@@ -616,68 +616,53 @@ jobs:
           path: obj/lint/
           if-no-files-found: warn
 
-  # Deliberately still `via: apt`, unlike every other Linux-hosted job this
-  # project has moved onto flake.nix's devShell.  That migration's own
-  # scoping report left this one job out on purpose, flagging "unverified
-  # sanitizer-runtime search-path parity between nixpkgs' clang cc-wrapper
-  # and Ubuntu's clang package" as a real risk needing its own dedicated
-  # check rather than a guess -- and that check has now been done, with a
-  # concrete negative result, not merely "still unverified".
+  # Was deliberately left on `via: apt` after this project's apt->Nix
+  # migration flagged one real, concrete blocker here: nixpkgs' clang
+  # cc-wrapper injects `-fwrapv` by default (its standard `strictoverflow`
+  # hardening flag, part of $NIX_HARDENING_ENABLE), which makes signed
+  # integer overflow well-defined and silently compiles UBSan's
+  # signed-integer-overflow check -- part of the `-fsanitize=undefined`
+  # group tools/asan-build.sh relies on -- to nothing, with no red build to
+  # reveal it. Measured at the time: `return INT_MAX + 1;` built under `nix
+  # develop`'s clang with this job's exact SAN flags ran clean (no
+  # diagnostic), while the identical build with `-fno-wrapv` appended
+  # correctly reported the overflow. Everything else about the Nix
+  # toolchain checked out -- runtime resolution/linking for both
+  # -fsanitize=address and -fsanitize=undefined,-shared-libsan builds
+  # matches apt's clang exactly.
   #
-  # THE PART THAT DOES WORK: nixpkgs' clang cc-wrapper resolves and links
-  # its own ASan/UBSan runtimes correctly.  `clang -print-file-name=
-  # libclang_rt.asan-<arch>.so` / `libclang_rt.ubsan_standalone-<arch>.so`
-  # both return real files inside the wrapper's resource-root under `nix
-  # develop`, tools/asan-build.sh's `-Wl,-rpath,$RTDIR` construction finds
-  # them at link time, and an ASan-instrumented binary built that way loads
-  # its shared runtime and runs -- verified locally (aarch64 devShell; this
-  # job's own runner is x86_64, but the cc-wrapper mechanism being tested is
-  # architecture-independent) up through the point where AddressSanitizer
-  # tries to reserve its shadow region.  A parallel UBSan-only build (this
-  # tree's own `NTLIBC_SAN_MODE=ubsan`, `-shared-libsan`) both built AND
-  # RAN clean under the Nix toolchain, and correctly reported a deliberate
-  # division-by-zero with the expected "runtime error: division by zero".
-  #
-  # THE REAL FINDING: nixpkgs' clang wrapper injects `-fwrapv` by default
-  # (part of its standard hardening flag set -- `strictoverflow` in
-  # $NIX_HARDENING_ENABLE, confirmed via `clang -fsanitize=undefined -###`,
-  # which shows `-fwrapv` ahead of the `-fsanitize=` arguments on every
-  # invocation).  `-fwrapv` makes signed-integer overflow well-defined
-  # wraparound rather than undefined behaviour, and UBSan's
-  # signed-integer-overflow check -- part of the plain `-fsanitize=
-  # undefined` group this job's SAN variable relies on, per Clang's own
-  # Sanitizers.def -- compiles to nothing when the compiler already treats
-  # the operation as defined.  Measured, not inferred: building
-  # `return INT_MAX + 1;` under `nix develop`'s clang with this tree's own
-  # exact flags (`-fsanitize=undefined -fno-sanitize-recover=undefined
-  # -shared-libsan -O1`) produces a binary that runs to completion and
-  # prints the wrapped value with exit 0 -- no diagnostic at all -- while
-  # the identical build with `-fno-wrapv` appended reports "runtime error:
-  # signed integer overflow: 2147483647 + 1 cannot be represented in type
-  # 'int'" and exits 1, as apt's unwrapped clang does today with neither
-  # flag needed.  A plain apt-installed clang carries no such wrapper and
-  # injects no such flag, so today's job actually catches this whole class
-  # of bug where a naive `nix develop --command make ARCH=x86_64 asan`
-  # would not.
-  #
-  # This is not a missing library or a search-path miss -- it is a silent,
-  # correctly-linking, correctly-starting build that quietly stops
-  # verifying one entire UBSan check this job exists to run, with no red
-  # build to reveal it.  A workaround exists (append `-fno-wrapv`, or drop
-  # `strictoverflow` from $NIX_HARDENING_ENABLE) but applying one is a
-  # deliberate behavioural change to tools/asan-build.sh's own flags, not a
-  # side effect of a CI-toolchain swap, so it is left for its own change
-  # with its own review rather than folded in here.  Until then this job
-  # stays on apt, which is not a stale caution but a confirmed exclusion.
+  # The fix is now in tools/asan-build.sh itself: it appends `-fno-wrapv`
+  # to every sanitizer build unconditionally, reasserting the script's own
+  # precondition ("signed overflow is UB, that's what the sanitizer is
+  # for") rather than depending on the ambient absence of a hardening flag
+  # a particular clang wrapper happens not to inject. That closes the gap
+  # at the source, so this job's own behaviour no longer depends on which
+  # clang is on PATH, and it can move to the same `via: nix` pattern as
+  # every other Linux-hosted job.
   asan:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # id-token: write is what DeterminateSystems/magic-nix-cache-action's
+    # own README example asks every job using it to set -- see the same
+    # comment on the `linux-builds` job.
+    permissions:
+      id-token: "write"
+      contents: "read"
     steps:
       - uses: actions/checkout@v7
-      - name: Install clang
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang
+      - name: Install Nix
+        # cachix/install-nix-action -- see the `linux-builds` job's copy
+        # of this comment for the full rationale and sources.
+        uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@v14
+        with:
+          # use-flakehub: false / diagnostic-endpoint: "" -- see the
+          # `linux-builds` job's copy of this comment.
+          use-flakehub: false
+          diagnostic-endpoint: ""
       - name: Run AddressSanitizer and UBSan suite
         # capability.overcommit=yes, explicitly.  The Makefile's
         # TEST_PROFILE default declares `no`, because the machine this
@@ -691,7 +676,7 @@ jobs:
         # difference between a stated intent and a lucky one.
         env:
           TEST_PROFILE: capability.overcommit=yes
-        run: make ARCH=x86_64 asan
+        run: nix develop --command make ARCH=x86_64 asan
       - name: Upload failing test output
         if: failure()
         uses: actions/upload-artifact@v7

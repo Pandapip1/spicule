@@ -166,6 +166,23 @@ ubsan)
 	;;
 esac
 
+# -fno-wrapv reasserts this script's own precondition for the
+# signed-integer-overflow check in $SAN's -fsanitize=undefined group: that
+# signed overflow is undefined behaviour, which is what the sanitizer is
+# there to catch.  A plain clang already treats it that way with no flag
+# needed (C11 6.5p5), so this is a no-op there -- but nixpkgs' clang
+# cc-wrapper injects -fwrapv by default (its standard `strictoverflow`
+# hardening flag, part of $NIX_HARDENING_ENABLE), which makes signed
+# overflow well-defined and silently compiles signed-integer-overflow
+# checking to nothing, with no build failure to reveal it.  Measured: see
+# the `asan` job's comment in .github/workflows/ci.yml for the `INT_MAX +
+# 1` reproduction that found this.  Applied to both SAN_MODE cases, since
+# -fwrapv would defeat the same UBSan check whether or not ASan is also
+# linked, and unconditionally rather than only under Nix, so this script's
+# own behaviour does not depend on which clang wrapper happens to be on
+# PATH.
+SAN="$SAN -fno-wrapv"
+
 # cfi-icall needs whole-program type information, hence LTO.  Keep it out
 # of the normal ASan loop because every test link then repeats LTO codegen.
 # It is an ASan-mode extension, not a meaningful addition to the reduced

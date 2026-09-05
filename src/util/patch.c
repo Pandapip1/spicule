@@ -501,11 +501,14 @@ static int parse_at_header(const struct pline *pl, long *o1, long *oc, long *n1,
 	s += 4;
 	s = parse_uint(s, end, o1); if (!s) return 0;
 	if (s != end && *s == ',') { s++; s = parse_uint(s, end, oc); if (!s) return 0; } else *oc = 1;
-	if (s == end || *s != ' ') return 0; s++;
-	if (s == end || *s != '+') return 0; s++;
+	if (s == end || *s != ' ') return 0;
+	s++;
+	if (s == end || *s != '+') return 0;
+	s++;
 	s = parse_uint(s, end, n1); if (!s) return 0;
 	if (s != end && *s == ',') { s++; s = parse_uint(s, end, nc); if (!s) return 0; } else *nc = 1;
-	if (s == end || *s != ' ') return 0; s++;
+	if (s == end || *s != ' ') return 0;
+	s++;
 	if (end - s < 2 || s[0] != '@' || s[1] != '@') return 0;
 	return 1;
 }

@@ -133,9 +133,45 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v22
+        # cachix/install-nix-action, not DeterminateSystems/nix-installer-
+        # action: this repo has no FlakeHub registration, and the
+        # Determinate installer's default `determinate: true` installs
+        # Determinate Nix and then attempts a FlakeHub login that always
+        # fails here (logged misleadingly as "Logged in to FlakeHub" right
+        # before magic-nix-cache-action's own FlakeHub call 401s). Rather
+        # than tune that action's login away, install plain upstream Nix
+        # instead -- flakes and nix-command are on by default here too:
+        # this action's own install-nix.sh unconditionally appends
+        # `experimental-features = nix-command flakes` unless
+        # `extra_nix_config` already sets `experimental-features` (see
+        # https://github.com/cachix/install-nix-action, "Differences from
+        # the default Nix installer"), so every `nix develop` call below
+        # is unaffected. `github_access_token` follows that same
+        # README's own "Usage with Flakes" example, to keep this flake's
+        # GitHub-hosted inputs (nixpkgs, flake-parts, ...; see
+        # flake.lock) off the unauthenticated GitHub API rate limit
+        # across this many concurrent legs -- no new secret, just the
+        # ambient job token.
+        uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Magic Nix Cache
         uses: DeterminateSystems/magic-nix-cache-action@v14
+        with:
+          # use-flakehub: false -- this repo has no FlakeHub registration,
+          # so the default ("no-preference", i.e. turn on FlakeHub Cache
+          # opportunistically) makes this action probe FlakeHub Cache and
+          # get a real 401 back; disabling it explicitly is a real,
+          # documented input for exactly this
+          # (github.com/DeterminateSystems/magic-nix-cache-action, `use-
+          # flakehub` in action.yml/README). GitHub Actions cache (use-
+          # gha-cache, left at its default) is unaffected.
+          # diagnostic-endpoint: "" -- also documented in that same
+          # action.yml ("to disable set this to an empty string"); no
+          # reason to phone home from every one of this many concurrent
+          # legs.
+          use-flakehub: false
+          diagnostic-endpoint: ""
       - name: Configure
         if: matrix.arch == 'aarch64'
         run: >-
@@ -371,9 +407,18 @@ jobs:
           repository: ${{ env.TINYCC_REPO }}
           revision: ${{ env.TINYCC_SHA }}
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v22
+        # cachix/install-nix-action -- see the `linux-builds` job's copy
+        # of this comment for the full rationale and sources.
+        uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Magic Nix Cache
         uses: DeterminateSystems/magic-nix-cache-action@v14
+        with:
+          # use-flakehub: false / diagnostic-endpoint: "" -- see the
+          # `linux-builds` job's copy of this comment.
+          use-flakehub: false
+          diagnostic-endpoint: ""
       - name: Configure
         run: ./configure --host=${{ matrix.host }} CC=${{ matrix.cc }} --disable-kernel32
       # The declared-symbol scanner (tools/clang/DeclScanner.cpp) is a
@@ -462,10 +507,19 @@ jobs:
       # ubuntu-24.04's own package snapshot happens to carry that day.
       - name: Install Nix
         if: matrix.via == 'nix'
-        uses: DeterminateSystems/nix-installer-action@v22
+        # cachix/install-nix-action -- see the `linux-builds` job's copy
+        # of this comment for the full rationale and sources.
+        uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Magic Nix Cache
         if: matrix.via == 'nix'
         uses: DeterminateSystems/magic-nix-cache-action@v14
+        with:
+          # use-flakehub: false / diagnostic-endpoint: "" -- see the
+          # `linux-builds` job's copy of this comment.
+          use-flakehub: false
+          diagnostic-endpoint: ""
       - name: Install stage tools
         if: matrix.via == 'apt' && matrix.packages != ''
         run: |

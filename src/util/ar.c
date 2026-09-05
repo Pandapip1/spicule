@@ -480,7 +480,17 @@ static int do_delete(const char *archive, char **files, int nfiles, int verbose)
 
 	snprintf(tmppath, sizeof tmppath, "%s.artmp", archive);
 	tmp = fopen(tmppath, "wb");
-	if (!tmp) { (void)fclose(src); free(arr); __util_diagf("ar: %s: %s\n", tmppath, strerror(errno)); return 1; }
+	if (!tmp) {
+		/* fclose(src) is cleanup for the fopen(tmppath) failure just
+		 * diagnosed; if it fails too, its own errno must not
+		 * overwrite the real reason tmppath could not be opened. */
+		int saved_errno = errno;
+		(void)fclose(src);
+		errno = saved_errno;
+		free(arr);
+		__util_diagf("ar: %s: %s\n", tmppath, strerror(errno));
+		return 1;
+	}
 	fwrite(AR_MAGIC, 1, AR_MAGIC_LEN, tmp);
 
 	for (i = 0; i < n; i++) {

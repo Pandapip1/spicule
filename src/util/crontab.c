@@ -185,10 +185,30 @@ static int install_crontab(FILE *src, long *bad_line)
 	out = fopen(tmp, "w");
 	if (!out) return -1;
 	while ((c = fgetc(src)) != EOF) {
-		if (fputc(c, out) == EOF) { (void)fclose(out); (void)unlink(tmp); return -1; }
+		if (fputc(c, out) == EOF) {
+			/* fclose()/unlink() below are cleanup for the fputc()
+			 * failure just diagnosed; save/restore errno around
+			 * them so a failure in either does not overwrite the
+			 * real write error do_install_from() reports. */
+			int saved_errno = errno;
+			(void)fclose(out);
+			(void)unlink(tmp);
+			errno = saved_errno;
+			return -1;
+		}
 	}
-	if (fclose(out) != 0) { (void)unlink(tmp); return -1; }
-	if (rename(tmp, path) < 0) { (void)unlink(tmp); return -1; }
+	if (fclose(out) != 0) {
+		int saved_errno = errno;
+		(void)unlink(tmp);
+		errno = saved_errno;
+		return -1;
+	}
+	if (rename(tmp, path) < 0) {
+		int saved_errno = errno;
+		(void)unlink(tmp);
+		errno = saved_errno;
+		return -1;
+	}
 	return 0;
 }
 

@@ -361,7 +361,14 @@ static int process_file(const char *path, int opt_g, int opt_u, int opt_p, int o
 	}
 
 	buf = read_whole_file(fd, &size);
-	(void)close(fd);
+	{
+		/* close() on a freshly-read fd is cleanup, not the operation
+		 * being diagnosed; if it fails, its own errno must not
+		 * overwrite read_whole_file()'s already-set failure reason. */
+		int saved_errno = errno;
+		(void)close(fd);
+		errno = saved_errno;
+	}
 	if (!buf) {
 		__util_diagf("nm: %s: %s\n", path, strerror(errno));
 		return 1;

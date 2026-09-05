@@ -96,9 +96,22 @@ int __plat_mem_reserve(void **base_inout, size_t len, int prot) // NOLINT(bugpro
 	/* Very large single reservations make Wine spend unbounded time
 	 * searching its host VMAs. Use a generous per-call ceiling and let
 	 * callers consume the address space with multiple mappings instead.
-	 * This is a mapping-size limit, not a live-mapping-count limit. */
-	if ((sizeof(size_t) > 4 && len > 0x10000000000ULL) ||
-	    (sizeof(size_t) == 4 && len > 0x40000000UL)) {
+	 * This is a mapping-size limit, not a live-mapping-count limit.
+	 *
+	 * The ceiling itself is picked at preprocessing time rather than via
+	 * `sizeof(size_t)` in the comparison below: on a target where
+	 * size_t is always 32-bit (i386), a runtime `sizeof(size_t) > 4`
+	 * guard is one GCC can prove always false (and its `== 4` twin
+	 * always true), hence -Wtype-limits. SIZE_MAX resolves the same "is
+	 * size_t wider than 32 bits" question at compile time instead, so
+	 * each target ends up with exactly one constant and one ordinary
+	 * comparison, matching the old runtime check's behavior exactly. */
+#if SIZE_MAX > 0xFFFFFFFFu
+	const size_t reserve_ceiling = 0x10000000000ULL;
+#else
+	const size_t reserve_ceiling = 0x40000000UL;
+#endif
+	if (len > reserve_ceiling) {
 		errno = ENOMEM;
 		return -1;
 	}

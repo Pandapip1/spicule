@@ -1910,10 +1910,9 @@ static struct dlobj *load_object(const char *file, int depth)
 			 * the file's real length, not at p_filesz specifically --
 			 * writing it explicitly costs nothing and does not depend
 			 * on that distinction lining up. */
-			{
-				size_t i = (size_t)((ph->p_vaddr - vstart) + ph->p_filesz);
-				for (; i < filelen; i++) ((char *)segbase)[i] = 0;
-			}
+			for (size_t tailoff = (size_t)((ph->p_vaddr - vstart) + ph->p_filesz);
+			     tailoff < filelen; tailoff++)
+				((char *)segbase)[tailoff] = 0;
 		}
 		alloclen = memend > filelen ? memend : filelen;
 		if (alloclen > filelen) {

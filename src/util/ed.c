@@ -1063,6 +1063,28 @@ static int cmd_read(struct ed *ed, long after, const char *arg)
 	return 0;
 }
 
+/* ed->nlines is a size_t because it sizes allocations (buf_reserve(),
+ * mallocarray) alongside ed->cap, but every address the command grammar
+ * deals in -- ed->cur, from/to/addr locals, marks -- is a signed `long`:
+ * a not-yet-validated address can be negative mid-parse (e.g. `.-5` on
+ * line 3), and the `< 0`/`< 1` checks throughout ed_exec_one() rely on
+ * that sign surviving unpromoted. Comparing one of those longs straight
+ * against ed->nlines makes the usual arithmetic conversions promote the
+ * long to unsigned instead, which happens not to misfire today (the
+ * negative case is always still caught by a neighboring `< 0`/`< 1`
+ * clause in the same `||` chain) but is exactly the kind of thing that
+ * silently stops being true the next time this code is touched. Convert
+ * the count once, here, to the signed type every address comparison
+ * already uses. This is exact, not merely convenient: a file's line
+ * count can never approach LONG_MAX. Even at one byte per line plus one
+ * pointer, a 32-bit process's whole 4GB address space could not hold
+ * more than ~800M lines -- under 2^31-1 -- and a 64-bit nlines has the
+ * same margin against 2^63-1. */
+static long ed_nlines(const struct ed *ed)
+{
+	return (long)ed->nlines;
+}
+
 static int cmd_write(struct ed *ed, long from, long to, const char *arg)
 {
 	int is_bang = (arg[0] == '!');
@@ -1098,7 +1120,7 @@ static int cmd_write(struct ed *ed, long from, long to, const char *arg)
 	if (!is_bang && !ed->filename) ed->filename = strdup(path);
 	/* Only a plain `w` of the whole buffer to a real pathname counts as
 	 * "the buffer was written in full" for the modified/quit latch. */
-	if (!is_bang && from == 1 && to == ed->nlines) { ed->modified = 0; ed->pending_quit = 0; }
+	if (!is_bang && from == 1 && to == ed_nlines(ed)) { ed->modified = 0; ed->pending_quit = 0; }
 	free(expanded);
 
 	if (!ed->suppress) fprintf(stdout, "%ld\n", bytes);
@@ -1155,7 +1177,7 @@ static int ed_exec_one(struct ed *ed, const char *cmdline, struct linesrc *texts
 		/* null command: print the addressed line(s), default .+1 */
 		if (rg.n) { from = rg.a1; to = rg.a2; }
 		else { from = to = ed->cur + 1; }
-		if (from < 1 || to > ed->nlines || from > to) return ed_fail(ed, "invalid address");
+		if (from < 1 || to > ed_nlines(ed) || from > to) return ed_fail(ed, "invalid address");
 		ed_print_range(ed, from, to, 0);
 		return 0;
 	}
@@ -1170,7 +1192,7 @@ static int ed_exec_one(struct ed *ed, const char *cmdline, struct linesrc *texts
 		if (rg.n == 2) return ed_fail(ed, "a single address, not a range, is expected here");
 		addr = rg.n ? rg.a1 : ed->cur;
 		if (require_eol(ed, p) < 0) return ED_ERR;
-		if (addr < 0 || addr > ed->nlines) return ed_fail(ed, "address out of range");
+		if (addr < 0 || addr > ed_nlines(ed)) return ed_fail(ed, "address out of range");
 		rc = read_text_lines(textsrc, &txt, &tn);
 		if (rc == ED_INTR) return ED_INTR;
 		if (rc < 0) return ed_fail(ed, "out of memory");
@@ -1191,7 +1213,7 @@ static int ed_exec_one(struct ed *ed, const char *cmdline, struct linesrc *texts
 		if (require_eol(ed, p) < 0) return ED_ERR;
 		if (ed->nlines == 0) {
 			if (addr != 1) return ed_fail(ed, "address out of range");
-		} else if (addr < 1 || addr > ed->nlines) {
+		} else if (addr < 1 || addr > ed_nlines(ed)) {
 			return ed_fail(ed, "address out of range");
 		}
 		rc = read_text_lines(textsrc, &txt, &tn);
@@ -1210,7 +1232,7 @@ static int ed_exec_one(struct ed *ed, const char *cmdline, struct linesrc *texts
 		if (ctx == CTX_GVSINGLE) return ed_fail(ed, "command not permitted here");
 		resolve_default(&rg, ed->cur, ed->cur, &f2, &t2);
 		if (require_eol(ed, p) < 0) return ED_ERR;
-		if (f2 < 1 || t2 > ed->nlines || f2 > t2) return ed_fail(ed, "invalid address");
+		if (f2 < 1 || t2 > ed_nlines(ed) || f2 > t2) return ed_fail(ed, "invalid address");
 		buf_delete_range(ed, f2, t2);
 		rc = read_text_lines(textsrc, &txt, &tn);
 		if (rc == ED_INTR) return ED_INTR;
@@ -1228,7 +1250,7 @@ static int ed_exec_one(struct ed *ed, const char *cmdline, struct linesrc *texts
 	case 'd': {
 		resolve_default(&rg, ed->cur, ed->cur, &from, &to);
 		if (parse_trailing_suffix(ed, p, &fmt) < 0) return ED_ERR;
-		if (from < 1 || to > ed->nlines || from > to) return ed_fail(ed, "invalid address");
+		if (from < 1 || to > ed_nlines(ed) || from > to) return ed_fail(ed, "invalid address");
 		buf_delete_range(ed, from, to);
 		ed->cur = cur_after_delete(from, ed->nlines);
 		ed->modified = 1;
@@ -1238,10 +1260,10 @@ static int ed_exec_one(struct ed *ed, const char *cmdline, struct linesrc *texts
 	case 'j': {
 		long def_b;
 		def_b = ed->cur + 1;
-		if (def_b > ed->nlines) def_b = ed->nlines;
+		if (def_b > ed_nlines(ed)) def_b = ed->nlines;
 		resolve_default(&rg, ed->cur, def_b, &from, &to);
 		if (parse_trailing_suffix(ed, p, &fmt) < 0) return ED_ERR;
-		if (from < 1 || to > ed->nlines || from > to) return ed_fail(ed, "invalid address");
+		if (from < 1 || to > ed_nlines(ed) || from > to) return ed_fail(ed, "invalid address");
 		if (to > from) {
 			struct strbuf sb; long i2;
 			char *joined;
@@ -1260,12 +1282,12 @@ static int ed_exec_one(struct ed *ed, const char *cmdline, struct linesrc *texts
 	case 'm': case 't': {
 		long addr3; struct range r3; int is_move = (cmd == 'm');
 		resolve_default(&rg, ed->cur, ed->cur, &from, &to);
-		if (from < 1 || to > ed->nlines || from > to) return ed_fail(ed, "invalid address");
+		if (from < 1 || to > ed_nlines(ed) || from > to) return ed_fail(ed, "invalid address");
 		if (parse_range(ed, &p, &r3) < 0) return ED_ERR;
 		if (!r3.n) return ed_fail(ed, "missing destination address");
 		addr3 = r3.a1;
 		if (parse_trailing_suffix(ed, p, &fmt) < 0) return ED_ERR;
-		if (addr3 < 0 || addr3 > ed->nlines) return ed_fail(ed, "address out of range");
+		if (addr3 < 0 || addr3 > ed_nlines(ed)) return ed_fail(ed, "address out of range");
 		if (is_move && addr3 >= from && addr3 <= to) return ed_fail(ed, "destination falls inside the source range");
 		{
 			size_t count = (size_t)(to - from + 1);
@@ -1294,26 +1316,26 @@ static int ed_exec_one(struct ed *ed, const char *cmdline, struct linesrc *texts
 	case 'p': case 'n': case 'l':
 		resolve_default(&rg, ed->cur, ed->cur, &from, &to);
 		if (require_eol(ed, p) < 0) return ED_ERR;
-		if (from < 1 || to > ed->nlines || from > to) return ed_fail(ed, "invalid address");
+		if (from < 1 || to > ed_nlines(ed) || from > to) return ed_fail(ed, "invalid address");
 		ed_print_range(ed, from, to, cmd);
 		break;
 	case '=': {
-		long addr = rg.n ? rg.a1 : ed->nlines;
+		long addr = rg.n ? rg.a1 : ed_nlines(ed);
 		if (rg.n == 2) return ed_fail(ed, "a single address, not a range, is expected here");
 		if (require_eol(ed, p) < 0) return ED_ERR;
-		if (addr < 0 || addr > ed->nlines) return ed_fail(ed, "address out of range");
+		if (addr < 0 || addr > ed_nlines(ed)) return ed_fail(ed, "address out of range");
 		fprintf(stdout, "%ld\n", addr);
 		break;
 	}
 	case 's':
 		resolve_default(&rg, ed->cur, ed->cur, &from, &to);
-		if (from < 1 || to > ed->nlines || from > to) return ed_fail(ed, "invalid address");
+		if (from < 1 || to > ed_nlines(ed) || from > to) return ed_fail(ed, "invalid address");
 		if (cmd_s(ed, from, to, p) < 0) return ED_ERR;
 		break;
 	case 'k': {
 		long addr = rg.n ? rg.a1 : ed->cur;
 		if (rg.n == 2) return ed_fail(ed, "a single address, not a range, is expected here");
-		if (addr < 1 || addr > ed->nlines) return ed_fail(ed, "address out of range");
+		if (addr < 1 || addr > ed_nlines(ed)) return ed_fail(ed, "address out of range");
 		skip_blanks(&p);
 		if (*p < 'a' || *p > 'z') return ed_fail(ed, "invalid mark name");
 		{
@@ -1346,9 +1368,9 @@ static int ed_exec_one(struct ed *ed, const char *cmdline, struct linesrc *texts
 		fprintf(stdout, "%s\n", ed->filename);
 		break;
 	case 'r': {
-		long addr = rg.n ? rg.a1 : ed->nlines;
+		long addr = rg.n ? rg.a1 : ed_nlines(ed);
 		if (rg.n == 2) return ed_fail(ed, "a single address, not a range, is expected here");
-		if (addr < 0 || addr > ed->nlines) return ed_fail(ed, "address out of range");
+		if (addr < 0 || addr > ed_nlines(ed)) return ed_fail(ed, "address out of range");
 		skip_blanks(&p);
 		if (cmd_read(ed, addr, p) < 0) return ED_ERR;
 		break;
@@ -1357,7 +1379,7 @@ static int ed_exec_one(struct ed *ed, const char *cmdline, struct linesrc *texts
 		resolve_default(&rg, 1, ed->nlines, &from, &to);
 		skip_blanks(&p);
 		if (from == 1 && to == 0 && ed->nlines == 0) { /* whole empty buffer: nothing to write, not an error */ }
-		else if (from < 1 || to > ed->nlines || from > to) return ed_fail(ed, "invalid address");
+		else if (from < 1 || to > ed_nlines(ed) || from > to) return ed_fail(ed, "invalid address");
 		if (cmd_write(ed, from, to, p) < 0) return ED_ERR;
 		break;
 	}
@@ -1411,7 +1433,7 @@ static int ed_exec_one(struct ed *ed, const char *cmdline, struct linesrc *texts
 
 		resolve_default(&rg, 1, ed->nlines, &from, &to);
 		if (from == 1 && to == 0 && ed->nlines == 0) { /* whole empty buffer: matches nothing, not an error */ }
-		else if (from < 1 || to > ed->nlines || from > to) return ed_fail(ed, "invalid address");
+		else if (from < 1 || to > ed_nlines(ed) || from > to) return ed_fail(ed, "invalid address");
 
 		if (*p == 0 || *p == ' ' || *p == '\t') return ed_fail(ed, "missing pattern delimiter");
 		delim = *p; p++;

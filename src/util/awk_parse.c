@@ -573,7 +573,10 @@ static struct awk_node *parse_ternary(struct awk_parser *p)
 	return c;
 }
 
-static const int assign_ops[] = { T_ASSIGN, T_ADD_ASSIGN, T_SUB_ASSIGN, T_MUL_ASSIGN, T_DIV_ASSIGN, T_MOD_ASSIGN, T_POW_ASSIGN, 0 };
+/* enum awk_toktype, not int: p->tok.type below is compared against these
+ * entries directly, and the terminating 0 is T_EOF (never a real assign
+ * operator), so the array's own element type should be the enum it holds. */
+static const enum awk_toktype assign_ops[] = { T_ASSIGN, T_ADD_ASSIGN, T_SUB_ASSIGN, T_MUL_ASSIGN, T_DIV_ASSIGN, T_MOD_ASSIGN, T_POW_ASSIGN, T_EOF };
 
 static struct awk_node *parse_assign(struct awk_parser *p)
 {

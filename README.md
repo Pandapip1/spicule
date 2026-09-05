@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: (C) 2026 Gavin John
 SPDX-License-Identifier: GPL-3.0-or-later
 -->
 
-# ebue (Easy Bootstrap Unix Environment)
+# Safe Platform-Independent Complete Unix-Like Environment
 
 A from-scratch C library and POSIX-ish userland that talks to the
 operating system directly, with nothing underneath it. On Windows NT

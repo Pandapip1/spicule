@@ -1056,13 +1056,26 @@ stage_totality() {
 		report=$builddir/$arch.totality.report
 		pardir=$(mktemp -d "$builddir/totality.XXXXXX") || return 1
 		# One fact stream per translation unit avoids interleaved TSV records.
+		# This stage's plugin is a plain -fsyntax-only PluginASTAction, not a
+		# clang --analyze checker, so unlike every other stage in this file
+		# that reads one of include/ownership.h's annotate(...) macros,
+		# clang never predefines __clang_analyzer__ here -- confirmed by
+		# comparing `clang -fsyntax-only` against `clang --analyze` on the
+		# same trivial input, the latter alone defining it. Without this
+		# flag, ownership.h's withtok(null_terminated) would go dark for
+		# this scan the same way elements_withtok already required it
+		# below stage_sizearith, and TotalityChecker's real "withtok:
+		# null_terminated" == match at every genuine call site would never
+		# fire, silently losing loop-termination proofs for every real
+		# NUL-terminated-string parameter in the tree.
 		# shellcheck disable=SC2086,SC2016
 		sources_for "$arch" | xargs -P "$LINT_JOBS" -I{} sh -c '
 			f=$1; clang=$2; plugin=$3; target=$4; shift 4
 			id=$(printf %s "$f" | tr / _)
 			# shellcheck disable=SC2086
 			"$clang" $target -fsyntax-only -Xclang -load -Xclang "$plugin" \
-				-Xclang -add-plugin -Xclang ntlibc-totality "$@" "$f" \
+				-Xclang -add-plugin -Xclang ntlibc-totality \
+				-DNTLIBC_OWNERSHIP_ANALYSIS "$@" "$f" \
 				> "'"$pardir"'/$id.log" 2> "'"$pardir"'/$id.err"
 		' _ {} clang-18 "$plugin" "$target" $flags
 		runrc=$?

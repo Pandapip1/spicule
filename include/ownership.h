@@ -8,54 +8,79 @@
  * refer to that policy by name. */
 #define __token_type typedef struct { char _tok; }
 #define tokdef __token_type
+/* Every qualifier/relation macro below exists purely for the benefit of
+ * the tools/clang checkers' AST walks (OwnershipChecker, MemoryContractChecker,
+ * AllocationLifetimeChecker, and SizeCastChecker's ntlibc.ArrayIndex): none
+ * of them is read by any normal compile. GCC parses annotate() but always
+ * reports it "ignored" outside its own LTO-streaming consumer, and even
+ * clang's own ordinary compiles never look at it -- only clang's static
+ * analyzer engine (tools/lint.sh's --analyze-based stages) and the one
+ * -fsyntax-only "totality" plugin stage that also needs withtok(...) for
+ * null_terminated consult it. __clang_analyzer__ is clang's own predefined
+ * macro for exactly the first case, defined whenever "clang --analyze" is
+ * running regardless of which -analyzer-checker=... is loaded (the same
+ * convention src/mman/mman.c's unsafe_pointer.h and
+ * src/thread/pthread_cond.c's lock_requires_held_on_entry()/
+ * lock_acquires_for_caller already use for their own, unrelated
+ * annotations). tools/lint.sh's stage_totality builds its plugin as a
+ * plain PluginASTAction under -fsyntax-only, which never defines
+ * __clang_analyzer__, so that one stage also defines
+ * NTLIBC_OWNERSHIP_ANALYSIS explicitly on its real-source scan; every
+ * other stage that reads one of these annotations always runs under
+ * --analyze and needs no extra flag. Emitting the attribute for a plain
+ * GCC/clang build (including the "lint (warn)" -Wall -Wextra gate, and
+ * tcc, which does not understand __attribute__((annotate(...))) at all)
+ * serves no purpose there and is exactly what GCC's own "annotate"
+ * warning is complaining about. */
+#if defined(__clang_analyzer__) || defined(NTLIBC_OWNERSHIP_ANALYSIS)
+#define __ownership_attr(text) __attribute__((annotate(text)))
+#else
+#define __ownership_attr(text)
+#endif
 /* Linear tokens are strict by default.  A permissive token remains linear,
  * but may stay behind while other, unlimited tokens on its carrier copy. */
-#define l_strict __attribute__((annotate("qual:l_strict")))
-#define l_permissive __attribute__((annotate("qual:l_permissive")))
-#define l_unlimited __attribute__((annotate("qual:l_unlimited")))
-#define implicit_drop __attribute__((annotate("qual:implicit_drop")))
-#define dynamic_storage __attribute__((annotate("qual:dynamic_storage")))
+#define l_strict __ownership_attr("qual:l_strict")
+#define l_permissive __ownership_attr("qual:l_permissive")
+#define l_unlimited __ownership_attr("qual:l_unlimited")
+#define implicit_drop __ownership_attr("qual:implicit_drop")
+#define dynamic_storage __ownership_attr("qual:dynamic_storage")
 #define implemented_by(token_name) \
-	__attribute__((annotate("qual:implemented_by=" #token_name)))
-#define string_literal __attribute__((annotate("qual:string_literal")))
-#define extent_at_least __attribute__((annotate("qual:extent_at_least")))
-#define element_extent __attribute__((annotate("qual:element_extent")))
-#define disjoint_extent __attribute__((annotate("qual:disjoint_extent")))
-#define zero_vacuous __attribute__((annotate("qual:zero_vacuous")))
+	__ownership_attr("qual:implemented_by=" #token_name)
+#define string_literal __ownership_attr("qual:string_literal")
+#define extent_at_least __ownership_attr("qual:extent_at_least")
+#define element_extent __ownership_attr("qual:element_extent")
+#define disjoint_extent __ownership_attr("qual:disjoint_extent")
+#define zero_vacuous __ownership_attr("qual:zero_vacuous")
 #define sentinel_exclude(value) \
-	__attribute__((annotate("qual:sentinel_exclude=" #value)))
+	__ownership_attr("qual:sentinel_exclude=" #value)
 #define blocks_dereference \
-	__attribute__((annotate("qual:blocks_dereference")))
+	__ownership_attr("qual:blocks_dereference")
 #define withtok(token_name) \
-	__attribute__((annotate("withtok:" #token_name)))
-#ifdef NTLIBC_OWNERSHIP_ANALYSIS
+	__ownership_attr("withtok:" #token_name)
 #define elements_withtok(token_name, extent_name) \
-	__attribute__((annotate("elements_withtok:" #token_name ":" #extent_name)))
-#else
-#define elements_withtok(token_name, extent_name)
-#endif
+	__ownership_attr("elements_withtok:" #token_name ":" #extent_name)
 #define withhandle(handle_name) \
-	__attribute__((annotate("withhandle:" #handle_name)))
+	__ownership_attr("withhandle:" #handle_name)
 #define withouttok(token_name) \
-	__attribute__((annotate("withouttok:" #token_name)))
+	__ownership_attr("withouttok:" #token_name)
 #define consume(token_name) \
-	__attribute__((annotate("consume:" #token_name)))
+	__ownership_attr("consume:" #token_name)
 #define consume_any(token_name) \
-	__attribute__((annotate("consume_any:" #token_name)))
+	__ownership_attr("consume_any:" #token_name)
 #define grant(token_name) \
-	__attribute__((annotate("grant:" #token_name)))
+	__ownership_attr("grant:" #token_name)
 #define drop(token_name) \
-	__attribute__((annotate("drop:" #token_name)))
+	__ownership_attr("drop:" #token_name)
 #define consume_if_nonnull_return(token_name) \
-	__attribute__((annotate("consume_if_nonnull_return:" #token_name)))
+	__ownership_attr("consume_if_nonnull_return:" #token_name)
 #define construct(handle_name) \
-	__attribute__((annotate("construct:" #handle_name)))
+	__ownership_attr("construct:" #handle_name)
 #define destroy(handle_name) \
-	__attribute__((annotate("destroy:" #handle_name)))
+	__ownership_attr("destroy:" #handle_name)
 #define handle(handle_name) \
-	__attribute__((annotate("handle:" #handle_name)))
+	__ownership_attr("handle:" #handle_name)
 #define static_handle(handle_name) \
-	__attribute__((annotate("static_handle:" #handle_name)))
+	__ownership_attr("static_handle:" #handle_name)
 /* A pointer-to-struct parameter whose pointee type carries its own
  * withtok(readable_elements(...))/withtok(writable_elements(...)) field
  * contracts (see include/memory_tokens.h). fields_established is a real,
@@ -71,6 +96,6 @@
  * a parameter that is actually mutated is always safe -- the checker
  * just treats the incoming fields as unconstrained, as it always did. */
 #define fields_established \
-	__attribute__((annotate("fields_established")))
+	__ownership_attr("fields_established")
 
 #endif

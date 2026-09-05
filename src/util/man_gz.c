@@ -365,6 +365,17 @@ static int inflate_dynamic_block(struct bitreader *br, struct gzbuf *out)
 	if (br->errmsg) return 0;
 	huff_build(&clen_huff, clen_lengths, 19);
 
+	/* hlit/hdist are each an opaque bit_getn() read plus a compile-time
+	 * constant (5-bit field + 257, 5-bit field + 1), so `total` is always
+	 * >= 258 and the decode loop below always runs at least once, filling
+	 * lengths[0..total) before either huff_build() call below reads it.
+	 * cppcheck's value-flow does not carry that range through bit_getn()
+	 * (an opaque call), so it considers the loop running zero iterations
+	 * and reports lengths as unconditionally uninitialised at the first
+	 * huff_build() call. Zero it up front, same as clen_lengths just
+	 * above, so the array is well-defined even on that unreachable path. */
+	for (i = 0; i < (int)(sizeof(lengths) / sizeof(lengths[0])); i++) lengths[i] = 0;
+
 	total = hlit + hdist;
 	n = 0;
 	while (n < total) {

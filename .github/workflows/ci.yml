@@ -453,11 +453,16 @@ jobs:
   lint:
     runs-on: ubuntu-24.04
     # ownership is Z3-bottlenecked path-sensitive analysis over every source
-    # file, three checker passes each: real runs on this runner class take
-    # ~23-25 real minutes even after the upstream-Z3 swap below, so it alone
-    # gets a wider ceiling. Every other leg has run in single-digit minutes
-    # since this file's own history, so leaving their budget at 25 keeps a
-    # stage that genuinely hangs failing fast instead of masking it here.
+    # file, three checker passes each: real runs on this runner class took
+    # ~23-25 real minutes even with the upstream-Z3 swap this job used to
+    # carry (see git history), so it alone gets a wider ceiling. That
+    # swap is gone now -- this stage uses flake.nix's own (newer) Z3 like
+    # every other via: nix leg below -- but real CI timing on that
+    # simplified config doesn't exist yet, so the wider ceiling stays as a
+    # safety margin until it does. Every other leg has run in single-digit
+    # minutes since this file's own history, so leaving their budget at 25
+    # keeps a stage that genuinely hangs failing fast instead of masking it
+    # here.
     timeout-minutes: ${{ matrix.stage == 'ownership' && 45 || 25 }}
     # id-token: write is what DeterminateSystems/magic-nix-cache-action's own
     # README example asks every job using it to set (see
@@ -476,10 +481,15 @@ jobs:
           # clang-18/llvm-18/z3/etc. version than local dev does. This is
           # the fix for the exact class of bug that made the `ownership`
           # row below time out: ubuntu-24.04's apt libz3-dev had drifted
-          # years behind this project's pinned Z3, undetected until a real
-          # workload hit the gap. via: apt is left alone (see its own
-          # per-row reasoning further down) wherever nixpkgs does not carry
-          # a drop-in equivalent, or carries a *different* one whose
+          # years behind Z3 upstream, undetected until a real workload hit
+          # the gap. `ownership` was first fixed with a pinned upstream-Z3
+          # download layered on top of `via: apt` (see git history), then
+          # moved onto flake.nix's own (newer still) Z3 like every other
+          # row here, dropping that download entirely -- nix already
+          # resolves the right Z3 for whatever runner arch it's on, with
+          # no separate pin to maintain. via: apt is left alone (see its
+          # own per-row reasoning further down) wherever nixpkgs does not
+          # carry a drop-in equivalent, or carries a *different* one whose
           # findings provably disagree with what CI runs today.
           - { stage: warn, via: apt, packages: "clang gcc-aarch64-linux-gnu gcc-mingw-w64-i686 gcc-mingw-w64-x86-64" }
           - { stage: analyze, via: nix, packages: "" }
@@ -503,7 +513,7 @@ jobs:
           - { stage: initproof, via: nix, packages: "" }
           - { stage: errno, via: nix, packages: "" }
           - { stage: purity, via: nix, packages: "" }
-          - { stage: ownership, via: apt, packages: "clang-18 libclang-18-dev llvm-18-dev pkg-config" }
+          - { stage: ownership, via: nix, packages: "" }
           - { stage: undefined, via: nix, packages: "" }
           - { stage: unreferenced, via: nix, packages: "" }
           - { stage: widthmod, via: apt, packages: "" }
@@ -533,74 +543,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ${{ matrix.packages }}
-      # ownership is the one Z3-backed stage CI runs (sizearith/totality/
-      # arithub/provenance are opt-in and not in this matrix), and it was
-      # timing out here: ubuntu-24.04's apt libz3-dev is 4.8.12-3.1build1 --
-      # frozen since well before this project existed -- while the
-      # path-sensitive proofs this stage runs are exactly the workload Z3's
-      # solver-internals releases since then have targeted (LP/arithmetic
-      # solver rewrites, nlsat projection algorithm changes, HNF pivoting
-      # and LRA model-init allocation reductions, among many others --
-      # see https://github.com/Z3Prover/z3/blob/master/RELEASE_NOTES.md).
-      # Rather than add a PPA or build Z3 from source (this project's own
-      # flake.nix already avoids that -- see its pkgs.z3 comment), fetch
-      # the Z3 project's own prebuilt release for exactly this runner's
-      # glibc: ubuntu-24.04 ships glibc 2.39 (see
-      # https://packages.ubuntu.com/noble/libc6), which is precisely the
-      # target of upstream's "x64-glibc-2.39" release asset -- no
-      # compilation, no ABI guessing. The archive ships no .pc file, so one
-      # is synthesized here and pointed to via PKG_CONFIG_PATH, which is
-      # all tools/lint.sh's `pkg-config --cflags --libs z3` needs; libz3.so
-      # has no other runtime dependency ubuntu-24.04 lacks by default
-      # (libstdc++6/libgcc-s1/libc6, all already present), so LD_LIBRARY_PATH
-      # alone -- no `ldconfig`, no system install -- is enough for clang-18
-      # to dlopen() the plugin that links against it later in this job.
-      - name: Install upstream Z3 (ownership stage)
-        if: matrix.stage == 'ownership'
-        env:
-          Z3_VERSION: 5.1.0
-          # Pinned to the z3-5.1.0-x64-glibc-2.39.zip asset of the
-          # Z3Prover/z3 "z3-5.1.0" GitHub release, cross-checked against
-          # that release's own API-reported digest (and its 54326027-byte
-          # size) as well as two independent local downloads -- not
-          # derived from anything fetched at CI time, so a compromised or
-          # MITM'd asset is caught here rather than trusted straight into
-          # every ownership run's proof toolchain. Update this alongside
-          # Z3_VERSION and the asset name below if the pinned release ever
-          # bumps.
-          Z3_SHA256: f47be8d27d3230e823bf1eeede2fe0abaca55bb78d0b59974370e6689a92284a
-        run: |
-          set -eu
-          z3_dir="$RUNNER_TEMP/z3-$Z3_VERSION"
-          asset="z3-$Z3_VERSION-x64-glibc-2.39"
-          curl -fsSL -o "$RUNNER_TEMP/z3.zip" \
-            "https://github.com/Z3Prover/z3/releases/download/z3-$Z3_VERSION/$asset.zip"
-          echo "$Z3_SHA256  $RUNNER_TEMP/z3.zip" | sha256sum -c -
-          unzip -q "$RUNNER_TEMP/z3.zip" -d "$RUNNER_TEMP"
-          mv "$RUNNER_TEMP/$asset" "$z3_dir"
-          mkdir -p "$z3_dir/pkgconfig"
-          # z3.pc: upstream's own release archive does not carry one (it is
-          # not built via the autotools/meson path Debian's package is), so
-          # pkg-config needs one describing where this archive actually put
-          # things -- headers under include/, both libz3.so and the linker
-          # name under bin/ (not lib/), matching this release layout as
-          # inspected from the archive's own file listing.
-          pc="$z3_dir/pkgconfig/z3.pc"
-          {
-            echo "prefix=$z3_dir"
-            echo 'libdir=${prefix}/bin'
-            echo 'includedir=${prefix}/include'
-            echo
-            echo 'Name: z3'
-            echo 'Description: Z3 Theorem Prover'
-            echo "Version: $Z3_VERSION"
-            echo 'Libs: -L${libdir} -lz3'
-            echo 'Cflags: -I${includedir}'
-          } > "$pc"
-          {
-            echo "PKG_CONFIG_PATH=$z3_dir/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
-            echo "LD_LIBRARY_PATH=$z3_dir/bin${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-          } >> "$GITHUB_ENV"
       - name: Run lint stage
         if: matrix.via == 'apt'
         env:

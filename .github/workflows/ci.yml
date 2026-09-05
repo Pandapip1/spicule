@@ -483,7 +483,15 @@ jobs:
           # findings provably disagree with what CI runs today.
           - { stage: warn, via: apt, packages: "clang gcc-aarch64-linux-gnu gcc-mingw-w64-i686 gcc-mingw-w64-x86-64" }
           - { stage: analyze, via: nix, packages: "" }
-          - { stage: cppcheck, via: apt, packages: cppcheck }
+          # cppcheck was kept on apt during the rest of this migration:
+          # nixpkgs' cppcheck (2.21.1) reported a real uninitvar finding at
+          # src/util/man_gz.c:400 that ubuntu-24.04's apt cppcheck (2.13.0)
+          # cannot see. Fixed there (an explicit zero-init of `lengths`,
+          # same reasoning as clen_lengths just above it in that function --
+          # see that fix's own commit), and confirmed via nixpkgs' cppcheck
+          # under `nix develop`: 0 findings across i386/x86_64/aarch64,
+          # matching apt's cppcheck's own "0 findings" baseline today.
+          - { stage: cppcheck, via: nix, packages: "" }
           - { stage: shell, via: apt, packages: shellcheck }
           - { stage: fallible, via: nix, packages: "" }
           - { stage: locks, via: nix, packages: "" }

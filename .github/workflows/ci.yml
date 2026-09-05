@@ -562,6 +562,59 @@ jobs:
           path: obj/lint/
           if-no-files-found: warn
 
+  # Deliberately still `via: apt`, unlike every other Linux-hosted job this
+  # project has moved onto flake.nix's devShell.  That migration's own
+  # scoping report left this one job out on purpose, flagging "unverified
+  # sanitizer-runtime search-path parity between nixpkgs' clang cc-wrapper
+  # and Ubuntu's clang package" as a real risk needing its own dedicated
+  # check rather than a guess -- and that check has now been done, with a
+  # concrete negative result, not merely "still unverified".
+  #
+  # THE PART THAT DOES WORK: nixpkgs' clang cc-wrapper resolves and links
+  # its own ASan/UBSan runtimes correctly.  `clang -print-file-name=
+  # libclang_rt.asan-<arch>.so` / `libclang_rt.ubsan_standalone-<arch>.so`
+  # both return real files inside the wrapper's resource-root under `nix
+  # develop`, tools/asan-build.sh's `-Wl,-rpath,$RTDIR` construction finds
+  # them at link time, and an ASan-instrumented binary built that way loads
+  # its shared runtime and runs -- verified locally (aarch64 devShell; this
+  # job's own runner is x86_64, but the cc-wrapper mechanism being tested is
+  # architecture-independent) up through the point where AddressSanitizer
+  # tries to reserve its shadow region.  A parallel UBSan-only build (this
+  # tree's own `NTLIBC_SAN_MODE=ubsan`, `-shared-libsan`) both built AND
+  # RAN clean under the Nix toolchain, and correctly reported a deliberate
+  # division-by-zero with the expected "runtime error: division by zero".
+  #
+  # THE REAL FINDING: nixpkgs' clang wrapper injects `-fwrapv` by default
+  # (part of its standard hardening flag set -- `strictoverflow` in
+  # $NIX_HARDENING_ENABLE, confirmed via `clang -fsanitize=undefined -###`,
+  # which shows `-fwrapv` ahead of the `-fsanitize=` arguments on every
+  # invocation).  `-fwrapv` makes signed-integer overflow well-defined
+  # wraparound rather than undefined behaviour, and UBSan's
+  # signed-integer-overflow check -- part of the plain `-fsanitize=
+  # undefined` group this job's SAN variable relies on, per Clang's own
+  # Sanitizers.def -- compiles to nothing when the compiler already treats
+  # the operation as defined.  Measured, not inferred: building
+  # `return INT_MAX + 1;` under `nix develop`'s clang with this tree's own
+  # exact flags (`-fsanitize=undefined -fno-sanitize-recover=undefined
+  # -shared-libsan -O1`) produces a binary that runs to completion and
+  # prints the wrapped value with exit 0 -- no diagnostic at all -- while
+  # the identical build with `-fno-wrapv` appended reports "runtime error:
+  # signed integer overflow: 2147483647 + 1 cannot be represented in type
+  # 'int'" and exits 1, as apt's unwrapped clang does today with neither
+  # flag needed.  A plain apt-installed clang carries no such wrapper and
+  # injects no such flag, so today's job actually catches this whole class
+  # of bug where a naive `nix develop --command make ARCH=x86_64 asan`
+  # would not.
+  #
+  # This is not a missing library or a search-path miss -- it is a silent,
+  # correctly-linking, correctly-starting build that quietly stops
+  # verifying one entire UBSan check this job exists to run, with no red
+  # build to reveal it.  A workaround exists (append `-fno-wrapv`, or drop
+  # `strictoverflow` from $NIX_HARDENING_ENABLE) but applying one is a
+  # deliberate behavioural change to tools/asan-build.sh's own flags, not a
+  # side effect of a CI-toolchain swap, so it is left for its own change
+  # with its own review rather than folded in here.  Until then this job
+  # stays on apt, which is not a stale caution but a confirmed exclusion.
   asan:
     runs-on: ubuntu-24.04
     timeout-minutes: 20

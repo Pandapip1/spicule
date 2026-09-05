@@ -967,10 +967,28 @@ static double do_getline(struct awk_interp *ip, struct awk_node *node)
 
 static void buf_append(char **buf, size_t *len, size_t *cap, const char *s, size_t n)
 {
-	if (*len + n + 1 > *cap) {
-		size_t newcap = *cap ? *cap * 2 : 64;
-		while (newcap < *len + n + 1) newcap *= 2;
+	/* *len + n + 1, computed raw, wraps for an adversarial n and would
+	 * then wrongly compare as "already fits" against *cap -- check it
+	 * the same overflow-safe way __util_mallocarray()'s callers do. */
+	size_t need;
+	if (!__util_size_add(*len, n, &need) || !__util_size_add(need, 1, &need))
+		fatal("output too large");
+	if (need > *cap) {
+		size_t oldcap = *cap;
+		size_t newcap = *cap ? *cap : 64;
+		while (newcap < need) {
+			if (newcap > (size_t)-1 / 2) fatal("output too large");
+			newcap *= 2;
+		}
 		*buf = xrealloc(*buf, newcap);
+		/* realloc() leaves the grown tail's bytes unspecified. Nothing
+		 * below writes past *len+n, so without this, capacity beyond
+		 * whatever the copy loop below actually reaches this call
+		 * would stay indeterminate -- and a later caller that hands
+		 * this same buffer back in as another buf_append() source
+		 * (e.g. do_sub()'s expand_replacement() result) then reads
+		 * that indeterminate tail. */
+		memset(*buf + oldcap, 0, newcap - oldcap);
 		*cap = newcap;
 	}
 	{

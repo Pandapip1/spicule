@@ -894,13 +894,19 @@ static int mbuf_append(struct man_buf *restrict b,
 		}
 		return 1;
 	}
-	if (b->len + n + 1 > b->cap) {
+	/* __util_array_capacity() folds the overflow-checked "is b->cap
+	 * already big enough?" test into its own return -- unlike the raw
+	 * `b->len + n + 1 > b->cap` comparison this replaced, which could
+	 * wrap around for an adversarial n and wrongly skip growing b->data
+	 * (still NULL for a never-appended-to b). */
+	{
 		size_t newcap;
-		char *g;
 		if (!__util_array_capacity(b->cap, b->len, n + 1, 256, 1, &newcap)) return 0;
-		g = __util_reallocarray(b->data, newcap, 1);
-		if (!g) return 0;
-		b->data = g; b->cap = newcap;
+		if (newcap != b->cap) {
+			char *g = __util_reallocarray(b->data, newcap, 1);
+			if (!g) return 0;
+			b->data = g; b->cap = newcap;
+		}
 	}
 	for (size_t i = 0; i < n; i++) b->data[b->len + i] = data[i];
 	b->len += n;
@@ -4233,9 +4239,18 @@ static int man_format(const char *text, size_t len, int width, struct man_buf *o
 
 	if (ok) {
 		struct man_buf full;
+		/* c.doc.len is only ever nonzero once c.doc.data has been
+		 * allocated (every writer is mbuf_append() or a sibling that
+		 * grows data before advancing len), but pairing the fallback
+		 * "" literal with the real length regardless would read past
+		 * that literal's single byte if the two ever came apart --
+		 * tie doc_len to the same null check instead of trusting the
+		 * invariant to hold at this one distant call site. */
+		const char *doc_data = c.doc.data;
+		size_t doc_len = doc_data ? c.doc.len : 0;
 		memset(&full, 0, sizeof full);
 		ok = man_emit_header(&full, width, &r) &&
-		     mbuf_append(&full, c.doc.data ? c.doc.data : "", c.doc.len);
+		     mbuf_append(&full, doc_data ? doc_data : "", doc_len);
 		if (ok) {
 			mbuf_free(&c.doc);
 			c.doc = full;

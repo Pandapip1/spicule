@@ -345,7 +345,7 @@ static int buf_insert_after(struct ed *ed, long after_line, char **newlines, siz
 	size_t at = (size_t)after_line, i;
 	if (!count) return 1;
 	if (!buf_reserve(ed, count)) return 0;
-	for (size_t i = ed->nlines; i > at; i--)
+	for (i = ed->nlines; i > at; i--)
 		ed->lines[i + count - 1] = ed->lines[i - 1];
 	for (i = 0; i < count; i++) ed->lines[at + i] = newlines[i];
 	ed->nlines += count;

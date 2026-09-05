@@ -430,8 +430,8 @@ static void format_unsigned(const char *arg, const struct spec *sp, int base, in
 		 * grew to fill DIGBUF_MAX (a large -- but SPEC_MAX-clamped,
 		 * so still bounded -- precision). */
 		char withpfx[DIGBUF_MAX + 4];
-		int n = snprintf(withpfx, sizeof withpfx, "%s%s", prefix, digs);
-		if (n < 0 || (size_t)n >= sizeof withpfx) {
+		int wrote = snprintf(withpfx, sizeof withpfx, "%s%s", prefix, digs);
+		if (wrote < 0 || (size_t)wrote >= sizeof withpfx) {
 			withpfx[0] = 0;
 			g_status = 1;
 		}

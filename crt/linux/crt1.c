@@ -385,14 +385,22 @@ static void linux_setup_tls(long *auxv)
 /* Builds this library's own, independently-owned copy of the initial
  * environment (see this file's top banner for why aliasing envp in
  * place is a real, confirmed bug). __malloc()/__free(), not
- * malloc()/free(): this runs before __fd_init(). */
-static char **linux_build_environ(char **envp) __attribute__((nonnull(1)));
-static char **linux_build_environ(char **envp)
+ * malloc()/free(): this runs before __fd_init().
+ *
+ * count is the caller's own responsibility, exactly the way argc is for
+ * every argc/argv-shaped utility entry point in src/internal/util.h --
+ * the NUL-scan that discovers it happens once, at the call site, so
+ * elements_withtok(null_terminated, count) below can name a parameter
+ * the caller already proved, instead of a length this function would
+ * otherwise have to discover on its own with no way to state the result. */
+static char **linux_build_environ(
+	char **envp elements_withtok(null_terminated, count), size_t count)
+	__attribute__((nonnull(1)));
+static char **linux_build_environ(
+	char **envp elements_withtok(null_terminated, count), size_t count)
 {
-	size_t count = 0, i;
+	size_t i;
 	char **ev;
-
-	while (envp[count]) count++;
 
 	ev = (char **)__malloc(sizeof(char *) * (count + 1));
 	if (!ev) return 0;
@@ -424,6 +432,7 @@ _Noreturn void __linux_start_main(long *sp)
 	char **argv = (char **)(sp + 1);
 	char **envp = argv + argc + 1;
 	long *auxv = (long *)envp;
+	size_t envc = 0;
 	char *slash;
 	int rc;
 
@@ -449,7 +458,8 @@ _Noreturn void __linux_start_main(long *sp)
 
 	__argc = (int)argc;
 	__argv = argv;
-	environ = linux_build_environ(envp);
+	while (envp[envc]) envc++;
+	environ = linux_build_environ(envp, envc);
 	if (!environ) {
 		static const char msg[] =
 			"ntlibc: out of memory building environ at startup\n";

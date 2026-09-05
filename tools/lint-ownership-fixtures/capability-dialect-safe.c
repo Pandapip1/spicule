@@ -51,6 +51,17 @@ void element_relation_survives_local_alias(
 		dialect_use_string(alias[i]);
 }
 
+void dialect_use_wide_vector(
+	unsigned long long count,
+	char **values elements_withtok(dialect_terminated, count))
+	__attribute__((nonnull(2)))
+{
+	unsigned long long i;
+
+	for (i = 0; i < count; i++)
+		dialect_use_string(values[i]);
+}
+
 int element_relation_captures_entry_extent(
 	int count,
 	char **values elements_withtok(dialect_terminated, count))

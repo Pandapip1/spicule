@@ -1467,9 +1467,31 @@ static bool aggregateIndexProven(const ArraySubscriptExpr *Access,
     return false;
   QualType IndexType = Index.getType(C.getASTContext());
   QualType UpperType = Upper->getType();
+  // hasSameType()'s exact canonical-type identity is the wrong tool here:
+  // when Index is a concrete integer (e.g. a loop's own "i = 0"
+  // initializer, taken on the first-iteration path before i turns
+  // symbolic), SVal::getType() cannot recover the index variable's real
+  // declared type from a bare width+signedness APSInt -- it reconstructs
+  // a representative type for that width/signedness pair instead, which
+  // on an LP64 target is "long"/"unsigned long" even when the source
+  // variable was declared some OTHER same-width type such as "long
+  // long" or its size_t alias (this project's own size_t is `unsigned
+  // _Addr`, and _Addr is `long long` on aarch64/x86_64 -- see
+  // arch/*/bits/alltypes.h.gen -- a real, distinct canonical type from
+  // "unsigned long" despite equal width and signedness). A same-width,
+  // same-signedness comparison is exactly what BO_LT below actually
+  // needs for a sound bounds check -- the SValBuilder call for two
+  // NonLoc integers of matching width/signedness never has to reconcile
+  // their nominal C types -- and it is the identical bit-width/signedness
+  // representation OwnershipZ3Proof::cType() (above) already uses in
+  // place of exact QualType equality for the same reason.
   if (IndexType.isNull() || UpperType.isNull() ||
-      !C.getASTContext().hasSameType(IndexType, UpperType) ||
-      !IndexType->isIntegralOrEnumerationType())
+      !IndexType->isIntegralOrEnumerationType() ||
+      !UpperType->isIntegralOrEnumerationType() ||
+      C.getASTContext().getIntWidth(IndexType) !=
+          C.getASTContext().getIntWidth(UpperType) ||
+      IndexType->isUnsignedIntegerOrEnumerationType() !=
+          UpperType->isUnsignedIntegerOrEnumerationType())
     return false;
   SValBuilder &Builder = C.getSValBuilder();
   SVal Below = Builder.evalBinOp(State, BO_LT, *DefinedIndex,

@@ -336,6 +336,23 @@ constexpr LifecycleObservation observeLifecycleExit(LifecycleFact Fact) {
   return {Fact, LifecycleEvent::None};
 }
 
+/* The photographic negative of RequireLive: proves a resource is safe to
+ * destroy or discard because nothing currently holds it live.  Absent and
+ * Released both already mean "not currently held", so -- unlike
+ * RequireLive, which treats Absent and Released as two distinct failure
+ * modes (MissingLive vs AlreadyReleased) -- this reports only the one
+ * failure mode a destroy-while-held operation actually has.  Purely
+ * observational, like RequireLive: the fact is never mutated, since a
+ * caller that ignores the reported violation and destroys anyway leaves
+ * lifecycle knowledge exactly as uncertain as it already was. */
+constexpr LifecycleObservation requireNotLive(LifecycleFact Fact) {
+  if (!isCanonicalLifecycle(Fact) || Fact.State == LifecycleState::Unknown)
+    return {Fact, LifecycleEvent::StateUnproven};
+  if (Fact.State == LifecycleState::Live)
+    return {Fact, LifecycleEvent::AlreadyLive};
+  return {Fact, LifecycleEvent::None};
+}
+
 /* Adapter mapping assumptions:
  * - ConstructMap Live/Destroyed becomes Live/Released keyed by MemRegion.
  * - ResourceMap's encoded family/liveness becomes a fact keyed by SymbolRef.

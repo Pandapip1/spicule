@@ -12,9 +12,11 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramStateTrait.h"
 #include "clang/StaticAnalyzer/Frontend/CheckerRegistry.h"
+#include "LifecycleAlgebra.h"
 #include "LockHandoffContracts.h"
 
 #include <cctype>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -22,8 +24,46 @@
 using namespace clang;
 using namespace ento;
 
-enum class HeldKind : unsigned char { Unlocked, Read, Write };
-REGISTER_MAP_WITH_PROGRAMSTATE(HeldLocks, const MemRegion *, HeldKind)
+// "Held" is the same must-hold/must-not-double-acquire linear-lifecycle
+// question OwnershipChecker.cpp's ConstructMap and AllocationLifetimeChecker.cpp's
+// AllocationLifecycle already answer via ntlibc::algebra's shared,
+// nominal-state algebra (Live/Released/Absent/Unknown, transitioned by
+// applyLifecycleOperation()) -- this checker used to carry its own,
+// separately hand-rolled boolean "is this MemRegion held" derivation
+// instead of reusing that already-audited machinery. A lock's own
+// acquire/release cycle repeats (unlike a one-shot malloc/free or
+// construct/destroy), but applyLifecycleOperation()'s Release always
+// produces Released rather than Absent, and Released accepts a further
+// Acquire cleanly -- so the same three-operation algebra already used for
+// one-shot resources composes correctly for a lock's repeated hold/release
+// cycles with no extension needed. Read vs write acquisition mode is
+// recorded as the lifecycle's own family tag (see readFamily()/
+// writeFamily() below), exactly the way OwnershipChecker tags a construct's
+// family from its own `construct(name)` annotation -- but, unlike an
+// annotated construct/destroy pair, a bare pthread_*_unlock() has no way to
+// know in advance whether it is releasing a read or a write acquisition, so
+// LifecycleEvent::FamilyMismatch is deliberately never consulted for
+// Release/RequireHeld below: this checker has never distinguished read from
+// write mode for those two checks, and family-mismatch detection is not a
+// discipline this checker claims to enforce.
+using ntlibc::algebra::absentLifecycle;
+using ntlibc::algebra::applyLifecycleOperation;
+using ntlibc::algebra::contains;
+using ntlibc::algebra::LifecycleEvent;
+using ntlibc::algebra::LifecycleFact;
+using ntlibc::algebra::LifecycleFamilyId;
+using ntlibc::algebra::LifecycleOperation;
+using ntlibc::algebra::LifecycleState;
+using ntlibc::algebra::LifecycleTransition;
+using ntlibc::algebra::liveLifecycle;
+using ntlibc::algebra::observeLifecycleExit;
+using ntlibc::algebra::releasedLifecycle;
+using ntlibc::algebra::requireNotLive;
+using ntlibc::algebra::unknownLifecycle;
+
+REGISTER_MAP_WITH_PROGRAMSTATE(HeldLocks, const MemRegion *, LifecycleState)
+REGISTER_MAP_WITH_PROGRAMSTATE(HeldLockFamily, const MemRegion *,
+                               const IdentifierInfo *)
 REGISTER_MAP_WITH_PROGRAMSTATE(LockAcquirers, const MemRegion *,
                                const StackFrameContext *)
 // A region tagged here, for the stack frame that tagged it, is exempt from
@@ -93,6 +133,50 @@ class LockDisciplineChecker
     if (Protocol.Argument >= Call.getNumArgs())
       return nullptr;
     return Call.getArgSVal(Protocol.Argument).getAsRegion();
+  }
+
+  // Mirrors OwnedConstructChecker::familyId() in OwnershipChecker.cpp
+  // exactly: an uninterpreted nominal atom's "value" is just its
+  // IdentifierInfo's own stable address, reinterpreted as the opaque
+  // integer LifecycleFamilyId wraps. Read and write acquisitions get their
+  // own fixed, TU-wide identifiers (there is exactly one of each, unlike
+  // OwnershipChecker's per-annotation-name families) purely so a held
+  // lock's LifecycleFact can still record which mode it was acquired in.
+  static LifecycleFamilyId familyId(const IdentifierInfo *Family) {
+    return {static_cast<uint64_t>(reinterpret_cast<uintptr_t>(Family))};
+  }
+
+  static const IdentifierInfo *readFamily(ASTContext &Ctx) {
+    return &Ctx.Idents.get("ntlibc.lock.read");
+  }
+
+  static const IdentifierInfo *writeFamily(ASTContext &Ctx) {
+    return &Ctx.Idents.get("ntlibc.lock.write");
+  }
+
+  // The MemRegion-keyed analogue of AllocationLifetimeChecker.cpp's own
+  // lifecycleFor(): reconstructs the canonical LifecycleFact a HeldLocks/
+  // HeldLockFamily pair encodes, so every caller reasons about "is this
+  // lock held" through the one shared representation instead of an
+  // ad hoc boolean. An absent HeldLocks entry is Absent, not Unknown --
+  // exactly the prior HeldKind-based code's own convention of reading "no
+  // information at all" as "unlocked", for every caller including a
+  // pthread_cond_wait() mutex argument this per-function analysis never
+  // saw acquired.
+  static LifecycleFact heldFact(ProgramStateRef State, const MemRegion *Region) {
+    const LifecycleState *Phase = State->get<HeldLocks>(Region);
+    if (!Phase)
+      return absentLifecycle();
+    if (*Phase == LifecycleState::Unknown)
+      return unknownLifecycle();
+    if (*Phase == LifecycleState::Absent)
+      return absentLifecycle();
+    const IdentifierInfo *const *Family = State->get<HeldLockFamily>(Region);
+    if (!Family)
+      return unknownLifecycle();
+    LifecycleFamilyId Id = familyId(*Family);
+    return *Phase == LifecycleState::Live ? liveLifecycle(Id)
+                                          : releasedLifecycle(Id);
   }
 
   // Function's own ntlibc_lock_requires_held_on_entry/
@@ -209,28 +293,57 @@ public:
     const Stmt *Statement = Call.getOriginExpr();
     if (!Region || !Statement)
       return;
-    const HeldKind *Kind = C.getState()->get<HeldLocks>(Region);
-    bool Held = Kind && *Kind != HeldKind::Unlocked;
+    ProgramStateRef State = C.getState();
+    LifecycleFact Fact = heldFact(State, Region);
     switch (Protocol->Operation) {
     case LockOperation::AcquireRead:
-    case LockOperation::AcquireWrite:
-      if (Held)
+    case LockOperation::AcquireWrite: {
+      LifecycleFamilyId Family = familyId(
+          Protocol->Operation == LockOperation::AcquireRead
+              ? readFamily(C.getASTContext())
+              : writeFamily(C.getASTContext()));
+      LifecycleTransition Transition =
+          applyLifecycleOperation(Fact, Family, LifecycleOperation::Acquire);
+      if (contains(Transition.Events, LifecycleEvent::AlreadyLive))
         report("lock acquisition is attempted while already held", Statement,
-               C.getState(), C);
+               State, C);
       break;
-    case LockOperation::Release:
-      if (!Held)
+    }
+    case LockOperation::Release: {
+      // RequireLive, not Release: checkPreCall only ever proves or
+      // disproves the precondition, it never commits a state transition
+      // -- checkPostCall is solely responsible for that, gated on the
+      // call's own success/failure outcome. See this class's own
+      // familyId() doc comment for why FamilyMismatch is not checked
+      // here: a bare pthread_*_unlock() carries no read/write mode of
+      // its own to mismatch against.
+      LifecycleTransition Transition = applyLifecycleOperation(
+          Fact, familyId(writeFamily(C.getASTContext())),
+          LifecycleOperation::RequireLive);
+      if (contains(Transition.Events, LifecycleEvent::MissingLive) ||
+          contains(Transition.Events, LifecycleEvent::AlreadyReleased) ||
+          contains(Transition.Events, LifecycleEvent::StateUnproven))
         report("lock release is not proven to hold the lock", Statement,
-               C.getState(), C);
+               State, C);
       break;
-    case LockOperation::RequireHeld:
-      if (!Held)
+    }
+    case LockOperation::RequireHeld: {
+      LifecycleTransition Transition = applyLifecycleOperation(
+          Fact, familyId(writeFamily(C.getASTContext())),
+          LifecycleOperation::RequireLive);
+      if (contains(Transition.Events, LifecycleEvent::MissingLive) ||
+          contains(Transition.Events, LifecycleEvent::AlreadyReleased) ||
+          contains(Transition.Events, LifecycleEvent::StateUnproven))
         report("condition wait is not proven to hold its mutex", Statement,
-               C.getState(), C);
+               State, C);
       break;
+    }
     case LockOperation::Destroy:
-      if (Held)
-        report("lock is destroyed while held", Statement, C.getState(), C);
+      // The photographic negative of the two RequireLive checks above:
+      // proves the lock is safe to tear down because nothing currently
+      // holds it, rather than proving something does.
+      if (contains(requireNotLive(Fact).Events, LifecycleEvent::AlreadyLive))
+        report("lock is destroyed while held", Statement, State, C);
       break;
     case LockOperation::Initialize:
       break;
@@ -255,15 +368,18 @@ public:
         C.getSValBuilder().makeZeroVal(Function->getReturnType()));
     auto [Succeeded, Failed] = C.getState()->assume(Success);
     if (Succeeded) {
-      HeldKind Next = HeldKind::Unlocked;
-      if (Protocol->Operation == LockOperation::AcquireRead)
-        Next = HeldKind::Read;
-      else if (Protocol->Operation == LockOperation::AcquireWrite)
-        Next = HeldKind::Write;
-      Succeeded = Succeeded->set<HeldLocks>(Region, Next);
-      if (Next == HeldKind::Unlocked) {
-        Succeeded = Succeeded->remove<LockAcquirers>(Region);
-      } else {
+      bool Acquired = Protocol->Operation == LockOperation::AcquireRead ||
+                     Protocol->Operation == LockOperation::AcquireWrite;
+      if (Acquired) {
+        const IdentifierInfo *Family =
+            Protocol->Operation == LockOperation::AcquireRead
+                ? readFamily(C.getASTContext())
+                : writeFamily(C.getASTContext());
+        LifecycleTransition Transition = applyLifecycleOperation(
+            heldFact(Succeeded, Region), familyId(Family),
+            LifecycleOperation::Acquire);
+        Succeeded = Succeeded->set<HeldLocks>(Region, Transition.After.State);
+        Succeeded = Succeeded->set<HeldLockFamily>(Region, Family);
         Succeeded = Succeeded->set<LockAcquirers>(Region, C.getStackFrame());
         // See LockHandoffContracts.h's AcquiresForCaller comment:
         // cond_wait_cleanup's pthread_mutex_lock(cleanup->mutex)
@@ -273,6 +389,17 @@ public:
         // this call succeeding.
         if (acquiresForCaller(C))
           Succeeded = Succeeded->set<HandoffExempt>(Region, C.getStackFrame());
+      } else {
+        // Initialize or Release: both leave the lock in a definite
+        // not-held state. Released, not Absent -- heldFact() reads
+        // either as "not held" identically, and Released additionally
+        // keeps a double-release or a wait-after-release distinguishable
+        // from a lock nobody ever touched, exactly as
+        // applyLifecycleOperation()'s own Release verb intends.
+        Succeeded = Succeeded->set<HeldLocks>(Region, LifecycleState::Released);
+        Succeeded = Succeeded->set<HeldLockFamily>(
+            Region, writeFamily(C.getASTContext()));
+        Succeeded = Succeeded->remove<LockAcquirers>(Region);
       }
       C.addTransition(Succeeded);
     }
@@ -293,7 +420,9 @@ public:
       // success/failure split is even reached.)
       if (Protocol->Operation == LockOperation::Release &&
           isDirectReturnOperand(Call, C)) {
-        Failed = Failed->set<HeldLocks>(Region, HeldKind::Unlocked);
+        Failed = Failed->set<HeldLocks>(Region, LifecycleState::Released);
+        Failed = Failed->set<HeldLockFamily>(Region,
+                                             writeFamily(C.getASTContext()));
         Failed = Failed->remove<LockAcquirers>(Region);
       }
       C.addTransition(Failed);
@@ -319,17 +448,25 @@ public:
     // region exempt from the end-of-function leak check in the same
     // step: both halves of this function's contract share one region,
     // discovered once, here.
-    State = State->set<HeldLocks>(Region, HeldKind::Write);
+    State = State->set<HeldLocks>(Region, LifecycleState::Live);
+    State = State->set<HeldLockFamily>(Region, writeFamily(C.getASTContext()));
     State = State->set<HandoffExempt>(Region, C.getStackFrame());
     C.addTransition(State);
   }
 
   void checkEndFunction(const ReturnStmt *Return, CheckerContext &C) const {
-    for (const auto &Entry : C.getState()->get<HeldLocks>()) {
-      if (Entry.second == HeldKind::Unlocked)
+    ProgramStateRef State = C.getState();
+    for (const auto &Entry : State->get<HeldLocks>()) {
+      // observeLifecycleExit()'s own LiveAtScopeExit event is exactly
+      // "function exits while a lock is held" -- the same shared verb
+      // AllocationLifetimeChecker.cpp uses for its own end-of-function
+      // leak check, applied here to a MemRegion-keyed lock fact instead
+      // of a SymbolRef-keyed allocation.
+      if (!contains(observeLifecycleExit(heldFact(State, Entry.first)).Events,
+                    LifecycleEvent::LiveAtScopeExit))
         continue;
       const StackFrameContext *const *Exempt =
-          C.getState()->get<HandoffExempt>(Entry.first);
+          State->get<HandoffExempt>(Entry.first);
       if (Exempt && *Exempt == C.getStackFrame())
         continue;
       const StackFrameContext *const *Acquirer =

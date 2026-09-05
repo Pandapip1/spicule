@@ -219,7 +219,10 @@ static void ustar_put_oct(unsigned char *field, int width, unsigned long value)
 	__ownership_readable_span(tmp, (size_t)(width - 1));
 	{
 		size_t i;
-		for (i = 0; i < width - 1; i++) field[i] = tmp[i];
+		/* Every caller below passes a literal 8 or 12; the cast mirrors
+		 * the two __ownership_*_span() calls just above, which already
+		 * treat width - 1 as a size_t for the same reason. */
+		for (i = 0; i < (size_t)(width - 1); i++) field[i] = tmp[i];
 	}
 	field[width - 1] = 0;
 }
@@ -372,7 +375,9 @@ static int cpio_put_field(char *field, int width __arith_range(6, 11),
 	}
 	snprintf(tmp, sizeof tmp, "%0*lo", width, value);
 	__ownership_writable_span(field, (size_t)width);
-	for (size_t i = 0; i < width; i++) field[i] = tmp[i];
+	/* width's __arith_range(6, 11) above is proven at every call site by
+	 * the arithub lint stage, so this is never negative. */
+	for (size_t i = 0; i < (size_t)width; i++) field[i] = tmp[i];
 	return 0;
 }
 

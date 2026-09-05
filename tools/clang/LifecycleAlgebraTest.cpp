@@ -423,10 +423,42 @@ static bool testExitTable() {
   return Passed;
 }
 
+static bool testRequireNotLiveTable() {
+  constexpr LifecycleFamilyId Family{1};
+  constexpr LifecycleFact States[] = {unknownLifecycle(), absentLifecycle(),
+                                      liveLifecycle(Family),
+                                      releasedLifecycle(Family)};
+  // Absent and Released are both "safe to destroy" -- unlike RequireLive,
+  // this predicate does not distinguish "never held" from "held, then
+  // released" among its passing cases; only a currently-Live fact fails.
+  constexpr LifecycleEvent Expected[] = {
+      LifecycleEvent::StateUnproven, LifecycleEvent::None,
+      LifecycleEvent::AlreadyLive, LifecycleEvent::None};
+  bool Passed = true;
+  for (unsigned Index = 0; Index < 4; ++Index) {
+    LifecycleObservation Observation = requireNotLive(States[Index]);
+    bool Cell =
+        Observation.Fact == States[Index] &&
+        Observation.Events == Expected[Index] &&
+        Observation.permitted() == (Expected[Index] == LifecycleEvent::None);
+    if (!Cell)
+      std::fprintf(stderr,
+                   "lifecycle-algebra-test: require-not-live cell state=%u\n",
+                   Index);
+    Passed &= Cell;
+  }
+  constexpr LifecycleFact Malformed{LifecycleState::Live, NoLifecycleFamily};
+  LifecycleObservation Observation = requireNotLive(Malformed);
+  Passed &= test(Observation.Fact == Malformed &&
+                     Observation.Events == LifecycleEvent::StateUnproven,
+                 "require-not-live accepted malformed fact");
+  return Passed;
+}
+
 int main() {
   return testOperationTable() && testFamilyAndMalformedFacts() &&
                  testReplacementTable() && testMorphismTables() &&
-                 testExitTable()
+                 testExitTable() && testRequireNotLiveTable()
              ? 0
              : 1;
 }

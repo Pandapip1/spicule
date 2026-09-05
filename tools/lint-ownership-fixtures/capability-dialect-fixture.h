@@ -33,6 +33,18 @@ void dialect_use_string_vector(
 	int count,
 	char **values elements_withtok(dialect_terminated, count))
 	__attribute__((nonnull(2)));
+/* Same shape as dialect_use_string_vector, but the extent parameter is a
+ * genuinely distinct 64-bit type from int/long -- "unsigned long long"
+ * is never the same canonical type as "unsigned long" even though both
+ * are 64 bits wide on this target, the same way this project's own
+ * size_t (`unsigned _Addr`, with _Addr = "long long" on aarch64/x86_64;
+ * see arch/*'s bits/alltypes.h.gen) is. Exercises
+ * AggregateElementTokenChecker's extent/index type compatibility check
+ * against a real, same-width-but-different-type pairing. */
+void dialect_use_wide_vector(
+	unsigned long long count,
+	char **values elements_withtok(dialect_terminated, count))
+	__attribute__((nonnull(2)));
 void dialect_clear_string(char *text drop(dialect_terminated));
 void dialect_bad_clear_string(char *text drop(dialect_terminated));
 char *dialect_copy_string(char *text grant(dialect_terminated));

@@ -95,6 +95,29 @@ void converted_index_is_conservatively_unproved(
 		dialect_use_string(values[index]); /* ownership-expect: converted-element-index */
 }
 
+void out_of_range_wide_element_is_not_evidence(
+	unsigned long long count,
+	char **values elements_withtok(dialect_terminated, count))
+	__attribute__((nonnull(2)))
+{
+	dialect_use_string(values[count]); /* ownership-expect: wide-element-at-extent */
+}
+
+/* Same-width, different-signedness twin: "unsigned long long count" vs.
+ * a "long long index" -- same 64 bits, but a genuine signedness
+ * mismatch the checker's width/signedness comparison must still
+ * reject, proving the fix compares BOTH properties, not just width. */
+void signedness_mismatched_wide_index_is_not_evidence(
+	unsigned long long count,
+	char **values elements_withtok(dialect_terminated, count))
+	__attribute__((nonnull(2)))
+{
+	long long i = 0;
+
+	if (count > 0)
+		dialect_use_string(values[i]); /* ownership-expect: wide-signedness-mismatch */
+}
+
 void use_string_after_invalidation(void)
 {
 	char text[8];

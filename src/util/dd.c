@@ -2,108 +2,43 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * dd(1p): a block-oriented copy utility with its own `operand=value`
- * argument grammar (XCU dd(1p) OPERANDS) instead of `-flag` options --
- * every argv[i] here is parsed as "name=value" or rejected outright.
+ * argument grammar (XCU dd(1p) OPERANDS) instead of `-flag` options.
  *
- * ---- OPERANDS implemented ------------------------------------------------
- *
- *  if=file / of=file   Input/output file; unspecified means standard
- *                       input / standard output, per dd(1p)'s own
- *                       "[i]f no if operand is specified... standard
- *                       input shall be used" wording (and symmetrically
- *                       for of/standard output).
- *  ibs=expr / obs=expr Input/output block size.
- *  bs=expr             "Set the input and output block sizes, superseding
- *                       ibs and obs.  If input blocks read are short ...
- *                       and the sync conversion is not specified, the
- *                       resultant output block ... shall be the same
- *                       size as the corresponding input block."  That
- *                       last clause is a real, specified behavioural
- *                       difference from ibs=/obs=: with bs=, this
- *                       implementation copies each block through as-is
- *                       (dd_copy_direct() below) instead of recombining
- *                       reads into obs-sized writes the way ibs=/obs=
- *                       does (dd_copy_blocked()) -- see either
- *                       function's own comment.
+ * Operands:
+ *  if=file / of=file    Input/output file; default stdin/stdout.
+ *  ibs=expr / obs=expr  Input/output block size.
+ *  bs=expr              Sets both ibs and obs, and changes copy strategy:
+ *                       with bs=, each block read is written out as-is
+ *                       (dd_copy_direct()); with ibs=/obs=, reads are
+ *                       recombined into obs-sized writes (dd_copy_blocked()).
+ *                       This split is a real behavioral difference dd(1p)
+ *                       itself specifies, not an implementation shortcut.
  *  count=n              Copy only n input blocks, then stop.
- *  skip=n / seek=n      Skip n ibs-sized / obs-sized blocks (from the
- *                       beginning of the file) before copying starts.
- *                       "If it is not possible to seek ... dd shall read
- *                       and discard" -- implemented for skip= (input)
- *                       exactly that way when lseek() reports the file is
- *                       not seekable; seek= (output) has no such
- *                       documented fallback and a non-seekable output is
- *                       a real, diagnosed error here instead.
- *  conv=value[,value...] Comma-separated conversions.  Only the cheap,
- *                       commonly-used subset below is implemented; any
- *                       other value is a loud, nonzero-exit refusal
- *                       (never a silent no-op -- the same "an
- *                       unsupported option must not look like it
- *                       worked" rule src/sh/builtin.c's bi_set() and
- *                       src/util/touch.c's -d both already apply):
- *                         notrunc  Do not truncate the output file --
- *                                  open it without O_TRUNC, so data
- *                                  past what this run writes survives
- *                                  (the point of combining it with
- *                                  seek=, to patch part of a file).
- *                         sync     Pad every short input block (a final
- *                                  partial read, or -- with noerror --
- *                                  one a read error cut short) to the
- *                                  full ibs with trailing NUL bytes,
- *                                  rather than passing the short length
- *                                  straight through.
+ *  skip=n / seek=n      Skip n ibs-/obs-sized blocks before copying starts.
+ *                       skip= falls back to read-and-discard when the input
+ *                       isn't seekable (POSIX-mandated); seek= has no such
+ *                       fallback -- a non-seekable output is an error.
+ *  conv=value[,...]     Only notrunc/sync/noerror are implemented; any
+ *                       other value is a loud, nonzero-exit refusal rather
+ *                       than a silent no-op. ucase/lcase/swab/ascii/ebcdic/
+ *                       block/unblock are a deliberate gap -- this
+ *                       project's own callers never need them.
+ *                         notrunc  Open the output file without O_TRUNC.
+ *                         sync     Pad every short input block to the full
+ *                                  ibs with NUL bytes.
  *                         noerror  Continue past a read error instead of
- *                                  stopping; the block that failed
- *                                  contributes nothing (or, combined
- *                                  with sync, an ibs of NUL bytes) rather
- *                                  than being retried or guessed at.
- *                       ucase/lcase/swab/ascii/ebcdic/block/unblock and
- *                       the rest of chmod(1p)... no, dd(1p)'s own
- *                       conv= alphabet are a documented, deliberate gap:
- *                       character-set and record-format conversions are
- *                       real work this project's own callers (bootstrap
- *                       image copies, mainly) never need, and refusing
- *                       them outright is far safer than a partial,
- *                       silently-wrong implementation of any one of
- *                       them.
+ *                                  stopping.
  *
- * ---- the block-size grammar (b/k/w suffixes, 'x' multiplication) --------
+ * Block-size grammar: an unsigned decimal, an optional single b/k/w suffix
+ * (multiply by 512/1024/sizeof(int)), and an optional trailing 'x'expr
+ * multiplier, parsed recursively so "2x3x4" reads left-to-right.
  *
- * dd(1p): "b: Multiply by 512 ... k: Multiply by 1024 ... w: Multiply by
- * the number of bytes in an integer ... expr1'x'expr2 ... equivalent to
- * expr1*expr2."  parse_dd_num() below implements exactly that: an
- * unsigned decimal integer, an optional single b/k/w suffix, and an
- * optional trailing 'x'-and-another-expression multiplier (recursive, so
- * "2x3x4" parses the same left-to-right way arithmetic reads).  "w"'s
- * "the number of bytes in an integer" is taken as sizeof(int) on this
- * platform (4) rather than the traditional PDP-11-derived "2" some very
- * old dd implementations hardcoded -- the standard's own wording is
- * platform-relative, not a fixed historical constant.
- *
- * ---- the end-of-run summary ----------------------------------------------
- *
- * dd(1p): "Upon receiving SIGINT, dd shall write the following to
- * standard error before exiting: ... total number of complete and
- * partial input and output blocks."  Implemented as a required feature,
- * not a cosmetic afterthought: the summary is written on ordinary
- * completion too (both really are just "the run has stopped copying"),
- * in the "N+P records in / N+P records out" format every historical dd
- * uses.  SIGINT itself is handled by a plain flag (`static volatile
- * sig_atomic_t dd_interrupted`) set from the handler and polled by the
- * copy loop between blocks and after every EINTR -- nothing runs inside
- * the handler except that one assignment, so there is no async-signal-
- * safety question about the fprintf() that prints the summary, which
- * always happens back on the normal call stack, after the loop has
- * actually stopped.  The previous SIGINT disposition is saved and
- * restored before returning (both success and failure paths, and the
- * SIGINT path itself), because __util_dd_main() can run in-process as a
- * shell built-in (src/sh/builtin.c) rather than as its own process --
- * leaving a handler installed after `dd` returns would keep intercepting
- * SIGINT for the rest of the shell's own life, and calling exit()/_exit()
- * from inside the handler (the other common way to implement this) would
- * tear down that whole shell process instead of just this one command,
- * which is exactly the class of mistake src/sh/builtin.c's own header
- * comment warns about for a builtin's effect on its host process.
+ * On SIGINT or ordinary completion, prints "N+P records in/out" to stderr.
+ * The SIGINT handler only sets a flag (no work inside it), and the previous
+ * disposition is restored before returning, since __util_dd_main() can run
+ * in-process as a shell builtin (src/sh/builtin.c) rather than its own
+ * process -- a handler left installed, or an exit() called from inside it,
+ * would otherwise outlive this command or tear down the whole shell.
  */
 
 /* This translation unit implements ntlibc's freestanding -nostdinc
@@ -129,14 +64,8 @@ static void dd_sigint_handler(int sig)
 	dd_interrupted = 1;
 }
 
-/* Overflow-checked multiplication for the uintmax_t arithmetic dd(1p)'s own
- * block-size/skip/seek/count grammar does throughout this file: a bare
- * `a * b` here would silently wrap mod 2^64 on overflow, landing on some
- * arbitrary *nonzero* value that sails straight past a caller's simple
- * `== 0` validation -- the classic "multiply that overflows before the
- * bounds check runs" bug class this function exists to close off, once,
- * for every call site below (parse_dd_num()'s own b/k/w suffix and 'x'
- * multiplier, and dd_position()'s skip/seek-count * block-size). */
+/* Overflow-checked multiplication -- a bare a*b could wrap and pass a
+ * caller's `== 0` check with a bogus nonzero result. */
 static int dd_mul_overflows(uintmax_t a, uintmax_t b, uintmax_t *out)
 {
 	if (b != 0 && a > UINTMAX_MAX / b) return -1;
@@ -155,10 +84,9 @@ static int parse_dd_num(const char *s, uintmax_t *out)
 	errno = 0;
 	v = strtoumax(s, &end, 10);
 	if (end == s) return -1;
-	/* strtoumax() itself clamps a literal too big for uintmax_t to
-	 * UINTMAX_MAX and sets errno to ERANGE (src/stdlib/strtol.c) rather
-	 * than failing outright -- without this check that clamped value
-	 * would silently stand in for whatever the caller actually typed. */
+	/* strtoumax() clamps an overlong literal to UINTMAX_MAX and sets
+	 * ERANGE instead of failing outright; without this check the clamped
+	 * value would silently stand in for whatever was actually typed. */
 	if (v == UINTMAX_MAX && errno == ERANGE) return -1;
 	s = end;
 
@@ -189,9 +117,8 @@ struct dd_opts {
 };
 
 /* conv=value[,value...] -- see this file's header for the implemented
- * subset. *notrunc, *sync, and *noerror are set (never left untouched) on a
- * 0 return; on -1 a diagnostic is already on stderr and the caller must
- * not trust any of the three. */
+ * subset. On 0 return, *notrunc, *sync, and *noerror are all set; on -1
+ * a diagnostic is already on stderr and the caller must not trust them. */
 static int parse_conv(const char *val, int *notrunc, int *sync, int *noerror)
 {
 	char buf[256];
@@ -365,15 +292,9 @@ static int dd_position(int fd, uintmax_t n, uintmax_t unit, int is_input, const 
 {
 	uintmax_t bytes;
 
-	/* n and unit (skip=/seek= and ibs=/obs=) are each validated on their
-	 * own by the caller's parse_dd_num(), but their product never is --
-	 * a bare `n * unit` here can wrap mod 2^64 and land on a small (even
-	 * zero) byte offset for a skip/seek the user asked to be enormous,
-	 * silently copying data that was supposed to be skipped past instead
-	 * of failing loudly.  off_t is a signed 64-bit type on this tree
-	 * (include/alltypes.h.gen), so the product must also fit INTMAX_MAX
-	 * before the `(off_t)bytes` cast below, or that cast itself produces
-	 * an implementation-defined (in practice negative) offset. */
+	/* n*unit must also fit INTMAX_MAX (not just UINTMAX_MAX): off_t is a
+	 * signed 64-bit type here, so an oversized product would produce a
+	 * negative offset once cast below. */
 	if (dd_mul_overflows(n, unit, &bytes) < 0 || bytes > (uintmax_t)INTMAX_MAX) {
 		__util_diagf("dd: %s: %" PRIuMAX " * %" PRIuMAX " overflows\n",
 			is_input ? "skip" : "seek", n, unit);
@@ -481,15 +402,8 @@ int __util_dd_main(
 	sigaction(SIGINT, &old_sa, 0);
 
 summary:
-	/* %ju assumes the host libc's own uintmax_t (e.g. "unsigned long" on
-	 * an LP64 Linux target), which is not what this tree's own
-	 * <stdint.h> defines uintmax_t as (always "unsigned _Int64", i.e.
-	 * "unsigned long long") -- see PRIuMAX's own comment in
-	 * include/inttypes.h. __util_diagf is the one printf-family function
-	 * in this tree that carries an explicit format(printf) attribute
-	 * (src/internal/util.h), so it is the one place that mismatch is
-	 * checkable, and PRIuMAX is exactly the macro built to name the
-	 * matching length modifier instead of the bare, ABI-dependent 'j'. */
+	/* PRIuMAX, not %ju: this tree's uintmax_t doesn't match the host
+	 * libc's, so the bare 'j' length modifier would be wrong here. */
 	__util_diagf("%" PRIuMAX "+%" PRIuMAX " records in\n%" PRIuMAX "+%" PRIuMAX " records out\n",
 		in_full, in_partial, out_full, out_partial);
 

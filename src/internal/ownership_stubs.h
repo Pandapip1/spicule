@@ -47,6 +47,30 @@ void __ownership_pthread_rwlock_destroyed(void *
 
 void __ownership_string_terminated(const void * grant(null_terminated));
 void __ownership_string_invalidated(void * drop(null_terminated));
+/* Leaf axiom: object is a real, live, nonnull pointer value right here,
+ * a fact this checker's own reasoning cannot derive for a struct field
+ * or array element read (e.g. one of argv's own entries, sliced into a
+ * still-live parser-context struct field, read back out through that
+ * struct's own accessor) even though it is genuinely always true by
+ * construction -- the same shape __ownership_string_terminated above
+ * already restates for that same kind of read's NUL-termination, just
+ * for a different property (liveness, not termination) that needs its
+ * own separate assertion.
+ *
+ * Unlike every other axiom in this file, this one is NOT expressed as a
+ * grant()/consume() token: tools/clang/OwnershipChecker.cpp's
+ * ntlibc.ValidPointer (see ValidPointerChecker::isPointerNonNullAxiom
+ * and its use in checkPostCall) recognizes this call by name and
+ * directly narrows Clang's own native nonnull constraint for object's
+ * underlying symbol, the same mechanism already used there for
+ * __attribute__((returns_nonnull)) (isAlwaysNonNull) and the strto*
+ * family's endptr contract (writesNonNullEndPointer) -- because
+ * ValidPointer's proof is keyed off that native constraint, a different
+ * state model from this project's own grant()/consume() token map, and
+ * tools/lint.sh's stage_ownership never loads ntlibc.CapabilityToken (the
+ * checker that maintains that token map) in the same analysis pass as
+ * ntlibc.ValidPointer. */
+void __ownership_pointer_nonnull(const void *object);
 void __ownership_readable_span(
 	const void *data grant(readable_span(length)), size_t length);
 void __ownership_writable_span(
@@ -72,6 +96,7 @@ void __ownership_disjoint_span(
 #define __ownership_pthread_rwlock_destroyed(object) ((void)0)
 #define __ownership_string_terminated(object) ((void)0)
 #define __ownership_string_invalidated(object) ((void)0)
+#define __ownership_pointer_nonnull(object) ((void)0)
 #define __ownership_readable_span(object, length) ((void)0)
 #define __ownership_writable_span(object, length) ((void)0)
 #define __ownership_disjoint_span(first, second, length) ((void)0)

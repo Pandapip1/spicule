@@ -326,7 +326,8 @@ static ssize_t vstrfmon(char *s, size_t maxsize, const char *fmt, va_list ap)
 			/* Walk the group sizes from the least significant
 			 * end to find where the first (most significant)
 			 * group starts. */
-			while (run && run != CHAR_MAX && head > run) {
+			while (run != CHAR_MAX && head > run) {
+				if (!run) break;
 				head -= run;
 				if (g[1]) { g++; run = (size_t)*g; }
 			}

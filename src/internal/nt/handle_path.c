@@ -74,8 +74,8 @@ char *__handle_path(HANDLE h)
 		if (!NT_SUCCESS(st)) continue;
 		tl = tus.Length / sizeof(WCHAR);
 		matches = oni->Name.Length / sizeof(WCHAR) >= tl;
-		for (i = 0; matches && i < tl; i++)
-			if (oni->Name.Buffer[i] != target[i]) matches = 0;
+		for (i = 0; i < tl; i++)
+			if (oni->Name.Buffer[i] != target[i]) { matches = 0; break; }
 		if (matches &&
 		    (oni->Name.Length / sizeof(WCHAR) == tl || oni->Name.Buffer[tl] == '\\')) {
 			size_t rest = oni->Name.Length / sizeof(WCHAR) - tl;

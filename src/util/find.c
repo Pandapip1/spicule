@@ -99,8 +99,8 @@
 #include <grp.h>
 #include "util.h"
 #include "find.h"
-#include "libc.h" /* __find_program()/__spawn() -- src/process/, the same primitives sh's own execute.c uses */
-#include "ownership_stubs.h" /* __ownership_string_terminated(): every token below traces back to argv, whose own elements_withtok(null_terminated, argc) contract this file's own struct fields and locals cannot see through automatically -- see the restated axioms below, the same idiom src/string/strdup.c etc. already use. */
+#include "libc.h" /* __find_program()/__spawn() -- src/process/ */
+#include "ownership_stubs.h" /* __ownership_string_terminated(): restates argv's null-termination where the checker can't trace it */
 
 enum ntype {
 	N_NOT, N_AND, N_OR,
@@ -150,11 +150,7 @@ static struct find_global g_find;
 
 /* ==== parsing ============================================================ */
 
-/* Never actually returns NULL: the only allocation-failure path exits(2)
- * first, matching this file's own copy of the "restate a fact the checker
- * can't otherwise see" idiom already documented at
- * tools/clang/OwnershipChecker.cpp's isAlwaysNonNull() (strchrnul() is its
- * own motivating example). */
+/* returns_nonnull holds because the only alloc-failure path below calls exit(2) first. */
 withtok(find_expression_allocated)
 static struct node *alloc_node(enum ntype t) __attribute__((returns_nonnull));
 withtok(find_expression_allocated)
@@ -241,9 +237,6 @@ static struct node *parse_primary(struct find_ctx *c)
 
 	if (c->i >= c->n) { ferr(c, "expression expected"); return alloc_node(P_PRINT); }
 	t = c->v[c->i];
-	/* t is one of argv's own elements; restate the argv-wide
-	 * null-terminated guarantee here, the same way strdup.c etc.
-	 * restate it right after a copy. */
 	__ownership_string_terminated(t);
 
 	if (!strcmp(t, "(")) {
@@ -383,7 +376,7 @@ static struct node *parse_primary(struct find_ctx *c)
 		for (;;) {
 			if (c->i >= c->n) break;
 			term = c->v[c->i];
-			__ownership_string_terminated(term); /* an argv element, same as t above */
+			__ownership_string_terminated(term);
 			if (!strcmp(term, ";") || !strcmp(term, "+")) break;
 			c->i++;
 		}
@@ -393,7 +386,7 @@ static struct node *parse_primary(struct find_ctx *c)
 		n->exec_argv = (const char **)&c->v[start];
 		if (!strcmp(term, "+")) {
 			const char *last = n->exec_argv[n->exec_argc - 1];
-			__ownership_string_terminated(last); /* also an argv element, sliced from c->v */
+			__ownership_string_terminated(last);
 			if (strcmp(last, "{}")) { // NOLINT(bugprone-suspicious-string-compare) -- nonzero intentionally detects a missing "{}" marker
 				ferr(c, "-exec/-ok ... {} +: '{}' must be the last argument before '+'");
 				c->i++;
@@ -420,7 +413,7 @@ withtok(find_expression_allocated)
 static struct node *parse_not(struct find_ctx *c)
 {
 	const char *t = peek(c);
-	if (t) __ownership_string_terminated(t); /* an argv element, same as parse_primary()'s own t */
+	if (t) __ownership_string_terminated(t);
 	if (t && !strcmp(t, "!")) {
 		struct node *n = alloc_node(N_NOT);
 		c->i++;
@@ -439,7 +432,7 @@ static struct node *parse_and(struct find_ctx *c)
 		const char *t;
 		if (c->err) break;
 		t = peek(c);
-		if (t) __ownership_string_terminated(t); /* an argv element, same as parse_primary()'s own t */
+		if (t) __ownership_string_terminated(t);
 		if (!t || !strcmp(t, ")") || !strcmp(t, "-o")) break;
 		if (!strcmp(t, "-a")) c->i++; /* explicit -a; otherwise implicit juxtaposition */
 		{
@@ -461,7 +454,7 @@ static struct node *parse_or(struct find_ctx *c)
 		const char *t;
 		if (c->err) break;
 		t = peek(c);
-		if (t) __ownership_string_terminated(t); /* an argv element, same as parse_primary()'s own t */
+		if (t) __ownership_string_terminated(t);
 		if (!t || strcmp(t, "-o")) break;
 		{
 			struct node *n = alloc_node(N_OR);
@@ -510,9 +503,7 @@ static long days_since(time_t then)
 	return diff / 86400;
 }
 
-/* path is always one of nftw()'s own callback pathnames (find_cb() below,
- * itself only ever called by nftw()), hence genuinely null-terminated --
- * see eval()'s own withtok(null_terminated) for the rest of this chain. */
+/* path is always one of nftw()'s callback pathnames, hence null-terminated. */
 static const char *basename_of(const char *path withtok(null_terminated)) __attribute__((nonnull(1), __pure__));
 static const char *basename_of(const char *path withtok(null_terminated))
 {
@@ -550,9 +541,7 @@ static int under_pruned(const char *path)
 	size_t i;
 	for (i = 0; i < g_find.pruned_n; i++) {
 		size_t pl;
-		/* every entry was stored by add_pruned() below as a fresh
-		 * malloc()+memcpy() copy that includes the trailing NUL byte;
-		 * true by construction, not otherwise visible from here. */
+		/* add_pruned() below stores each entry via malloc()+memcpy(), always NUL-terminated. */
 		__ownership_string_terminated(g_find.pruned[i]);
 		pl = strlen(g_find.pruned[i]);
 		if (!strncmp(path, g_find.pruned[i], pl) && path[pl] == '/') return 1;
@@ -624,8 +613,6 @@ static int do_exec_semi(struct node *n, const char *path)
 	int rc;
 	if (!argv2) { g_find.exit_status = 1; return 0; }
 	for (i = 0; i < n->exec_argc; i++) {
-		/* n->exec_argv is a slice of the original argv (see struct
-		 * node's own comment), so every element is an argv entry. */
 		__ownership_string_terminated(n->exec_argv[i]);
 		argv2[i] = !strcmp(n->exec_argv[i], "{}") ? (char *)path : (char *)n->exec_argv[i];
 	}
@@ -666,18 +653,9 @@ static int do_exec(struct node *n, const char *path withtok(null_terminated))
 	return n->exec_plus ? do_exec_plus_accumulate(n, path) : do_exec_semi(n, path);
 }
 
-/* n is never NULL along any real path: every recursive call below passes
- * n->a/n->b for an N_NOT/N_AND/N_OR node, and parse_not()/parse_and()/
- * parse_or() only ever build those node types with both children set (see
- * their own alloc_node() call sites), so this is a real, checkable
- * invariant of the parser -- unlike free_node()/has_action()/flush_plus(),
- * which all guard `if (!n) return`, this one dereferences unconditionally.
- * path is always one of nftw()'s own callback pathnames -- see
- * basename_of()/add_pruned()/do_exec()'s own withtok(null_terminated).
- * st is always find_cb()'s own st parameter, unchanged across every
- * recursive call below -- itself always nftw()'s own callback struct
- * stat *, POSIX-guaranteed non-NULL, never validated by this project
- * (which does not implement nftw()'s libc side either). */
+/* n is never NULL here: the parser only ever builds N_NOT/N_AND/N_OR
+ * nodes with both children set, unlike free_node()/has_action()/
+ * flush_plus() below, which guard against it anyway. */
 // NOLINTNEXTLINE(misc-no-recursion) -- expression evaluation mirrors the parsed AST and is expression-depth bounded
 static int eval(struct node *n, const char *path withtok(null_terminated), const struct stat *st, int is_dir) __attribute__((nonnull(1, 3)));
 // NOLINTNEXTLINE(misc-no-recursion) -- expression evaluation mirrors the parsed AST and is expression-depth bounded
@@ -714,10 +692,7 @@ static int eval(struct node *n, const char *path withtok(null_terminated), const
 
 static struct node *g_root;
 
-/* path is nftw()'s own callback pathname, POSIX-guaranteed null-terminated
- * -- the root of the withtok(null_terminated) chain that eval()/
- * basename_of()/add_pruned()/do_exec() below all restate on their own
- * path parameter. */
+/* path is nftw()'s callback pathname, POSIX-guaranteed null-terminated. */
 static int find_cb(const char *path withtok(null_terminated), const struct stat *st, int typeflag, struct FTW *ftwbuf)
 {
 	(void)ftwbuf;
@@ -737,9 +712,8 @@ static int find_cb(const char *path withtok(null_terminated), const struct stat 
 	return g_find.fatal ? -1 : 0;
 }
 
-/* Flush every "{} +" -exec/-ok node's accumulated batch, in size-bounded
- * chunks -- see this file's header comment on why flushing is deferred
- * to the end of the whole walk rather than streamed. */
+/* Flush every "{} +" node's accumulated batch in size-bounded chunks (see
+ * header comment on why this is deferred to the end of the walk). */
 // NOLINTNEXTLINE(misc-no-recursion) -- mirrors the parsed AST's own bounded nesting
 static void flush_plus(struct node *n)
 {
@@ -751,10 +725,7 @@ static void flush_plus(struct node *n)
 			size_t j = i, bytes = 0, k;
 			char **argv2;
 			while (j < n->acc_n && (j - i) < 1000 && bytes < 131072) {
-				/* every entry was stored by do_exec_plus_accumulate()
-				 * as a fresh malloc()+memcpy() copy that includes
-				 * the trailing NUL byte, same as add_pruned(). */
-				__ownership_string_terminated(n->acc[j]);
+				__ownership_string_terminated(n->acc[j]); /* stored by do_exec_plus_accumulate() via malloc()+memcpy() */
 				bytes += strlen(n->acc[j]) + 1;
 				j++;
 			}

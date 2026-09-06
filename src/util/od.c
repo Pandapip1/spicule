@@ -51,6 +51,7 @@
 #include <errno.h>
 #include <limits.h>
 #include "util.h"
+#include "ownership_stubs.h" /* __ownership_string_terminated(): instream_read() below opens is->files[is->idx], sliced from __util_od_main's own argv (elements_withtok(null_terminated, argc)) into struct instream's char **files field -- a struct field the analyzer cannot see through back to that parameter contract, the same idiom src/util/find.c's byte-for-byte identical struct find_ctx (char **v; ...) already uses for its own argv slice. */
 
 static int od_output_failed;
 
@@ -63,6 +64,10 @@ static int od_output_failed;
  * alltypes.h.in: `long` is 32-bit even on a 64-bit build), so an -N/-j
  * value or a -t x8/o8/d8/u8 unit -- both legitimately up to 64 bits --
  * would silently truncate through a plain `long`. */
+/* Both callers below (-j/-N option handling in __util_od_main) always pass
+ * &o.skip or &o.count, and an argv element already checked in range --
+ * never NULL. */
+static int parse_odnum(const char *s, long long *out) __attribute__((nonnull(1, 2)));
 static int parse_odnum(const char *s, long long *out)
 {
 	size_t n = strlen(s);
@@ -95,7 +100,13 @@ struct instream {
 	int idx;      /* nfiles>0: next files[] index to open. nfiles==0: 0
 	               * before stdin has been used, 1 after (stdin is only
 	               * ever read once, then treated as exhausted). */
-	FILE *cur;
+	/* Genuinely owns a file_stream_open token across calls to
+	 * instream_read(): a freshly fopen()'d stream is stashed here and
+	 * survives that call's own return so the NEXT call can keep reading
+	 * from it, only being fclose()'d (discharging the token) once this
+	 * same field's stream is exhausted, or never at all for stdin (which
+	 * never carried the token to begin with). */
+	FILE *cur withtok(file_stream_open);
 	int any_error;
 };
 
@@ -121,6 +132,11 @@ static size_t instream_read(struct instream *is, unsigned char *buf, size_t want
 				is->idx = 1;
 			} else {
 				if (is->idx >= is->nfiles) return 0;
+				/* is->files is __util_od_main's own argv (or an
+				 * argv+i slice of it), whose elements the analyzer
+				 * cannot trace across the struct field -- see this
+				 * file's own #include comment above. */
+				__ownership_string_terminated(is->files[is->idx]);
 				is->cur = fopen(is->files[is->idx], "rb");
 				if (!is->cur) {
 					__util_diagf("od: %s: %s\n", is->files[is->idx], strerror(errno));
@@ -194,6 +210,9 @@ static int ddigits(int size)
 }
 
 /* od(1p)'s -t c escape table, quoted in full in this file's header. */
+/* tmp is always &-of a local `char tmp[8]` at this file's one call site
+ * (print_row() below) -- never NULL. */
+static const char *char_field(unsigned char b, char tmp[8]) __attribute__((nonnull(2)));
 static const char *char_field(unsigned char b, char tmp[8])
 {
 	switch (b) {
@@ -324,8 +343,8 @@ static int od_run(struct instream *is, const struct od_opts *o)
 		if (remaining >= 0) remaining -= (long long)got;
 
 		int same = got == ROWBYTES;
-		for (size_t j = 0; same && j < ROWBYTES; j++)
-			if (buf[j] != prev[j]) same = 0;
+		for (size_t j = 0; j < ROWBYTES; j++)
+			if (buf[j] != prev[j]) { same = 0; break; }
 		if (!o->verbose && prev_valid && prev_full && same) {
 			if (!in_run) { printf("*\n"); in_run = 1; }
 		} else {
@@ -353,6 +372,9 @@ static int od_run(struct instream *is, const struct od_opts *o)
 
 /* ---- argument parsing --------------------------------------------------- */
 
+/* Sole caller (-t option handling in __util_od_main) always passes an
+ * in-range argv element and &o.type/&o.size -- never NULL. */
+static int parse_type(const char *s, char *type, int *size) __attribute__((nonnull(1, 2, 3)));
 static int parse_type(const char *s, char *type, int *size)
 {
 	if (!strcmp(s, "c")) { *type = 'c'; *size = 1; return 0; }
@@ -387,6 +409,12 @@ int __util_od_main(
 
 	for (; i < argc; i++) {
 		char *a = argv[i];
+		/* a is one of argv's own elements (i < argc), genuinely never
+		 * NULL by this function's own elements_withtok(null_terminated,
+		 * argc) contract on argv -- restated here the same way
+		 * src/util/test.c's t_expr() restates t->v's own analogous
+		 * argv-slice fact. */
+		__ownership_pointer_nonnull(a);
 		if (a[0] != '-' || a[1] == 0) break;
 		if (!strcmp(a, "--")) { i++; break; }
 		if (!strcmp(a, "-v")) { o.verbose = 1; continue; }

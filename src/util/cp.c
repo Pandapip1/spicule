@@ -160,13 +160,25 @@ static int cpt_tree_failed;
  * freshly malloc'd string, or NULL (errno ENOMEM) on allocation
  * failure. */
 withtok(heap_allocated)
-static char *cpt_dst_path(const char *srcpath)
+static char *cpt_dst_path(const char *srcpath withtok(null_terminated))
 {
 	const char *rel = srcpath + cpt_src_root_len;
-	size_t dstlen = strlen(cpt_dst_root);
-	size_t rellen, bytes;
+	size_t dstlen, rellen, bytes;
 	char *out;
 	int n;
+
+	/* cpt_dst_root is set exactly once, from __util_copy_tree()'s own
+	 * null_terminated `dst` parameter, before nftw() (and therefore this
+	 * callback chain) ever runs -- see this file's file-scope-state
+	 * comment above. rel is a suffix of srcpath, so it reaches exactly
+	 * the same trailing NUL byte srcpath's own null_terminated contract
+	 * already guarantees. Neither fact is visible to the checker across
+	 * a static-global boundary or through pointer-offset arithmetic, so
+	 * both are restated here the same way src/util/find.c's argv-derived
+	 * locals restate theirs. */
+	__ownership_string_terminated(cpt_dst_root);
+	__ownership_string_terminated(rel);
+	dstlen = strlen(cpt_dst_root);
 
 	while (*rel == '/' || *rel == '\\') rel++;
 	if (!*rel) return strdup(cpt_dst_root);
@@ -260,7 +272,7 @@ static int cpt_cb(const char *path, const struct stat *st, int type, struct FTW 
  * the two operands exactly as given. That is a real, stated gap, not a
  * silent guarantee: it catches the direct and by far the most likely
  * accidental case rather than every disguised one. */
-static int path_is_under_or_same(const char *child, const char *parent) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
+static int path_is_under_or_same(const char *child, const char *parent withtok(null_terminated)) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
 	size_t plen = strlen(parent);
 	size_t i;
@@ -281,7 +293,7 @@ static int path_is_under_or_same(const char *child, const char *parent) // NOLIN
  * semantics build that destination with __util_join_basename() first,
  * exactly as __util_cp_main() and src/util/mv.c do).  Returns 0 if
  * every entry was copied, -1 (diagnostics already written) otherwise. */
-int __util_copy_tree(const char *src, const char *dst, int force)
+int __util_copy_tree(const char *src withtok(null_terminated), const char *dst withtok(null_terminated), int force)
 {
 	if (path_is_under_or_same(dst, src)) {
 		__util_diagf("cp: cannot copy '%s' into itself, '%s'\n", src, dst);
@@ -303,8 +315,8 @@ int __util_copy_tree(const char *src, const char *dst, int force)
 
 /* ==== "target/basename(source)", shared with src/util/mv.c ============= */
 
-withtok(heap_allocated) __attribute__((nonnull(1, 2)))
-char *__util_join_basename(const char *dir, const char *src) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
+withtok(heap_allocated) withtok(null_terminated) __attribute__((nonnull(1, 2)))
+char *__util_join_basename(const char *dir withtok(null_terminated), const char *src withtok(null_terminated)) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
 	char *srccopy = strdup(src);
 	char *base, *out;
@@ -313,6 +325,13 @@ char *__util_join_basename(const char *dir, const char *src) // NOLINT(bugprone-
 
 	if (!srccopy) return NULL;
 	base = basename(srccopy);   /* libgen.h; may write into srccopy */
+	/* basename() returns a pointer either into srccopy itself (already
+	 * established null_terminated by strdup()'s own return contract) or
+	 * to its own internal static string -- either way a real C string;
+	 * not visible to the checker since libgen.h's basename() is an
+	 * opaque external declaration with no ownership contract of its
+	 * own. */
+	__ownership_string_terminated(base);
 	dirlen = strlen(dir);
 	need_slash = dirlen > 0 && dir[dirlen - 1] != '/' && dir[dirlen - 1] != '\\';
 
@@ -324,6 +343,14 @@ char *__util_join_basename(const char *dir, const char *src) // NOLINT(bugprone-
 			free(out);
 			out = NULL;
 			if (n >= 0) errno = EOVERFLOW;
+		} else {
+			/* snprintf() is deliberately not itself annotated to grant
+			 * null_terminated (see include/stdio.h's own comment on why
+			 * its buffer argument isn't marked at all), but a successful,
+			 * non-truncated call like this one always NUL-terminates --
+			 * restate that fact the same way src/util/pax.c's namebuf
+			 * does after its own snprintf() success check. */
+			__ownership_string_terminated(out);
 		}
 	}
 	free(srccopy);
@@ -332,7 +359,7 @@ char *__util_join_basename(const char *dir, const char *src) // NOLINT(bugprone-
 
 /* ==== dispatch: one operand ============================================= */
 
-static int cp_one(const char *src, const char *dst, int recursive, int force) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
+static int cp_one(const char *src withtok(null_terminated), const char *dst withtok(null_terminated), int recursive, int force) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
 	struct stat sst, dst_st;
 
@@ -372,6 +399,14 @@ int __util_cp_main(
 		char *a = argv[i];
 		char *p;
 
+		/* a is one of argv's own elements (i < nargs <= argc); restate
+		 * the argv-wide null-terminated guarantee here, the same way
+		 * src/util/find.c/test.c restate theirs right after a copy out
+		 * of an elements_withtok(null_terminated, argc)-carrying array
+		 * -- a plain local like `a` reused across loop iterations is
+		 * not something the checker can see through automatically. */
+		__ownership_string_terminated(a);
+
 		if (a[0] != '-' || a[1] == 0) break;
 		if (!strcmp(a, "--")) { i++; break; }
 
@@ -397,6 +432,11 @@ int __util_cp_main(
 	}
 
 	target = argv[nargs - 1];
+	/* Also an argv element (nargs - 1 < nargs <= argc); restated for the
+	 * same reason `a` above is -- it later crosses into
+	 * __util_join_basename()'s and cp_one()'s own null_terminated
+	 * parameters. */
+	__ownership_string_terminated(target);
 	target_is_dir = stat(target, &tst) == 0 && S_ISDIR(tst.st_mode);
 
 	if (noperands > 2 && !target_is_dir) {
@@ -409,6 +449,11 @@ int __util_cp_main(
 
 	for (; i < nargs - 1; i++) {
 		const char *src = argv[i];
+
+		/* Same argv-element restatement as `a`/`target` above: src
+		 * crosses into __util_join_basename()'s and cp_one()'s own
+		 * null_terminated parameters below. */
+		__ownership_string_terminated(src);
 
 		if (target_is_dir) {
 			char *dst = __util_join_basename(target, src);

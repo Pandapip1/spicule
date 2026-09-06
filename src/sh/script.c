@@ -346,11 +346,12 @@ static int slurp(FILE *f, char **out)
 
 		if (cap - len < 2) {
 			char *nb;
-			if (cap > (size_t)-1 / 2) { free(buf); return -1; }
-			nb = realloc(buf, cap * 2);
+			size_t newcap;
+			if (!__size_mul_checked(cap, 2, &newcap)) { free(buf); return -1; }
+			nb = realloc(buf, newcap);
 			if (!nb) { free(buf); return -1; }
 			buf = nb;
-			cap *= 2;
+			cap = newcap;
 		}
 		room = cap - len - 1;
 		n = fread(buf + len, 1, room, f);

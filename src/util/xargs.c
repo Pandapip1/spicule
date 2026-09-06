@@ -131,7 +131,11 @@ static int emit_token(struct tok **arrp, size_t *np, size_t *capp, struct buf *c
 		*arrp = grown;
 		*capp = ncap;
 	}
-	text = malloc(cur->len + 1);
+	{
+		size_t bytes;
+		if (!__util_size_add(cur->len, 1, &bytes)) return -1;
+		text = malloc(bytes);
+	}
 	if (!text) return -1;
 	for (size_t i = 0; i < cur->len; i++) text[i] = cur->p[i];
 	text[cur->len] = 0;
@@ -239,12 +243,24 @@ static char *subst(const char *tmpl, const char *replstr, const char *value)
 	size_t opos;
 
 	if (rlen == 0) {
-		char *r = malloc(tlen + 1);
+		char *r;
+		size_t bytes;
+		if (!__util_size_add(tlen, 1, &bytes)) return NULL;
+		r = malloc(bytes);
 		if (r) for (size_t i = 0; i <= tlen; i++) r[i] = tmpl[i];
 		return r;
 	}
 	for (p = tmpl; (p = strstr(p, replstr)) != NULL; p += rlen) occ++;
-	out = malloc(tlen + (vlen > rlen ? (vlen - rlen) * occ : 0) + 1);
+	{
+		size_t bytes = tlen;
+		if (vlen > rlen) {
+			size_t grow;
+			if (!__util_size_mul(vlen - rlen, occ, &grow) ||
+			    !__util_size_add(bytes, grow, &bytes)) return NULL;
+		}
+		if (!__util_size_add(bytes, 1, &bytes)) return NULL;
+		out = malloc(bytes);
+	}
 	if (!out) return NULL;
 	opos = 0;
 	p = tmpl;
@@ -455,7 +471,7 @@ int __util_xargs_main(
 			}
 			value[vpos] = 0;
 
-			argv2 = malloc(((size_t)prog_argc + 1) * sizeof(char *));
+			argv2 = __util_mallocarray((size_t)prog_argc + 1, sizeof(char *));
 			if (!argv2) { free(value); xstatus = 1; break; }
 			{
 				size_t built = 0, blen = 0;
@@ -505,7 +521,7 @@ int __util_xargs_main(
 			}
 			if (ti == start) break; /* nothing more fits */
 			{
-				char **argv2 = malloc(((size_t)prog_argc + (ti - start) + 1) * sizeof(char *));
+				char **argv2 = __util_mallocarray((size_t)prog_argc + (ti - start) + 1, sizeof(char *));
 				size_t k;
 				if (!argv2) { xstatus = 1; break; }
 				for (k = 0; k < (size_t)prog_argc; k++) argv2[k] = prog_argv[k];
@@ -537,7 +553,7 @@ int __util_xargs_main(
 				break;
 			}
 			{
-				char **argv2 = malloc(((size_t)prog_argc + count + 1) * sizeof(char *));
+				char **argv2 = __util_mallocarray((size_t)prog_argc + count + 1, sizeof(char *));
 				size_t k;
 				if (!argv2) { xstatus = 1; break; }
 				for (k = 0; k < (size_t)prog_argc; k++) argv2[k] = prog_argv[k];

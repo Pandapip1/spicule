@@ -207,7 +207,10 @@ static char **pv_pack(struct pv *p, size_t offs)
 	if (p->n == (size_t)-1 || offs > (size_t)-1 - p->n - 1) return 0;
 	total = offs + p->n + 1;
 	if (total > (size_t)-1 / sizeof *v) return 0;
-	v = (char **)__malloc(total * sizeof *v);
+	{
+		size_t bytes = total * sizeof *v; /* proven <= SIZE_MAX just above */
+		v = (char **)__malloc(bytes);
+	}
 	if (!v) return 0;
 	for (i = 0; i < offs; i++) v[i] = 0;
 	for (i = 0; i < p->n; i++) v[offs + i] = p->v[i];
@@ -382,8 +385,13 @@ static int expand_param_word(const char *start, size_t input_len, int flags, // 
 	 * recursive scanner cannot otherwise see those outer quotes, so
 	 * protect a leading tilde exactly as an input backslash would. */
 	if (quoted && input_len && *start == '~') prefix = 1;
-	if (input_len > INT_MAX) return WRDE_NOSPACE;
-	text = __malloc(input_len + prefix + 1);
+	{
+		size_t bytes;
+		if (input_len > INT_MAX ||
+		    !__size_add_checked(input_len, prefix, &bytes) ||
+		    !__size_add_checked(bytes, 1, &bytes)) return WRDE_NOSPACE;
+		text = __malloc(bytes);
+	}
 	if (!text) return WRDE_NOSPACE;
 	if (prefix) text[0] = '\\';
 	if (snprintf(text + prefix, input_len + 1, "%.*s",
@@ -404,7 +412,11 @@ static int expand_param_word(const char *start, size_t input_len, int flags, // 
 	 * contributes no field of its own.  Preserve one so the caller's
 	 * final split does not concatenate following literal text. */
 	if (!quoted && input_len && is_split_char(start[input_len - 1])) n++;
-	s = __malloc(n + 1);
+	{
+		size_t bytes;
+		if (!__size_add_checked(n, 1, &bytes)) { wordfree(&we); return WRDE_NOSPACE; }
+		s = __malloc(bytes);
+	}
 	if (!s) { wordfree(&we); return WRDE_NOSPACE; }
 	n = 0;
 	for (i = 0; i < we.we_wordc; i++) {
@@ -666,7 +678,11 @@ static int expand_trim_pattern(const char *start, size_t len, int flags, // NOLI
 	int rc = 0;
 
 	*result = 0;
-	text = __malloc(len + 1);
+	{
+		size_t bytes;
+		if (!__size_add_checked(len, 1, &bytes)) return WRDE_NOSPACE;
+		text = __malloc(bytes);
+	}
 	if (!text) return WRDE_NOSPACE;
 	__ownership_writable_span(text, len);
 	__ownership_readable_span(start, len);
@@ -714,7 +730,12 @@ static int expand_trim_pattern(const char *start, size_t len, int flags, // NOLI
 	__free(text);
 	if (!rc && q != T_NONE) rc = WRDE_SYNTAX;
 	if (rc) { fbuf_free(&b); return rc; }
-	pattern = __malloc(b.n * 2 + 1);
+	{
+		size_t bytes;
+		if (!__size_mul_checked(b.n, 2, &bytes) ||
+		    !__size_add_checked(bytes, 1, &bytes)) { fbuf_free(&b); return WRDE_NOSPACE; }
+		pattern = __malloc(bytes);
+	}
 	if (!pattern) { fbuf_free(&b); return WRDE_NOSPACE; }
 	for (i = 0; i < b.n; i++) {
 		if (b.lit[i] && strchr("*?[\\", b.data[i])) pattern[n++] = '\\';
@@ -897,8 +918,11 @@ static int expand_arith(const char **pp, struct fbuf *b, int flags, int sh,
 	}
 
 	len = (size_t)(end - start);
-	if (len > INT_MAX) return WRDE_NOSPACE;
-	expr = __malloc(len + 1);
+	{
+		size_t bytes;
+		if (len > INT_MAX || !__size_add_checked(len, 1, &bytes)) return WRDE_NOSPACE;
+		expr = __malloc(bytes);
+	}
 	if (!expr) return WRDE_NOSPACE;
 	if (snprintf(expr, len + 1, "%.*s", (int)len, start) != (int)len) {
 		__free(expr);
@@ -1019,8 +1043,11 @@ static char *cmdsub_dollar_text(const char **pp, int *syntax)
 		p++;
 	}
 	len = (size_t)(p - start);
-	if (len > INT_MAX) return 0;
-	r = __malloc(len + 1);
+	{
+		size_t bytes;
+		if (len > INT_MAX || !__size_add_checked(len, 1, &bytes)) return 0;
+		r = __malloc(bytes);
+	}
 	if (!r) return 0;
 	if (snprintf(r, len + 1, "%.*s", (int)len, start) != (int)len) {
 		__free(r);
@@ -1055,7 +1082,11 @@ static char *cmdsub_backquote_text(const char **pp, int *syntax)
 	}
 	if (!*p) { *syntax = 1; return 0; }
 
-	r = __malloc((size_t)(p - start) + 1);
+	{
+		size_t bytes;
+		if (!__size_add_checked((size_t)(p - start), 1, &bytes)) return 0;
+		r = __malloc(bytes);
+	}
 	if (!r) return 0;
 	for (; start < p; start++) {
 		if (*start == '\\' && start + 1 < p &&
@@ -1219,7 +1250,11 @@ static int emit_field(struct fbuf *b, struct pv *out)
 		if (!b->lit[i] && (b->data[i] == '*' || b->data[i] == '?' || b->data[i] == '['))
 			{ has_meta = 1; break; }
 
-	plain = __malloc(b->n + 1);
+	{
+		size_t bytes;
+		if (!__size_add_checked(b->n, 1, &bytes)) return WRDE_NOSPACE;
+		plain = __malloc(bytes);
+	}
 	if (!plain) return WRDE_NOSPACE;
 	if (b->n) {
 		memcpy(plain, b->data, b->n);
@@ -1443,10 +1478,15 @@ static int expand_impl(const char *words, wordexp_t *pwordexp, int flags, int sh
 		out.n = out.cap = pwordexp->we_wordc;
 		if (out.n) {
 			char *const *old = pwordexp->we_wordv + pwordexp->we_offs;
-			out.v = (char **)__malloc(out.n * sizeof *out.v);
+			size_t bytes;
+			if (!__size_mul_checked(out.n, sizeof *out.v, &bytes)) {
+				errno = ENOMEM;
+				return WRDE_NOSPACE;
+			}
+			out.v = (char **)__malloc(bytes);
 			if (!out.v) { errno = ENOMEM; return WRDE_NOSPACE; }
-			__ownership_readable_span(old, out.n * sizeof *out.v);
-			memcpy((void *)out.v, (const void *)old, out.n * sizeof *out.v);
+			__ownership_readable_span(old, bytes);
+			memcpy((void *)out.v, (const void *)old, bytes);
 		}
 		base = out.n;
 	}

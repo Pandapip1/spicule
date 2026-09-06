@@ -1156,7 +1156,11 @@ static char *bi_substr(struct m4_state *st, const char *s, const char *start_s, 
 		}
 		take = (size_t)len < avail ? (size_t)len : avail;
 	}
-	r = malloc(take + 1);
+	{
+		size_t bytes;
+		if (!__util_size_add(take, 1, &bytes)) { st->had_error = 1; return strdup(""); }
+		r = malloc(bytes);
+	}
 	if (!r) { st->had_error = 1; return strdup(""); }
 	for (size_t i = 0; i < take; i++) r[i] = s[start + i];
 	r[take] = 0;

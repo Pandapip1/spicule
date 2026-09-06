@@ -217,7 +217,7 @@ int __util_at_main(
 	int nrest = 0;
 	char dir[NTLIBC_SPOOL_PATH_MAX];
 
-	rest = malloc(sizeof(char *) * (size_t)(argc + 1));
+	rest = __util_mallocarray((size_t)argc + 1, sizeof(char *));
 	if (!rest) { __util_diagf("at: out of memory\n"); return 1; }
 
 	for (; i < argc; i++) {

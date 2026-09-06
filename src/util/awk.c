@@ -150,8 +150,7 @@ static void buf_grow_append(char **buf, size_t *len, size_t *cap, const char *s,
 	if (need > *cap) {
 		size_t newcap = *cap ? *cap : 256;
 		while (newcap < need) {
-			if (newcap > (size_t)-1 / 2) { __util_diagf("awk: out of memory\n"); awk_unwind_fatal(); }
-			newcap *= 2;
+			if (!__util_size_mul(newcap, 2, &newcap)) { __util_diagf("awk: out of memory\n"); awk_unwind_fatal(); }
 		}
 		*buf = realloc(*buf, newcap);
 		if (!*buf) { __util_diagf("awk: out of memory\n"); awk_unwind_fatal(); }
@@ -264,7 +263,7 @@ int __util_awk_main(
 				return 2;
 			}
 			{
-				struct vassign *g = realloc(vassigns, (size_t)(nvassigns + 1) * sizeof *g);
+				struct vassign *g = __util_reallocarray(vassigns, (size_t)nvassigns + 1, sizeof *g);
 				if (!g) { __util_diagf("awk: out of memory\n"); return 2; }
 				vassigns = g;
 				vassigns[nvassigns].name = name;
@@ -277,7 +276,7 @@ int __util_awk_main(
 			val = opt_value(argv, argc, &i, 'f', arg);
 			if (!val) return 2;
 			{
-				char **g = realloc(progfiles, (size_t)(nprogfiles + 1) * sizeof *g);
+				char **g = __util_reallocarray(progfiles, (size_t)nprogfiles + 1, sizeof *g);
 				if (!g) { __util_diagf("awk: out of memory\n"); return 2; }
 				progfiles = g;
 				progfiles[nprogfiles++] = (char *)val;

@@ -550,8 +550,12 @@ static int parse_mbox(const char *buf, size_t len, const char *label, struct mbo
 		while (j < len && buf[j] != '\n') j++;
 		if (prev_blank && j - linestart >= 5 && memcmp(buf + linestart, "From ", 5) == 0) {
 			if (nb == cap) {
-				size_t ncap = cap ? cap * 2 : 64;
-				size_t *nbounds = __util_reallocarray(bounds, ncap, sizeof *bounds);
+				size_t ncap;
+				size_t *nbounds;
+				if (!__util_array_capacity(cap, nb, 1, 64, sizeof *bounds, &ncap)) {
+					free(bounds); errno = ENOMEM; return -1;
+				}
+				nbounds = __util_reallocarray(bounds, ncap, sizeof *bounds);
 				if (!nbounds) { free(bounds); errno = ENOMEM; return -1; }
 				bounds = nbounds;
 				cap = ncap;

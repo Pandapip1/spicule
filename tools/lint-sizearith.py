@@ -185,7 +185,14 @@ def has_arithmetic(toks: list[Tok], begin: int, end: int, ignored: set[int]) -> 
             if have_operand:
                 return True
             continue
-        if text not in ("(", "[", "{", ",", "?", ":", "="):
+        if text in ("?", ":"):
+            # A ternary's '?' and ':' each start a fresh sub-expression:
+            # a '*' (or unary '-') immediately following one is a pointer
+            # dereference or sign, not this operand's continuation, so an
+            # operand seen before the ternary must not carry across it.
+            have_operand = False
+            continue
+        if text not in ("(", "[", "{", ",", "="):
             have_operand = True
     return False
 

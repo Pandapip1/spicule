@@ -104,11 +104,14 @@ static int grow_entries(struct cron_entry **arr, int *n, int *cap)
 {
 	if (*n < *cap) return 0;
 	{
-		int newcap = *cap ? *cap * 2 : 8;
-		struct cron_entry *n2 = realloc(*arr, (size_t)newcap * sizeof **arr);
+		size_t newcap;
+		struct cron_entry *n2;
+		if (!__util_array_capacity((size_t)*cap, (size_t)*n, 1, 8, sizeof **arr, &newcap) ||
+		    newcap > (size_t)INT_MAX) return -1;
+		n2 = __util_reallocarray(*arr, newcap, sizeof **arr);
 		if (!n2) return -1;
 		*arr = n2;
-		*cap = newcap;
+		*cap = (int)newcap;
 	}
 	return 0;
 }
@@ -178,8 +181,10 @@ static void reload_crontab(const char *path)
 			continue;
 		}
 		{
-			size_t cmdlen = strcspn(p, "\n");
-			char *cmd = malloc(cmdlen + 1);
+			size_t cmdlen = strcspn(p, "\n"), cmdbytes;
+			char *cmd;
+			if (!__util_size_add(cmdlen, 1, &cmdbytes)) break;
+			cmd = malloc(cmdbytes);
 			if (!cmd) break;
 			memcpy(cmd, p, cmdlen);
 			cmd[cmdlen] = 0;
@@ -203,14 +208,16 @@ static void reload_crontab(const char *path)
  * NULL in that case). */
 static void split_percent(const char *raw, char **cmd_out, char **stdin_out)
 {
-	size_t len = strlen(raw);
-	char *cmd = malloc(len + 1);
-	char *body = malloc(len + 1);
+	size_t len = strlen(raw), bytes;
+	char *cmd, *body;
 	size_t ci = 0, bi = 0;
 	int in_body = 0;
 	size_t i;
 
 	*cmd_out = *stdin_out = 0;
+	if (!__util_size_add(len, 1, &bytes)) return;
+	cmd = malloc(bytes);
+	body = malloc(bytes);
 	if (!cmd || !body) { free(cmd); free(body); return; }
 
 	for (i = 0; i < len; i++) {

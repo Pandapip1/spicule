@@ -399,15 +399,23 @@ static char **linux_build_environ(
 static char **linux_build_environ(
 	char **envp elements_withtok(null_terminated, count), size_t count)
 {
-	size_t i;
+	size_t i, evbytes, added;
 	char **ev;
 
-	ev = (char **)__malloc(sizeof(char *) * (count + 1));
+	if (!__size_add_checked(count, 1, &added) ||
+	    !__size_mul_checked(added, sizeof(char *), &evbytes)) return 0;
+	ev = (char **)__malloc(evbytes);
 	if (!ev) return 0;
 
 	for (i = 0; i < count; i++) {
 		size_t len = strlen(envp[i]);
-		char *s = (char *)__malloc(len + 1);
+		size_t bytes;
+		char *s;
+		if (!__size_add_checked(len, 1, &bytes)) {
+			__free(ev);
+			return 0;
+		}
+		s = (char *)__malloc(bytes);
 		if (!s) {
 			while (i > 0) __free(ev[--i]);
 			__free(ev);

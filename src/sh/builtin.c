@@ -848,8 +848,9 @@ static int bi_export(struct sh_builtin_ctx *ctx)
 
 	for (i = 1; i < ctx->argc; i++) {
 		const char *arg = ctx->argv[i];
-		size_t namelen = strcspn(arg, "=");
-		char *name = __malloc(namelen + 1);
+		size_t namelen = strcspn(arg, "="), namebytes;
+		char *name = __size_add_checked(namelen, 1, &namebytes) ?
+			__malloc(namebytes) : 0;
 
 		if (!name) {
 			(void)fprintf(stderr, "export: out of memory\n");
@@ -927,8 +928,9 @@ static int bi_readonly(struct sh_builtin_ctx *ctx)
 
 	for (i = 1; i < ctx->argc; i++) {
 		const char *arg = ctx->argv[i];
-		size_t namelen = strcspn(arg, "=");
-		char *name = __malloc(namelen + 1);
+		size_t namelen = strcspn(arg, "="), namebytes;
+		char *name = __size_add_checked(namelen, 1, &namebytes) ?
+			__malloc(namebytes) : 0;
 
 		if (!name) {
 			(void)fprintf(stderr, "readonly: out of memory\n");

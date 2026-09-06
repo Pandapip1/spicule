@@ -172,16 +172,16 @@ static void unrd(struct sc *sc, int c)
 	    ungetc(c, sc->f) != EOF) { sc->nread--; return; }
 	if (sc->npb >= sc->pbcap) {
 		struct pbent *q;
-		int cap;
-		if (sc->pbcap > INT_MAX / (2 * (int)sizeof *q)) return;
-		cap = sc->pbcap * 2;
-		q = sc->pb == sc->pbinit ? malloc((size_t)cap * sizeof *q)
-		                         : realloc(sc->pb, (size_t)cap * sizeof *q);
+		size_t newcap, bytes;
+		if (!__size_mul_checked((size_t)sc->pbcap, 2, &newcap) ||
+		    newcap > (size_t)INT_MAX ||
+		    !__size_mul_checked(newcap, sizeof *q, &bytes)) return;
+		q = sc->pb == sc->pbinit ? malloc(bytes) : realloc(sc->pb, bytes);
 		/* Nowhere to put it or report it: the character is lost. */
 		if (!q) return;
 		if (sc->pb == sc->pbinit) memcpy(q, sc->pbinit, (size_t)sc->npb * sizeof *q);
 		sc->pb = q;
-		sc->pbcap = cap;
+		sc->pbcap = (int)newcap;
 	}
 	sc->pb[sc->npb].wc = (wchar_t)c;
 	sc->pb[sc->npb].nb = (unsigned char)sc->lastnb;
@@ -245,15 +245,15 @@ static int nb_put(struct nbuf *b, int c)
 {
 	if (b->len + 1 >= b->cap) {
 		char *q;
-		int cap;
-		if (b->cap > INT_MAX / 2) { b->oom = 1; return 0; }
-		cap = b->cap * 2;
-		q = b->p == b->init ? malloc((size_t)cap)
-		                    : realloc(b->p, (size_t)cap);
+		size_t newcap;
+		if (!__size_mul_checked((size_t)b->cap, 2, &newcap) ||
+		    newcap > (size_t)INT_MAX) { b->oom = 1; return 0; }
+		q = b->p == b->init ? malloc(newcap)
+		                    : realloc(b->p, newcap);
 		if (!q) { b->oom = 1; return 0; }
 		if (b->p == b->init) memcpy(q, b->init, (size_t)b->len);
 		b->p = q;
-		b->cap = cap;
+		b->cap = (int)newcap;
 	}
 	b->p[b->len++] = (char)c;
 	return 1;
@@ -287,19 +287,18 @@ static int ab_room(struct abuf *b, int need) __attribute__((nonnull(1)));
 static int ab_room(struct abuf *b, int need)
 {
 	void *q;
-	int cap = b->cap;
+	size_t cap = (size_t)b->cap, bytes;
 
-	if (need <= cap) return 1;
+	if (need <= b->cap) return 1;
 	if (cap < 32) cap = 32;
-	while (cap < need) {
-		if (cap > INT_MAX / 2) return 0;
-		cap *= 2;
+	while (cap < (size_t)need) {
+		if (!__size_mul_checked(cap, 2, &cap) || cap > (size_t)INT_MAX) return 0;
 	}
-	if (cap > INT_MAX / b->esz) return 0;
-	q = realloc(b->p, (size_t)cap * (size_t)b->esz);
+	if (!__size_mul_checked(cap, (size_t)b->esz, &bytes)) return 0;
+	q = realloc(b->p, bytes);
 	if (!q) return 0;
 	b->p = q;
-	b->cap = cap;
+	b->cap = (int)cap;
 	return 1;
 }
 
@@ -315,7 +314,10 @@ static int ab_room(struct abuf *b, int need)
 static void ab_give(struct abuf *b, void *arg, int n) __attribute__((nonnull(1, 2)));
 static void ab_give(struct abuf *b, void *arg, int n)
 {
-	void *q = realloc(b->p, (size_t)(n > 0 ? n : 1) * (size_t)b->esz);
+	void *q = 0;
+	size_t bytes;
+	if (__size_mul_checked((size_t)(n > 0 ? n : 1), (size_t)b->esz, &bytes))
+		q = realloc(b->p, bytes);
 	if (q) b->p = q;
 	*(void **)arg = b->p;
 	b->p = 0;

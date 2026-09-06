@@ -265,12 +265,13 @@ static struct mapping *find_slot(void)
 		return &maps[i];
 	}
 	if (maps_len == maps_cap) {
-		cap = maps_cap ? maps_cap * 2 : 16;
-		if (cap < maps_cap || cap > (size_t)-1 / sizeof *maps) {
+		size_t bytes;
+		if (!__array_next_capacity(maps_cap, maps_len, 1, 16, sizeof *maps, &cap)) {
 			errno = ENOMEM;
 			return NULL;
 		}
-		grown = realloc(maps, cap * sizeof *maps);
+		bytes = cap * sizeof *maps; /* proven <= SIZE_MAX by __array_next_capacity's own element_size bound above */
+		grown = realloc(maps, bytes);
 		if (!grown) return NULL;
 		for (i = maps_cap; i < cap; i++)
 			grown[i] = (struct mapping){0};

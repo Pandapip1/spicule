@@ -126,12 +126,13 @@ static char *shm_mode_path(const char *path)
 {
 	const char *slash = strrchr(path, '/');
 	size_t len = strlen(path);
-	size_t prefix;
+	size_t prefix, bytes;
 	char *modepath;
 
 	if (!slash) { errno = EINVAL; return NULL; }
 	prefix = (size_t)(slash - path);
-	modepath = malloc(len + sizeof "-mode");
+	if (!__size_add_checked(len, sizeof "-mode", &bytes)) return NULL;
+	modepath = malloc(bytes);
 	if (!modepath) return NULL;
 	__ownership_writable_span(modepath, prefix);
 	__ownership_readable_span(path, prefix);

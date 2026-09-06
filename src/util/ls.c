@@ -237,9 +237,11 @@ withtok(heap_allocated)
 static char *build_display_name(const struct ls_opts *o, const struct entry *e)
 {
 	char ind = type_indicator(o, e);
-	size_t len = strlen(e->name);
-	char *out = malloc(len + 2);
+	size_t len = strlen(e->name), bytes;
+	char *out;
 	size_t i;
+	if (!__util_size_add(len, 2, &bytes)) return NULL;
+	out = malloc(bytes);
 	if (!out) return NULL;
 	for (i = 0; i < len; i++) {
 		unsigned char ch = (unsigned char)e->name[i];
@@ -292,7 +294,7 @@ static void print_columns(const struct ls_opts *o, struct entry *ent, size_t n)
 	int tw = term_width();
 
 	if (n == 0) return;
-	disp = malloc(n * sizeof(char *));
+	disp = __util_mallocarray(n, sizeof(char *));
 	if (!disp) { __util_diagf("ls: out of memory\n"); return; }
 	for (i = 0; i < n; i++) {
 		size_t l;
@@ -387,12 +389,15 @@ static int grow_entries(struct entry **arr, size_t *n, size_t *cap)
 withtok(heap_allocated)
 static char *join_path(const char *dir, const char *name)
 {
-	size_t dl = strlen(dir), nl = strlen(name);
+	size_t dl = strlen(dir), nl = strlen(name), bytes;
 	int need_slash = dl > 0 && dir[dl - 1] != '/';
-	char *p = malloc(dl + (size_t)need_slash + nl + 1);
+	char *p;
+	if (!__util_size_add(dl, (size_t)need_slash, &bytes) ||
+	    !__util_size_add(bytes, nl, &bytes) ||
+	    !__util_size_add(bytes, 1, &bytes)) return NULL;
+	p = malloc(bytes);
 	if (!p) return NULL;
-	snprintf(p, dl + (size_t)need_slash + nl + 1, "%s%s%s",
-	    dir, need_slash ? "/" : "", name);
+	snprintf(p, bytes, "%s%s%s", dir, need_slash ? "/" : "", name);
 	return p;
 }
 
@@ -421,7 +426,11 @@ static int read_directory(const struct ls_opts *o, const char *dir, struct entry
 		if (o->A && (is_dot || is_dotdot)) continue;
 
 		if (grow_entries(&arr, &n, &cap) < 0) { (void)closedir(dp); goto nomem; }
-		arr[n].name = malloc(namelen + 1);
+		{
+			size_t namebytes;
+			if (!__util_size_add(namelen, 1, &namebytes)) { (void)closedir(dp); goto nomem; }
+			arr[n].name = malloc(namebytes);
+		}
 		if (!arr[n].name) { (void)closedir(dp); goto nomem; }
 		memcpy(arr[n].name, de->d_name, namelen);
 		arr[n].name[namelen] = 0;

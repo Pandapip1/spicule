@@ -232,7 +232,9 @@ static int split_assignment(const char *raw, char **name, char **val) // NOLINT(
 	if (!eq) return -1;
 	nlen = (size_t)(eq - raw);
 	{
-		char *allocated_name = __malloc(nlen + 1);
+		size_t namebytes;
+		char *allocated_name = __size_add_checked(nlen, 1, &namebytes) ?
+			__malloc(namebytes) : 0;
 		if (!allocated_name) return -1;
 		__ownership_writable_span(allocated_name, nlen);
 		__ownership_readable_span(raw, nlen);
@@ -267,8 +269,16 @@ static int env_set(char ***vp, size_t *n, size_t *cap, char *entry, size_t namel
 		}
 	}
 	if (*n + 1 >= *cap) {
-		size_t nc = *cap ? *cap * 2 : 16;
-		char **nv = (char **)__malloc((nc + 1) * sizeof *nv);
+		size_t nc, slots, bytes;
+		char **nv;
+		if (*cap) {
+			if (!__size_mul_checked(*cap, 2, &nc)) { __free(entry); return -1; }
+		} else {
+			nc = 16;
+		}
+		if (!__size_add_checked(nc, 1, &slots) ||
+		    !__size_mul_checked(slots, sizeof *nv, &bytes)) { __free(entry); return -1; }
+		nv = (char **)__malloc(bytes);
 		if (!nv) { __free(entry); return -1; }
 		memcpy((void *)nv, (const void *)v, *n * sizeof *nv);
 		__free((void *)v);
@@ -298,13 +308,15 @@ static char **build_child_envp(const struct sh_word *assigns, size_t *out_n)
 withtok(child_environment_allocated)
 static char **build_child_envp(const struct sh_word *assigns, size_t *out_n)
 {
-	size_t n = 0, cap, i;
+	size_t n = 0, cap, slots, bytes, i;
 	char **v;
 	const struct sh_word *a;
 
 	for (n = 0; __environ && __environ[n]; n++) continue;
-	cap = n + 8;
-	v = (char **)__malloc((cap + 1) * sizeof *v);
+	if (!__size_add_checked(n, 8, &cap) ||
+	    !__size_add_checked(cap, 1, &slots) ||
+	    !__size_mul_checked(slots, sizeof *v, &bytes)) return 0;
+	v = (char **)__malloc(bytes);
 	if (!v) return 0;
 	for (i = 0; i < n; i++) {
 		v[i] = xstrdup(__environ[i]);
@@ -322,9 +334,17 @@ static char **build_child_envp(const struct sh_word *assigns, size_t *out_n)
 			__free(val);
 			continue;
 		}
-		nlen = strlen(name);
-		vlen = strlen(val);
-		entry = __malloc(nlen + 1 + vlen + 1);
+		{
+			size_t entrybytes;
+			nlen = strlen(name);
+			vlen = strlen(val);
+			if (!__size_add_checked(nlen, 1, &entrybytes) ||
+			    !__size_add_checked(entrybytes, vlen, &entrybytes) ||
+			    !__size_add_checked(entrybytes, 1, &entrybytes)) {
+				__free(name); __free(val); free_strv(v, n); return 0;
+			}
+			entry = __malloc(entrybytes);
+		}
 		if (!entry) { __free(name); __free(val); free_strv(v, n); return 0; }
 		__ownership_writable_span(entry, nlen);
 		memcpy(entry, name, nlen);
@@ -399,8 +419,15 @@ static int save_fd(struct redir_state *rs, int fd)
 	size_t i;
 	for (i = 0; i < rs->n; i++) if (rs->saves[i].fd == fd) return 0;
 	if (rs->n == rs->cap) {
-		size_t nc = rs->cap ? rs->cap * 2 : 4;
-		struct redir_save *ns = __malloc(nc * sizeof *ns);
+		size_t nc, bytes;
+		struct redir_save *ns;
+		if (rs->cap) {
+			if (!__size_mul_checked(rs->cap, 2, &nc)) return -1;
+		} else {
+			nc = 4;
+		}
+		if (!__size_mul_checked(nc, sizeof *ns, &bytes)) return -1;
+		ns = __malloc(bytes);
 		if (!ns) return -1;
 		if (rs->saves) { memcpy(ns, rs->saves, rs->n * sizeof *ns); __free(rs->saves); }
 		rs->saves = ns;
@@ -484,13 +511,17 @@ static char *expand_heredoc(const char *body, int *unsupported)
     __attribute__((nonnull(1, 2)));
 static char *expand_heredoc(const char *body, int *unsupported)
 {
-	size_t n = strlen(body), i;
-	char *syn = __malloc(2 * n + 3);
+	size_t n = strlen(body), i, synbytes;
+	char *syn;
 	size_t o = 0;
+
 	int run = 0;
 	wordexp_t we;
 	char *r;
 
+	if (!__size_mul_checked(n, 2, &synbytes) ||
+	    !__size_add_checked(synbytes, 3, &synbytes)) { *unsupported = 1; return 0; }
+	syn = __malloc(synbytes);
 	if (!syn) { *unsupported = 1; return 0; }
 	syn[o++] = '"';
 	for (i = 0; i < n; i++) {
@@ -813,10 +844,12 @@ static int run_interpreted(const char *resolved, const wordexp_t *we, int *statu
 static int run_interpreted(const char *resolved, const wordexp_t *we, int *status)
 {
 	char **av;
-	size_t n = we->we_wordc, i;
+	size_t n = we->we_wordc, i, navs, bytes;
 	int argc;
 
-	av = (char **)malloc((n + 3) * sizeof *av);
+	if (!__size_add_checked(n, 3, &navs) ||
+	    !__size_mul_checked(navs, sizeof *av, &bytes)) return -1;
+	av = (char **)malloc(bytes);
 	if (!av) return -1;
 	av[0] = n ? we->we_wordv[0] : (char *)"sh";
 	av[1] = (char *)resolved;
@@ -1198,18 +1231,22 @@ static void free_env_snapshot(struct env_snapshot *es)
 static int env_snapshot_take(struct env_snapshot *es) __attribute__((nonnull(1)));
 static int env_snapshot_take(struct env_snapshot *es)
 {
-	size_t n, i;
+	size_t n, i, namesbytes, valsbytes;
 	es->names = 0; es->vals = 0; es->n = 0;
 	for (n = 0; __environ && __environ[n]; n++) continue;
 	if (!n) return 0;
-	es->names = (char **)__malloc(n * sizeof *es->names);
-	es->vals = (char **)__malloc(n * sizeof *es->vals);
+	if (!__size_mul_checked(n, sizeof *es->names, &namesbytes) ||
+	    !__size_mul_checked(n, sizeof *es->vals, &valsbytes)) return -1;
+	es->names = (char **)__malloc(namesbytes);
+	es->vals = (char **)__malloc(valsbytes);
 	if (!es->names || !es->vals) { __free((void *)es->names); __free((void *)es->vals); es->names = 0; es->vals = 0; return -1; }
 	for (i = 0; i < n; i++) {
 		const char *e = __environ[i];
 		const char *eq = strchr(e, '=');
 		size_t nlen = eq ? (size_t)(eq - e) : strlen(e);
-		char *name = __malloc(nlen + 1);
+		size_t namebytes;
+		char *name = __size_add_checked(nlen, 1, &namebytes) ?
+			__malloc(namebytes) : 0;
 		if (name) {
 			__ownership_writable_span(name, nlen);
 			__ownership_readable_span(e, nlen);
@@ -1241,17 +1278,20 @@ static void env_snapshot_restore(const struct env_snapshot *es)
     __attribute__((nonnull(1)));
 static void env_snapshot_restore(const struct env_snapshot *es)
 {
-	size_t n, i;
+	size_t n, i, curbytes;
 	char **cur;
 
 	for (n = 0; __environ && __environ[n]; n++) continue;
-	cur = n ? (char **)__malloc(n * sizeof *cur) : 0;
+	cur = (n && __size_mul_checked(n, sizeof *cur, &curbytes)) ?
+		(char **)__malloc(curbytes) : 0;
 	if (n && cur) {
 		for (i = 0; i < n; i++) {
 			const char *e = __environ[i];
 			const char *eq = strchr(e, '=');
 			size_t nlen = eq ? (size_t)(eq - e) : strlen(e);
-			char *nm = __malloc(nlen + 1);
+			size_t nmbytes;
+			char *nm = __size_add_checked(nlen, 1, &nmbytes) ?
+				__malloc(nmbytes) : 0;
 			if (nm) {
 				__ownership_writable_span(nm, nlen);
 				__ownership_readable_span(e, nlen);
@@ -1581,10 +1621,19 @@ static char *slurp_fd(int fd, size_t *out_len)
 
 	for (;;) {
 		ssize_t n;
-		if (len + 4096 + 1 > cap) {
-			size_t nc = cap ? cap * 2 : 8192;
+		size_t need;
+		if (!__size_add_checked(len, 4096 + 1, &need)) { __free(buf); return 0; }
+		if (need > cap) {
+			size_t nc;
 			char *nb;
-			while (len + 4096 + 1 > nc) nc *= 2;
+			if (cap) {
+				if (!__size_mul_checked(cap, 2, &nc)) { __free(buf); return 0; }
+			} else {
+				nc = 8192;
+			}
+			while (need > nc) {
+				if (!__size_mul_checked(nc, 2, &nc)) { __free(buf); return 0; }
+			}
 			nb = __malloc(nc);
 			if (!nb) { __free(buf); return 0; }
 			if (buf) {
@@ -1834,15 +1883,22 @@ int __sh_exec_pipeline(const struct sh_pipeline *pl, int *status)
 			return -1;
 	}
 
-	pids = __malloc(n * sizeof *pids);
-	statuses = __malloc(n * sizeof *statuses);
-	pipes = __malloc((n - 1) * sizeof *pipes);
-	deferred = __malloc(n * sizeof *deferred);
-	if (!pids || !statuses || !pipes || !deferred) {
-		__free(pids); __free(statuses); __free(pipes); __free(deferred);
-		return -1;
+	{
+		size_t pidsbytes, statusesbytes, pipesbytes, deferredbytes;
+		if (!__size_mul_checked(n, sizeof *pids, &pidsbytes) ||
+		    !__size_mul_checked(n, sizeof *statuses, &statusesbytes) ||
+		    !__size_mul_checked(n - 1, sizeof *pipes, &pipesbytes) ||
+		    !__size_mul_checked(n, sizeof *deferred, &deferredbytes)) return -1;
+		pids = __malloc(pidsbytes);
+		statuses = __malloc(statusesbytes);
+		pipes = __malloc(pipesbytes);
+		deferred = __malloc(deferredbytes);
+		if (!pids || !statuses || !pipes || !deferred) {
+			__free(pids); __free(statuses); __free(pipes); __free(deferred);
+			return -1;
+		}
+		memset(deferred, 0, deferredbytes);
 	}
-	memset(deferred, 0, n * sizeof *deferred);
 
 	/* Every pipe is created up front, O_CLOEXEC: if creation fails partway
 	 * through, only the ones already made need cleaning up -- nothing has

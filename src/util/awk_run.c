@@ -150,7 +150,10 @@ static void *xrealloc(void *p, size_t n)
 
 static char *dupn_local(const char *s, size_t n)
 {
-	char *r = malloc(n + 1);
+	char *r;
+	size_t bytes;
+	if (!__util_size_add(n, 1, &bytes)) oom();
+	r = malloc(bytes);
 	if (!r) oom();
 	for (size_t i = 0; i < n; i++) r[i] = s[i];
 	r[n] = 0;
@@ -492,10 +495,13 @@ static void fields_reserve(struct awk_interp *ip, int n)
 {
 	if (n <= ip->fcap) return;
 	{
-		int newcap = ip->fcap ? ip->fcap * 2 : 16;
-		while (newcap < n) newcap *= 2;
-		ip->flds = xrealloc(ip->flds, (size_t)newcap * sizeof *ip->flds);
-		ip->fcap = newcap;
+		size_t newcap = ip->fcap ? (size_t)ip->fcap : 16;
+		if (ip->fcap && !__util_size_mul((size_t)ip->fcap, 2, &newcap)) oom();
+		while (newcap < (size_t)n) {
+			if (!__util_size_mul(newcap, 2, &newcap)) oom();
+		}
+		ip->flds = xrealloc(ip->flds, newcap * sizeof *ip->flds);
+		ip->fcap = (int)newcap;
 	}
 }
 
@@ -604,12 +610,13 @@ static void rebuild_record(struct awk_interp *ip)
 {
 	const char *ofs = cell_str(ip, lookup_cell(ip, "OFS"));
 	size_t ofslen = strlen(ofs);
-	size_t len = 0;
+	size_t len = 0, bytes;
 	int i;
 	char *rec;
 
 	for (i = 0; i < ip->nf; i++) len += strlen(ip->flds[i]) + (i ? ofslen : 0);
-	rec = malloc(len + 1);
+	if (!__util_size_add(len, 1, &bytes)) oom();
+	rec = malloc(bytes);
 	if (!rec) oom();
 	len = 0;
 	for (i = 0; i < ip->nf; i++) {
@@ -977,8 +984,7 @@ static void buf_append(char **buf, size_t *len, size_t *cap, const char *s, size
 		size_t oldcap = *cap;
 		size_t newcap = *cap ? *cap : 64;
 		while (newcap < need) {
-			if (newcap > (size_t)-1 / 2) fatal("output too large");
-			newcap *= 2;
+			if (!__util_size_mul(newcap, 2, &newcap)) fatal("output too large");
 		}
 		*buf = xrealloc(*buf, newcap);
 		/* realloc() leaves the grown tail's bytes unspecified. Nothing
@@ -1438,8 +1444,10 @@ static struct awk_value eval(struct awk_interp *ip, struct awk_node *n)
 	case N_CONCAT: {
 		struct awk_value a = eval(ip, n->a), b = eval(ip, n->b);
 		const char *sa = v_str(&a, convfmt_str(ip)), *sb = v_str(&b, convfmt_str(ip));
-		size_t la = strlen(sa), lb = strlen(sb);
-		char *s = malloc(la + lb + 1);
+		size_t la = strlen(sa), lb = strlen(sb), bytes;
+		char *s;
+		if (!__util_size_add(la, lb, &bytes) || !__util_size_add(bytes, 1, &bytes)) oom();
+		s = malloc(bytes);
 		if (!s) oom();
 		for (size_t i = 0; i < la; i++) s[i] = sa[i];
 		for (size_t i = 0; i < lb; i++) s[la + i] = sb[i];
@@ -1710,8 +1718,10 @@ static struct awk_value call_builtin(struct awk_interp *ip, struct awk_node *cal
 	if (!strcmp(name, "tolower") || !strcmp(name, "toupper")) {
 		struct awk_value s = eval(ip, a[0]);
 		const char *str = v_str(&s, convfmt_str(ip));
-		size_t len = strlen(str), i;
-		char *r = malloc(len + 1);
+		size_t len = strlen(str), i, bytes;
+		char *r;
+		if (!__util_size_add(len, 1, &bytes)) oom();
+		r = malloc(bytes);
 		if (!r) oom();
 		for (i = 0; i < len; i++) r[i] = (char)(name[2] == 'l' ? tolower((unsigned char)str[i]) : toupper((unsigned char)str[i]));
 		r[len] = 0;

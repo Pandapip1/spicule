@@ -971,9 +971,13 @@ static int list_dir_sorted(const char *path, struct namelist *out)
 			if (!g) goto fail;
 			names = g; cap = newcap;
 		}
-		dup = malloc(namelen + 1);
-		if (!dup) goto fail;
-		memcpy(dup, d->d_name, namelen + 1);
+		{
+			size_t bytes;
+			if (!__util_size_add(namelen, 1, &bytes)) goto fail;
+			dup = malloc(bytes);
+			if (!dup) goto fail;
+			memcpy(dup, d->d_name, bytes);
+		}
 		names[n++] = dup;
 	}
 	(void)closedir(dp);

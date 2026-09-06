@@ -156,8 +156,10 @@ withtok(internal_heap_allocated)
 withtok(writable_span(len))
 static char *unescape(const char *s, size_t len, int flags)
 {
-	char *buf = __malloc(len + 1);
-	size_t i = 0, j = 0, remaining = len;
+	char *buf;
+	size_t i = 0, j = 0, remaining = len, bytes;
+	if (!__size_add_checked(len, 1, &bytes)) return 0;
+	buf = __malloc(bytes);
 	if (!buf) return 0;
 	while (remaining > 0) {
 		if (!(flags & GLOB_NOESCAPE) && s[i] == '\\' && remaining > 1) {
@@ -393,10 +395,14 @@ static int do_glob(char *prefix withtok(readable_span(prefixcap)),
 		struct dirent *d;
 		int rc = 0;
 
-		if (seglen > INT_MAX) { errno = ENOMEM; return -1; }
-		segbuf = __malloc(seglen + 1);
+		size_t segbytes;
+		if (seglen > INT_MAX || !__size_add_checked(seglen, 1, &segbytes)) {
+			errno = ENOMEM;
+			return -1;
+		}
+		segbuf = __malloc(segbytes);
 		if (!segbuf) return -1;
-		if (snprintf(segbuf, seglen + 1, "%.*s", (int)seglen, pat) !=
+		if (snprintf(segbuf, segbytes, "%.*s", (int)seglen, pat) !=
 		    (int)seglen) {
 			__free(segbuf);
 			errno = ENOMEM;
@@ -481,7 +487,10 @@ static int finish(struct pv *out, int flags, glob_t *pglob)
 	if (out->n == (size_t)-1 || offs > (size_t)-1 - out->n - 1) goto nospace;
 	total = offs + out->n + 1;
 	if (total > (size_t)-1 / sizeof *v) goto nospace;
-	v = (char **)__malloc(total * sizeof *v);
+	{
+		size_t bytes = total * sizeof *v; /* proven <= SIZE_MAX just above */
+		v = (char **)__malloc(bytes);
+	}
 	if (!v) goto nospace;
 	for (i = 0; i < offs; i++) v[i] = 0;
 	for (i = 0; i < out->n; i++) v[offs + i] = out->v[i];
@@ -900,10 +909,15 @@ int glob(const char *pattern, int flags, int (*errfunc)(const char *, int), glob
 		out.n = out.cap = pglob->gl_pathc;
 		if (out.n) {
 			char *const *old = pglob->gl_pathv + pglob->gl_offs;
-			out.v = (char **)__malloc(out.n * sizeof *out.v);
+			size_t bytes;
+			if (!__size_mul_checked(out.n, sizeof *out.v, &bytes)) {
+				errno = ENOMEM;
+				return GLOB_NOSPACE;
+			}
+			out.v = (char **)__malloc(bytes);
 			if (!out.v) { errno = ENOMEM; return GLOB_NOSPACE; }
-			__ownership_readable_span(old, out.n * sizeof *out.v);
-			memcpy((void *)out.v, (const void *)old, out.n * sizeof *out.v);
+			__ownership_readable_span(old, bytes);
+			memcpy((void *)out.v, (const void *)old, bytes);
 		}
 		__free((void *)pglob->gl_pathv);
 	}

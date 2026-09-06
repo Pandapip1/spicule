@@ -85,6 +85,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <limits.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <time.h>
@@ -141,8 +142,39 @@ static int write_header(FILE *out, const struct ar_member *m)
 
 /* Parses one already-read 60-byte header. Returns 0 on a structurally
  * valid header (name may still be empty for a foreign long-name/symtab
- * member -- see below), or -1 if the trailing "`\n" magic is wrong,
- * meaning the archive is corrupt or desynchronized. */
+ * member -- see below), or -1 if the trailing "`\n" magic is wrong, the
+ * name field embeds a path separator, or the size field over/underflows
+ * `long` -- all three meaning the archive is corrupt, desynchronized,
+ * or hostile, and every one of them means "stop", not "guess".
+ *
+ * The name check matters on its own: this format's name field is a
+ * bare 15-byte-max filename by convention (see this file's top-of-file
+ * comment), and every member this writer itself produces is built from
+ * basename_of() so it can never contain '/' or '\\' -- but a foreign or
+ * deliberately crafted archive can put anything it likes in that field,
+ * and x_visit() below passes m->name straight to fopen() for -x. Absent
+ * this check, a member named e.g. "../../evil" or "/etc/passwd" (both
+ * well within the 15-byte limit) would make `ar x` write outside the
+ * extraction directory or over an arbitrary absolute path -- a classic
+ * archive-extraction path-traversal ("Zip Slip"). Rejecting it here
+ * protects every operation (-t/-p/-x/-d/-r all route through this
+ * function), not just -x, which is deliberate: a name field that could
+ * only ever have been put there by something other than this writer is
+ * a corrupt/hostile header regardless of which operation reads it.
+ *
+ * The size check matters because this format's size field is a 10-byte
+ * decimal ASCII string, so a crafted header can claim up to
+ * 9999999999 -- past LONG_MAX on an LLP64 target (this project's own
+ * x86_64 Windows target has a 32-bit `long`; see include/limits.h and
+ * src/internal/nt.h). strtol() clamps rather than wraps, but the
+ * caller's `m.size + (m.size & 1)` even-padding arithmetic in
+ * ar_foreach()/read_all_headers() can then itself overflow a 32-bit
+ * signed long (undefined behavior) when size lands on LONG_MAX. A
+ * leading '-' in the field is accepted by strtol() too, producing a
+ * negative size that would otherwise skip zero bytes instead of the
+ * member's actual data, desynchronizing the walk from the next real
+ * header. Rejecting both here, before any arithmetic runs, is cheaper
+ * and safer than trying to make that arithmetic overflow-safe. */
 static int parse_header(const char raw[AR_HDR_LEN], struct ar_member *m)
 {
 	char field[17];
@@ -156,10 +188,18 @@ static int parse_header(const char raw[AR_HDR_LEN], struct ar_member *m)
 	if (i >= 0 && field[i] == '/') field[i] = 0;
 	strncpy(m->name, field, AR_NAME_MAX);
 	m->name[AR_NAME_MAX] = 0;
+	if (strchr(m->name, '/') || strchr(m->name, '\\')) return -1;
 
 	memcpy(field, raw + 16, 12); field[12] = 0; m->mtime = strtol(field, NULL, 10);
 	memcpy(field, raw + 40, 8); field[8] = 0; m->mode = strtol(field, NULL, 8);
-	memcpy(field, raw + 48, 10); field[10] = 0; m->size = strtol(field, NULL, 10);
+	memcpy(field, raw + 48, 10); field[10] = 0;
+	errno = 0;
+	m->size = strtol(field, NULL, 10);
+	/* Reject LONG_MAX itself too, not just values strtol() had to clamp
+	 * to reach it (errno == ERANGE): LONG_MAX is always odd, so the
+	 * caller's `m.size + (m.size & 1)` even-padding would overflow a
+	 * signed long even for this in-range value. */
+	if (m->size < 0 || errno == ERANGE || m->size >= LONG_MAX) return -1;
 	return 0;
 }
 

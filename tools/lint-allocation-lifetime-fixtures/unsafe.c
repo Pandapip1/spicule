@@ -51,6 +51,22 @@ void double_release(void)
 	free(object); /* allocation-lifetime-expect: double release */
 }
 
+void file_leak(void)
+{
+	(void)fopen_stub("path");
+} /* allocation-lifetime-expect: FILE*-shaped leak */
+
+void file_double_close(void)
+{
+	void *f = fopen_stub("path");
+	fclose_stub(f);
+	fclose_stub(f); /* allocation-lifetime-expect: FILE*-shaped double close */
+} /* allocation-lifetime-expect: state unproven after the double close above --
+   * unlike double_release() above, fclose_stub isn't a name clang's own
+   * built-in unix.Malloc recognizes, so this path is not sunk and keeps
+   * exploring to function exit, where the havoced post-double-release state
+   * is independently (and correctly) reported again. */
+
 withtok(widget_allocated)
 void *skip_implementation_edge(void)
 {

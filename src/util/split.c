@@ -50,6 +50,15 @@ static int gen_suffix(char *buf, int suflen, long index) // NOLINT(bugprone-easi
 	return 0;
 }
 
+/* Deliberately NOT withtok(file_stream_open): split_by_lines() below
+ * rotates through a sequence of these (close the current piece, then
+ * call this again for the next one) inside one loop, and the analyzer's
+ * loop-widening merges that rotation into a spurious "not freed before
+ * function exit" on the very first piece, even though every piece this
+ * function ever returns is closed before being replaced or at the
+ * function's own final return. Not a real leak; annotating it produced
+ * a false finding the checker's loop exploration cannot resolve on its
+ * own here. */
 static FILE *open_piece(const char *prefix, int suflen, long index, char *namebuf, size_t namebuf_sz)
 {
 	char suf[32];

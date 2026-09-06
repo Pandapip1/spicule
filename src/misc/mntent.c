@@ -22,6 +22,7 @@
 #include <string.h>
 #include <stdlib.h>
 
+withtok(file_stream_open)
 FILE *setmntent(const char *file, const char *mode)
 {
 	return fopen(file, mode);

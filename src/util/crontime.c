@@ -6,6 +6,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <limits.h>
+#include <errno.h>
 #include "crontime.h"
 
 /* Matches `text` (of length `len`) case-insensitively against one of
@@ -49,8 +51,16 @@ static int parse_one(const char **pp, int lo, int hi, const char *const *names, 
 	v = strtol(p, &end, 10);
 	if (end == p) return -1;
 	*pp = end;
-	if (dow7 && v == 7) v = 0;
-	if (v < lo || v > hi) return -1;
+	/* 7 stays 7 here rather than folding to 0 immediately: a range's
+	 * a-b order (checked by the caller against these raw values) has
+	 * to see "5-7" as ascending, not as "5-0" -- 7 is only an alias
+	 * for 0 when a bit actually gets set, which __crontime_parse_field()
+	 * does itself once the whole range is known. Folding early would
+	 * make every range ending in 7 look like it wraps and get rejected,
+	 * defeating the entire reason crontab(5) allows 7 as Sunday: writing
+	 * a range that reaches the end of the week (e.g. "5-7" for Fri-Sun)
+	 * without wrapping. */
+	if (v < lo || v > (dow7 ? 7 : hi)) return -1;
 	return (int)v;
 }
 
@@ -91,15 +101,41 @@ int __crontime_parse_field(const char *text, int lo, int hi,
 			char *end;
 			p++;
 			if (!isdigit((unsigned char)*p)) return -1;
+			errno = 0;
 			s = strtol(p, &end, 10);
-			if (end == p || s <= 0) return -1;
+			/* s is cast to `int` below and then used as out[]'s own
+			 * loop stride -- an unchecked strtol() clamp to LONG_MAX
+			 * (a field like "0-59/99999999999999999999", well inside
+			 * crontab(5)'s own a-b/N grammar) truncates to a small or
+			 * negative `int` on cast (this project also builds with a
+			 * 32-bit `long` on NT/tcc), turning one out-of-range digit
+			 * string into out[]'s own loop walking backward off the
+			 * struct crontime this array lives in until it segfaults.
+			 * INT_MAX is already a wildly unrealistic step for any
+			 * field with at most 60 values, so rejecting anything that
+			 * large costs nothing real. */
+			if (end == p || errno == ERANGE || s <= 0 || s > INT_MAX) return -1;
 			p = end;
 			step = (int)s;
 		}
 		if (b < a) return -1; /* crontab(5) ranges never wrap */
 		{
-			int v;
-			for (v = a; v <= b; v += step) out[v] = 1;
+			/* Bounding `step` above keeps the cast itself faithful,
+			 * but `v += step` in a plain for-loop can still overflow
+			 * `int` once v is already close to `b` (b is always small
+			 * -- at most 59 -- while step can be as large as INT_MAX):
+			 * checking "would the next v pass b" before computing it,
+			 * rather than computing v+step and comparing, never forms
+			 * the out-of-range sum at all. */
+			int v = a;
+			for (;;) {
+				/* Fold a raw 7 to 0 only here, once the range itself
+				 * (checked against the unfolded a/b above) is known
+				 * good -- see parse_one()'s own comment. */
+				out[dow7 && v == 7 ? 0 : v] = 1;
+				if (v > b - step) break;
+				v += step;
+			}
 		}
 		if (*p == ',') { p++; continue; }
 		break;

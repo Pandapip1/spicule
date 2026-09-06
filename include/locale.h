@@ -66,6 +66,8 @@ struct lconv *localeconv(void) __attribute__((returns_nonnull));
 
 #define __NEED_locale_t
 
+#include <ownership.h>
+
 #include <bits/alltypes.h>
 
 #define LC_GLOBAL_LOCALE ((locale_t)-1)
@@ -78,32 +80,33 @@ struct lconv *localeconv(void) __attribute__((returns_nonnull));
 #define LC_MESSAGES_MASK (1<<LC_MESSAGES)
 #define LC_ALL_MASK      0x7fffffff
 
-/* No tokdef here despite newlocale()/duplocale()/freelocale() looking
- * exactly like DIR* (dirent.h) at the header level: dynamic_storage's
- * checkEndFunction proof requires whichever function is marked
- * consume(...) to itself reach a real, matching release when its body
- * is analyzed -- not merely to be trusted by callers. freelocale()'s
- * body (src/misc/locale.c) is `(void)l;`, correctly: ntlibc has one
- * immutable static locale object for every request, so there is
- * nothing to release (see test/posix-locale.c's own clause-by-clause
- * audit of exactly this point). That leaves no in-tree call for the
- * checker to find, so marking freelocale() consume(...) does not
- * describe a proof gap the way wordexp_t's out-parameter shape did
- * (tools/lint-allocation-lifetime-fixtures/*.c's fill_word_vector*
- * fixtures) -- it manufactures one: every real path through
- * freelocale()'s real body is reported "consume function exits
- * without releasing its argument," confirmed by running the checker
- * against the annotated header and this file. The only ways to silence
- * that would be dishonest (an unconditional pass despite proving
- * nothing) or dangerous (a real free()-family call against
- * &__c_locale's address, which was never malloc'd). Since freelocale()
- * is the only consume(...) site the family would ever have, minting
- * withtok(...) at newlocale()/duplocale() without it would make every
- * real call site an unconditional leak report instead -- there is no
- * partial slice of this contract that is both sound and useful, unlike
- * wordexp_t's producer-only slice. */
+/* locale_t tracked the same way DIR* is (dirent.h): a real acquire/
+ * release token pair, not a bespoke special case. locale_opened has no
+ * implemented_by(...) because ntlibc's own locale implementation hands
+ * out one immutable static object for every request (src/misc/locale.c,
+ * test/posix-locale.c's own audit) -- there is no further, more-primitive
+ * family for freelocale() to route a release through today. That is a
+ * fact about the CURRENT implementation, not a reason to leave the type
+ * untracked: AllocationLifetimeChecker.cpp's checkEndFunction trusts a
+ * terminal family's own consume(...) site as the release, the same way
+ * it already trusts consume(...) at every CALL site regardless of the
+ * callee's body (including an opaque external declaration with no body
+ * to inspect at all) -- it only re-derives release from the body for a
+ * family that names a further one via implemented_by(...), where that is
+ * a real, checkable promise (see closedir()/catclose()/iconv_close()).
+ * If a future locale implementation ever backs locale_t with real
+ * per-locale storage, adding implemented_by(...) here is the only change
+ * needed: the existing consume(locale_opened) below would then also
+ * start proving freelocale() actually releases that storage, with no
+ * further annotation changes. */
+tokdef locale_opened
+	dynamic_storage
+	sentinel_exclude(-1);
+
+withtok(locale_opened)
 locale_t duplocale(locale_t);
-void freelocale(locale_t);
+void freelocale(locale_t consume(locale_opened));
+withtok(locale_opened)
 locale_t newlocale(int, const char *, locale_t);
 locale_t uselocale(locale_t);
 

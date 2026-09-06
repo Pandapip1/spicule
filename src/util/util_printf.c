@@ -103,6 +103,16 @@
 #include <errno.h>
 #include <limits.h>
 #include "util.h"
+#include "ownership_stubs.h" /* __ownership_string_terminated(): every fixed-size
+	buffer this file assembles digit-by-digit in a loop (format_signed()'s/
+	format_unsigned()'s own `digs`), via snprintf() (format_unsigned()'s
+	`withpfx`, format_float()'s `buf`), or byte-by-byte by hand
+	(format_char()'s `c`) is genuinely NUL-terminated by the time it
+	reaches emit_padded(), but none of those constructions is a plain
+	`p[fixed_offset] = 0` a raw per-byte walk lets the checker see through
+	on its own -- the same gap src/util/patch.c's own comment on this
+	same include describes for its own snprintf()-then-terminate and
+	hand-rolled-copy shapes. */
 
 /* ---- argument cursor ---------------------------------------------- */
 
@@ -119,6 +129,12 @@ struct argcur {
  * same "as if" case, not a diagnosed error.  Returns 0 (meaning
  * "already exhausted, use the standard fallback") when nothing is
  * left, 1 with *out set when a real argument was consumed. */
+/* Every call site (all 8 inside run_one_pass()) passes &a (run_one_pass's
+ * own struct argcur parameter, itself always __util_printf_main()'s
+ * local `a`'s address) and &arg (a local in the same scope) -- neither is
+ * ever actually NULL. */
+static int arg_take(struct argcur *a, const char **out)
+	__attribute__((nonnull(1, 2)));
 static int arg_take(struct argcur *a, const char **out)
 {
 	if (a->i >= a->n) { *out = ""; return 0; }
@@ -142,6 +158,11 @@ static void numeric_error(const char *arg)
 	g_status = 1;
 }
 
+/* s is always one of arg_signed()'s/arg_unsigned()'s/arg_double()'s own
+ * `s` (never NULL -- see each's own nonnull(1) below), out is always the
+ * caller's own local's address. */
+static int leading_quote_char(const char *s, long *out)
+	__attribute__((nonnull(1, 2)));
 static int leading_quote_char(const char *s, long *out)
 {
 	if ((s[0] == '\'' || s[0] == '"') && s[1] != 0) {
@@ -151,6 +172,12 @@ static int leading_quote_char(const char *s, long *out)
 	return 0;
 }
 
+/* s is always format_signed()'s own `arg` (never NULL: arg_take() writes
+ * either "" or a genuine argv operand into it, never NULL -- see
+ * format_signed()'s own nonnull(1) below), out is always the caller's
+ * own local's address. */
+static int arg_signed(const char *s, long *out)
+	__attribute__((nonnull(1, 2)));
 static int arg_signed(const char *s, long *out)
 {
 	char *end;
@@ -165,6 +192,10 @@ static int arg_signed(const char *s, long *out)
 	return 0;
 }
 
+/* Same shape as arg_signed() above: s is always format_unsigned()'s own
+ * `arg` (never NULL), out is always the caller's own local's address. */
+static int arg_unsigned(const char *s, unsigned long *out)
+	__attribute__((nonnull(1, 2)));
 static int arg_unsigned(const char *s, unsigned long *out)
 {
 	char *end;
@@ -187,6 +218,10 @@ static int arg_unsigned(const char *s, unsigned long *out)
 	return 0;
 }
 
+/* Same shape as arg_signed() above: s is always format_float()'s own
+ * `arg` (never NULL), out is always the caller's own local's address. */
+static int arg_double(const char *s, double *out)
+	__attribute__((nonnull(1, 2)));
 static int arg_double(const char *s, double *out)
 {
 	char *end;
@@ -204,6 +239,11 @@ static int arg_double(const char *s, double *out)
 
 /* ---- format string's own \-escape table (not %b's) ------------------ */
 
+/* s is always run_one_pass()'s own `p`, walking along `format`
+ * (__util_printf_main()'s own argv[1], never NULL) one already-dereferenced
+ * byte at a time -- the caller only ever calls this once `*p == '\\'` has
+ * already been read, so s itself is never NULL here. */
+static const char *format_escape(const char *s) __attribute__((nonnull(1)));
 static const char *format_escape(const char *s)
 {
 	/* s[0] == '\\' */
@@ -233,7 +273,11 @@ static const char *format_escape(const char *s)
 
 /* ---- %b's own escape table (distinct from format_escape() above) ---- */
 
-/* Returns 1 if \c was hit (the whole invocation must stop now). */
+/* s is always run_one_pass()'s own `arg`, freshly written by arg_take()
+ * (either "" or a genuine argv operand, never NULL -- see run_one_pass()'s
+ * own call site). Returns 1 if \c was hit (the whole invocation must stop
+ * now). */
+static int expand_b_arg(const char *s) __attribute__((nonnull(1)));
 static int expand_b_arg(const char *s)
 {
 	for (; *s; s++) {
@@ -274,6 +318,12 @@ struct spec {
 	char conv;
 };
 
+/* p is always run_one_pass()'s own `p + 1`, one byte past an already-read
+ * '%' (run_one_pass only calls this once *p == '%' has been dereferenced),
+ * so p itself is never NULL here; sp is always run_one_pass()'s own local
+ * `struct spec sp`'s address. */
+static const char *parse_spec(const char *p, struct spec *sp)
+	__attribute__((nonnull(1, 2)));
 static const char *parse_spec(const char *p, struct spec *sp)
 {
 	memset(sp, 0, sizeof *sp);
@@ -332,12 +382,34 @@ static const char *parse_spec(const char *p, struct spec *sp)
 /* sign/body padding shared by every conversion below. zero_ok gates
  * whether the '0' flag applies (it never does for %s/%c/%b, and it is
  * suppressed for numeric conversions whose precision was given -- the
- * same C rule src/stdio/printf.c's own formatter follows). */
-static void emit_padded(const char *sign, const char *body, const struct spec *sp, int zero_ok)
+ * same C rule src/stdio/printf.c's own formatter follows). sign is
+ * genuinely optional -- format_char() passes a literal NULL for both of
+ * its own calls -- so it is deliberately NOT withtok(null_terminated)
+ * (that qualifier has no zero_vacuous escape hatch the way
+ * readable_span/writable_span do, so declaring it here would make
+ * format_char()'s own NULL argument itself a new finding); every
+ * non-NULL sign every caller ever actually passes is one of "", "-",
+ * "+", " " -- string literals, established by hand just below rather
+ * than relying on withtok(null_terminated) to accept a value that may
+ * legitimately be NULL. body, by contrast, is never NULL and always
+ * genuinely NUL-terminated by its caller (format_signed()'s/
+ * format_unsigned()'s `digs`, format_unsigned()'s `withpfx`,
+ * format_char()'s `""`/`c`, format_float()'s `buf` -- see each call
+ * site's own __ownership_string_terminated()), so it is safe to declare
+ * withtok(null_terminated) outright; sp is always the caller's own
+ * `&sp`. */
+static void emit_padded(const char *sign, const char *body withtok(null_terminated),
+	const struct spec *sp, int zero_ok) __attribute__((nonnull(2, 3)));
+static void emit_padded(const char *sign, const char *body withtok(null_terminated),
+	const struct spec *sp, int zero_ok)
 {
-	size_t slen = sign ? strlen(sign) : 0;
+	size_t slen;
 	size_t blen = strlen(body);
-	size_t total = slen + blen;
+	size_t total;
+
+	if (sign) __ownership_string_terminated(sign); /* always a string literal when non-NULL: "", "-", "+", or " " */
+	slen = sign ? strlen(sign) : 0;
+	total = slen + blen;
 	size_t pad = sp->width > 0 && (size_t)sp->width > total ?
 		(size_t)sp->width - total : 0;
 
@@ -362,6 +434,11 @@ static void emit_padded(const char *sign, const char *body, const struct spec *s
  * 64-bit value's own ~20 digits. */
 #define DIGBUF_MAX (SPEC_MAX + 32)
 
+/* arg is always run_one_pass()'s own `arg` (never NULL -- arg_take()
+ * writes either "" or a genuine argv operand), sp is always the caller's
+ * own `&sp`. */
+static void format_signed(const char *arg, const struct spec *sp)
+	__attribute__((nonnull(1, 2)));
 static void format_signed(const char *arg, const struct spec *sp)
 {
 	long v;
@@ -386,15 +463,23 @@ static void format_signed(const char *arg, const struct spec *sp)
 		while (t > 0) digs[n++] = tmp[--t];
 		digs[n] = 0;
 	}
+	/* Both branches above end by writing a NUL somewhere in digs (digs[0]
+	 * directly, or digs[n] after the loop) -- genuinely terminated either
+	 * way, but a loop-computed offset is not a fact a raw per-byte walk
+	 * lets the checker see through on its own. */
+	__ownership_string_terminated(digs);
 	emit_padded(sign, digs, sp, sp->prec < 0);
 }
 
+/* arg is always run_one_pass()'s own `arg` (never NULL), sp is always the
+ * caller's own `&sp`. */
+static void format_unsigned(const char *arg, const struct spec *sp, int base, int upper) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
+	__attribute__((nonnull(1, 2)));
 static void format_unsigned(const char *arg, const struct spec *sp, int base, int upper) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
 	unsigned long v, orig;
 	char tmp[DIGBUF_MAX], digs[DIGBUF_MAX];
 	int t = 0, n = 0;
-	const char *hex = upper ? "0123456789ABCDEF" : "0123456789abcdef";
 	const char *prefix = "";
 
 	(void)arg_unsigned(arg, &v); /* on failure: diagnosed already, v left 0 */
@@ -407,8 +492,30 @@ static void format_unsigned(const char *arg, const struct spec *sp, int base, in
 		 * zero well before this one-pass-per-value-bit guard. */
 		unsigned bits_left = (unsigned)(sizeof v * CHAR_BIT);
 		do {
-			tmp[t++] = hex[v % (unsigned)base];
-			v /= (unsigned)base;
+			/* v % base/v /= base with base itself a plain, unconstrained
+			 * `int` parameter cannot be bounded against
+			 * "0123456789abcdef"'s own fixed 16-character extent by this
+			 * project's ownership vocabulary -- there is no annotation
+			 * for "this parameter is always one of {8, 10, 16}"
+			 * (integer_sentinel/long_sentinel name ONE excluded value,
+			 * not a general range), and even clamping base to a runtime
+			 * variable ranged [2, 16] first does not let the checker's
+			 * modulus-based bound proof see through a non-constant
+			 * divisor. Switching on the three real values every actual
+			 * caller ever passes turns each arm's `% 8`/`% 10`/`% 16`
+			 * into a literal, compile-time-constant modulus, provably
+			 * bounding its own result -- arithmetically identical to the
+			 * single `% (unsigned)base` this replaces, and defensively
+			 * defined for a base outside {8, 10, 16} (a caller error
+			 * this file's four real callers never commit) rather than
+			 * left as undefined behavior. */
+			unsigned digit_val;
+			switch (base) {
+			case 8:  digit_val = (unsigned)(v % 8);  v /= 8;  break;
+			case 16: digit_val = (unsigned)(v % 16); v /= 16; break;
+			default: digit_val = (unsigned)(v % 10); v /= 10; break;
+			}
+			tmp[t++] = upper ? "0123456789ABCDEF"[digit_val] : "0123456789abcdef"[digit_val];
 			bits_left--;
 		} while (v && bits_left > 0);
 		while (sp->prec > t) tmp[t++] = '0';
@@ -435,6 +542,12 @@ static void format_unsigned(const char *arg, const struct spec *sp, int base, in
 			withpfx[0] = 0;
 			g_status = 1;
 		}
+		/* Genuinely terminated either way: a successful snprintf()
+		 * always NUL-terminates a nonzero-size buffer, and the failure
+		 * branch above sets withpfx[0] = 0 by hand -- but snprintf()'s
+		 * own contract does not grant null_terminated on its output
+		 * buffer (see this file's own include comment). */
+		__ownership_string_terminated(withpfx);
 		emit_padded("", withpfx, sp, sp->prec < 0);
 	}
 }
@@ -442,8 +555,21 @@ static void format_unsigned(const char *arg, const struct spec *sp, int base, in
 /* Not routed through emit_padded(): %s's argument can be arbitrarily
  * long and only a precision-bounded *prefix* of it is ever wanted, so
  * this writes directly from `arg` (length-bounded) instead of building
- * a NUL-terminated copy just to hand it to a strlen()-based helper. */
-static void format_str(const char *arg, const struct spec *sp)
+ * a NUL-terminated copy just to hand it to a strlen()-based helper.
+ *
+ * arg is always run_one_pass()'s own `arg`: either "" or a genuine argv
+ * operand written by arg_take(), never NULL and always NUL-terminated --
+ * but arg_take()'s own `out` is a `const char **` out-parameter, whose
+ * postcondition cannot itself carry null_terminated (the same reason
+ * src/util/patch.c's parse_name_line() re-asserts its own T** out-param's
+ * result by hand instead of annotating the parameter), so withtok(...)
+ * here pushes the proof onto run_one_pass()'s own call site, which
+ * restates it with __ownership_string_terminated() right after each
+ * arg_take() that feeds a %s conversion. sp is always the caller's own
+ * `&sp`. */
+static void format_str(const char *arg withtok(null_terminated), const struct spec *sp)
+	__attribute__((nonnull(1, 2)));
+static void format_str(const char *arg withtok(null_terminated), const struct spec *sp)
 {
 	size_t len = strlen(arg);
 	size_t pad;
@@ -460,6 +586,10 @@ static void format_str(const char *arg, const struct spec *sp)
 	}
 }
 
+/* arg is always run_one_pass()'s own `arg` (never NULL), sp is always the
+ * caller's own `&sp`. */
+static void format_char(const char *arg, const struct spec *sp)
+	__attribute__((nonnull(1, 2)));
 static void format_char(const char *arg, const struct spec *sp)
 {
 	char c[2];
@@ -469,6 +599,7 @@ static void format_char(const char *arg, const struct spec *sp)
 	}
 	c[0] = arg[0];
 	c[1] = 0;
+	__ownership_string_terminated(c); /* c[1] = 0 just above, by hand */
 	emit_padded(0, c, sp, 0);
 }
 
@@ -476,6 +607,10 @@ static void format_char(const char *arg, const struct spec *sp)
  * already-exact float-to-decimal conversion -- see this file's header
  * for why that is not the same thing as wrapping the whole utility
  * around vprintf(). */
+/* arg is always run_one_pass()'s own `arg` (never NULL), sp is always the
+ * caller's own `&sp`. */
+static void format_float(const char *arg, const struct spec *sp, char conv)
+	__attribute__((nonnull(1, 2)));
 static void format_float(const char *arg, const struct spec *sp, char conv)
 {
 	double v;
@@ -508,11 +643,23 @@ static void format_float(const char *arg, const struct spec *sp, char conv)
 			g_status = 1;
 		}
 	}
+	/* Genuinely terminated on every path: the outer failure branch and
+	 * the inner failure branch both set buf[0] = 0 by hand, and a
+	 * successful snprintf() always NUL-terminates a nonzero-size buffer
+	 * -- but, again, not a fact snprintf()'s own contract grants (see
+	 * this file's own include comment). */
+	__ownership_string_terminated(buf);
 	emit_padded(sign, body, sp, sp->prec >= 0 ? 0 : 1);
 }
 
 /* ---- one pass over `format`, consuming arguments from `a` ----------- */
 
+/* format is always __util_printf_main()'s own argv[1] (elements_withtok(...)
+ * on argv there, and argc >= 2 already checked before that indexing), a is
+ * always __util_printf_main()'s own local `a`'s address -- neither is
+ * ever NULL. */
+static int run_one_pass(const char *format, struct argcur *a)
+	__attribute__((nonnull(1, 2)));
 static int run_one_pass(const char *format, struct argcur *a)
 {
 	const char *p = format;
@@ -553,6 +700,12 @@ static int run_one_pass(const char *format, struct argcur *a)
 				break;
 			case 's':
 				arg_take(a, &arg);
+				/* arg_take()'s own `out` is a T** out-parameter whose
+				 * postcondition cannot itself carry null_terminated
+				 * (see format_str()'s own comment); arg is genuinely
+				 * either "" or a genuine null_terminated argv operand
+				 * either way, so restate it here by hand. */
+				__ownership_string_terminated(arg);
 				format_str(arg, &sp);
 				break;
 			case 'f': case 'e': case 'g':

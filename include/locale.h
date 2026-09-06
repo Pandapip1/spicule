@@ -58,7 +58,7 @@ struct lconv {
 };
 
 char  *setlocale (int, const char *);
-struct lconv *localeconv(void);
+struct lconv *localeconv(void) __attribute__((returns_nonnull));
 
 #if defined(_POSIX_SOURCE) || defined(_POSIX_C_SOURCE) \
  || defined(_XOPEN_SOURCE) || defined(_GNU_SOURCE) \

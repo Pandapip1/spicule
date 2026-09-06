@@ -3313,37 +3313,22 @@ class ValidPointerChecker
   mutable std::unique_ptr<BugType> BT;
 
   // Functions this codebase itself guarantees always return a pointer to
-  // real, live storage and never NULL, but which this checker has no
-  // other way to know: not a heap allocation, just a fixed,
-  // always-present object. Cross-TU analysis can't see these bodies
-  // (their real definitions live in another translation unit), so each
-  // needs to be named explicitly:
-  //   - __errno_location() (errno.h's `#define errno
-  //     (*__errno_location())`): always returns the calling thread's own
-  //     storage, never NULL.
-  //   - __teb() (src/internal/libc.h): reads the current thread's TEB via
-  //     a segment register/TPIDR, which the OS guarantees exists for any
-  //     running thread; crt1.c's __libc_start_main bootstraps __peb from
-  //     exactly this fact.
-  //   - localeconv() (src/misc/locale.c): `return &__posix_lconv;`,
-  //     unconditional, the only return statement in its real definition.
-  //
-  // Also honors GCC/Clang's `returns_nonnull` attribute, the return-value
-  // counterpart of the `nonnull` parameter attribute checkBeginFunction
-  // trusts below. Motivating case: strchr.c's `char *r =
-  // strchrnul(s, c); ...` -- strchrnul() is marked `returns_nonnull`, and
-  // without honoring it every strchr() call produced an unprovable
-  // finding on r. Symmetric with the parameter mechanism: this only
-  // trusts a return value the project has itself explicitly annotated.
+  // real, live storage and never NULL, but whose bodies this checker's
+  // cross-TU analysis can't see (their real definitions live in another
+  // translation unit), are marked `__attribute__((returns_nonnull))` at
+  // their declarations -- errno.h's __errno_location, src/internal/libc.h's
+  // __teb, and locale.h's localeconv all do this. This is the standard
+  // GCC/Clang return-value counterpart of the `nonnull` parameter
+  // attribute checkBeginFunction trusts below. Motivating case: strchr.c's
+  // `char *r = strchrnul(s, c); ...` -- strchrnul() is marked
+  // `returns_nonnull`, and without honoring it every strchr() call
+  // produced an unprovable finding on r. This only trusts a return value
+  // the project has itself explicitly annotated.
   static bool isAlwaysNonNull(const CallEvent &Call) {
     const auto *Function = dyn_cast_or_null<FunctionDecl>(Call.getDecl());
     if (!Function || !Function->getIdentifier())
       return false;
-    if (Function->hasAttr<ReturnsNonNullAttr>())
-      return true;
-    StringRef Name = Function->getName();
-    return Name == "__errno_location" || Name == "__teb" ||
-           Name == "localeconv";
+    return Function->hasAttr<ReturnsNonNullAttr>();
   }
 
   // The strto* family writes either its input pointer or a pointer later in

@@ -222,6 +222,25 @@ static int addr_is_current_user(const struct passwd *pw, const char *addr)
 	return strlen(pw->pw_name) == namelen && strncmp(pw->pw_name, addr, namelen) == 0;
 }
 
+/* True if `s` contains a raw CR or LF. deliver_message() below builds the
+ * whole header block with one snprintf() and no other escaping, so a
+ * caller-supplied value (the -s subject, or a recipient address) that
+ * carries an embedded newline would land in the header block verbatim --
+ * forging extra header lines (e.g. a "Bcc:" nothing above ever intended)
+ * or, worse, a blank-line-preceded "From " line of its own, which is
+ * mbox format's own boundary rule (see this file's top-of-file comment):
+ * that reads back as a second, fully forged message on the next receive.
+ * addr_is_current_user() above only ever inspects the substring *before*
+ * an '@', so an address like "realname@host\nBcc: x" still passes it
+ * while carrying attacker-controlled bytes after the '@' through to the
+ * header block -- this check is what actually closes that off. Refused
+ * outright, same as every other "don't silently pass this through"
+ * refusal in this file (-F, an unknown recipient, ...). */
+static int has_header_injection(const char *s)
+{
+	return strpbrk(s, "\r\n") != 0;
+}
+
 static int system_mailbox_path(const struct passwd *pw, char *out, size_t outsz)
 {
 	const char *mail = getenv("MAIL");
@@ -415,7 +434,18 @@ static int do_send(const struct passwd *me, const char *subject, char **rcpts, i
 	int i, r;
 	char subjbuf[512];
 
+	if (subject && has_header_injection(subject)) {
+		__util_diagf("mailx: -s: subject contains a newline -- refused (would forge extra "
+			"message headers)\n");
+		return 1;
+	}
+
 	for (i = 0; i < nrcpt; i++) {
+		if (has_header_injection(rcpts[i])) {
+			__util_diagf("mailx: %s: recipient address contains a newline -- refused "
+				"(would forge extra message headers)\n", rcpts[i]);
+			return 1;
+		}
 		if (!addr_is_current_user(me, rcpts[i])) {
 			__util_diagf("mailx: %s: user unknown -- local delivery only, and this "
 				"machine's one real user is \"%s\" (see src/misc/pwd.c)\n",

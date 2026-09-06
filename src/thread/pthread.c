@@ -136,6 +136,11 @@ static unsigned __PLAT_APC_CALL thread_entry(void *argument)
 {
 	struct __pthread *self = argument;
 	void *result;
+	/* First thing this thread ever does, before anything below can touch
+	 * a __thread object -- see plat_thread.h's own declaration of this
+	 * call for why it must run here, from the new thread itself, rather
+	 * than from pthread_create(). */
+	__plat_thread_tls_fixup();
 	__pthread_adopt_current(self);
 	result = self->start(self->argument);
 	finish(self, result);

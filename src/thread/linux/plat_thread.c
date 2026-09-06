@@ -592,6 +592,15 @@ int __plat_thread_spawn(__plat_thread_entry_t entry, void *arg,
 	return 0;
 }
 
+/* A no-op here: the pinned bootstrap tcc PE-linker alignment bug
+ * src/thread/nt/plat_thread.c's own implementation of this function works
+ * around is specific to that backend's IMAGE_TLS_DIRECTORY-based TLS
+ * layout. This backend's own TLS setup (clone() plus src/internal/linux/
+ * tls_setup.c) is unrelated and already correct. */
+void __plat_thread_tls_fixup(void)
+{
+}
+
 /* Boxed like __plat_thread_spawn() above (tid+1): gettid(2) never fails
  * and is stable for the thread's whole lifetime. */
 #if defined(__aarch64__)

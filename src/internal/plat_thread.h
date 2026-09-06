@@ -297,6 +297,16 @@ int __plat_sync_close(__plat_handle_t h) __attribute__((nonnull(1)));
 int __plat_thread_spawn(__plat_thread_entry_t entry, void *arg,
                         size_t stack_size, int create_suspended,
                         __plat_handle_t *out) __attribute__((nonnull(5)));
+/* Called once by a freshly spawned thread, on itself, before it runs any
+ * of the caller-supplied entry function -- src/thread/pthread.c's
+ * thread_entry() is the one real call site. On NT this rebuilds the
+ * calling thread's own TLS block by hand (see src/thread/nt/plat_thread.c
+ * for why: a pinned bootstrap-tcc PE linker bug the platform loader's own
+ * automatic per-thread TLS allocation cannot be trusted to get the
+ * alignment of, and why this must run from the new thread itself rather
+ * than from the thread that spawned it). A no-op on Linux, whose TLS setup
+ * is unrelated (see src/internal/linux/tls_setup.c). */
+void __plat_thread_tls_fixup(void);
 /* Releases a thread handle once it will never be waited on or resumed
  * again (pthread_join(), pthread_detach()'s already-exited case,
  * finish()'s own detached self-cleanup, and pthread_create()'s

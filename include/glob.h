@@ -23,13 +23,33 @@ extern "C" {
 #endif
 
 #include <features.h>
+#include <allocation_tokens.h>
+#include <ownership.h>
 
 #define __NEED_size_t
 #include <bits/alltypes.h>
 
+/* gl_pathv is the one field globfree() releases as a single unit (the
+ * pointer array itself, from src/glob/glob.c's finish()); the individual
+ * char* entries it holds are a separate, unannotated concern shared with
+ * <wordexp.h>'s equally-scoped we_wordv (see that header's own comment,
+ * which this one mirrors). Like wordexp(), glob() has no pointer-typed
+ * return to hang withtok(...) on -- it returns int and reaches this field
+ * only through one level of struct-member access on an out-parameter,
+ * which AllocationLifetimeChecker's checkPostCall never turns into a
+ * freshly tracked fact at a CALLER's call site (only a producer's own
+ * pointer-typed return, or an argument echoed back unchanged, ever does
+ * that). This annotation therefore proves glob()'s *own* implementation
+ * never leaks or double-transfers gl_pathv on any internal path; it
+ * cannot, and does not claim to, prove that a caller of glob()/globfree()
+ * always pairs them (see src/wordexp/wordexp.c's emit_field() -- the one
+ * real caller of glob()/globfree() in this tree, manually reviewed
+ * correct -- and tools/lint-allocation-lifetime-fixtures/safe.c's
+ * missing_release_is_not_caught() for the same limit demonstrated
+ * generically). */
 typedef struct {
 	size_t gl_pathc;	/* count of paths matched */
-	char **gl_pathv;	/* list of matched pathnames, NULL-terminated */
+	char **gl_pathv withtok(internal_heap_allocated);	/* list of matched pathnames, NULL-terminated */
 	size_t gl_offs;		/* slots to reserve at gl_pathv's front, if GLOB_DOOFFS */
 } glob_t;
 

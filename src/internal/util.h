@@ -161,23 +161,37 @@ static inline int __util_array_capacity(size_t current, size_t used, // NOLINT(b
  * dirname/pathchk/readlink still touch errno or stat() a path, so a
  * repeated call with the same argv is not guaranteed to answer the same
  * way twice -- unlike true(1p)/false(1p) below. */
-int __util_basename_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_dirname_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_basename_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_dirname_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 int __util_pathchk_main(
 	int argc, char **argv elements_withtok(null_terminated, argc))
 	__attribute__((nonnull(2)));
 int __util_pwd_main(
 	int argc, char **argv elements_withtok(null_terminated, argc))
 	__attribute__((nonnull(2)));
-int __util_readlink_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_realpath_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_readlink_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_realpath_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 
 /* rm(1p), cp(1p) and mv(1p) do real, potentially destructive filesystem
  * work, so none of them are __pure__ -- unlike true/false below, or
  * test(1p) which never affects the filesystem it inspects. */
-int __util_cp_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_mv_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_rm_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_cp_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_mv_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_rm_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 
 /* Alphabetical.  All six below do real filesystem I/O -- creating,
  * removing, linking or restamping something -- so none is __pure__ the
@@ -194,7 +208,9 @@ int __util_chmod_main(
  * both are genuinely side-effect-free regardless of what is passed --
  * pure in the strict __attribute__ sense, not just in the true(1p)/
  * false(1p) naming sense. */
-int __util_false_main(int argc, char **argv) __attribute__((__pure__));
+int __util_false_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((__pure__));
 int __util_ln_main(
 	int argc, char **argv elements_withtok(null_terminated, argc))
 	__attribute__((nonnull(2)));
@@ -207,11 +223,15 @@ int __util_mkfifo_main(
 int __util_rmdir_main(
 	int argc, char **argv elements_withtok(null_terminated, argc))
 	__attribute__((nonnull(2)));
-int __util_test_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_test_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 int __util_touch_main(
 	int argc, char **argv elements_withtok(null_terminated, argc))
 	__attribute__((nonnull(2)));
-int __util_true_main(int argc, char **argv) __attribute__((__pure__));
+int __util_true_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((__pure__));
 
 /* Tier 2: text I/O utilities (XCU cat(1p), echo(1p), tee(1p), wc(1p),
  * head(1p), tail(1p)) -- the first batch of the tier after Tier 1's
@@ -227,10 +247,18 @@ int __util_cat_main(
 int __util_echo_main(
 	int argc, char **argv elements_withtok(null_terminated, argc))
 	__attribute__((nonnull(2)));
-int __util_head_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_tail_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_tee_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_wc_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_head_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_tail_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_tee_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_wc_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 
 /* Tier 2 continued: the data-copying/reporting tier (dd(1p), df(1p),
  * du(1p), cksum(1p)) plus the two uuencoding utilities (uuencode(1p),
@@ -246,9 +274,15 @@ int __util_wc_main(int argc, char **argv) __attribute__((nonnull(2)));
 int __util_cksum_main(
 	int argc, char **argv elements_withtok(null_terminated, argc))
 	__attribute__((nonnull(2)));
-int __util_dd_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_df_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_du_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_dd_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_df_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_du_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 int __util_uudecode_main(
 	int argc, char **argv elements_withtok(null_terminated, argc))
 	__attribute__((nonnull(2)));
@@ -265,12 +299,24 @@ int __util_uuencode_main(
  * a real argv from a real caller is never NULL, and each function's
  * own usage-error path formats argv[0] into a diagnostic before any
  * argc check could matter. */
-int __util_csplit_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_od_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_pr_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_printf_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_split_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_tabs_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_csplit_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_od_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_pr_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_printf_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_split_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_tabs_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 
 /* Tier 2 continued: sorting/set-operation utilities (XCU sort(1p),
  * uniq(1p), comm(1p), join(1p), tsort(1p)) -- none is __pure__: all
@@ -281,13 +327,21 @@ int __util_tabs_main(int argc, char **argv) __attribute__((nonnull(2)));
  * basename collision with any existing src/ file (checked before
  * naming these -- see this header's own comment above for why that
  * check matters). */
-int __util_comm_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_join_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_sort_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_comm_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_join_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_sort_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 int __util_tsort_main(
 	int argc, char **argv elements_withtok(null_terminated, argc))
 	__attribute__((nonnull(2)));
-int __util_uniq_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_uniq_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 
 /* Tier 2 continued: text-formatting utilities (XCU cut(1p), paste(1p),
  * tr(1p), expand(1p), unexpand(1p), fold(1p)).  None is __pure__: all
@@ -305,8 +359,12 @@ int __util_expand_main(
 int __util_fold_main(
 	int argc, char **argv elements_withtok(null_terminated, argc))
 	__attribute__((nonnull(2)));
-int __util_paste_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_tr_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_paste_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_tr_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 int __util_unexpand_main(
 	int argc, char **argv elements_withtok(null_terminated, argc))
 	__attribute__((nonnull(2)));
@@ -334,7 +392,9 @@ int __util_patch_main(
  * visible side effects -- so, like every other utility in this header,
  * a repeated call with the same argv is not guaranteed to answer the
  * same way twice. */
-int __util_sed_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_sed_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 
 /* Tier 4 continued: grep(1p) -- a real regex-driven line filter,
  * sharing src/regex/regex.c's regcomp()/regexec() (already used
@@ -342,7 +402,9 @@ int __util_sed_main(int argc, char **argv) __attribute__((nonnull(2)));
  * implementation.  Not __pure__: it reads a real file or stdin, so a
  * repeated call with the same argv is not guaranteed to answer the
  * same way twice. */
-int __util_grep_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_grep_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 
 /* Tier 4 continued: real archive/content-format parsers, rather than
  * line/field-oriented text tools (XCU pax(1p), ar(1p), file(1p)).
@@ -359,9 +421,15 @@ int __util_grep_main(int argc, char **argv) __attribute__((nonnull(2)));
  * __pure__: pax and ar both do real archive/filesystem I/O by design,
  * and file(1p) at minimum stat()s (and, for a regular file, opens and
  * reads a peek of) every operand. */
-int __util_ar_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_file_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_pax_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_ar_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_file_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_pax_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 
 /* Tier 4 continued: find(1p), xargs(1p), expr(1p), ls(1p) -- real
  * expression grammars and a real recursive traversal, not just a
@@ -380,10 +448,18 @@ int __util_pax_main(int argc, char **argv) __attribute__((nonnull(2)));
  * because it writes its result to stdout as its entire purpose (the
  * same reasoning src/util/printf.c's own entry doesn't claim __pure__
  * either). */
-int __util_expr_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_find_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_ls_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_xargs_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_expr_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_find_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_ls_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_xargs_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 
 /* Tier 4 continued: ed(1p), m4(1p) -- real parsers, not line-oriented
  * filters.  Both are genuinely interactive/stateful by design (ed's
@@ -404,7 +480,9 @@ int __util_xargs_main(int argc, char **argv) __attribute__((nonnull(2)));
  * Neither is __pure__: ed touches real files via e/E/r/w/!  and m4 via
  * include/sinclude/mkstemp/syscmd, so a repeated call is not guaranteed
  * to answer the same way twice. */
-int __util_ed_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_ed_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 int __util_m4_main(
 	int argc, char **argv elements_withtok(null_terminated, argc))
 	__attribute__((nonnull(2)));
@@ -416,8 +494,12 @@ int __util_m4_main(
  * basename collision with any existing src/ file (checked before
  * naming these -- see this header's own comment above for why that
  * check matters). */
-int __util_cmp_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_diff_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_cmp_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_diff_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 
 /* Tier 7 (this project's own POSIX-utilities plan's "Software
  * Development option tier", the plan's final, explicitly follow-on
@@ -437,7 +519,9 @@ int __util_diff_main(int argc, char **argv) __attribute__((nonnull(2)));
  * still needs argv[0] for its own diagnostic (or, with argc==1, simply
  * defaults its one implicit operand to "a.out" per XCU nm(1p)'s own
  * OPERANDS text -- either way argv itself is never NULL). */
-int __util_nm_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_nm_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 
 /* ---- plumbing shared between src/util/cp.c, src/util/mv.c and
  * src/util/rm.c -----------------------------------------------------
@@ -470,7 +554,9 @@ char *__util_join_basename(const char *dir, const char *src);
  * way src/util/dd.c documents its conv= coverage. Not __pure__: awk
  * reads real files/stdin, writes real output, and can run arbitrary
  * commands via system()/getline/print redirection. */
-int __util_awk_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_awk_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 
 /* Tier 5: process/environment utilities.  time(1p) runs a utility and
  * reports its real/user/system elapsed time; timeout(1) -- not an XCU
@@ -483,8 +569,12 @@ int __util_awk_main(int argc, char **argv) __attribute__((nonnull(2)));
  * spec/manual wording cited and every deliberate scope narrowing.
  * Neither is __pure__: both spawn and wait on a real child process,
  * whose very existence and behaviour differ call to call. */
-int __util_time_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_timeout_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_time_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_timeout_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 
 /* Terminal-control utilities: stty(1p), tty(1p) -- both real against
  * src/termios/termios.c's genuine tcgetattr()/tcsetattr() and
@@ -533,8 +623,12 @@ int __util_tput_main(
  * delta(1p) at all, so no second delta ever exists to retrieve; no
  * branches, MR validation, flags, or user-list editing).  Neither is
  * __pure__: both do real filesystem I/O by design. */
-int __util_admin_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_get_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_admin_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_get_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 
 /* ---- plumbing shared between src/util/admin.c and src/util/get.c ----
  *
@@ -560,7 +654,9 @@ unsigned __util_sccs_checksum(const char *buf, size_t len) __attribute__((nonnul
 int __util_mesg_main(
 	int argc, char **argv elements_withtok(null_terminated, argc))
 	__attribute__((nonnull(2)));
-int __util_write_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_write_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 
 /* at(1p)/batch(1p)/crontab(1p), plus the two standalone-only daemons
  * behind them (atd, crond -- not POSIX utilities themselves, no XCU
@@ -580,13 +676,21 @@ int __util_write_main(int argc, char **argv) __attribute__((nonnull(2)));
  * None of the five are __pure__: all five read and write real files
  * in the job spool (src/util/spool.h), and the two daemons spawn and
  * wait on real child processes besides. */
-int __util_at_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_batch_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_at_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_batch_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 int __util_crontab_main(
 	int argc, char **argv elements_withtok(null_terminated, argc))
 	__attribute__((nonnull(2)));
-int __util_atd_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_crond_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_atd_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
+int __util_crond_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 
 /* mailx(1p): originally listed in this project's own POSIX-utilities
  * plan as needing "infrastructure this plan doesn't build" (an MTA, a
@@ -600,7 +704,9 @@ int __util_crond_main(int argc, char **argv) __attribute__((nonnull(2)));
  * exactly which of mailx.html's interactive commands are implemented
  * and which are deliberately deferred). Not __pure__: reads real
  * mailbox files, writes/appends to them, and reads stdin/a terminal. */
-int __util_mailx_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_mailx_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 
 /* man(1p): finds a manual page by name/section across $MANPATH and
  * formats it -- a real parser/formatter for the `man`-macro-package
@@ -626,7 +732,9 @@ int __util_man_main(
  * batch, is built around "never touch a byte this file cannot prove is
  * safe to move" rather than "strip everything a real GNU strip would").
  * Not __pure__: it reads a real file and, absent -o, overwrites it. */
-int __util_strip_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_strip_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 
 #endif
 

@@ -928,6 +928,14 @@ stage_sizearith() {
 			-Xclang -analyzer-output=text "$fixture" -o /dev/null \
 			>> "$tagged_fixture_log" 2>&1 || any=1
 	done
+	sentinel_fixture_log=$builddir/integer-sentinel-fixtures.log
+	: > "$sentinel_fixture_log"
+	for fixture in tools/lint-integer-sentinel-fixtures/*.c; do
+		clang-18 --analyze -Xclang -load -Xclang "$plugin" \
+			-Xclang -analyzer-checker=ntlibc.IntegerSentinel \
+			-Xclang -analyzer-output=text "$fixture" -o /dev/null \
+			>> "$sentinel_fixture_log" 2>&1 || any=1
+	done
 
 	cast_logs=
 	analyzed=0
@@ -951,7 +959,7 @@ stage_sizearith() {
 			id=$(printf %s "$f" | tr / _)
 			# shellcheck disable=SC2086
 			"$clang" $target --analyze -Xclang -load -Xclang "$plugin" \
-				-Xclang -analyzer-checker=ntlibc.SizeCast,ntlibc.ArrayIndex,ntlibc.TaggedResult \
+				-Xclang -analyzer-checker=ntlibc.SizeCast,ntlibc.ArrayIndex,ntlibc.TaggedResult,ntlibc.IntegerSentinel \
 				-DNTLIBC_OWNERSHIP_ANALYSIS \
 				-Xclang -analyzer-output=text "$@" "$f" -o /dev/null \
 				> "'"$pardir"'/$id.log" 2>&1
@@ -1002,6 +1010,14 @@ stage_sizearith() {
 	cat "$tagged_report"
 	[ "$rc" -eq 0 ] || any=1
 	tools/lint-gh-annotate.sh error "$tagged_report"
+
+	sentinel_report=$builddir/integer-sentinel.report
+	# shellcheck disable=SC2086
+	tools/lint-integer-sentinel.py --fixtures "$sentinel_fixture_log" $cast_logs > "$sentinel_report" 2>&1
+	rc=$?
+	cat "$sentinel_report"
+	[ "$rc" -eq 0 ] || any=1
+	tools/lint-gh-annotate.sh error "$sentinel_report"
 	return $any
 }
 

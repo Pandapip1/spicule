@@ -205,6 +205,23 @@ static bool testElementRelations() {
                  "havoced relation released an element token");
 }
 
+// findTokenSort above only ever resolves a TypedefNameDecl; integer_sentinel/
+// long_sentinel attach to a plain FunctionDecl (or, via its parameters, a
+// ParmVarDecl), so this test needs its own by-name function lookup. Real
+// checker code never needs this: it already holds the FunctionDecl/
+// ParmVarDecl directly (from a CallEvent or a LocationContext), never by
+// name.
+static const clang::FunctionDecl *findFunction(clang::ASTContext &Context,
+                                               llvm::StringRef Name) {
+  clang::IdentifierInfo &Identifier = Context.Idents.get(Name);
+  clang::DeclarationName Declaration(&Identifier);
+  for (clang::NamedDecl *Candidate :
+       Context.getTranslationUnitDecl()->lookup(Declaration))
+    if (const auto *Function = llvm::dyn_cast<clang::FunctionDecl>(Candidate))
+      return Function;
+  return nullptr;
+}
+
 int main() {
   constexpr const char *Source = R"(
 typedef struct { char byte; } dynamic_token
@@ -269,6 +286,14 @@ typedef struct { char byte; } unsupported_external
 typedef struct { char byte; } unsupported_internal
   __attribute__((annotate("qual:dynamic_storage"),
                  annotate("qual:implemented_by=plain_family")));
+int int_sentinel_return(void)
+  __attribute__((annotate("qual:integer_sentinel=-1")));
+long long_sentinel_return(void)
+  __attribute__((annotate("qual:long_sentinel=-2")));
+int no_sentinel_return(void);
+int malformed_sentinel_return(void)
+  __attribute__((annotate("qual:integer_sentinel=not-a-number")));
+void sentinel_param(int value __attribute__((annotate("qual:integer_sentinel=-1"))));
 )";
   std::unique_ptr<clang::ASTUnit> AST =
       clang::tooling::buildASTFromCodeWithArgs(
@@ -304,6 +329,41 @@ typedef struct { char byte; } unsupported_internal
       require(excludedSentinel(findTokenSort(Context, "maximum_sentinel")) ==
                   std::numeric_limits<int64_t>::max(),
               "maximum signed sentinel was not preserved");
+  // integer_sentinel(value)/long_sentinel(value): the same literal grammar,
+  // reused verbatim (parseSentinelLiteral/sentinelFromQualifier), applied to
+  // a plain FunctionDecl/ParmVarDecl instead of a tokdef TypedefNameDecl.
+  const clang::FunctionDecl *IntReturn =
+      findFunction(Context, "int_sentinel_return");
+  const clang::FunctionDecl *LongReturn =
+      findFunction(Context, "long_sentinel_return");
+  const clang::FunctionDecl *NoSentinelReturn =
+      findFunction(Context, "no_sentinel_return");
+  const clang::FunctionDecl *MalformedReturn =
+      findFunction(Context, "malformed_sentinel_return");
+  const clang::FunctionDecl *SentinelParamFn =
+      findFunction(Context, "sentinel_param");
+  Passed &= require(integerSentinel(IntReturn) == -1,
+                    "integer_sentinel literal not recovered off a FunctionDecl");
+  Passed &= require(!longSentinel(IntReturn),
+                    "long_sentinel matched an integer_sentinel qualifier");
+  Passed &= require(longSentinel(LongReturn) == -2,
+                    "long_sentinel literal not recovered off a FunctionDecl");
+  Passed &= require(!integerSentinel(LongReturn),
+                    "integer_sentinel matched a long_sentinel qualifier");
+  Passed &= require(scalarSentinel(IntReturn) == -1,
+                    "scalarSentinel did not dispatch to integer_sentinel");
+  Passed &= require(scalarSentinel(LongReturn) == -2,
+                    "scalarSentinel did not dispatch to long_sentinel");
+  Passed &= require(!scalarSentinel(NoSentinelReturn),
+                    "scalarSentinel invented a sentinel with none declared");
+  Passed &= require(!scalarSentinel(MalformedReturn),
+                    "scalarSentinel accepted a nonnumeric literal");
+  Passed &= require(SentinelParamFn && SentinelParamFn->getNumParams() == 1,
+                    "sentinel_param fixture did not parse as expected");
+  if (SentinelParamFn && SentinelParamFn->getNumParams() == 1)
+    Passed &= require(
+        scalarSentinel(SentinelParamFn->getParamDecl(0)) == -1,
+        "scalarSentinel did not read a qualifier off a ParmVarDecl");
   auto Implementation = [&](const char *Name) {
     return tokenImplementation(Context, findTokenSort(Context, Name));
   };

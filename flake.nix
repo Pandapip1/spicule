@@ -140,6 +140,69 @@
             };
           };
 
+          # ntlibc's patched Wine fork (with RtlCloneUserProcess), built
+          # through Nix instead of .github/actions/setup-wine's own `git
+          # clone`/`checkout`/`configure`/`make install` sequence. That
+          # action's apt packages (gcc-mingw-w64-i686,
+          # gcc-mingw-w64-x86-64, flex, bison, pkg-config, zlib1g-dev) are
+          # exactly what nixpkgs' own `wineWow64Packages` already
+          # assembles for a from-source WoW64 build, so this overrides
+          # only the two things CI's build changes from stock
+          # wine-mirror/wine: the source repository and its pinned
+          # revision.
+          #
+          # `wineWow64Packages.minimal`, not `.full` or plain `wine`, is
+          # the base: `minimal` already builds with every optional
+          # subsystem (X11, Vulkan, GStreamer, sane, usb, udev, dbus,
+          # cups, ...) off, matching setup-wine/action.yml's own
+          # --without-x/--without-freetype/--without-vulkan/... configure
+          # flags without needing to repeat them here -- CI turns those
+          # off explicitly; nixpkgs' `minimal` variant never turns them
+          # on. It also builds both i386 and x86_64 PE guest archs
+          # (WoW64), which is what ntlibc-suite/libc-test/posix-optsrun's
+          # i386-win32/x86_64-win32 matrix legs need `wine <exe>.exe` to
+          # run. Only `src`/`version`/`patches` change below; every
+          # buildInput/configureFlag/support-flag decision still comes
+          # from nixpkgs' own pkgs/applications/emulators/wine/
+          # {base,packages}.nix, unmodified.
+          #
+          # `patches = [ ]` drops nixpkgs' own two patches (a
+          # $NIX_SSL_CERT_FILE cert-path fix and a device-paths
+          # backport), both written against stock wine-mirror/wine
+          # tarball releases: this fork's tree already carries its own
+          # full patch set (RtlCloneUserProcess included) baked in, plus
+          # its own pre-generated `configure`, so reapplying either would
+          # either fail to apply against different context or double up
+          # functionality the fork's tree already has.
+          #
+          # Verified with a real build on this project's own aarch64 dev
+          # host (nixpkgs has no prebuilt substitute for a fork/rev it
+          # has never seen, so this is a genuine from-source Wine build,
+          # not a cache hit): `nix build` on this exact override
+          # compiled cleanly in about 13 minutes wall-clock via
+          # nixpkgs' llvm-mingw cross toolchain (the aarch64-host
+          # substitute for the real GCC mingw-w64 cross-compilers
+          # setup-wine/action.yml installs on CI's x86_64 runner),
+          # producing a working bin/{wine,wineserver} and
+          # lib/wine/{i386,x86_64}-windows/{ntdll,kernel32}.dll.
+          # `wine --version`/`wineserver --version` both ran and reported
+          # "Wine 11.16" -- this fork's own version past its 11.0 base,
+          # not a placeholder. Matches .github/workflows/ci.yml's
+          # WINE_REPO/WINE_SHA; keep both, and the `rev`/`hash` below, in
+          # sync with that file by hand, same as `tcc` above -- there is
+          # no automated link between a GitHub Actions env var and a Nix
+          # derivation.
+          wineFork = pkgs.wineWow64Packages.minimal.overrideAttrs (_: {
+            version = "52fef96f6";
+            src = pkgs.fetchFromGitHub {
+              owner = "Pandapip1";
+              repo = "wine";
+              rev = "52fef96f65a73013ee922e8143f22575ec727e21";
+              hash = "sha256-0WApht2wtfugN0lby3wbZPcqov1BTodGQMCDIlJ+D2E=";
+            };
+            patches = [ ];
+          });
+
           # tools/lint.sh's Z3-backed stages (sizearith, totality, arithub,
           # ownership, initproof, fallible, provenance, locks, lockset,
           # abizeroinit, reentrancy, variadic, signals, errno, purity,
@@ -282,6 +345,7 @@ EOF
           };
 
           packages.tcc = tcc;
+          packages.wine-fork = wineFork;
         };
     };
 }

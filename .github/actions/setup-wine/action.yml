@@ -12,92 +12,47 @@
 # ...) unfalsifiable in CI: a row could be right on a developer's patched
 # build and wrong here for no reason but which binary ran it.  The patched
 # build is what actually implements the syscalls ntlibc's tests exercise.
-#
-# The build is cached by the fork commit so an unchanged fork is a pure
-# cache hit; a moved pin invalidates it automatically.  See build-wine in
-# ci.yml, which populates the cache once and is a hard prerequisite of
-# every job that calls this action -- a cache miss here is a configuration
-# bug (the pin and the populating job disagreed), not something to paper
-# over by rebuilding silently and slowly inside each matrix leg.
 
 name: Set up Wine
-description: Install ntlibc's patched Wine fork (with RtlCloneUserProcess) for running PE test binaries.
-
-inputs:
-  repository:
-    description: Wine fork repository to build
-    required: true
-  revision:
-    description: Pinned Wine fork commit
-    required: true
-  build-on-miss:
-    description: Build and cache the fork when it is not already cached
-    required: false
-    default: "false"
+description: Build ntlibc's patched Wine fork via flake.nix's `wine-fork` package, restoring it from cache on a hit
 
 runs:
   using: composite
   steps:
-    - name: Restore patched Wine build
-      id: cache
-      uses: actions/cache@v6
+    # cachix/install-nix-action, not DeterminateSystems/nix-installer-action
+    # -- see .github/workflows/ci.yml's `linux-builds` job for the full
+    # rationale (no FlakeHub registration here, so the Determinate
+    # installer's default FlakeHub login always fails).
+    - name: Install Nix
+      uses: cachix/install-nix-action@v31
       with:
-        path: ~/wine-install
-        # Keyed on the fork commit (not a branch name) so an update to the
-        # fork invalidates this automatically, and a cache hit can only
-        # ever be a build of exactly this commit -- never a stale build
-        # left over from a previous pin, which would silently reintroduce
-        # the same "which binary actually ran this" problem we're fixing.
-        key: wine-${{ inputs.revision }}-${{ runner.os }}-${{ runner.arch }}-v1
+        github_access_token: ${{ github.token }}
+    - name: Set up Magic Nix Cache
+      uses: DeterminateSystems/magic-nix-cache-action@v14
+      with:
+        # use-flakehub: false / diagnostic-endpoint: "" -- see ci.yml's
+        # `linux-builds` job for the full rationale.
+        use-flakehub: false
+        diagnostic-endpoint: ""
 
-    - name: Build patched Wine after a cache miss
-      if: steps.cache.outputs.cache-hit != 'true' && inputs.build-on-miss == 'true'
+    # The pinned fork commit and the from-source build recipe itself
+    # (nixpkgs' wineWow64Packages.minimal, overridden for our fork's
+    # source/rev) both live solely in flake.nix's `wineFork` derivation
+    # now -- see that file's own comment on it for why the arch list is
+    # forced to match this action's own downstream needs.
+    - name: Build patched Wine
       shell: bash
-      env:
-        WINE_REPOSITORY: ${{ inputs.repository }}
-        WINE_REVISION: ${{ inputs.revision }}
-      run: |
-        set -euo pipefail
-        sudo apt-get update
-        sudo apt-get install -y \
-          flex bison pkg-config zlib1g-dev \
-          gcc-mingw-w64-i686 gcc-mingw-w64-x86-64
-        git clone "$WINE_REPOSITORY" "$RUNNER_TEMP/wine"
-        git -C "$RUNNER_TEMP/wine" checkout "$WINE_REVISION"
-        mkdir -p "$RUNNER_TEMP/wine/build-wow64"
-        cd "$RUNNER_TEMP/wine/build-wow64"
-        # Matches the flags used for the developer build this fork is
-        # validated against: a single WoW64 build covering both PE
-        # arches, with the optional subsystems (X11, Vulkan, GStreamer,
-        # ...) ntlibc's PE test binaries never touch turned off so the
-        # runner doesn't need their dev packages at all.
-        ../configure --enable-archs=i386,x86_64 \
-          --without-x --without-freetype --without-vulkan --without-opengl \
-          --without-gstreamer --without-sane --without-usb --without-udev \
-          --without-dbus --without-cups \
-          CC=gcc CXX=g++ \
-          --prefix="$HOME/wine-install"
-        make -j"$(nproc)"
-        make install
-        # The cache stores what we run, not what we debug: strip the
-        # installed tree so the cache entry is a runtime, not a build
-        # directory with symbols still attached.
-        find "$HOME/wine-install" -type f -exec sh -c '
-          for f; do
-            case "$(file -b "$f")" in
-              ELF*) strip --strip-unneeded "$f" 2>/dev/null || true ;;
-            esac
-          done
-        ' _ {} +
+      run: nix build .#wine-fork
 
     - name: Verify and expose the patched Wine build
       shell: bash
       run: |
-        test -x "$HOME/wine-install/bin/wine"
-        echo "$HOME/wine-install/bin" >> "$GITHUB_PATH"
+        test -x "result/bin/wine"
+        test -x "result/bin/wineserver"
+        echo "$PWD/result/bin" >> "$GITHUB_PATH"
 
     - name: Report Wine version
       shell: bash
       run: |
-        export PATH="$HOME/wine-install/bin:$PATH"
         wine --version
+        wineserver --version

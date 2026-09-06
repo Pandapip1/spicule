@@ -152,13 +152,21 @@
           # revision.
           #
           # `wineWow64Packages.minimal`, not `.full` or plain `wine`, is
-          # the base: `minimal` already builds with every optional
-          # subsystem (X11, Vulkan, GStreamer, sane, usb, udev, dbus,
-          # cups, ...) off, matching setup-wine/action.yml's own
-          # --without-x/--without-freetype/--without-vulkan/... configure
-          # flags without needing to repeat them here -- CI turns those
-          # off explicitly; nixpkgs' `minimal` variant never turns them
-          # on. It also builds both i386 and x86_64 PE guest archs
+          # the base: `minimal` already excludes Vulkan, GStreamer, sane,
+          # usb, udev, dbus and cups from its buildInputs entirely, so
+          # Wine's own ./configure autodetects them absent and disables
+          # each the same way setup-wine/action.yml's explicit
+          # --without-vulkan/--without-gstreamer/... flags do -- CI turns
+          # those off explicitly; nixpkgs' `minimal` variant never turns
+          # them on in the first place. freetype is the one exception:
+          # `minimal` keeps it as a real buildInput (confirmed via `nix
+          # derivation show`), so without an explicit --without-freetype
+          # here Wine would detect and enable FreeType-based font support
+          # that setup-wine/action.yml's CI build has never had (that
+          # job's apt package list installs no libfreetype-dev either) --
+          # forced off below, the same way --enable-archs is forced,
+          # rather than silently gaining a capability CI has never
+          # validated. It also builds both i386 and x86_64 PE guest archs
           # (WoW64), which is what ntlibc-suite/libc-test/posix-optsrun's
           # i386-win32/x86_64-win32 matrix legs need `wine <exe>.exe` to
           # run. Only `src`/`version`/`patches` change below; every
@@ -218,7 +226,7 @@
             # (e.g. --without-x) `minimal` already computed intact.
             configureFlags =
               (pkgs.lib.filter (f: !(pkgs.lib.hasPrefix "--enable-archs=" f)) old.configureFlags)
-              ++ [ "--enable-archs=i386,x86_64" ];
+              ++ [ "--enable-archs=i386,x86_64" "--without-freetype" ];
           });
 
           # tools/lint.sh's Z3-backed stages (sizearith, totality, arithub,

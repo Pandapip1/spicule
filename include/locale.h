@@ -78,6 +78,30 @@ struct lconv *localeconv(void) __attribute__((returns_nonnull));
 #define LC_MESSAGES_MASK (1<<LC_MESSAGES)
 #define LC_ALL_MASK      0x7fffffff
 
+/* No tokdef here despite newlocale()/duplocale()/freelocale() looking
+ * exactly like DIR* (dirent.h) at the header level: dynamic_storage's
+ * checkEndFunction proof requires whichever function is marked
+ * consume(...) to itself reach a real, matching release when its body
+ * is analyzed -- not merely to be trusted by callers. freelocale()'s
+ * body (src/misc/locale.c) is `(void)l;`, correctly: ntlibc has one
+ * immutable static locale object for every request, so there is
+ * nothing to release (see test/posix-locale.c's own clause-by-clause
+ * audit of exactly this point). That leaves no in-tree call for the
+ * checker to find, so marking freelocale() consume(...) does not
+ * describe a proof gap the way wordexp_t's out-parameter shape did
+ * (tools/lint-allocation-lifetime-fixtures/*.c's fill_word_vector*
+ * fixtures) -- it manufactures one: every real path through
+ * freelocale()'s real body is reported "consume function exits
+ * without releasing its argument," confirmed by running the checker
+ * against the annotated header and this file. The only ways to silence
+ * that would be dishonest (an unconditional pass despite proving
+ * nothing) or dangerous (a real free()-family call against
+ * &__c_locale's address, which was never malloc'd). Since freelocale()
+ * is the only consume(...) site the family would ever have, minting
+ * withtok(...) at newlocale()/duplocale() without it would make every
+ * real call site an unconditional leak report instead -- there is no
+ * partial slice of this contract that is both sound and useful, unlike
+ * wordexp_t's producer-only slice. */
 locale_t duplocale(locale_t);
 void freelocale(locale_t);
 locale_t newlocale(int, const char *, locale_t);

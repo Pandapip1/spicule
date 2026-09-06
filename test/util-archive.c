@@ -246,6 +246,76 @@ static void test_ar_roundtrip(void)
 	CHECK(out_contains("arm2.txt"));
 }
 
+/* Regression test for a path-traversal ("Zip Slip") bug found in
+ * src/util/ar.c's parse_header(): the classic ar format's 16-byte name
+ * field is just bytes, so nothing in the on-disk format itself stops a
+ * hostile archive from putting "../<something>" or an absolute path
+ * there, well within the 15-byte limit this build's own writer
+ * enforces. -x used to pass that name straight to fopen(), so
+ * extracting such an archive could write outside the extraction
+ * directory. parse_header() now rejects any header whose name field
+ * contains '/' or '\\' as corrupt, for every operation (-t/-p/-x/-d/-r
+ * alike), not just -x.
+ *
+ * This hand-builds one 60-byte header (bypassing this ar's own writer,
+ * which can never produce such a name -- it always writes a bare
+ * basename) naming the member "../ar_trav_x", 12 bytes, comfortably
+ * under both the 16-byte on-disk field width and this build's own
+ * 15-byte AR_NAME_MAX, so neither truncates it: parse_header() sees
+ * exactly that name, '/' and all. The canary path checked below is
+ * that same name, one level *above* the process's own working
+ * directory (a throwaway per-run temp directory under `make check`'s
+ * runner -- see tools/run-tests.py), not somewhere shared. It is
+ * unlinked unconditionally afterward regardless of outcome, so even a
+ * future regression that recreates this bug leaves nothing behind. */
+static void write_raw_header(FILE *f, const char *name, long size)
+{
+	char hdr[60];
+	size_t nl = strlen(name);
+	char tmp[16];
+	int n;
+
+	memset(hdr, ' ', sizeof hdr);
+	memcpy(hdr, name, nl < 16 ? nl : 16);
+	n = snprintf(tmp, sizeof tmp, "%ld", size);
+	memcpy(hdr + 48, tmp, (size_t)n < 10 ? (size_t)n : 10);
+	hdr[58] = '`';
+	hdr[59] = '\n';
+	fwrite(hdr, 1, sizeof hdr, f);
+}
+
+#define AR_TRAV_CANARY "../ar_trav_x"
+
+static void test_ar_traversal_rejected(void)
+{
+	FILE *f;
+	struct stat st;
+	char *toc[] = { (char *)"ar", (char *)"t", (char *)"scratch/artrav.a", 0 };
+	char *extract[] = { (char *)"ar", (char *)"x", (char *)"scratch/artrav.a", 0 };
+
+	unlink(AR_TRAV_CANARY);
+	unlink("scratch/artrav.a");
+
+	f = fopen("scratch/artrav.a", "wb");
+	if (!f) return;
+	fwrite("!<arch>\n", 1, 8, f);
+	write_raw_header(f, AR_TRAV_CANARY, 6);
+	fwrite("PWNED\n", 1, 6, f);
+	fclose(f);
+
+	/* -t must refuse the whole archive as corrupt, not just quietly
+	 * list a dangerous name -- the check lives in the shared header
+	 * parser, not just the extraction path. */
+	CHECK(run(ar_path, toc) != 0);
+
+	/* -x must neither create the canary file nor exit 0. */
+	CHECK(run(ar_path, extract) != 0);
+	CHECK(stat(AR_TRAV_CANARY, &st) != 0);
+
+	unlink(AR_TRAV_CANARY);
+	unlink("scratch/artrav.a");
+}
+
 static void test_ar_builtin(void)
 {
 	unlink("scratch/artest2.a");
@@ -501,6 +571,7 @@ static void rmtree_scratch(void)
 	unlink("scratch/artest.a"); unlink("scratch/artest2.a");
 	unlink("scratch/arm1.txt"); unlink("scratch/arm2.txt"); unlink("scratch/arm3.txt");
 	unlink("arm1.txt"); unlink("arm2.txt");
+	unlink("scratch/artrav.a"); unlink(AR_TRAV_CANARY);
 	unlink("scratch/pax1.tar"); unlink("scratch/pax2.cpio"); unlink("scratch/pax3.tar");
 	unlink("scratch/px1.txt"); unlink("scratch/px2.txt");
 	unlink("scratch/px1.orig"); unlink("scratch/px2.orig");
@@ -561,6 +632,7 @@ int main(int argc, char **argv)
 	test_file_symlink();
 
 	test_ar_roundtrip();
+	test_ar_traversal_rejected();
 	test_ar_builtin();
 
 	test_pax_ustar_roundtrip();

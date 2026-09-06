@@ -132,6 +132,7 @@
 #include <strings.h>
 #include <ctype.h>
 #include <errno.h>
+#include <limits.h>
 #include <regex.h>
 #include "util.h"
 
@@ -336,7 +337,7 @@ static int scan_one(const struct grep_opts *o, const struct pat_list *pl,
 
 		if (selected) {
 			*matched = 1;
-			(*count)++;
+			if (*count < LONG_MAX) (*count)++;
 			if (o->qflag) { *quiet_hit = 1; break; }
 			if (o->lflag) break;
 			if (!o->cflag) {
@@ -346,7 +347,15 @@ static int scan_one(const struct grep_opts *o, const struct pat_list *pl,
 				if (had_nl && fputc('\n', stdout) == EOF) werr = 1;
 			}
 		}
-		lineno++;
+		/* A file with LONG_MAX or more lines is possible on a real
+		 * system (LONG_MAX is only 2^31-1 on an LLP64 target, e.g.
+		 * this tree's own x86_64-win32 build) -- `lineno++` past
+		 * LONG_MAX is signed overflow, undefined behavior, not just
+		 * a cosmetic wraparound. Saturate instead: -n's displayed
+		 * number pins at LONG_MAX for any further line rather than
+		 * the read itself failing, the same "count, don't abort"
+		 * choice *count just above makes for -c. */
+		if (lineno < LONG_MAX) lineno++;
 	}
 	free(line);
 	return werr ? -1 : 0;

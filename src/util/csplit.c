@@ -293,9 +293,17 @@ int __util_csplit_main(int argc, char **argv)
 		}
 		if (!strcmp(a, "-n")) {
 			char *end;
+			long v;
 			if (i + 1 >= argc) { __util_diagf("csplit: -n: option requires an argument\n"); return 1; }
-			ndigits = (int)strtol(argv[++i], &end, 10);
-			if (*end || ndigits <= 0) { __util_diagf("csplit: -n: invalid digit count\n"); return 1; }
+			v = strtol(argv[++i], &end, 10);
+			/* Same cast-before-validate hazard as the line_no operand
+			 * below: check the un-narrowed `long` against INT_MAX before
+			 * ever casting to `int`, so a digit count too large to be a
+			 * real `int` is rejected outright rather than silently
+			 * wrapping into some small (or negative) value that then
+			 * slips past the `ndigits <= 0` check. */
+			if (*end || v <= 0 || v > INT_MAX) { __util_diagf("csplit: -n: invalid digit count\n"); return 1; }
+			ndigits = (int)v;
 			continue;
 		}
 		__util_diagf("csplit: %s: invalid option\n", a);
@@ -377,19 +385,35 @@ int __util_csplit_main(int argc, char **argv)
 		}
 		{
 			char *end;
-			long lineno = strtol(a, &end, 10);
+			long lineno, t;
+			lineno = strtol(a, &end, 10);
 			if (*end || lineno <= 0) {
 				__util_diagf("csplit: %s: invalid arg (expected a line number, "
 				                "/regexp/[offset], or %%regexp%%[offset])\n", a);
 				had_error = 1;
 				break;
 			}
-			target = (int)lineno - 1;
-			if (target < cur || target > L.n) {
+			/* Validate in `long` BEFORE narrowing to `int`: L.n is an
+			 * `int` (bounded well under INT_MAX by read_all_lines()'s own
+			 * cap), but `lineno` is a `long`, 64 bits wide on this
+			 * project's Linux targets even though `int` stays 32 bits
+			 * there. A line number like 4294967301 (2^32+5) is a
+			 * perfectly valid `long` -- no strtol() clamp involved at
+			 * all -- but truncates to 5 on a naive `(int)lineno`,
+			 * silently turning an out-of-range operand into a
+			 * plausible-looking small target instead of the "line
+			 * number is out of range" diagnostic a real csplit(1p) would
+			 * give. Comparing the unnarrowed `t` against `cur`/`L.n`
+			 * first (both promoted to `long` for the comparison) means
+			 * the cast below only ever runs once t is already known to
+			 * fit inside `int`. */
+			t = lineno - 1;
+			if (t < cur || t > (long)L.n) {
 				__util_diagf("csplit: %s: line number is out of range\n", a);
 				had_error = 1;
 				break;
 			}
+			target = (int)t;
 			if (write_piece(&L, cur, target, prefix, ndigits, piece++, opt_s, &created) < 0) {
 				had_error = 1;
 				break;

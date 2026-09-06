@@ -914,11 +914,40 @@ static char *strip_components(const char *name, long strip)
 	return strdup(p);
 }
 
+/* A context/unified patch header's "---"/"+++" filename is content from
+ * the patch stream itself -- not something the invoking user typed --
+ * yet pick_target_name() below (when no file operand overrides it) feeds
+ * it straight to fopen() for both the read and the final write. Absent
+ * this check, a crafted patch naming an absolute path, or a path with a
+ * ".." component, would let `patch -i evil.diff` (a perfectly normal
+ * invocation, no operand needed) read and then overwrite an arbitrary
+ * file anywhere the invoking user can write -- the same header-driven
+ * path traversal that git-apply and modern GNU patch both explicitly
+ * guard against. An explicit file operand bypasses this check entirely:
+ * that path came from the user's own command line, which is trusted the
+ * same way it is for every other utility in this project. */
+static int name_is_unsafe(const char *name)
+{
+	const char *p = name;
+	if (!name || !*name) return 1;
+	if (name[0] == '/') return 1;
+	for (;;) {
+		size_t seglen = strcspn(p, "/");
+		if (seglen == 2 && p[0] == '.' && p[1] == '.') return 1;
+		if (!p[seglen]) break;
+		p += seglen + 1;
+	}
+	return 0;
+}
+
 withtok(heap_allocated)
 static char *pick_target_name(const char *old_name, const char *new_name, long strip)
 {
 	char *o = strip_components(old_name, strip);
 	char *n = strip_components(new_name, strip);
+
+	if (o && name_is_unsafe(o)) { free(o); o = 0; }
+	if (n && name_is_unsafe(n)) { free(n); n = 0; }
 
 	if (o && access(o, F_OK) == 0) { free(n); return o; }
 	if (n) { free(o); return n; }
@@ -930,6 +959,20 @@ static char *pick_target_name(const char *old_name, const char *new_name, long s
 static int side_matches(const struct hunk *h, int want_old, const struct linebuf *target, size_t pos, int loose)
 {
 	size_t i, t = pos;
+	/* A hunk whose relevant side is empty -- a pure insertion's old side
+	 * (h has only HOP_ADD ops) or a pure deletion's new side (only
+	 * HOP_DEL, reachable via -N's already-applied probe below) -- never
+	 * enters the per-item comparison loop below at all, so without this
+	 * check it would report a "match" at ANY `pos`, including one far
+	 * past `target->n` when the hunk header's own line number (fully
+	 * attacker-controlled patch content) names a position beyond the
+	 * target file's actual length. find_match() then hands that
+	 * out-of-range position straight to apply_section(), which indexes
+	 * target->v[] up to it -- a heap out-of-bounds read that can crash
+	 * the process or leak adjacent heap memory into the patched output.
+	 * A zero-length match is only ever meaningful at a real position in
+	 * [0, target->n], so reject anything past the end up front. */
+	if (pos > target->n) return 0;
 	for (i = 0; i < h->n; i++) {
 		enum hop_kind k = h->v[i].kind;
 		if (want_old ? (k == HOP_ADD) : (k == HOP_DEL)) continue;
@@ -948,7 +991,21 @@ static long find_match(const struct hunk *h, int want_old, const struct linebuf 
 	long n = (long)target->n, lo = (long)lo_bound, d;
 
 	if (expected < lo) expected = lo;
-	if (expected <= n && side_matches(h, want_old, target, (size_t)expected, loose)) return expected;
+	/* A hunk header's line number is attacker-controlled patch content,
+	 * bounded only by parse_uint()'s LONG_MAX check -- nothing stops a
+	 * crafted header from naming a line number far beyond the target
+	 * file's actual length. Left unclamped above, the scan loop below
+	 * walks `fwd`/`bwd` outward from that huge `expected` one step at a
+	 * time toward the real, small [lo, n] range: on a 32-bit long this
+	 * can take billions of iterations (a practical denial-of-service),
+	 * and the repeated `expected + d` addition can run `d` well past
+	 * where `fwd` itself would wrap, which is signed-overflow undefined
+	 * behaviour. Clamping to `n` here keeps `expected` inside the range
+	 * that's actually reachable, so the loop below is bounded by the
+	 * target's own size (as intended) and every `fwd`/`bwd` value it
+	 * computes stays well within `long`'s range. */
+	if (expected > n) expected = n;
+	if (side_matches(h, want_old, target, (size_t)expected, loose)) return expected;
 
 	for (d = 1; ; d++) {
 		long fwd = expected + d, bwd = expected - d;
@@ -1271,8 +1328,18 @@ int __util_patch_main(int argc, char **argv)
 		if (o.R && pf->fmt == FMT_ED) { __util_diagf("patch: -R cannot be used with ed scripts\n"); exit_status = 2; break; }
 		if (o.D && pf->fmt == FMT_ED) { __util_diagf("patch: -D cannot be used with ed scripts\n"); exit_status = 2; break; }
 
-		path = operand ? strdup(operand) : pick_target_name(pf->old_name, pf->new_name, o.p);
-		if (!path) { __util_diagf("patch: out of memory\n"); exit_status = 2; break; }
+		if (operand) {
+			path = strdup(operand);
+			if (!path) { __util_diagf("patch: out of memory\n"); exit_status = 2; break; }
+		} else {
+			path = pick_target_name(pf->old_name, pf->new_name, o.p);
+			if (!path) {
+				__util_diagf("patch: %s: refusing unsafe or missing patch target filename\n",
+					pf->new_name ? pf->new_name : (pf->old_name ? pf->old_name : "(none)"));
+				exit_status = 2;
+				break;
+			}
+		}
 
 		memset(&target, 0, sizeof target);
 		{

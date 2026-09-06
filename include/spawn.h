@@ -85,6 +85,12 @@ typedef struct {
  * C++, and tools/hdr-hygiene.sh compiles every extern "C" header as C++
  * too -- so the identical adjusted type is written out as a pointer
  * instead. */
+/* file_actions is deliberately left unmarked here (unlike the add*()
+ * functions below): POSIX allows a null file_actions, and
+ * src/process/posix_spawn.c's own internal helpers already guard every
+ * dereference with `if (fa && fa->__len)` -- handle(spawn_file_actions)
+ * would wrongly demand a live, constructed object on a path that is
+ * legitimately never constructed at all. */
 int posix_spawn(pid_t *__restrict, const char *__restrict,
 	const posix_spawn_file_actions_t *,
 	const posix_spawnattr_t *__restrict,
@@ -94,13 +100,20 @@ int posix_spawnp(pid_t *__restrict, const char *__restrict,
 	const posix_spawnattr_t *__restrict,
 	char *const *__restrict, char *const *__restrict);
 
-/* The add*() functions are deliberately NOT marked for fa: each only
- * forwards it into fa_push(), never dereferencing it directly. */
-int posix_spawn_file_actions_init(posix_spawn_file_actions_t *) __attribute__((nonnull(1)));
-int posix_spawn_file_actions_destroy(posix_spawn_file_actions_t *) __attribute__((nonnull(1)));
-int posix_spawn_file_actions_addclose(posix_spawn_file_actions_t *, int);
-int posix_spawn_file_actions_adddup2(posix_spawn_file_actions_t *, int, int);
-int posix_spawn_file_actions_addopen(posix_spawn_file_actions_t *__restrict,
+/* posix_spawn_file_actions_t's __actions array (src/process/
+ * spawn_file_actions.c's fa_push()) is real heap storage, grown by
+ * realloc() and only ever freed by posix_spawn_file_actions_destroy() --
+ * the same construct()/destroy()/handle() shape as sem_init/sem_destroy/
+ * sem_wait (semaphore.h) and pthread_mutex_init/destroy/lock
+ * (pthread.h), giving real initialize-before-use and no-double-destroy
+ * proof coverage. The add*() functions are still deliberately NOT
+ * marked nonnull for fa: each only forwards it into fa_push(), never
+ * dereferencing it directly. */
+int posix_spawn_file_actions_init(posix_spawn_file_actions_t * construct(spawn_file_actions)) __attribute__((nonnull(1)));
+int posix_spawn_file_actions_destroy(posix_spawn_file_actions_t * destroy(spawn_file_actions)) __attribute__((nonnull(1)));
+int posix_spawn_file_actions_addclose(posix_spawn_file_actions_t * handle(spawn_file_actions), int);
+int posix_spawn_file_actions_adddup2(posix_spawn_file_actions_t * handle(spawn_file_actions), int, int);
+int posix_spawn_file_actions_addopen(posix_spawn_file_actions_t *__restrict handle(spawn_file_actions),
 	int, const char *__restrict withtok(null_terminated), int, mode_t)
 	__attribute__((nonnull(3)));
 

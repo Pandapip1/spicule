@@ -411,6 +411,17 @@ struct awk_parser {
 	                         * any nested parentheses: a bare '>' is output
 	                         * redirection, not the relational operator --
 	                         * see awk_parse.c's parse_print_stmt(). */
+	int depth;              /* recursion depth guard for the mutually-
+	                         * recursive parse_stmt()/parse_primary()/
+	                         * parse_pow()/parse_ternary()/parse_assign()
+	                         * productions -- see awk_parse.c's own
+	                         * AWK_PARSE_MAX_DEPTH comment. Unrelated to
+	                         * struct awk_interp's own `depth` (that one
+	                         * guards awk *function call* nesting at run
+	                         * time; this one guards *this parser's own
+	                         * C stack* while building the AST in the
+	                         * first place, before any struct awk_interp
+	                         * even exists). */
 };
 
 /* Parses the whole program text in src into a fresh struct awk_program.

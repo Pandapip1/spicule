@@ -251,8 +251,18 @@ struct awk_cell {
 	unsigned char kind;       /* enum awk_valkind */
 	unsigned char numcached, strcached; /* lazy cross-conversion validity */
 	double num;
-	char *str;                 /* owned, NUL-terminated; valid iff strcached */
-	struct awk_htab *arr;       /* non-NULL iff is_array */
+	/* NUL-terminated whenever non-NULL -- every writer (awk_run.c's
+	 * cell_str()/assign_value_to_cell()) either xstrdup()s, builds via
+	 * num_to_str_fmt(), or moves a struct awk_value's own str field,
+	 * itself held to the same invariant (see that struct's own comment).
+	 * Not also declared heap_allocated: awk_run.c's do_getline() can
+	 * move a getdelim()-sourced record buffer in through the same
+	 * struct awk_value.str, and this project's own include/stdio.h does
+	 * not grant getdelim() a dynamic_storage family to bridge with --
+	 * declaring this field heap_allocated anyway would just trade this
+	 * field's real, provable fact (NUL-terminated) for a false one. */
+	char *str withtok(null_terminated); /* owned; valid iff strcached */
+	struct awk_htab *arr withtok(heap_allocated); /* non-NULL iff is_array */
 };
 
 /* ==== lexer ==============================================================
@@ -462,9 +472,18 @@ struct awk_interp {
 	struct awk_frame *frame;   /* current call frame, NULL at top level */
 	int depth;                 /* recursion depth guard */
 
-	/* current record's fields; $0 is rec, $1.. are flds[0]..flds[nf-1] */
-	char *rec;
-	char **flds;
+	/* current record's fields; $0 is rec, $1.. are flds[0]..flds[nf-1].
+	 * Both NUL-terminated per element whenever non-NULL (set_record()/
+	 * rebuild_record()/split_record() and set_field()/set_nf()'s own
+	 * xstrdup()/manual-copy-plus-explicit-NUL sites are the only
+	 * writers) -- not also heap_allocated, for the same do_getline()/
+	 * getdelim() reason struct awk_cell.str's own comment gives. flds
+	 * only ever grows via fields_reserve()'s xrealloc() (capacity,
+	 * fcap, not occupancy) and individual per-index element writes, so
+	 * declaring the null-terminated fact over just the occupied prefix
+	 * (nf) is a real per-element invariant, not a bulk-array claim. */
+	char *rec withtok(null_terminated);
+	char **flds elements_withtok(null_terminated, nf);
 	int nf, fcap;
 
 	struct awk_htab streams;   /* target string -> struct awk_stream * */

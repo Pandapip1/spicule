@@ -200,7 +200,11 @@ static enum pax_type ustar_flag_to_pax_type(char f)
  * place) is reported to the caller as -1, which write_ustar_header()
  * turns into the loud, documented refusal this file's header
  * describes rather than an extended-header fallback. */
-static int ustar_split_name(const char *restrict path,
+static int ustar_split_name(const char *restrict path withtok(null_terminated),
+	char *restrict prefix withtok(writable_span(prefixcap)), size_t prefixcap,
+	char *restrict name withtok(writable_span(namecap)), size_t namecap)
+	__attribute__((nonnull(1, 2, 4)));
+static int ustar_split_name(const char *restrict path withtok(null_terminated),
 	char *restrict prefix withtok(writable_span(prefixcap)), size_t prefixcap,
 	char *restrict name withtok(writable_span(namecap)), size_t namecap)
 {
@@ -227,6 +231,7 @@ static int ustar_split_name(const char *restrict path,
 	return -1;
 }
 
+__attribute__((nonnull(1)))
 static void ustar_put_oct(unsigned char *field, int width, unsigned long value)
 {
 	char tmp[24];
@@ -247,6 +252,7 @@ static void ustar_put_oct(unsigned char *field, int width, unsigned long value)
  * (diagnostic already printed) if the name doesn't fit or a numeric
  * field overflows its width -- see this file's header on why neither
  * case falls back to an extended header. */
+__attribute__((nonnull(2)))
 static int write_ustar_header(FILE *out, const struct pax_member *m)
 {
 	unsigned char block[USTAR_BLOCK];
@@ -256,10 +262,26 @@ static int write_ustar_header(FILE *out, const struct pax_member *m)
 	unsigned long sum;
 	size_t i;
 
+	/* m->name is a struct pax_member field, not a function parameter, so
+	 * withtok(null_terminated) has no field-level spelling to attach to
+	 * (see include/ownership.h's own vocabulary); restate the always-true
+	 * fact by hand instead, the same idiom src/util/find.c's own argv-
+	 * derived-string fixes use. Every real populator of this struct
+	 * (parse_ustar_block(), read_cpio_header(), build_member_from_stat(),
+	 * write_cpio_trailer()) writes it via snprintf()/strcpy(), which
+	 * always NUL-terminates. */
+	__ownership_string_terminated(m->name);
 	if (m->type == PAX_DIR) {
 		size_t l = strlen(m->name);
 		if (l == 0 || m->name[l - 1] != '/') {
 			snprintf(namebuf, sizeof namebuf, "%s/", m->name);
+			/* snprintf() is deliberately not itself annotated to grant
+			 * null_terminated (see include/stdio.h's own comment on why
+			 * its buffer argument isn't marked at all), but it always
+			 * NUL-terminates a nonzero-size buffer -- restate that fact
+			 * here the same way strcpy.c/strstr.c do after their own
+			 * writes. */
+			__ownership_string_terminated(namebuf);
 			use_name = namebuf;
 		}
 	}
@@ -270,6 +292,13 @@ static int write_ustar_header(FILE *out, const struct pax_member *m)
 		                "(see src/util/pax.c's header)\n", use_name);
 		return -1;
 	}
+	/* ustar_split_name() always NUL-terminates both out-parameters on its
+	 * 0 return (either the whole-name-fits branch's strcpy()+prefix[0]=0,
+	 * or the split branch's two memcpy()+NUL-byte pairs) -- restate that
+	 * fact here since writable_span(...) says nothing about
+	 * termination, only extent. */
+	__ownership_string_terminated(prefix);
+	__ownership_string_terminated(name);
 	if (!fits_octal(m->mode & 07777, 7)) {
 		__util_diagf("pax: %s: mode does not fit a ustar header\n", use_name);
 		return -1;
@@ -381,6 +410,7 @@ static unsigned long pax_type_to_ifmt(enum pax_type t)
 	}
 }
 
+__attribute__((nonnull(1)))
 static int cpio_put_field(char *field, int width __arith_range(6, 11),
 	unsigned long value, const char *ctxname, const char *what)
 {
@@ -704,7 +734,8 @@ static int is_plain_pattern(const char *pat)
 	return strpbrk(pat, "*?[") == NULL;
 }
 
-static int pax_name_matches(const char *name, char **patterns, int npat, int complement)
+static int pax_name_matches(const char *name withtok(null_terminated),
+	char **patterns elements_withtok(null_terminated, npat), int npat, int complement)
 {
 	int i, matched;
 	if (npat == 0) return 1;
@@ -736,6 +767,7 @@ static int pax_name_matches(const char *name, char **patterns, int npat, int com
  * NT) since a well-formed ustar/cpio name never legitimately contains a
  * backslash or a drive-letter prefix in the first place (ustar_split_
  * name()/write_cpio_header() above only ever emit '/'). */
+__attribute__((nonnull(1)))
 static int name_is_safe(const char *name)
 {
 	const char *p;
@@ -796,6 +828,7 @@ static int ensure_parent_dirs(const char *path)
  * hardlink member's size field the way this build's own writer
  * always does). `reader` is NULL in copy mode (there is no archive to
  * drain from), so this is a harmless no-op there. */
+__attribute__((nonnull(2)))
 static void materialize_skip_data(struct pax_reader *reader, const struct pax_member *m)
 {
 	if (reader && (m->type == PAX_REG || m->type == PAX_HARDLINK))
@@ -809,6 +842,7 @@ static void materialize_skip_data(struct pax_reader *reader, const struct pax_me
  * if `m->type == PAX_REG`. Returns 0 on success (including a
  * deliberate skip under -k/-u), or -1 on a real failure (diagnostic
  * already printed). */
+__attribute__((nonnull(1, 2, 5)))
 static int materialize(const struct pax_member *m, const char *destpath,
                          struct pax_reader *reader, int srcfd,
                          const struct materialize_opts *opts)
@@ -995,6 +1029,7 @@ static int walk_operands(char **files, int nfiles, int no_recurse,
 
 /* ==== building a pax_member from a real stat()/lstat() result ============ */
 
+__attribute__((nonnull(1, 2, 3)))
 static int build_member_from_stat(const char *path, const struct stat *st, struct pax_member *m)
 {
 	memset(m, 0, sizeof *m);
@@ -1024,6 +1059,9 @@ static int build_member_from_stat(const char *path, const struct stat *st, struc
 
 struct write_ctx { FILE *out; enum pax_format fmt; int verbose; int failed; };
 
+/* ud is always &ctx from do_write()'s own walk_operands(..., write_emit,
+ * &ctx) call below -- the sole call site. */
+__attribute__((nonnull(3)))
 static void write_emit(const char *path, const struct stat *st, void *ud)
 {
 	struct write_ctx *ctx = ud;
@@ -1054,8 +1092,14 @@ static char **read_stdin_file_list(int *out_n)
 	char line[PAX_PATH_MAX];
 
 	while (fgets(line, sizeof line, stdin)) {
-		size_t len = strlen(line);
+		size_t len;
 		char *dup;
+		/* fgets() always NUL-terminates a nonzero-size buffer on success
+		 * (line is PAX_PATH_MAX > 0 bytes); include/stdio.h's own
+		 * declaration doesn't grant this (see its comment on why
+		 * snprintf's sibling isn't marked either), so restate it here. */
+		__ownership_string_terminated(line);
+		len = strlen(line);
 		if (len && line[len - 1] == '\n') line[--len] = 0;
 		if (!len) continue;
 		dup = strdup(line);
@@ -1153,7 +1197,8 @@ static void reader_skip_data(struct pax_reader *r, const struct pax_member *m)
 	if (m->type == PAX_REG || m->type == PAX_HARDLINK) pax_reader_copy_data(r, m, -1);
 }
 
-static int do_list_or_read(const char *archive, char **patterns, int npat, int complement,
+static int do_list_or_read(const char *archive,
+	char **patterns elements_withtok(null_terminated, npat), int npat, int complement,
                              int do_extract, int no_recurse, int keep_existing, int newer_only, int verbose)
 {
 	struct pax_reader r;
@@ -1168,6 +1213,16 @@ static int do_list_or_read(const char *archive, char **patterns, int npat, int c
 		int rc = pax_reader_next(&r, &m);
 		if (rc < 0) { failed = 1; break; }
 		if (rc == 0) break;
+
+		/* m.name/m.linkname are struct fields, not function parameters,
+		 * so withtok(null_terminated) has no field-level spelling to
+		 * attach to; restate the always-true fact by hand instead.
+		 * pax_reader_next() -> parse_ustar_block()/read_cpio_header()
+		 * populate both exclusively via snprintf()/an explicit NUL byte,
+		 * so this holds for every member, hardlink or not (a non-
+		 * hardlink's linkname is left as ""). */
+		__ownership_string_terminated(m.name);
+		__ownership_string_terminated(m.linkname);
 
 		if (!pax_name_matches(m.name, patterns, npat, complement)) {
 			reader_skip_data(&r, &m);
@@ -1218,6 +1273,10 @@ static int do_list_or_read(const char *archive, char **patterns, int npat, int c
 
 struct copy_ctx { const char *destdir; int keep_existing; int newer_only; int verbose; int failed; };
 
+/* ud is always &ctx from do_copy()'s own walk_operands(..., copy_emit, &ctx)
+ * call below -- the sole call site, and the same "a real caller-supplied
+ * accumulator, never optional" shape write_emit()'s own ctx has. */
+__attribute__((nonnull(3)))
 static void copy_emit(const char *path, const struct stat *st, void *ud)
 {
 	struct copy_ctx *ctx = ud;

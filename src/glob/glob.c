@@ -33,11 +33,39 @@
 #include "libc.h"
 #include "ownership_stubs.h"
 
+/* v carries internal_heap_allocated (the backing array itself, __malloc()'d
+ * below) AND elements_withtok(internal_heap_allocated, n) (every element up
+ * to n is itself a separate xstrdup()/unescape() heap allocation, never a
+ * string literal or a borrowed pointer) -- src/wordexp/wordexp.c's own
+ * struct pv, "same shape ... not shared", carries the identical pair for
+ * the identical reason; see that file's own comment on both, including its
+ * already-confirmed finding that the elements_withtok half does NOT make
+ * AllocationLifetimeChecker recognize a pv_push(out, xstrdup(...))-style
+ * per-element transfer (MemoryContractChecker's extent proofs read
+ * elements_withtok; AllocationLifetimeChecker's escape recognition does
+ * not) -- do_glob()'s own xstrdup() results handed to pv_push() below are
+ * exactly that shape, and are not expected to stop being reported by it. */
 struct pv {
-	char **v withtok(readable_elements(n)) withtok(writable_elements(cap));
+	char **v withtok(internal_heap_allocated)
+		elements_withtok(internal_heap_allocated, n)
+		withtok(readable_elements(n)) withtok(writable_elements(cap));
 	size_t n, cap;
 };
 
+/* s is genuinely null-terminated at every real call site: a string
+ * literal ("/", ".", ""), prefix/newprefix (both maintained NUL-terminated
+ * throughout do_glob() via join()'s own snprintf, but neither one itself
+ * withtok(null_terminated) -- do_glob()'s own comment on prefix explains
+ * why it is deliberately not given a parameter-level contract), tmp
+ * (explicitly NUL-terminated two lines above its own xstrdup() call), or
+ * pattern/pat (glob()'s own withtok(null_terminated) parameter). Tried
+ * marking s withtok(null_terminated) here to resolve this function's own
+ * "strlen(s)" finding below and reverted: xstrdup(prefix)/xstrdup(newprefix)
+ * in do_glob() have no comparable fact to offer once xstrdup() itself
+ * demands one, so the requirement simply relocates to those call sites as
+ * new findings there (measured via a real tools/lint.sh ownership run) --
+ * a strictly larger backlog than the one finding this was meant to close.
+ * Left unannotated and the finding left open. */
 withtok(internal_heap_allocated)
 static char *xstrdup(const char *s)
 {
@@ -110,6 +138,22 @@ static void pv_free_from(struct pv *p, size_t from)
 /* p required: `*p` is read unconditionally at the loop's own entry, and
  * its one real call site (do_glob()) passes pat, itself required (see
  * do_glob()'s own comment below), never NULL. */
+/* p is a genuine null-terminated C string at every real call site (both
+ * do_glob()'s own pat and split_components()'s own p, each themselves
+ * withtok(null_terminated)) -- marking p and the return here the same way
+ * would resolve this function's own "strlen(p)" capability-token finding
+ * below, matching string.h's strchr() for the identical returned-pointer
+ * shape. Tried and reverted: doing so requires the checker to carry the
+ * fact across `p += 2` (a plain compound-assignment reassignment, not the
+ * `for (...; s++)`-shaped loop increment string.h's own strlen()/strchr()
+ * use), which it does not -- and the resulting "ownership destination
+ * token state is not proven"/"source ownership token has already moved"
+ * findings on that reassignment, PLUS the loss of the fact at every
+ * caller across a real function-call boundary (do_glob()'s own
+ * strlen(slash), split_components()'s own slash = find_slash(...)),
+ * measured strictly more findings than the one this was meant to fix
+ * (confirmed via a real tools/lint.sh ownership run, not just this file).
+ * Left unannotated and the finding left open. */
 static const char *find_slash(const char *p, int flags) __attribute__((nonnull(1)));
 static const char *find_slash(const char *p, int flags)
 {
@@ -268,7 +312,12 @@ static int join(char *out withtok(writable_span(outcap)), size_t outcap,
  * recursive calls pass rest, which is only ever reached from inside an
  * `if (rest)` guard, so rest is always a live pointer into pat's own
  * string, not the 0 find_slash()/the `rest = slash ? slash + 1 : 0;`
- * assignment can otherwise produce. prefix/out are not marked here: out
+ * assignment can otherwise produce. pat is also withtok(null_terminated)
+ * for the same reason: glob()'s own pattern parameter carries it (see
+ * include/glob.h), rest is find_slash()'s own withtok(null_terminated)
+ * return (or one past it, still inside the same terminated string), and
+ * collapse_dotdot()'s replacement pattern is always a fresh xstrdup()
+ * result of a real C string it built itself. prefix/out are not marked here: out
  * is already required by pv_push()/finish() at its own real dereference
  * sites, and prefix, though written through in several branches, is
  * only read back conditionally per-branch (never unconditionally at
@@ -280,12 +329,14 @@ static int join(char *out withtok(writable_span(outcap)), size_t outcap,
  * never NULL. */
 // NOLINTNEXTLINE(misc-no-recursion) -- component expansion mirrors the pathname hierarchy and is pattern/path-depth bounded; total call count is separately bounded by GLOB_STEP_LIMIT
 static int do_glob(char *prefix withtok(readable_span(prefixcap)),
-                    size_t prefixcap, size_t preflen, const char *pat, int flags,
+                    size_t prefixcap, size_t preflen,
+                    const char *pat withtok(null_terminated), int flags,
                     int (*errfunc)(const char *, int), struct pv *out, size_t *steps)
     __attribute__((nonnull(4, 8)));
 // NOLINTNEXTLINE(misc-no-recursion) -- component expansion mirrors the pathname hierarchy and is pattern/path-depth bounded; total call count is separately bounded by GLOB_STEP_LIMIT
 static int do_glob(char *prefix withtok(readable_span(prefixcap)),
-                    size_t prefixcap, size_t preflen, const char *pat, int flags,
+                    size_t prefixcap, size_t preflen,
+                    const char *pat withtok(null_terminated), int flags,
                     int (*errfunc)(const char *, int), struct pv *out, size_t *steps)
 {
 	const char *slash, *rest;
@@ -365,6 +416,13 @@ static int do_glob(char *prefix withtok(readable_span(prefixcap)),
 		int isdir;
 
 		if (!name) return -1;
+		/* unescape()'s declared contract is writable_span(len) only, not
+		 * null_terminated (see classify()'s own comment on why that is
+		 * deliberate) -- but its body, read by hand, always leaves a real
+		 * NUL at buf[j] for some j <= len before returning, which is
+		 * exactly what strlen() below needs and a raw loop here cannot
+		 * syntactically prove from the type alone. */
+		__ownership_string_terminated(name);
 		namelen = strlen(name);
 		if (join(newprefix, sizeof newprefix, prefix, preflen, name, namelen, want_slash,
 		         &newlen)) {
@@ -449,6 +507,27 @@ static int do_glob(char *prefix withtok(readable_span(prefixcap)),
 				if ((flags & GLOB_MARK) && stat(newprefix, &st) == 0) isdir = S_ISDIR(st.st_mode);
 				if (isdir) {
 					if (newlen + 1 < PATH_MAX) {
+						/* newprefix is a concrete PATH_MAX-sized local
+						 * array, and the guard just proved newlen+1 is a
+						 * valid index into it -- but this write is inside
+						 * a readdir() loop, and ValidPointer still reports
+						 * "dereference extent is not proven sufficient"
+						 * here (the byte-for-byte identical guarded pair
+						 * in this function's own literal branch above,
+						 * reached only once per call, is never reported,
+						 * so this looks like the analyzer's own loop
+						 * widening forgetting the per-iteration bound
+						 * across the back-edge). Tried restating it by
+						 * hand with __ownership_writable_span(newprefix +
+						 * newlen, 2), the same idiom the pattern-exhausted
+						 * branch's own memcpy() above uses, and reverted:
+						 * MemoryContractChecker's own manual-proof-axiom
+						 * pass reports that call as "can be narrowed" (its
+						 * span is already provable at that program point
+						 * without it) while the ORIGINAL finding on the
+						 * write itself is untouched either way -- a net
+						 * increase in findings for no proof gained. Left
+						 * as-is and the finding left open. */
 						newprefix[newlen++] = '/';
 						newprefix[newlen] = 0;
 					}
@@ -516,6 +595,16 @@ static int finish(struct pv *out, int flags, glob_t *pglob)
 	pglob->gl_pathv = v;
 	pglob->gl_pathc = out->n;
 	if (!(flags & GLOB_DOOFFS) && !(flags & GLOB_APPEND)) pglob->gl_offs = offs;
+	/* out->v was just freed above (its contents copied into v, now
+	 * owned by pglob->gl_pathv instead); out itself is *out, the
+	 * caller's own local struct pv, which every real call site abandons
+	 * right after this call returns, but MemoryContractChecker's
+	 * deferred paired-field proof still requires out->n/out->cap to stay
+	 * within out->v's real extent at every one of those callers' own
+	 * return points (see split_components()'s own comment on this exact
+	 * mechanism). Zero all three fields together, the same shape
+	 * pv_free_from() already uses. */
+	out->v = 0; out->n = out->cap = 0;
 	return 0;
 
 nospace:
@@ -632,8 +721,17 @@ struct comp {
 	enum comp_kind kind;
 };
 
+/* v carries internal_heap_allocated for the backing array itself
+ * (comp_push()'s own __malloc(bytes), matching struct pv's identical
+ * field above) -- but NOT elements_withtok: unlike struct pv's char*
+ * elements (each a separate xstrdup()/unescape() heap allocation), a
+ * struct comp's own `start` field is always a borrowed pointer INTO the
+ * original pattern text (see struct comp's own comment below), never a
+ * heap allocation in its own right, so there is no per-element ownership
+ * fact to state here. */
 struct comp_list {
-	struct comp *v withtok(readable_elements(n)) withtok(writable_elements(cap));
+	struct comp *v withtok(internal_heap_allocated)
+		withtok(readable_elements(n)) withtok(writable_elements(cap));
 	size_t n, cap;
 	int trailing_slash;
 };
@@ -719,10 +817,14 @@ static int classify(const char *s, size_t len, int flags, enum comp_kind *kind)
  * more '/' never produces an empty component here either. pat is
  * guaranteed not to start with '/' by glob()'s own leading-slash
  * handling before this is ever called, so there is no leading empty
- * component to represent either. */
-static int split_components(const char *pat, int flags, struct comp_list *cl)
+ * component to represent either. pat is withtok(null_terminated): its one
+ * real call site (collapse_dotdot()) passes its own pat parameter, itself
+ * required there -- see collapse_dotdot()'s own comment -- unchanged. */
+static int split_components(const char *pat withtok(null_terminated), int flags,
+                             struct comp_list *cl)
     __attribute__((nonnull(1, 3)));
-static int split_components(const char *pat, int flags, struct comp_list *cl)
+static int split_components(const char *pat withtok(null_terminated), int flags,
+                             struct comp_list *cl)
 {
 	const char *p = pat;
 
@@ -741,7 +843,21 @@ static int split_components(const char *pat, int flags, struct comp_list *cl)
 		slash = find_slash(p, flags);
 		seglen = slash ? (size_t)(slash - p) : strlen(p);
 		if (classify(p, seglen, flags, &kind) || comp_push(cl, p, seglen, kind)) {
+			/* cl is discarded by every real caller on this path (the
+			 * function returns -1 without leaving cl in play) -- but
+			 * MemoryContractChecker's deferred paired-field proof
+			 * (checkEndFunction, see MemoryContractChecker.cpp's own
+			 * TouchedRecordSpan comment, which cites this exact
+			 * function's caller chain) still requires cl->n/cl->cap to
+			 * stay within cl->v's real extent at every path's end, and a
+			 * freed cl->v has none. Zero the paired fields the same way
+			 * pv_free_from() already does for struct pv, so a freed
+			 * pointer is always paired with n == cap == 0 --
+			 * zero_vacuous (include/memory_tokens.h) makes that
+			 * combination valid with no storage proof at all. */
 			__free((void *)cl->v);
+			cl->v = 0;
+			cl->n = cl->cap = 0;
 			return -1;
 		}
 		if (!slash) break;
@@ -790,6 +906,11 @@ static int literal_prefix_exists(const struct comp_list *stk, int flags,
 		if (c->kind == CK_WILD) return 0;
 		name = unescape(c->start, c->len, flags);
 		if (!name) return -1;
+		/* Same fact, same reason, as do_glob()'s own identical
+		 * unescape()-then-strlen() pair in its literal branch: the
+		 * writable_span(len) contract alone does not say so, but the
+		 * body always leaves a real NUL within it. */
+		__ownership_string_terminated(name);
 		namelen = strlen(name);
 		if (namelen >= sizeof path - len) { __free(name); return 0; }
 		if (snprintf(path + len, sizeof path - len, "%s", name) !=
@@ -806,15 +927,18 @@ static int literal_prefix_exists(const struct comp_list *stk, int flags,
 
 /* The rewrite pass itself -- see the banner comment above. pat is the
  * pattern with any leading '/' already stripped and stored in
- * base_prefix/base_preflen by glob() (see glob()'s own call site).
- * Returns a newly heap-allocated replacement for pat, or NULL on
- * allocation failure. */
+ * base_prefix/base_preflen by glob() (see glob()'s own call site), and is
+ * withtok(null_terminated) for the same reason: it is glob()'s own
+ * withtok(null_terminated) pattern parameter (see include/glob.h),
+ * advanced past a leading '/' by ordinary pointer arithmetic, which does
+ * not change its terminator. Returns a newly heap-allocated replacement
+ * for pat, or NULL on allocation failure. */
 withtok(internal_heap_allocated)
-static char *collapse_dotdot(const char *pat, int flags,
+static char *collapse_dotdot(const char *pat withtok(null_terminated), int flags,
                               const char *base_prefix, size_t base_preflen)
     __attribute__((nonnull(1, 3)));
 withtok(internal_heap_allocated)
-static char *collapse_dotdot(const char *pat, int flags,
+static char *collapse_dotdot(const char *pat withtok(null_terminated), int flags,
                               const char *base_prefix, size_t base_preflen)
 {
 	struct comp_list src, stk;
@@ -860,8 +984,21 @@ static char *collapse_dotdot(const char *pat, int flags,
 		}
 		if (!canceled && comp_push(&stk, c.start, c.len, c.kind)) ok = 0;
 	}
+	/* src/stk are both about to go out of scope on every path below, so
+	 * none of these resets change runtime behavior -- but
+	 * MemoryContractChecker's deferred paired-field proof (see
+	 * split_components()'s own comment on this same mechanism, and
+	 * MemoryContractChecker.cpp's own TouchedRecordSpan comment, which
+	 * names this file's glob() by example) still requires each struct's
+	 * n/cap to stay within its v's real extent at every path's end, and a
+	 * freed v has none. Zeroing all three fields together, the same way
+	 * pv_free_from() already does for struct pv, keeps every freed
+	 * pointer paired with n == cap == 0, which zero_vacuous
+	 * (include/memory_tokens.h) makes valid with no storage proof at
+	 * all. */
 	__free((void *)src.v);
-	if (!ok) { __free((void *)stk.v); return 0; }
+	src.v = 0; src.n = src.cap = 0;
+	if (!ok) { __free((void *)stk.v); stk.v = 0; stk.n = stk.cap = 0; return 0; }
 
 	if (stk.n == 0) {
 		/* Every real component canceled away: what remains names
@@ -871,18 +1008,20 @@ static char *collapse_dotdot(const char *pat, int flags,
 		 * pathname for an empty remaining pattern -- see its own
 		 * comment on that branch). */
 		__free((void *)stk.v);
+		stk.v = 0; stk.cap = 0;
 		return xstrdup("");
 	}
 
 	for (i = 0, total = 1; i < stk.n; i++) total += stk.v[i].len + 1;
 	out = __malloc(total);
-	if (!out) { __free((void *)stk.v); return 0; }
+	if (!out) { __free((void *)stk.v); stk.v = 0; stk.n = stk.cap = 0; return 0; }
 	for (i = 0, pos = 0; i < stk.n; i++) {
 		if (stk.v[i].len > INT_MAX ||
 		    snprintf(out + pos, total - pos, "%.*s", (int)stk.v[i].len,
 		    stk.v[i].start) != (int)stk.v[i].len) {
 			__free(out);
 			__free((void *)stk.v);
+			stk.v = 0; stk.n = stk.cap = 0;
 			return 0;
 		}
 		pos += stk.v[i].len;
@@ -891,10 +1030,12 @@ static char *collapse_dotdot(const char *pat, int flags,
 	if (stk.trailing_slash) out[pos++] = '/';
 	out[pos] = 0;
 	__free((void *)stk.v);
+	stk.v = 0; stk.n = stk.cap = 0;
 	return out;
 }
 
-int glob(const char *pattern, int flags, int (*errfunc)(const char *, int), glob_t *pglob)
+int glob(const char *pattern withtok(null_terminated), int flags,
+         int (*errfunc)(const char *, int), glob_t *pglob)
 {
 	struct pv out;
 	char prefix[PATH_MAX];
@@ -910,12 +1051,26 @@ int glob(const char *pattern, int flags, int (*errfunc)(const char *, int), glob
 		if (out.n) {
 			char *const *old = pglob->gl_pathv + pglob->gl_offs;
 			size_t bytes;
+			/* out.n/out.cap were just set from pglob->gl_pathc above,
+			 * ahead of out.v itself (the opposite order from pv_push()'s
+			 * own careful v-then-cap sequencing, and unavoidable here:
+			 * bytes, needed to allocate out.v, is derived from out.n).
+			 * Both early returns below leave that window open --
+			 * out.n/out.cap nonzero, out.v still its initial 0 -- which
+			 * MemoryContractChecker.cpp's own TouchedRecordSpan comment
+			 * names this exact statement as the motivating case for
+			 * deferring its paired-field proof to checkEndFunction rather
+			 * than checking eagerly at every store. Reset out.n/out.cap
+			 * back to 0 on both paths, the same zero_vacuous-valid state
+			 * pv_free_from() leaves behind, so the pair stays consistent
+			 * at this function's own return. */
 			if (!__size_mul_checked(out.n, sizeof *out.v, &bytes)) {
+				out.n = out.cap = 0;
 				errno = ENOMEM;
 				return GLOB_NOSPACE;
 			}
 			out.v = (char **)__malloc(bytes);
-			if (!out.v) { errno = ENOMEM; return GLOB_NOSPACE; }
+			if (!out.v) { out.n = out.cap = 0; errno = ENOMEM; return GLOB_NOSPACE; }
 			__ownership_readable_span(old, bytes);
 			memcpy((void *)out.v, (const void *)old, bytes);
 		}

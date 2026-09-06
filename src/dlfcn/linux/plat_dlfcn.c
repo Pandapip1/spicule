@@ -217,6 +217,7 @@
 #include "libc.h"
 #include "plat_dlfcn.h"
 #include "unsafe_pointer.h"
+#include "ownership_stubs.h"
 
 static int table_bytes(size_t count, size_t element_size, size_t *out)
 {
@@ -827,8 +828,26 @@ static void self_symtab_load_once(void)
 
 	{
 		Elf_Shdr *symtab_sh = &shdrs[symtab_idx];
-		Elf_Shdr *strtab_sh = &shdrs[symtab_sh->sh_link];
-		size_t nsyms = symtab_sh->sh_size / sizeof(Elf_Sym);
+		Elf_Shdr *strtab_sh;
+		size_t nsyms;
+
+		/* symtab_sh->sh_link is the associated string table's OWN
+		 * section index, read straight out of the file -- unlike
+		 * symtab_idx just above (bounded by the `i < eh.e_shnum` loop
+		 * that found it), nothing had constrained sh_link to be a
+		 * valid index into `shdrs` at all before this fix: a running
+		 * binary with a corrupt or merely unusual .symtab section
+		 * header (sh_link pointing past e_shnum) turned this into a
+		 * genuine out-of-bounds read of `shdrs`, not a hypothetical
+		 * one -- caught by this file's own ownership-lint pass, which
+		 * could not prove strtab_sh's extent for exactly this reason.
+		 * Refuse cleanly instead of indexing past the array. */
+		if (symtab_sh->sh_link >= eh.e_shnum) {
+			seterr("dlopen: running binary's .symtab has an out-of-range sh_link");
+			goto fail;
+		}
+		strtab_sh = &shdrs[symtab_sh->sh_link];
+		nsyms = symtab_sh->sh_size / sizeof(Elf_Sym);
 		Elf_Sym *syms = malloc(symtab_sh->sh_size);
 		char *strs = malloc(strtab_sh->sh_size);
 
@@ -927,6 +946,11 @@ struct dlobj {
 
 #define ADDR(obj, v) ((void *)((obj)->bias + (uint64_t)(v)))
 
+/* dyn is always ADDR(obj, pt_dynamic->p_vaddr) -- a computed ELF-mapped
+ * address, never a possibly-failed allocation result -- at both call
+ * sites (run_ctors(), load_object()'s own dynamic-section-parsing
+ * block). */
+static Elf_Dyn *find_dyn_ptr(Elf_Dyn *dyn, int64_t tag) __attribute__((nonnull(1)));
 static Elf_Dyn *find_dyn_ptr(Elf_Dyn *dyn, int64_t tag)
 {
 	for (; dyn->d_tag != DT_NULL; dyn++)
@@ -1006,6 +1030,12 @@ static void *resolve_via_deps(struct dlobj *obj, const char *name, int depth)
  * Returns 1 with *out filled on success, 0 on an unresolvable undefined
  * symbol (caller sets the sticky error with the symbol name for
  * context). */
+/* obj is always non-null: every call site is inside apply_one_reloc(),
+ * passing that function's own obj parameter (itself always non-null --
+ * see apply_one_reloc()'s own nonnull attribute below). out is always
+ * the address of a local variable at every call site, never NULL. */
+static int resolve_symref(struct dlobj *obj, uint32_t symidx, uint64_t *out)
+	__attribute__((nonnull(1, 3)));
 static int resolve_symref(struct dlobj *obj, uint32_t symidx, uint64_t *out)
 {
 	Elf_Sym *sym;
@@ -1237,6 +1267,13 @@ struct reloc {
 	int64_t r_addend;
 };
 
+/* obj and r are always non-null: this function's one call site
+ * (apply_reloc_table()'s own loop) passes that function's own obj
+ * parameter (see apply_reloc_table()'s matching nonnull attribute below)
+ * and &rec, the address of a local variable. */
+static int apply_one_reloc(struct dlobj *obj, const struct reloc *r,
+                            unsigned long lo, unsigned long hi)
+	__attribute__((nonnull(1, 2)));
 static int apply_one_reloc(struct dlobj *obj, const struct reloc *r,
                             unsigned long lo, unsigned long hi)
 {
@@ -1406,6 +1443,11 @@ static int apply_one_reloc(struct dlobj *obj, const struct reloc *r,
 	}
 }
 
+/* obj is always non-null: both call sites, in load_object(), pass its
+ * own just-allocated obj. */
+static int apply_reloc_table(struct dlobj *obj, uint64_t tbl_vaddr, uint64_t tbl_size, // NOLINT(bugprone-easily-swappable-parameters) -- table address and size have distinct relocation roles
+                              unsigned long lo, unsigned long hi)
+	__attribute__((nonnull(1)));
 static int apply_reloc_table(struct dlobj *obj, uint64_t tbl_vaddr, uint64_t tbl_size, // NOLINT(bugprone-easily-swappable-parameters) -- table address and size have distinct relocation roles
                               unsigned long lo, unsigned long hi)
 {
@@ -1473,6 +1515,13 @@ static int apply_reloc_table(struct dlobj *obj, uint64_t tbl_vaddr, uint64_t tbl
  * either applied it for real or already failed loudly on it during the
  * first pass, so a second, unrelated type showing up in the same table
  * is expected, not a new problem this pass needs to report again. */
+/* obj and r are always non-null: this function's one call site
+ * (apply_irelative_table()'s own loop) passes that function's own obj
+ * parameter (see apply_irelative_table()'s matching nonnull attribute
+ * below) and &rec, the address of a local variable. */
+static int apply_one_irelative(struct dlobj *obj, const struct reloc *r,
+                                unsigned long lo, unsigned long hi)
+	__attribute__((nonnull(1, 2)));
 static int apply_one_irelative(struct dlobj *obj, const struct reloc *r,
                                 unsigned long lo, unsigned long hi)
 {
@@ -1517,6 +1566,11 @@ static int apply_one_irelative(struct dlobj *obj, const struct reloc *r,
 	return 0;
 }
 
+/* obj is always non-null: both call sites, in load_object(), pass its
+ * own just-allocated obj. */
+static int apply_irelative_table(struct dlobj *obj, uint64_t tbl_vaddr, uint64_t tbl_size, // NOLINT(bugprone-easily-swappable-parameters) -- table address and size have distinct relocation roles
+                                  unsigned long lo, unsigned long hi)
+	__attribute__((nonnull(1)));
 static int apply_irelative_table(struct dlobj *obj, uint64_t tbl_vaddr, uint64_t tbl_size, // NOLINT(bugprone-easily-swappable-parameters) -- table address and size have distinct relocation roles
                                   unsigned long lo, unsigned long hi)
 {
@@ -1650,22 +1704,62 @@ static void run_ctors(struct dlobj *obj, Elf_Dyn *dyn)
  * wanting DT_RPATH/DT_RUNPATH/LD_LIBRARY_PATH/an ldconfig-style cache
  * can build all of that on top of this same open_needed() call site
  * later; nothing above it needs to change. */
-static void dirname_of(const char *path, char *buf, size_t bufsz)
+/* path required (nonnull, and null_terminated -- its one real call site,
+ * load_object(), passes load_object()'s own file parameter, itself
+ * withtok(null_terminated), see that function's own declaration).  buf
+ * is an out parameter: uninitialized on entry, always left holding a
+ * genuine null-terminated string on return (both exit paths below store
+ * a literal NUL; __ownership_string_terminated() restates each as an
+ * axiom the same way put_field()/strcpy() do for their own raw stores,
+ * since a raw indexed store is not something this checker's syntactic
+ * walk proves on its own). */
+static void dirname_of(const char *path withtok(null_terminated),
+                        char *buf grant(null_terminated), size_t bufsz)
+	__attribute__((nonnull(1, 2)));
+static void dirname_of(const char *path withtok(null_terminated),
+                        char *buf grant(null_terminated), size_t bufsz)
 {
 	const char *slash = strrchr(path, '/');
 	size_t len, i;
-	if (!slash) { buf[0] = 0; return; }
+	if (!slash) {
+		buf[0] = 0;
+		__ownership_string_terminated(buf);
+		return;
+	}
 	len = (size_t)(slash - path) + 1; /* keep the slash itself */
 	if (len >= bufsz) len = bufsz - 1;
 	for (i = 0; i < len; i++) buf[i] = path[i];
 	buf[len] = 0;
+	__ownership_string_terminated(buf);
 }
 
-static int open_needed(const char *dir, const char *name, char *pathbuf, size_t pathbuf_sz)
+/* dir is deliberately NOT withtok(null_terminated)/nonnull: this function
+ * itself supports a NULL dir (the `dir &&` guard just below), even though
+ * this file's own one call site always happens to pass a real buffer --
+ * a future caller with no directory to search is exactly the shape this
+ * parameter already exists to support. name is always a genuine
+ * null-terminated string at that call site (see load_object()'s own
+ * needed_name axiom); pathbuf is an out parameter, uninitialized on
+ * entry and always left null-terminated by the time any successful
+ * return is reached (see the two __ownership_string_terminated() calls
+ * below) -- the one early failure return (ENAMETOOLONG) leaves it
+ * untouched, which is fine, since load_object()'s own caller never reads
+ * pathbuf after a negative return. */
+static int open_needed(const char *dir, const char *name withtok(null_terminated),
+                        char *pathbuf grant(null_terminated), size_t pathbuf_sz)
+	__attribute__((nonnull(2, 3)));
+static int open_needed(const char *dir, const char *name withtok(null_terminated),
+                        char *pathbuf grant(null_terminated), size_t pathbuf_sz)
 {
 	int fd = -1;
 	if (dir && dir[0] && strlen(dir) + strlen(name) < pathbuf_sz) {
 		(void)snprintf(pathbuf, pathbuf_sz, "%s%s", dir, name);
+		/* snprintf() with a nonzero size (pathbuf_sz here) always
+		 * NUL-terminates its output buffer (C11 7.21.6.5p2), true by
+		 * construction and not otherwise visible to the checker
+		 * across this call -- same restatement put_field() (src/util/
+		 * ar.c) already makes for its own snprintf() call. */
+		__ownership_string_terminated(pathbuf);
 		fd = open(pathbuf, O_RDONLY);
 	}
 	if (fd >= 0) return fd;
@@ -1673,6 +1767,10 @@ static int open_needed(const char *dir, const char *name, char *pathbuf, size_t 
 	{
 		size_t i, length = strlen(name);
 		for (i = 0; i <= length; i++) pathbuf[i] = name[i];
+		/* The loop above copies name[length] == name's own NUL
+		 * terminator (length == strlen(name)) into pathbuf -- true by
+		 * construction, not provable from a raw indexed-copy loop. */
+		__ownership_string_terminated(pathbuf);
 	}
 	return open(name, O_RDONLY);
 }
@@ -1685,6 +1783,12 @@ static int open_needed(const char *dir, const char *name, char *pathbuf, size_t 
  * is shared or reference-counted, so there is exactly one owner and
  * closing (or failing to fully build) it must tear down everything
  * underneath it too. */
+/* obj and dep are always non-null: this function's one call site, in
+ * load_object(), passes its own just-allocated obj and dep (already
+ * checked `if (!dep) goto fail;` immediately after the recursive
+ * load_object() call that produced it, and before this call). */
+static int add_dep(struct dlobj *obj, struct dlobj *dep)
+	__attribute__((nonnull(1, 2)));
 static int add_dep(struct dlobj *obj, struct dlobj *dep)
 {
 	struct dlobj **grown;
@@ -1737,7 +1841,15 @@ static void teardown_obj(struct dlobj *obj)
  * thin wrapper: MAIN_IMAGE_HANDLE's special-casing and the RTLD_* `mode`
  * parameter both belong to the PUBLIC entry point, not to this internal
  * one. */
-static struct dlobj *load_object(const char *file, int depth)
+/* file required (nonnull, and null_terminated): __plat_dlopen() below
+ * establishes the axiom on its own file parameter (a real fact, per
+ * dlopen()'s own POSIX contract that a non-NULL file names a real
+ * pathname string) right before its one top-level call here, and the
+ * recursive call further down passes open_needed()'s own pathbuf out
+ * parameter, itself grant(null_terminated). */
+static struct dlobj *load_object(const char *file withtok(null_terminated), int depth)
+	__attribute__((nonnull(1)));
+static struct dlobj *load_object(const char *file withtok(null_terminated), int depth)
 {
 	int fd = -1;
 	Elf_Ehdr eh;
@@ -2015,6 +2127,16 @@ static struct dlobj *load_object(const char *file, int depth)
 				const char *needed_name;
 				if (walk->d_tag != DT_NEEDED) continue;
 				needed_name = obj->dynstr + walk->d_val;
+				/* obj->dynstr is DT_STRTAB's own mapped base; every
+				 * DT_NEEDED d_val is an offset into it, and the ELF
+				 * specification defines a string table's own contents
+				 * as a sequence of NUL-terminated strings -- the same
+				 * class of "trust the file format, not just the
+				 * bytes a raw loop touched" fact resolve_export()'s
+				 * own ADDR() reconstructions already rely on
+				 * throughout this file, just restated here as an
+				 * axiom since open_needed() below requires it. */
+				__ownership_string_terminated(needed_name);
 				nfd = open_needed(dir, needed_name, pathbuf, sizeof pathbuf);
 				if (nfd < 0) {
 					seterr("dlopen: %s: cannot find DT_NEEDED dependency \"%s\": %s (searched \"%s\" and the bare name -- no DT_RPATH/DT_RUNPATH/LD_LIBRARY_PATH support, see this file's own DT_NEEDED banner)",
@@ -2151,6 +2273,14 @@ void *__plat_dlopen(const char *file, int mode)
 	             * backend for its own, different reasons. */
 
 	if (!file) return MAIN_IMAGE_HANDLE;
+	/* file is non-NULL here, and dlopen()'s own POSIX contract requires
+	 * a non-NULL file to name a real pathname string -- true by that
+	 * contract, not otherwise visible to the checker across the public
+	 * dlfcn.c/plat_dlfcn.h boundary this parameter crosses. Established
+	 * only in this branch (never for the NULL/MAIN_IMAGE_HANDLE case
+	 * just above), the same conditional-axiom shape src/env/getenv.c's
+	 * own `if (result) __ownership_string_terminated(result);` uses. */
+	__ownership_string_terminated(file);
 	return load_object(file, 0);
 }
 

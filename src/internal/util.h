@@ -559,10 +559,10 @@ int __util_nm_main(
  * failing outright.  None of the four are __pure__: all touch the
  * filesystem. */
 int __util_copy_regular_file(const char *src, const char *dst, int force) __attribute__((nonnull(1, 2)));
-int __util_copy_tree(const char *src, const char *dst, int force) __attribute__((nonnull(1, 2)));
+int __util_copy_tree(const char *src withtok(null_terminated), const char *dst withtok(null_terminated), int force) __attribute__((nonnull(1, 2)));
 int __util_remove_tree(const char *path) __attribute__((nonnull(1)));
-withtok(heap_allocated) __attribute__((nonnull(1, 2)))
-char *__util_join_basename(const char *dir, const char *src);
+withtok(heap_allocated) withtok(null_terminated) __attribute__((nonnull(1, 2)))
+char *__util_join_basename(const char *dir withtok(null_terminated), const char *src withtok(null_terminated));
 
 /* Tier 4: "bigger engines" -- real parsers, budget real time.  awk(1p)
  * is the whole of this tier: the single biggest POSIX utility there

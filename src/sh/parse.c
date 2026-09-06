@@ -95,7 +95,10 @@ static char *xstrndup(const char *s, size_t n)
 	size_t bytes;
 	char *p = __size_add_checked(n, 1, &bytes) ? __malloc(bytes) : 0;
 	if (p) {
-		__ownership_writable_span(p, n);
+		/* p's own dynamic extent is already bytes == n + 1 (just
+		 * established by the allocation above), which already proves
+		 * an n-byte writable span without restating it by hand -- the
+		 * manual axiom here was redundant scaffolding. */
 		__ownership_readable_span(s, n);
 		memcpy(p, s, n);
 		p[n] = 0;
@@ -105,8 +108,17 @@ static char *xstrndup(const char *s, size_t n)
 
 static char *xstrdup(const char *s)
 {
-	size_t n = strlen(s) + 1;
-	char *p = __malloc(n);
+	size_t n;
+	char *p;
+	/* Every call site in this file passes a live WORD token's own
+	 * ->text, established null-terminated by scan_word()'s trailing
+	 * gbuf_push(&b, 0) -- restate that fact here since the checker
+	 * cannot trace it through the struct token field it flows through
+	 * (scan_word()'s return -> next_raw_token()'s local tok.text ->
+	 * advance()'s p->cur.text) to here. */
+	__ownership_string_terminated(s);
+	n = strlen(s) + 1;
+	p = __malloc(n);
 	if (p) {
 		memcpy(p, s, n);
 	}
@@ -317,6 +329,11 @@ static char *strip_delim(const char *raw, int *quoted)
 		}
 	}
 	if (gbuf_push(&b, 0)) goto oom;
+	/* Restate the trailing NUL gbuf_push(&b, 0) just wrote, the same way
+	 * scan_word() does for its own return value: drain_heredocs()'s
+	 * immediate strlen(lit) on this exact return value is a separately
+	 * analyzed function. */
+	__ownership_string_terminated(b.d);
 	return b.d;
 oom:
 	__free(b.d);
@@ -334,6 +351,10 @@ static int drain_heredocs(struct lexer *lx)
 		size_t litlen;
 		struct gbuf body = {0, 0, 0};
 		if (!lit) { lex_errf(lx, "out of memory"); __free(h); h = next; continue; }
+		/* strip_delim()'s own doc comment: a non-NULL return is a
+		 * NUL-terminated delimiter -- restate here for the same reason
+		 * scan_word()'s callers do. */
+		__ownership_string_terminated(lit);
 		litlen = strlen(lit);
 		for (;;) {
 			const char *line = lx->p;
@@ -448,6 +469,12 @@ static char *scan_word(struct lexer *lx)
 	}
 	lx->p = p;
 	if (gbuf_push(&b, 0)) goto oom;
+	/* The gbuf_push(&b, 0) just above wrote the trailing NUL this
+	 * function's own doc comment promises ("NUL-terminated"); restate
+	 * that here since next_raw_token()'s immediate strlen(w) on this
+	 * same return value is a different function the checker analyzes
+	 * separately. */
+	__ownership_string_terminated(b.d);
 	return b.d;
 oom:
 	lex_errf(lx, "out of memory");
@@ -507,6 +534,11 @@ static struct token next_raw_token(struct lexer *lx)
 			size_t i, len;
 			int alldig;
 			if (!w) return mktok(T_ERROR);
+			/* scan_word()'s own doc comment: a non-NULL return is
+			 * "NUL-terminated" -- restate that here since a fact
+			 * established inside a separately analyzed callee's own
+			 * body does not itself cross back into this function. */
+			__ownership_string_terminated(w);
 			len = strlen(w);
 			alldig = len > 0;
 			for (i = 0; i < len; i++) if (!isdigit((unsigned char)w[i])) { alldig = 0; break; }
@@ -674,15 +706,31 @@ static struct sh_redir *parse_redir(struct parser *p)
 
 static struct sh_list *parse_list(struct parser *p, unsigned stops);
 
-/* A bare, unquoted WORD token whose text is exactly `w`. */
-static int is_resword(struct parser *p, const char *w) __attribute__((nonnull(1)));
-static int is_resword(struct parser *p, const char *w)
+/* A bare, unquoted WORD token whose text is exactly `w`. Every call site
+ * in this file passes a string literal ("if", "then", "!", ...), the
+ * same real contract string.h's own strcmp()/strcpy() parameters already
+ * assert for a literal argument -- withtok(null_terminated) on `w`
+ * states that explicitly instead of relying on each call site's literal
+ * being recognised only when it appears directly in a strcmp() call. */
+static int is_resword(struct parser *p, const char *w withtok(null_terminated))
+    __attribute__((nonnull(1)));
+static int is_resword(struct parser *p, const char *w withtok(null_terminated))
 {
-	return p->cur.type == T_WORD && strcmp(p->cur.text, w) == 0;
+	if (p->cur.type != T_WORD) return 0;
+	/* advance()'s own invariant comment: whenever p->cur.type == T_WORD,
+	 * ->text is a live, non-freed WORD text established null-terminated
+	 * by scan_word() -- restate that fact here since the checker cannot
+	 * trace it through the struct token field it flows through. */
+	__ownership_string_terminated(p->cur.text);
+	return strcmp(p->cur.text, w) == 0;
 }
 
-static int expect_resword(struct parser *p, const char *w) __attribute__((nonnull(1)));
-static int expect_resword(struct parser *p, const char *w)
+/* Every call site in this file passes a string literal ("do", "done",
+ * "then", "fi"), same as is_resword() itself, whose own withtok(...)
+ * this forwards straight through to. */
+static int expect_resword(struct parser *p, const char *w withtok(null_terminated))
+    __attribute__((nonnull(1)));
+static int expect_resword(struct parser *p, const char *w withtok(null_terminated))
 {
 	if (p->had_error) return -1;
 	if (!is_resword(p, w)) {
@@ -914,6 +962,15 @@ static struct sh_command *parse_command(struct parser *p);
  * time keeps a syntax error inside a function from surfacing halfway
  * through a build script. */
 // NOLINTNEXTLINE(misc-no-recursion) -- recursive descent mirrors nested shell grammar
+/* p is always live (every caller in this file threads a real parser
+ * through); cmd is always the non-NULL SH_CMD_SIMPLE new_command() just
+ * allocated at parse_command()'s only call site below (that site already
+ * returns early on `!cmd`); fname is always the WORD text already proven
+ * non-NULL by the `is_name(p->cur.text)` check that gated taking this
+ * branch, stashed into a local so advance() doesn't free it out from
+ * under the caller. */
+static struct sh_command *parse_funcdef(struct parser *p, struct sh_command *cmd, char *fname)
+    __attribute__((nonnull(1, 2, 3)));
 static struct sh_command *parse_funcdef(struct parser *p, struct sh_command *cmd, char *fname)
 {
 	const struct sh_builtin *bi;
@@ -1026,11 +1083,22 @@ static struct sh_command *parse_command(struct parser *p)
 		else if (is_resword(p, "until")) cmd = parse_loop(p, 1);
 		else if (is_resword(p, "for")) cmd = parse_for(p);
 		else {
-			for (i = 0; misplaced_reswords[i]; i++)
+			/* Same invariant is_resword() itself restates: p->cur.type
+			 * == T_WORD here (this whole branch is gated on it above)
+			 * means ->text is a live, null-terminated WORD text. */
+			__ownership_string_terminated(p->cur.text);
+			for (i = 0; misplaced_reswords[i]; i++) {
+				/* misplaced_reswords[] is a fixed array of string
+				 * literals, but the literal-ness the checker relies
+				 * on elsewhere is lost once read back out through an
+				 * array index rather than appearing directly in the
+				 * call -- restate it the same way. */
+				__ownership_string_terminated(misplaced_reswords[i]);
 				if (strcmp(p->cur.text, misplaced_reswords[i]) == 0) {
 					perr(p, "unexpected reserved word `%s'", misplaced_reswords[i]);
 					return 0;
 				}
+			}
 			goto not_compound;
 		}
 		if (!cmd) return 0;
@@ -1158,7 +1226,12 @@ static int parse_pipeline(struct parser *p, struct sh_pipeline *out)
 	struct sh_command *arr = 0;
 	size_t n = 0, cap = 0;
 	out->bang = 0;
-	if (p->cur.type == T_WORD && strcmp(p->cur.text, "!") == 0) { out->bang = 1; advance(p); }
+	if (p->cur.type == T_WORD) {
+		/* Same invariant is_resword() restates: a live T_WORD's ->text
+		 * is null-terminated. */
+		__ownership_string_terminated(p->cur.text);
+		if (strcmp(p->cur.text, "!") == 0) { out->bang = 1; advance(p); }
+	}
 	for (;;) {
 		struct sh_command *cmd = parse_command(p);
 		if (!cmd) goto fail;

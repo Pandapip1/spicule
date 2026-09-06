@@ -6,46 +6,37 @@
  * sequence to standard output.
  *
  * SCOPE.  tabs(1p) is fundamentally a termcap/terminfo-database lookup:
- * `-T type` selects a terminal type, and the standard's own escape
- * sequence is *whatever that terminal type's database entry says* --
- * "the appropriate sequence to clear and set the tab stops may be
- * written to standard output in an unspecified format" (od(1p)'s
- * sibling page, quoted here because tabs(1p) says the same thing about
- * its own output).  This tree has no termcap/terminfo database (see
- * src/termios/, which is I/O *mode* control -- raw/cooked, echo, baud --
- * not terminal *capability* escape sequences), so `-T type` cannot be
- * honored for any type this build doesn't hard-code, and is refused
- * loudly rather than silently guessing a database entry that isn't
+ * `-T type` selects a terminal type whose database entry defines the
+ * escape sequence to use. This tree has no termcap/terminfo database
+ * (see src/termios/, which is I/O *mode* control -- raw/cooked, echo,
+ * baud -- not terminal *capability* escape sequences), so `-T type` is
+ * refused rather than silently guessing a database entry that isn't
  * there.
  *
- * What IS implemented: the one case that needs no database at all
- * because the sequence is the same widely-implemented ANSI X3.64/VT100
- * convention on effectively every real terminal emulator (xterm,
- * gnome-terminal, Windows Terminal, ...) -- `tabs -N`, a uniform
- * interval of N column positions, or bare `tabs` with no operands at
- * all, which tabs(1p) itself defines as "equivalent to tabs -8":
+ * What IS implemented: `tabs -N` (uniform interval of N columns), or
+ * bare `tabs` with no operands (tabs(1p) defines this as "equivalent to
+ * tabs -8") -- the one case needing no database, since the sequence is
+ * the same ANSI X3.64/VT100 convention every real terminal emulator
+ * implements:
  *
  *   1. TBC (Tabulation Clear), Ps=3: "\033[3g" -- clear every existing
- *      hardware tab stop, so old stops from a previous `tabs` call (or
- *      the terminal's own power-on default) don't linger.
+ *      hardware tab stop, so old stops don't linger.
  *   2. <CR> to return to column 1.
  *   3. For each stop position (N, 2N, 3N, ... up to MAX_COLUMN below):
- *      emit enough <space> characters to advance the cursor to that
- *      column, then HTS (Horizontal Tab Set), "\033H" -- set a stop at
- *      the cursor's current column.
- *   4. <CR> again, to leave the cursor back at column 1 rather than
- *      wherever the last stop landed -- matching every real
- *      implementation of this exact technique.
+ *      emit enough <space> characters to reach that column, then HTS
+ *      (Horizontal Tab Set), "\033H" -- set a stop at the cursor.
+ *   4. <CR> again, to leave the cursor at column 1 rather than wherever
+ *      the last stop landed.
  *
  * MAX_COLUMN is a fixed, generous bound (not read from the real
  * terminal's width, which this build has no portable way to query) --
  * see this file's own comment at its definition.
  *
- * `-a`/`-c`/`-c2`/`-c3`/`-f`/`-p`/`-s`/`-u` (tabs(1p)'s named presets for
- * specific historical languages/editors) and the explicit tab-stop-list
- * form (`tabs 1,10 +8` etc.) are real tabs(1p) but not implemented:
- * refused loudly rather than guessing a plausible-looking but wrong
- * column list.
+ * `-a`/`-c`/`-c2`/`-c3`/`-f`/`-p`/`-s`/`-u` (named presets for specific
+ * historical languages/editors) and the explicit tab-stop-list form
+ * (`tabs 1,10 +8` etc.) are real tabs(1p) but not implemented: refused
+ * loudly rather than guessing a plausible-looking but wrong column
+ * list.
  *
  * EXIT STATUS: "0 Successful completion." ">0 An error occurred."
  */
@@ -53,12 +44,11 @@
 #include <string.h>
 #include "util.h"
 
-/* No real way to query the attached terminal's actual width from this
- * build (see this file's header) -- 132 columns is the widest standard
- * terminal geometry (VT100's own 80/132-column modes), comfortably past
- * the common 80, so tab stops are set out to it regardless of the
- * terminal's real width; a real terminal simply ignores an HTS sent
- * past its own last column. */
+/* No way to query the attached terminal's actual width (see this
+ * file's header) -- 132 columns is the widest standard terminal
+ * geometry (VT100's own 80/132-column modes), so tab stops are set out
+ * this far regardless; a real terminal simply ignores an HTS sent past
+ * its own last column. */
 #define MAX_COLUMN 132
 
 static int emit_uniform_tabs(int n)

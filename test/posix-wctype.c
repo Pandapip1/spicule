@@ -462,15 +462,27 @@ static void test_no_errors_defined(void)
  *
  * Everything asserted here is UNDEFINED per every page's domain
  * sentence -- POSIX requires nothing at all of it.  It is asserted
- * because include/wctype.h's banner commits to it in writing: "every
- * classification function returns 0 (false) and every conversion
- * function returns the argument unchanged" for anything outside the
- * ASCII ranges, "no BMP code point past 0x7f is ever classified true",
- * and a lone surrogate half gets that same defined answer rather than
- * being special-cased.  A libc that promises its callers a defined
- * answer for the undefined region owes them a test of that promise;
- * what it does not owe is a claim that POSIX demanded it, hence this
- * section being separate and labelled.
+ * because include/wctype.h's banner commits to it in writing that a
+ * lone surrogate half (0xd800-0xdfff) and any code point past the BMP
+ * a 16-bit wchar_t can hold (past 0xffff) get a defined answer rather
+ * than being special-cased: every classification function returns 0
+ * (false) and every conversion function returns the argument
+ * unchanged.  A libc that promises its callers a defined answer for
+ * that undefined region owes them a test of that promise; what it
+ * does not owe is a claim that POSIX demanded it, hence this section
+ * being separate and labelled.
+ *
+ * This does NOT cover ordinary BMP code points past 0x7f (Latin-1,
+ * Greek, Hebrew, Hiragana, ...): since 5da2d7f8 ("Replace ASCII-only
+ * wctype classification with real Unicode 15.0.0"), include/wctype.h
+ * documents those as classified from the real Unicode Character
+ * Database, not blanket-false -- this file used to assert the old
+ * ASCII-only contract for them, which that commit intentionally
+ * dropped without updating this stale assertion (it updated
+ * test/posix-wchar.c's real-Unicode coverage instead, which is where
+ * per-character classification of that range is actually exercised;
+ * see test_iswalpha_family() there for the same Latin-1/Greek/
+ * Hebrew/Hiragana examples this array used to assume were all false).
  *
  * This is also the ASan-relevant half: a classification family
  * implemented as a table indexed by wc would read outside it here, and
@@ -479,10 +491,7 @@ static void test_no_errors_defined(void)
 static void test_documented_extension(void)
 {
 	static const wint_t outside[] = {
-		0x80, 0xa0, 0xa9, 0xb5, 0xc0, 0xe9, 0xff,   /* Latin-1 */
-		0x100, 0x391, 0x5d0, 0x2000, 0x3042,        /* other BMP */
 		0xd800, 0xdbff, 0xdc00, 0xdfff,             /* lone surrogates */
-		0xfffd, 0xffff,                             /* end of the BMP */
 		0x10000, 0x10ffff, 0x7fffffff, 0xfffffffeu  /* above wchar_t */
 	};
 	size_t i;

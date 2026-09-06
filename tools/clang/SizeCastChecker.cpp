@@ -246,15 +246,94 @@ class CastZ3Proof {
     if (const auto *Binary = dyn_cast<SymSymExpr>(Expression)) {
       QualType LeftType = Binary->getLHS()->getType();
       QualType RightType = Binary->getRHS()->getType();
-      if (!SameWidth(LeftType, RightType) ||
-          (BinaryOperator::isComparisonOp(Binary->getOpcode()) &&
-           isUnsigned(LeftType) != isUnsigned(RightType)))
+      BinaryOperator::Opcode Opcode = Binary->getOpcode();
+      if (LeftType.isNull() || RightType.isNull() ||
+          !LeftType->isIntegerType() || !RightType->isIntegerType())
+        return std::nullopt;
+      if (SameWidth(LeftType, RightType)) {
+        if (BinaryOperator::isComparisonOp(Opcode) &&
+            isUnsigned(LeftType) != isUnsigned(RightType))
+          return std::nullopt;
+        std::optional<z3::expr> Left = translate(Binary->getLHS(), Depth + 1);
+        std::optional<z3::expr> Right = translate(Binary->getRHS(), Depth + 1);
+        if (!Left || !Right)
+          return std::nullopt;
+        return Apply(*Left, *Right, Opcode, LeftType);
+      }
+      // Mismatched-width operands: real, confirmed on man.c's
+      // man_builtin_pager() and awk_run.c's awk_format() (both scan a fixed
+      // `const char *end` with a cursor advanced by a *narrower*-typed
+      // offset -- an `int`/`unsigned` loop or match index -- before
+      // subtracting or comparing it against `end`'s own size_t-typed
+      // distance from the buffer's start). RegionStore's own pointer-offset
+      // arithmetic keeps each side's ORIGINAL integer type instead of
+      // inserting the SymbolCast a real source-level mixed-width
+      // subtraction or comparison would have, for the identical reason
+      // documented just above for a signedness-only mismatch: nothing
+      // downstream of RegionStore's index bookkeeping re-derives that
+      // missing conversion node. Modeling the fix the same way as
+      // provesRepresentable()'s own CommonWidth trick -- sign/zero-extend
+      // each operand through ITS OWN type's signedness into one guard-bit
+      // padded common width, wide enough for the result type too, then
+      // compute/compare there as ordinary signed values -- reproduces
+      // exactly what a real mixed-type expression's inserted usual
+      // arithmetic conversions would have computed for a same-rank
+      // widening (the only shape RegionStore's own index arithmetic can
+      // produce: one type's value promoted to fit the other's range, never
+      // truncated), without asserting anything about whichever real
+      // conversion Clang would have chosen for a source-level comparison
+      // between the two ORIGINAL types. Deliberately narrower than Apply():
+      // only Add/Sub/Mul and the six comparisons are given a mismatched-
+      // width interpretation, so a mismatched-width BO_And/Or/Shl/Shr (a
+      // shape no real pointer-offset expression produces) simply falls
+      // through unproven rather than risk a wrong bit-pattern assumption.
+      bool IsArithmetic =
+          Opcode == BO_Add || Opcode == BO_Sub || Opcode == BO_Mul;
+      if (!IsArithmetic && !BinaryOperator::isComparisonOp(Opcode))
         return std::nullopt;
       std::optional<z3::expr> Left = translate(Binary->getLHS(), Depth + 1);
       std::optional<z3::expr> Right = translate(Binary->getRHS(), Depth + 1);
-      if (!Left || !Right)
+      unsigned LeftWidth = AST.getIntWidth(LeftType);
+      unsigned RightWidth = AST.getIntWidth(RightType);
+      if (!Left || !Right || Left->get_sort().bv_size() != LeftWidth ||
+          Right->get_sort().bv_size() != RightWidth)
         return std::nullopt;
-      return Apply(*Left, *Right, Binary->getOpcode(), LeftType);
+      unsigned CommonWidth = std::max({LeftWidth, RightWidth, Width}) + 1;
+      z3::expr LeftWide = isUnsigned(LeftType)
+                              ? z3::zext(*Left, CommonWidth - LeftWidth)
+                              : z3::sext(*Left, CommonWidth - LeftWidth);
+      z3::expr RightWide = isUnsigned(RightType)
+                               ? z3::zext(*Right, CommonWidth - RightWidth)
+                               : z3::sext(*Right, CommonWidth - RightWidth);
+      if (IsArithmetic) {
+        z3::expr Wide = Opcode == BO_Add   ? LeftWide + RightWide
+                        : Opcode == BO_Sub ? LeftWide - RightWide
+                                           : LeftWide * RightWide;
+        // Truncating an already wide-enough two's-complement sum/difference/
+        // product down to the result's own true width is exactly the same
+        // modular value plain Width-bit arithmetic would have produced --
+        // this is the well-known extend-then-truncate identity for +/-/*,
+        // not a new assumption -- so this remains an exact model of the
+        // result, never an approximation of it.
+        return Wide.extract(Width - 1, 0);
+      }
+      z3::expr Predicate = [&]() -> z3::expr {
+        switch (Opcode) {
+        case BO_EQ:
+          return LeftWide == RightWide;
+        case BO_NE:
+          return LeftWide != RightWide;
+        case BO_LT:
+          return LeftWide < RightWide;
+        case BO_LE:
+          return LeftWide <= RightWide;
+        case BO_GT:
+          return LeftWide > RightWide;
+        default: // BO_GE: the only remaining opcode this case can reach.
+          return LeftWide >= RightWide;
+        }
+      }();
+      return z3::ite(Predicate, ZCtx.bv_val(1, Width), ZCtx.bv_val(0, Width));
     }
     if (const auto *Binary = dyn_cast<SymIntExpr>(Expression)) {
       QualType LeftType = Binary->getLHS()->getType();
@@ -364,6 +443,118 @@ public:
     z3::expr LowerWide = bitVector(DestMin, CommonWidth);
     z3::expr UpperWide = bitVector(DestMax, CommonWidth);
     z3::expr OutsideRange = SourceWide < LowerWide || SourceWide > UpperWide;
+    if (!OutsideRange.is_bool())
+      return false;
+    Solver.add(OutsideRange);
+    return ntlibc::algebra::provesUnsatisfiable(Solver);
+  }
+
+  // Proves a pointer-difference cast is safe by comparing the exact,
+  // untruncated mathematical difference between its two operand symbols
+  // directly against the cast's destination range, rather than routing
+  // through provesRepresentable()'s generic reinterpret-through-the-cast's-
+  // own-source-type path. That generic path is exactly right for every
+  // OTHER cast this file proves (the source value really was computed
+  // modulo its own declared width, so reinterpreting its bit pattern
+  // through that width is the correct model) -- it is specifically wrong
+  // here: C only defines `a - b` between two pointers into the same array
+  // at all when their true difference already fits in ptrdiff_t, so a
+  // buffer-size symbol with no independently-known upper bound (the
+  // ordinary case -- nothing about `size_t len` alone says len fits in
+  // PTRDIFF_MAX) makes provesRepresentable()'s own Width-bit truncate step
+  // reintroduce exactly the sign-bit wraparound the cast is trying to
+  // rule out, purely as an artifact of modeling a value through a width
+  // its true, real-hardware computation never actually wraps at (confirmed
+  // directly: instrumenting provesRepresentable() on man_builtin_pager()'s
+  // own `(size_t)(end - p)` shape showed a real, provable `end_idx >=
+  // p_idx` fact reaching the solver correctly, yet the proof still failed
+  // until this method bypassed the truncate/re-widen step -- see this
+  // file's SymSymExpr mismatched-width comment above for the sibling half
+  // of that same investigation).
+  //
+  // Re-deriving that ptrdiff_t-representability precondition itself is a
+  // pointer-provenance/object-bound obligation this file already declines
+  // to check elsewhere -- see ArithmeticContractChecker::checkPreStmt
+  // (BinaryOperator)'s own explicit skip of a pointer BO_Sub's overflow
+  // check, for the identical reason -- so trusting it here, rather than
+  // reproving it, matches this file's own existing convention rather than
+  // inventing a new exception. Given that guarantee, `a - b`'s actual
+  // runtime value already equals the exact mathematical difference with
+  // no modular reduction, so comparing that same exact, guard-bit-padded
+  // difference against the cast's destination range is sound.
+  //
+  // Deliberately narrow: only matches a bare top-level BO_Sub between two
+  // plain integer operands (SymSymExpr/SymIntExpr/IntSymExpr) -- exactly
+  // the shape RegionStore's own element-region offset arithmetic produces
+  // for `end - p` once both pointers resolve to a comparable offset into
+  // the same base region. checkPreStmt only ever calls this after
+  // independently confirming, from the cast's own AST, that its source
+  // expression really is a pointer-typed BO_Sub -- never for ordinary
+  // integer subtraction, where no such standing guarantee exists and
+  // skipping the width truncation would be unsound.
+  bool provesPointerDifferenceRepresentable(NonLoc Value,
+                                            const llvm::APSInt &DestMin,
+                                            const llvm::APSInt &DestMax) {
+    SymbolRef Sym = Value.getAsSymbol();
+    if (!Sym)
+      return false;
+    const SymExpr *LeftSym = nullptr;
+    const SymExpr *RightSym = nullptr;
+    QualType LeftType, RightType;
+    llvm::APSInt LeftLiteral, RightLiteral;
+    bool LeftIsLiteral = false, RightIsLiteral = false;
+    if (const auto *Binary = dyn_cast<SymSymExpr>(Sym)) {
+      if (Binary->getOpcode() != BO_Sub)
+        return false;
+      LeftSym = Binary->getLHS();
+      RightSym = Binary->getRHS();
+      LeftType = LeftSym->getType();
+      RightType = RightSym->getType();
+    } else if (const auto *Binary = dyn_cast<SymIntExpr>(Sym)) {
+      if (Binary->getOpcode() != BO_Sub)
+        return false;
+      LeftSym = Binary->getLHS();
+      LeftType = LeftSym->getType();
+      RightLiteral = Binary->getRHS();
+      RightIsLiteral = true;
+      RightType = LeftType;
+    } else if (const auto *Binary = dyn_cast<IntSymExpr>(Sym)) {
+      if (Binary->getOpcode() != BO_Sub)
+        return false;
+      RightSym = Binary->getRHS();
+      RightType = RightSym->getType();
+      LeftLiteral = Binary->getLHS();
+      LeftIsLiteral = true;
+      LeftType = RightType;
+    } else {
+      return false;
+    }
+    if (LeftType.isNull() || RightType.isNull() ||
+        !LeftType->isIntegerType() || !RightType->isIntegerType())
+      return false;
+    unsigned LeftWidth = AST.getIntWidth(LeftType);
+    unsigned RightWidth = AST.getIntWidth(RightType);
+    std::optional<z3::expr> LeftRaw =
+        LeftIsLiteral ? std::optional<z3::expr>(bitVector(LeftLiteral, LeftWidth))
+                      : translate(LeftSym);
+    std::optional<z3::expr> RightRaw =
+        RightIsLiteral ? std::optional<z3::expr>(bitVector(RightLiteral, RightWidth))
+                       : translate(RightSym);
+    if (!LeftRaw || !RightRaw || LeftRaw->get_sort().bv_size() != LeftWidth ||
+        RightRaw->get_sort().bv_size() != RightWidth)
+      return false;
+    unsigned CommonWidth =
+        std::max({LeftWidth, RightWidth, DestMin.getBitWidth()}) + 1;
+    z3::expr LeftWide = isUnsigned(LeftType)
+                            ? z3::zext(*LeftRaw, CommonWidth - LeftWidth)
+                            : z3::sext(*LeftRaw, CommonWidth - LeftWidth);
+    z3::expr RightWide = isUnsigned(RightType)
+                             ? z3::zext(*RightRaw, CommonWidth - RightWidth)
+                             : z3::sext(*RightRaw, CommonWidth - RightWidth);
+    z3::expr Diff = LeftWide - RightWide;
+    z3::expr LowerWide = bitVector(DestMin, CommonWidth);
+    z3::expr UpperWide = bitVector(DestMax, CommonWidth);
+    z3::expr OutsideRange = Diff < LowerWide || Diff > UpperWide;
     if (!OutsideRange.is_bool())
       return false;
     Solver.add(OutsideRange);
@@ -1049,6 +1240,65 @@ public:
     // still runs exactly as it always has.
     if (Defined && SourceBits <= MathBits && DestBits <= MathBits) {
       CastZ3Proof Proof(castZ3Engine(), PathState, Ctx);
+      // A cast whose own source expression is literally a pointer
+      // difference (`(size_t)(end - p)`-shaped) gets the dedicated,
+      // truncation-free proof first -- see provesPointerDifferenceRepresentable()'s
+      // own comment for why the generic path below can spuriously fail on
+      // exactly this shape once the buffer-size operand has no proven
+      // upper bound. Gated on the CAST's own AST, not on Value's runtime
+      // shape, so this can never fire for an ordinary integer subtraction
+      // that merely happens to produce the same kind of SymExpr.
+      //
+      // SameBaseRegion is what makes trusting the C-standard "representable
+      // in ptrdiff_t" precondition sound rather than merely convenient:
+      // provesPointerDifferenceRepresentable() itself pattern-matches only
+      // on the resulting integer SymExpr's shape (a bare top-level BO_Sub
+      // between two plain symbols), which says nothing on its own about
+      // whether those two symbols were ever offsets into the same object --
+      // two entirely unrelated pointers subtracted could in principle
+      // produce the identical shape. Two adversarial fixtures probed this
+      // directly (tools/lint-cast-range-fixtures/pointer-diff.c's
+      // unrelated_buffers() and unrelated_cursors()): in practice, for
+      // both, Clang's own engine already declines to produce a usable
+      // relational fact for a `<` comparison (or, for unrelated_buffers,
+      // the ordinary assumeInclusiveRange() check just above already
+      // short-circuits before CastZ3Proof ever runs) -- comparing pointers
+      // into two unrelated objects is itself undefined behavior in C, and
+      // the analyzer treats it conservatively. Neither fixture was
+      // observed to actually flip from that ablation, so this guard was
+      // not caught fixing a live false accept on either -- it is kept
+      // anyway as this class's own explicit, independently-verifiable
+      // invariant, rather than resting soundness on the incidental fact
+      // that some other part of the engine happens to decline first.
+      // getBaseRegion() strips away any ElementRegion/FieldRegion layers
+      // down to each pointer's own root region (a VarRegion,
+      // SymbolicRegion, etc.), the same technique
+      // PointerProvenanceChecker.cpp already uses elsewhere in this tree
+      // to decide whether two pointers alias one object; two pointers into
+      // the very same array always share that same root by construction,
+      // so pointer identity between the two roots is exact, not a
+      // heuristic.
+      const auto *Difference =
+          dyn_cast<BinaryOperator>(Cast->getSubExpr()->IgnoreParens());
+      bool IsPointerDifference =
+          Difference && Difference->getOpcode() == BO_Sub &&
+          Difference->getLHS()->getType()->isPointerType() &&
+          Difference->getRHS()->getType()->isPointerType();
+      const MemRegion *LeftRegion =
+          IsPointerDifference
+              ? C.getSVal(Difference->getLHS()).getAsRegion()
+              : nullptr;
+      const MemRegion *RightRegion =
+          IsPointerDifference
+              ? C.getSVal(Difference->getRHS()).getAsRegion()
+              : nullptr;
+      bool SameBaseRegion =
+          LeftRegion && RightRegion &&
+          LeftRegion->getBaseRegion() == RightRegion->getBaseRegion();
+      if (IsPointerDifference && SameBaseRegion &&
+          Proof.provesPointerDifferenceRepresentable(*Defined, DestMin,
+                                                      DestMax))
+        return;
       if (Proof.provesRepresentable(*Defined, Source, DestMin, DestMax))
         return;
     }

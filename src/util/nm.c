@@ -2,82 +2,56 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * nm(1p): `nm [-g] [-p] [-u] [-v] [file...]`
+ * Spec: https://pubs.opengroup.org/onlinepubs/9699919799/utilities/nm.html
  *
- * ---- scope: ELF64 (aarch64/x86_64), not PE/COFF object files -----------
+ * Scope: ELF64 (aarch64/x86_64) object files only, matching this build's
+ * native-Linux target (src/dlfcn/linux/plat_dlfcn.c). PE is not attempted:
+ * this project's PE parsing (src/internal/pe.c/pe.h) walks a *mapped
+ * executable image's* export directory, a different on-disk structure
+ * from a COFF *object file's* symbol table. A file not starting "\x7fELF"
+ * is reported as unrecognized, never guessed at as PE. This project ships
+ * no <elf.h>; this file keeps its own local Ehdr/Shdr/Sym copy,
+ * cross-checked field-for-field against plat_dlfcn.c's.
  *
- * This build's native-Linux target produces ELF64 little-endian object
- * files (see src/dlfcn/linux/plat_dlfcn.c) -- that is the format this
- * file reads. PE is not attempted: this project's existing PE parsing
- * (src/internal/pe.c/pe.h) walks a *mapped executable image's* export
- * directory, a different on-disk structure from a COFF *object file's*
- * symbol table, and a correct from-scratch reader for the latter is a
- * comparably-sized project of its own. A file not starting "\x7fELF" is
- * reported as an unrecognized format (see read_elf_object() below),
- * never guessed at as PE. ELF32/i386 is out of scope for the same reason
- * plat_dlfcn.c draws the EM_AARCH64/EM_X86_64-only boundary.
+ * Archives: POSIX requires processing each object file inside an archive
+ * operand. Walking this project's own ar(1p) "!<arch>\n" format to run
+ * this file's ELF reader over each member is deferred out of this first
+ * pass -- an archive operand is refused loudly rather than misread as a
+ * malformed ELF file.
  *
- * ---- from-scratch ELF64 structures, not a shared <elf.h> ---------------
+ * Options implemented:
+ *  -g  Only external (global/weak) symbols, i.e. bind != LOCAL.
+ *  -u  Only undefined symbols (st_shndx == SHN_UNDEF).
+ *  -p  Print in the object's own symbol-table order, not alphabetical.
+ *  -v  Sort by symbol value (address) instead of by name.
  *
- * This project ships no <elf.h>; this file keeps its own local Ehdr/Shdr/
- * Sym copy, cross-checked field-for-field against plat_dlfcn.c's, per
- * this tree's per-file struct-definition convention. No Phdr/Dyn/Rela --
- * this file does no loading or relocation.
+ * Not implemented, refused loudly: -A/-o (pathname prefix, only useful
+ * once archive-member iteration exists), -f (this file's only format is
+ * already the full one), -P (portable output format), -C/-r (demangling,
+ * reverse sort -- cosmetic, GNU-only or not in the POSIX synopsis).
  *
- * ---- archives ------------------------------------------------------------
+ * Output: one symbol per line as `<value> <type> <name>`. <value> is 16
+ * lowercase hex digits, zero-filled, or 16 spaces for an undefined
+ * symbol. <type> is a single letter, uppercase for global/weak, lowercase
+ * for local: 'A' absolute, 'B'/'b' bss, 'C' common, 'D'/'d' initialized
+ * data, 'N' non-loaded (e.g. debug) section, 'R'/'r' read-only data,
+ * 'T'/'t' text, 'U' undefined (always uppercase), 'W'/'w' weak, 'I'/'i'
+ * GNU indirect function (STT_GNU_IFUNC -- an ABI extension both
+ * aarch64/x86_64 toolchains emit, classified distinctly to match what a
+ * real nm reports).
  *
- * POSIX requires processing each object file inside an archive operand.
- * This build's ar(1p) (src/util/ar.c) uses the "!<arch>\n" member
- * format; walking it to run this file's ELF reader over each member is
- * deferred out of this first pass -- an archive operand is refused
- * loudly (see the "!<arch>\n" magic check in __util_nm_main()) rather
- * than misread as a malformed ELF file.
- *
- * ---- OPTIONS implemented -------------------------------------------------
- *  -g  Display only external (global/weak) symbols, i.e. bind != LOCAL.
- *  -u  Display only undefined symbols (st_shndx == SHN_UNDEF).
- *  -p  Do not order the symbols in any particular order (print in
- *      the object's own symbol-table order instead of alphabetical).
- *  -v  Sort output by symbol value (address) instead of alphabetically
- *      by symbol name (ties broken by name either way).
- *
- * ---- NOT IMPLEMENTED, refused loudly -------------------------------------
- *  -A/-o    Prefix every line with the file's pathname (only useful once
- *           archive-member iteration exists above).
- *  -f       "Produce full output" -- this file's only format already is
- *           the full one, so there is nothing for a separate -f to do.
- *  -P       The alternate portable output format (name/type/value/size).
- *  -C, -r   Reverse sort (-r) and demangled-name output (-C, GNU-only,
- *           not in the POSIX synopsis) -- cosmetic, not attempted here.
- *
- * DESCRIPTION/STDOUT: one symbol per line as `<value> <type> <name>`.
- * <value> is 16 lowercase hex digits, zero-filled, or 16 spaces for an
- * undefined symbol. <type> is a single letter, uppercase for global/weak,
- * lowercase for local: 'A' absolute, 'B'/'b' bss, 'C' common, 'D'/'d'
- * initialized data, 'N' non-loaded (e.g. debug) section, 'R'/'r' read-only
- * data, 'T'/'t' text, 'U' undefined (always uppercase), 'W'/'w' weak,
- * 'I'/'i' GNU indirect function (STT_GNU_IFUNC -- an ABI extension both
- * aarch64/x86_64 toolchains emit, classified distinctly rather than
- * folded into 'T'/'t' to match what a real nm reports).
- *
- * A symbol with no name, STT_FILE entries, and AArch64/ARM mapping
- * symbols ($x/$d/$a/$t, see is_mapping_symbol() below) are omitted by
- * default, matching every real nm this project interoperates with.
+ * Omitted by default: a symbol with no name, STT_FILE entries, and
+ * AArch64/ARM mapping symbols ($x/$d/$a/$t, see is_mapping_symbol()
+ * below) -- matching every real nm this project interoperates with.
  *
  * The default alphabetical sort is a plain byte-wise strcmp() on the raw
  * UTF-8 name, not locale-collated -- consistent with this project's own
  * "UTF-8 is the only encoding this library has ever supported" position
- * (src/util/wc.c). This differs from GNU nm's strcoll()-based sort under
- * a non-C locale (e.g. it treats '_' as collation-ignorable), which is
- * accepted as the right tradeoff rather than building a from-scratch
- * glibc collation-table reader.
+ * (src/util/wc.c).
  *
- * OPERANDS: no file operand defaults to a file named `a.out`.
- *
- * EXIT STATUS: diagnose-and-continue across multiple file operands, same
- * as this project's other utilities (e.g. src/util/wc.c) -- one bad
- * operand does not stop the rest, and the final exit status is nonzero.
- *
- * Spec consulted: https://pubs.opengroup.org/onlinepubs/9699919799/utilities/nm.html
+ * No file operand defaults to `a.out`. Exit status: diagnose-and-continue
+ * across multiple file operands -- one bad operand doesn't stop the
+ * rest, and the final exit status is nonzero if any failed.
  */
 
 /* This translation unit implements ntlibc's freestanding -nostdinc
@@ -96,12 +70,8 @@
 #include "util.h"
 #include "ownership_stubs.h"
 
-/* ---- minimal local ELF64 shapes ------------------------------------
- * See this file's own header comment above for why these are a fresh
- * local copy rather than a shared <elf.h> or a reach into
- * src/dlfcn/linux/plat_dlfcn.c's private ones. Field widths/order are
- * ELFCLASS64's, architecture-independent -- cross-checked against
- * plat_dlfcn.c's own copy of the same structures. */
+/* Local ELF64 shapes -- see this file's header. Field widths/order are
+ * ELFCLASS64's, architecture-independent. */
 typedef struct {
 	unsigned char e_ident[16];
 	uint16_t e_type, e_machine;
@@ -160,14 +130,10 @@ typedef struct {
 
 /* AArch64 (and ARM) ELF object files carry "mapping symbols" -- local,
  * STT_NOTYPE entries named "$x"/"$d"/"$a"/"$t" (optionally followed by
- * ".<disambiguator>"), inserted by the assembler at every boundary
- * between machine code and data so a disassembler knows how to decode
- * each byte range (AAELF64 SS4.5.4). They carry no symbol-table
- * information a caller of nm(1p) ever wants; every real nm this
- * project needs to interoperate with hides them by default, confirmed
- * empirically against `nix shell nixpkgs#binutils -c nm` on this
- * build's own aarch64 object files (readelf -s shows them, real nm
- * does not). */
+ * ".<disambiguator>"), inserted by the assembler at every code/data
+ * boundary (AAELF64 SS4.5.4). Every real nm hides them by default
+ * (confirmed against `nix shell nixpkgs#binutils -c nm`: readelf -s
+ * shows them, real nm does not). */
 static int is_mapping_symbol(const char *name)
 {
 	if (name[0] != '$') return 0;
@@ -183,13 +149,10 @@ struct nm_sym {
 	char type; /* already-cased type letter, see sym_type_letter() */
 };
 
-/* Classifies one symbol table entry per this file's own header comment
- * ("STDOUT" section) -- section-based for a normal defined symbol,
- * special-cased for undefined/absolute/common/weak/ifunc, then folded
- * to lowercase for a local binding (matching the "uppercase global,
- * lowercase local" convention). `shdrs`/`shnum` are the object's own
- * section header table, needed to classify a defined symbol by the
- * section it lives in. */
+/* Classifies one symbol table entry per this file's header comment
+ * ("Output" section). `shdrs`/`shnum` are the object's own section
+ * header table, needed to classify a defined symbol by the section it
+ * lives in. */
 static char sym_type_letter(const Elf64_Sym *s, const Elf64_Shdr *shdrs, uint16_t shnum)
 {
 	unsigned bind = ELF64_ST_BIND(s->st_info);
@@ -231,14 +194,11 @@ static int cmp_by_name(const void *a, const void *b)
 	return strcmp(sa->name, sb->name);
 }
 
-/* An undefined symbol's "value" is meaningless (it is printed as blank
- * spaces, not a real address -- see this file's own header comment),
- * so -v's value sort treats "undefined" as its own leading group
- * rather than numerically tying every undefined symbol to whatever
- * defined symbol happens to also sit at address 0 -- confirmed against
- * a real `nm -v` on this build's own object files, which puts every U
- * symbol first regardless of a same-object defined symbol's own
- * (perfectly real) value-0 address. */
+/* An undefined symbol's "value" is meaningless (printed as blank spaces,
+ * not a real address), so -v's value sort treats "undefined" as its own
+ * leading group rather than numerically tying it to whatever defined
+ * symbol happens to also sit at address 0 -- confirmed against a real
+ * `nm -v`, which puts every U symbol first regardless. */
 static int cmp_by_value(const void *a, const void *b)
 {
 	const struct nm_sym *sa = a, *sb = b;

@@ -341,7 +341,7 @@ struct buf { char *data withtok(readable_span(len)) withtok(writable_span(cap));
 static int buf_reserve(struct buf *b, size_t extra)
 {
 	size_t need;
-	if (!__util_size_add(b->len, extra, &need)) return -1;
+	if (!__util_size_add(b->len, extra, &need)) { errno = ENOMEM; return -1; }
 	if (need + 1 <= b->cap) return 0;
 	{
 		size_t newcap;

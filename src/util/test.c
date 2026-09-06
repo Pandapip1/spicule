@@ -422,6 +422,15 @@ static int eval_argc(struct texpr *t)
 	t->i = 0;
 	{
 		int r = t_oexpr(t);
+		/* t->v is the same argv slice t_primary()'s own tok extraction
+		 * reads from (see this file's own top-of-file comment on struct
+		 * texpr's char **v) -- genuinely never NULL by construction, but
+		 * read here directly (not through a snapshot local, and after
+		 * t_oexpr()'s own call has already crossed a function boundary
+		 * this per-function analysis cannot see through), so restate the
+		 * fact the same way __ownership_string_terminated() above
+		 * restates NUL-termination for that identical read. */
+		__ownership_pointer_nonnull(t->v);
 		if (!t->err && t->i != t->n) { terr(t, "unexpected argument", t->v[t->i]); return T_ERR; }
 		return t->err ? T_ERR : r;
 	}

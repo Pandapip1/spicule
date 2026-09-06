@@ -6,6 +6,8 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/Decl.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/ProgramState.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/SValBuilder.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Casting.h"
@@ -362,6 +364,37 @@ inline std::optional<int64_t> excludedSentinel(const TokenSort *Token) {
       return Value;
   }
   return std::nullopt;
+}
+
+/* The two halves of testing whether a symbolic Value is Token's declared
+ * sentinel_exclude value: Sentinel is the state where it is, NonSentinel is
+ * the state where it provably is not. Either half may be null if that
+ * branch is infeasible under State's existing constraints. Callers that
+ * only care about the "not the sentinel" continuation (the common case for
+ * a value already known to hold real ownership) use NonSentinel alone and
+ * discard Sentinel. */
+struct SentinelSplit {
+  clang::ento::ProgramStateRef Sentinel;
+  clang::ento::ProgramStateRef NonSentinel;
+};
+
+/* Splits State on whether Value equals Sentinel, the constant a caller has
+ * already read from excludedSentinel(Token). Type must be Value's real
+ * expression type: SValBuilder::makeIntVal(uint64_t, QualType) dispatches
+ * on it to build either a NonLoc integer or a Loc pointer constant, so for
+ * a pointer-typed token (for example iconv_t's (iconv_t)-1) this ends up
+ * comparing two pointer values, the same technique the analyzer's own
+ * MAP_FAILED-style checks use, rather than an integer comparison that could
+ * never be true for a symbolic pointer. */
+inline SentinelSplit splitOnExcludedSentinel(
+    clang::ento::ProgramStateRef State, clang::ento::DefinedOrUnknownSVal Value,
+    clang::QualType Type, int64_t Sentinel, clang::ento::SValBuilder &SVB) {
+  clang::ento::DefinedSVal SentinelValue =
+      SVB.makeIntVal(static_cast<uint64_t>(Sentinel), Type);
+  clang::ento::DefinedOrUnknownSVal IsSentinel =
+      SVB.evalEQ(State, Value, SentinelValue);
+  auto [SentinelState, NonSentinelState] = State->assume(IsSentinel);
+  return {SentinelState, NonSentinelState};
 }
 
 } // namespace ntlibc::algebra

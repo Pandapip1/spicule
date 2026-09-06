@@ -118,6 +118,19 @@
 #             every callee itself pure) -- and, symmetrically, disproves the
 #             claim for any function already marked pure that fails it,
 #             which is a real correctness bug rather than a style nit.
+#   loopcond  currently opt-in while its first tree-wide pass is triaged.
+#             A Clang 18 AST plugin (tools/clang/LoopConditionChecker.cpp)
+#             walks every for/while/do header and flags a condition that
+#             compounds, via && or ||, a structural bound (a range, a
+#             count, a cursor-vs-NULL/sentinel test) with a distinct,
+#             apparently incidental data-dependent condition (a found/
+#             success/error flag, or an unrelated function-call result).
+#             The fix is always the same: keep the primary condition in
+#             the loop header and move the other into an explicit
+#             `if (...) break;` in the loop body -- which this stage does
+#             not do itself, only reports. A conditional `break` inside an
+#             otherwise-clean range/cursor loop is the pattern this steers
+#             code towards, not a finding in its own right.
 #   undefined tools/lint-undefined.sh: a public header declaring a
 #             function nothing defines.  Needs clang-18/clang++-18/
 #             llvm-config-18 (a real AST walk, tools/clang/
@@ -2052,6 +2065,61 @@ stage_purity() {
 	return $any
 }
 
+stage_loopcond() {
+	hdr "loop headers that compound a bound with a data-dependent condition"
+	any=0
+	require_tool clang-18 || return $missing
+	require_tool clang++-18 || return $missing
+	require_tool llvm-config-18 || return $missing
+	libdir=$(llvm-config-18 --libdir)
+	clang_cpp=$(find "$libdir" -maxdepth 1 -name 'libclang-cpp.so.18*' -print 2>/dev/null | sort | head -n 1)
+	[ -n "$clang_cpp" ] || { report_missing "Clang 18 development libraries are required for loop-condition analysis."; return $missing; }
+	plugin=$builddir/ntlibc-loopcond-checker.so
+	# shellcheck disable=SC2046
+	clang++-18 -fPIC -shared $(llvm-config-18 --cxxflags) \
+		tools/clang/LoopConditionChecker.cpp -o "$plugin" "$clang_cpp" \
+		$(llvm-config-18 --ldflags --libs --system-libs) || return 1
+	fixture_log=$builddir/loopcond-fixtures.log
+	: > "$fixture_log"
+	for fixture in tools/lint-loopcond-fixtures/*.c; do
+		clang-18 --analyze -Xclang -load -Xclang "$plugin" \
+			-Xclang -analyzer-checker=ntlibc.LoopCondition \
+			-Xclang -analyzer-output=text "$fixture" -o /dev/null \
+			>> "$fixture_log" 2>&1 || any=1
+	done
+	tools/lint-loopcond.py --fixtures "$fixture_log" || any=1
+	analyzed=0
+	for arch in $LINT_ARCHS; do
+		gen_alltypes "$arch" || { any=1; continue; }
+		flags=$(cppflags_for "$arch"); target=$(pick_target "$arch")
+		nsrc=$(sources_for "$arch" | grep -c . || true)
+		out=$builddir/$arch.loopcond.log
+		report=$builddir/$arch.loopcond.report
+		pardir=$(mktemp -d "$builddir/loopcond.XXXXXX") || return 1
+		# shellcheck disable=SC2086,SC2016
+		sources_for "$arch" | xargs -P "$LINT_JOBS" -I{} sh -c '
+			f=$1; clang=$2; plugin=$3; target=$4; shift 4
+			id=$(printf %s "$f" | tr / _)
+			# shellcheck disable=SC2086
+			"$clang" $target --analyze -Xclang -load -Xclang "$plugin" \
+				-Xclang -analyzer-checker=ntlibc.LoopCondition \
+				-Xclang -analyzer-output=text "$@" "$f" -o /dev/null \
+				> "'"$pardir"'/$id.log" 2>&1
+		' _ {} clang-18 "$plugin" "$target" $flags
+		runrc=$?; nlog=$(find "$pardir" -name '*.log' | grep -c . || true)
+		: > "$out"; ls "$pardir"/*.log >/dev/null 2>&1 && cat "$pardir"/*.log > "$out"; rm -rf "$pardir"
+		if [ "$runrc" -ne 0 ] || [ "$nsrc" -eq 0 ] || [ "$nlog" -ne "$nsrc" ]; then any=1; show_findings "$out"; continue; fi
+		analyzed=$((analyzed + 1))
+		if tools/lint-loopcond.py --fixtures "$fixture_log" "$out" > "$report" 2>&1; then
+			note "loop condition shape [$arch]: no findings -> $report"
+		else
+			note "loop condition shape [$arch]: findings -> $report"; show_findings "$report"; any=1
+		fi
+	done
+	[ "$analyzed" -gt 0 ] || return 1
+	return $any
+}
+
 requested_stages=${*:-warn analyze cppcheck shell fallible locks lockset reentrancy variadic signals abizeroinit initproof errno purity ownership undefined unreferenced widthmod}
 stages=
 for requested_stage in $requested_stages; do
@@ -2104,6 +2172,7 @@ for s in $stages; do
 		signals)    stage_signals ;;
 		errno)      stage_errno ;;
 		purity)     stage_purity ;;
+		loopcond)   stage_loopcond ;;
 		widthmod)  tools/lint-widthmod.sh ;;
 		unreferenced) tools/lint-unreferenced.sh ;;
 		undefined) tools/lint-undefined.sh ;;

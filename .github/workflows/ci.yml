@@ -13,8 +13,6 @@ permissions:
 # Do not cancel superseded runs: each commit on main remains useful bisect
 # evidence, and the real-Windows jobs are the only oracle for native NT.
 env:
-  TINYCC_REPO: https://github.com/Pandapip1/tinycc.git
-  TINYCC_SHA: 69eed4d346f31dea12d61b99f60298d2f59f66be
   # Our patched Wine fork: implements RtlCloneUserProcess (fork()) and
   # related clone work that stock apt Wine lacks entirely. Pinned to a
   # commit, not a branch, so a fork update is a deliberate bump here
@@ -54,20 +52,22 @@ jobs:
       - name: Minimum supported Windows version
         run: ./tools/lint-minver.sh
 
-  # Build the win32-cross tinycc toolchain once and cache it, keyed on the
-  # pinned commit above, so a normal CI run restores a prebuilt toolchain
-  # instead of rebuilding a whole cross-compiler from scratch every time.
+  # Build the win32-cross tinycc toolchain once and cache it via Magic Nix
+  # Cache, so a normal CI run restores a prebuilt toolchain instead of
+  # rebuilding a whole cross-compiler from scratch every time.
   build-toolchain:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    # id-token: write is what DeterminateSystems/magic-nix-cache-action's
+    # own README example asks every job using it to set -- see the same
+    # comment on the `linux-builds` job below.
+    permissions:
+      id-token: "write"
+      contents: "read"
     steps:
       - uses: actions/checkout@v7
       - name: Restore or build tinycc
         uses: ./.github/actions/setup-tinycc
-        with:
-          repository: ${{ env.TINYCC_REPO }}
-          revision: ${{ env.TINYCC_SHA }}
-          build-on-miss: "true"
 
   # Build our patched Wine fork once and cache it, keyed on the pinned
   # commit above, exactly like build-toolchain does for tinycc. A Wine
@@ -211,6 +211,12 @@ jobs:
     needs: build-toolchain
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # id-token: write is what DeterminateSystems/magic-nix-cache-action's
+    # own README example asks every job using it to set -- see the same
+    # comment on the `linux-builds` job above.
+    permissions:
+      id-token: "write"
+      contents: "read"
     strategy:
       fail-fast: false
       matrix:
@@ -224,9 +230,6 @@ jobs:
       - uses: actions/checkout@v7
       - name: Set up tinycc
         uses: ./.github/actions/setup-tinycc
-        with:
-          repository: ${{ env.TINYCC_REPO }}
-          revision: ${{ env.TINYCC_SHA }}
       - name: Configure
         run: ./configure --host=${{ matrix.host }} CC=${{ matrix.cc }} --${{ matrix.kernel32 }}-kernel32
       - name: Build ${{ matrix.name }} artifacts
@@ -247,6 +250,12 @@ jobs:
     needs: [build-toolchain, build-wine]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # id-token: write is what DeterminateSystems/magic-nix-cache-action's
+    # own README example asks every job using it to set -- see the same
+    # comment on the `linux-builds` job above.
+    permissions:
+      id-token: "write"
+      contents: "read"
     strategy:
       fail-fast: false
       matrix:
@@ -258,9 +267,6 @@ jobs:
       - uses: actions/checkout@v7
       - name: Set up tinycc
         uses: ./.github/actions/setup-tinycc
-        with:
-          repository: ${{ env.TINYCC_REPO }}
-          revision: ${{ env.TINYCC_SHA }}
       - name: Set up Wine
         uses: ./.github/actions/setup-wine
         with:
@@ -283,15 +289,18 @@ jobs:
     needs: [build-toolchain, build-wine]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # id-token: write is what DeterminateSystems/magic-nix-cache-action's
+    # own README example asks every job using it to set -- see the same
+    # comment on the `linux-builds` job above.
+    permissions:
+      id-token: "write"
+      contents: "read"
     steps:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Set up tinycc
         uses: ./.github/actions/setup-tinycc
-        with:
-          repository: ${{ env.TINYCC_REPO }}
-          revision: ${{ env.TINYCC_SHA }}
       - name: Set up Wine
         uses: ./.github/actions/setup-wine
         with:
@@ -308,6 +317,12 @@ jobs:
     needs: [build-toolchain, build-wine]
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    # id-token: write is what DeterminateSystems/magic-nix-cache-action's
+    # own README example asks every job using it to set -- see the same
+    # comment on the `linux-builds` job above.
+    permissions:
+      id-token: "write"
+      contents: "read"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -315,9 +330,6 @@ jobs:
           fetch-depth: 0
       - name: Set up tinycc
         uses: ./.github/actions/setup-tinycc
-        with:
-          repository: ${{ env.TINYCC_REPO }}
-          revision: ${{ env.TINYCC_SHA }}
       - name: Set up Wine
         uses: ./.github/actions/setup-wine
         with:
@@ -370,18 +382,17 @@ jobs:
   # once shipped past every host-toolchain lint -- so they need the pinned
   # tinycc, but neither needs Wine: nothing is executed.
   #
-  # tinycc itself stays on the setup-tinycc action either way -- nixpkgs
-  # carries no tcc package at all (see flake.nix's own comment on
-  # devShells.default), so the real per-arch PE link this job exists for
-  # could never move to Nix. What DOES move is the declaration-scanner
-  # toolchain below: tools/clang/DeclScanner.cpp is the exact same clang
-  # plugin the `lint` job's `undefined`/`unreferenced` stages already
-  # build and run via flake.nix's devShell (see the `lint` job matrix
-  # further down), so this is the already-proven via: nix path, not a new
-  # one. Verified locally for both arches: with the pinned tinycc on
-  # PATH, `nix develop --command make -j"$(nproc)" linkcheck` after each
-  # arch's own `./configure` reproduces today's clean result exactly --
-  # "no findings" for both i386 (1080 checked, 0 unlinkable) and x86_64.
+  # tinycc itself now comes from flake.nix's own `tcc` package too (via
+  # setup-tinycc, which just runs `nix build .#tcc`), same as the
+  # declaration-scanner toolchain below: tools/clang/DeclScanner.cpp is the
+  # exact same clang plugin the `lint` job's `undefined`/`unreferenced`
+  # stages already build and run via flake.nix's devShell (see the `lint`
+  # job matrix further down), so this is the already-proven via: nix path,
+  # not a new one. Verified locally for both arches: with the pinned
+  # tinycc on PATH, `nix develop --command make -j"$(nproc)" linkcheck`
+  # after each arch's own `./configure` reproduces today's clean result
+  # exactly -- "no findings" for both i386 (1080 checked, 0 unlinkable) and
+  # x86_64.
   linkcheck:
     needs: build-toolchain
     runs-on: ubuntu-24.04
@@ -402,23 +413,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up tinycc
+        # Also installs Nix and Magic Nix Cache as part of building
+        # flake.nix's `tcc` package -- nothing further to set up before
+        # the `nix develop` call below.
         uses: ./.github/actions/setup-tinycc
-        with:
-          repository: ${{ env.TINYCC_REPO }}
-          revision: ${{ env.TINYCC_SHA }}
-      - name: Install Nix
-        # cachix/install-nix-action -- see the `linux-builds` job's copy
-        # of this comment for the full rationale and sources.
-        uses: cachix/install-nix-action@v31
-        with:
-          github_access_token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Set up Magic Nix Cache
-        uses: DeterminateSystems/magic-nix-cache-action@v14
-        with:
-          # use-flakehub: false / diagnostic-endpoint: "" -- see the
-          # `linux-builds` job's copy of this comment.
-          use-flakehub: false
-          diagnostic-endpoint: ""
       - name: Configure
         run: ./configure --host=${{ matrix.host }} CC=${{ matrix.cc }} --disable-kernel32
       # The declared-symbol scanner (tools/clang/DeclScanner.cpp) is a
@@ -438,13 +436,16 @@ jobs:
     needs: build-toolchain
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # id-token: write is what DeterminateSystems/magic-nix-cache-action's
+    # own README example asks every job using it to set -- see the same
+    # comment on the `linux-builds` job above.
+    permissions:
+      id-token: "write"
+      contents: "read"
     steps:
       - uses: actions/checkout@v7
       - name: Set up tinycc
         uses: ./.github/actions/setup-tinycc
-        with:
-          repository: ${{ env.TINYCC_REPO }}
-          revision: ${{ env.TINYCC_SHA }}
       - name: Configure
         run: ./configure --host=x86_64-win32 CC=x86_64-win32-tcc --disable-kernel32
       - name: Compile every public header in isolation

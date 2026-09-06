@@ -9,6 +9,12 @@ void local_release(void)
 	free(p);
 }
 
+void file_correct_usage(void)
+{
+	void *f = fopen_stub("path");
+	if (f) fclose_stub(f);
+}
+
 withtok(heap_allocated)
 void *heap_boundary(size_t size)
 {

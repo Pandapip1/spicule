@@ -138,7 +138,7 @@ struct netent *getnetbyaddr(uint32_t net, int type)
 	return NULL;
 }
 
-static FILE *g_netf;
+static FILE *g_netf withtok(file_stream_open);
 
 void setnetent(int stayopen)
 {

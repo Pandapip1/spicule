@@ -131,7 +131,7 @@ struct hostent *gethostbyname(const char *name)
 #define GHE_MAX_ALIASES 16
 #define GHE_ALIASBUF_SZ 512
 
-static FILE *g_hostf;
+static FILE *g_hostf withtok(file_stream_open);
 
 static struct hostent g_ghe;
 static char g_ghe_name[256];

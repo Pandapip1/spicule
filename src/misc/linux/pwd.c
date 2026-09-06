@@ -223,7 +223,7 @@ int getpwuid_r(uid_t uid, struct passwd *pwd, char *buffer,
  * setpwent()/endpwent(); g_pwent_line/g_pwent_linesz are getline()'s
  * own persistent scratch buffer, deliberately NOT reset by either --
  * reusing it avoids reallocating on every line of a long /etc/passwd. */
-static FILE *g_pwent_f;
+static FILE *g_pwent_f withtok(file_stream_open);
 static int g_pwent_open_tried;
 static char *g_pwent_line;
 static size_t g_pwent_linesz;

@@ -86,3 +86,14 @@ size_t ushort_type_width(void)
 {
 	return sizeof(USHORT);
 }
+
+/* A ternary's '?' and ':' each start a fresh sub-expression: the '*'
+ * right after '?' below dereferences out_size (unary), it does not
+ * multiply the previous branch's operand (there is no previous
+ * branch -- this is the condition itself, but the same shape recurs
+ * with a real preceding operand whenever the true-branch also derefs
+ * a pointer). Not allocation arithmetic at all. */
+void *ternary_dereference_is_not_multiplication(size_t *out_size)
+{
+	return malloc(*out_size ? *out_size : 1);
+}

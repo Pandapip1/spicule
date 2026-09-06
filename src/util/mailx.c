@@ -264,11 +264,17 @@ static int append_escaped_body(char **out, size_t *outlen, size_t *outcap,
 		size_t linelen = j - linestart;
 		int escape = linelen >= 5 && memcmp(body + linestart, "From ", 5) == 0;
 		size_t need = linelen + (escape ? 2 : 1) + 1; /* '>'?, line, '\n' */
+		/* *outlen + need, computed raw, wraps for an adversarial need
+		 * (a huge unescaped line) and would then wrongly compare as
+		 * "already fits" against *outcap -- compute it the
+		 * overflow-checked way instead. */
+		size_t total;
+		if (!__util_size_add(*outlen, need, &total)) { errno = ENOMEM; return -1; }
 
-		if (*outlen + need > *outcap) {
+		if (total > *outcap) {
 			size_t ncap = *outcap ? *outcap : 4096;
 			char *nb;
-			while (ncap < *outlen + need) {
+			while (ncap < total) {
 				if (!__util_size_mul(ncap, 2, &ncap)) { errno = ENOMEM; return -1; }
 			}
 			nb = realloc(*out, ncap);

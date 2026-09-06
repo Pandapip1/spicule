@@ -96,6 +96,11 @@ struct stat {
 async_signal_safe
 io_operation
 int stat(const char *__restrict, struct stat *__restrict);
+/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline:
+ * src/stat/stat.c's fstat() sets errno on every failure return, either
+ * via __fd_get() (already errno-capable) or __plat_fstat() (both
+ * platforms' own implementations set errno on every failure). */
+grants_thread_token(errno_grounds)
 async_signal_safe
 io_operation
 int fstat(int, struct stat *) __attribute__((nonnull(2)));
@@ -105,9 +110,20 @@ int fstatat(int, const char *__restrict, struct stat *__restrict, int);
 fallible
 async_signal_safe
 int chmod(const char *, mode_t);
+/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline:
+ * src/stat/chmod.c's fchmod() sets errno on every failure return, via
+ * __fd_get(), its own explicit EROFS assignment, or __plat_chmod()/
+ * fchmodat() (the latter already errno-capable by way of chmod()'s
+ * own trust, since chmod() is exactly fchmodat(AT_FDCWD, ...)). */
+grants_thread_token(errno_grounds)
 fallible
 async_signal_safe
 int fchmod(int, mode_t);
+/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline:
+ * src/stat/chmod.c's fchmodat() sets errno on every failure return,
+ * via its own explicit EINVAL assignment or __plat_chmodat() (chmod()
+ * itself is exactly fchmodat(AT_FDCWD, ...), already trusted above). */
+grants_thread_token(errno_grounds)
 fallible
 int fchmodat(int, const char *, mode_t, int);
 async_signal_safe
@@ -121,7 +137,13 @@ fallible
 int mkdirat(int, const char *, mode_t);
 int mkfifoat(int, const char *, mode_t);
 
+/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline:
+ * src/stat/chmod.c's mknod()/mknodat() set errno on every failure
+ * return, via __plat_mknod() (both platforms' own implementations set
+ * errno on every failure). */
+grants_thread_token(errno_grounds)
 int mknod(const char *, mode_t, dev_t);
+grants_thread_token(errno_grounds)
 int mknodat(int, const char *, mode_t, dev_t);
 
 int futimens(int, const struct timespec [2]);

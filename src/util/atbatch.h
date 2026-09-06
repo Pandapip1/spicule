@@ -62,6 +62,7 @@
 
 #include <stddef.h>
 #include <time.h>
+#include <ownership.h>
 
 /* Writes a new job to the atjobs spool (src/util/spool.h), scheduled
  * to run at `run_at` (an absolute time, already resolved by
@@ -83,6 +84,14 @@
  * (id_out_sz bytes, NUL-terminated). On failure, returns -1 with
  * errno set to whatever the underlying spool/file/read operation
  * failed with; id_out is left untouched. */
+/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline: every
+ * failure return of this file's own atbatch.c implementation sets
+ * errno, via a real errno-setting call (__spool_dir/__spool_new_job/
+ * fopen/fread/fwrite/fputc/fputs/fclose/__spool_publish_job) or its own
+ * explicit ENAMETOOLONG assignment on the one path none of those
+ * cover -- see this header's own doc comment above and the `fail:`
+ * label's errno save/restore around cleanup in atbatch.c itself. */
+grants_thread_token(errno_grounds)
 int __atbatch_submit(const char *queue, time_t run_at, const char *srcfile,
 	char *id_out, size_t id_out_sz);
 

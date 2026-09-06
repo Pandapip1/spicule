@@ -488,6 +488,22 @@ static int finish(struct pv *out, int flags, glob_t *pglob)
 	v[offs + out->n] = 0;
 	__free((void *)out->v);
 
+	/* Unlike src/wordexp/wordexp.c's pv_pack() -- which needs its own
+	 * withtok(internal_heap_allocated) so its char** return survives the
+	 * call into the separate function (expand_impl()) that performs the
+	 * field write -- this function both allocates v AND stores it into
+	 * gl_pathv in the same frame. v already carries a fresh
+	 * internal_heap_allocated fact straight from __malloc()'s own
+	 * withtok'd return (src/internal/libc.h), so
+	 * AllocationLifetimeChecker's checkPostStmt recognizes this store into
+	 * gl_pathv's own withtok(internal_heap_allocated) (include/glob.h)
+	 * without any annotation on finish() itself -- and one would do
+	 * nothing anyway, since finish() returns int, and checkPostCall/
+	 * checkEndFunction only ever act on a pointer-typed return value.
+	 * Confirmed against tools/lint.sh ownership: annotating the field
+	 * alone made this line's previously-reported "dynamic allocation is
+	 * not freed before function exit" finding disappear, with no change
+	 * to this function. */
 	pglob->gl_pathv = v;
 	pglob->gl_pathc = out->n;
 	if (!(flags & GLOB_DOOFFS) && !(flags & GLOB_APPEND)) pglob->gl_offs = offs;

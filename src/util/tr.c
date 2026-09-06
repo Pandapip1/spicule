@@ -1,21 +1,16 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * tr(1p). XCU's SYNOPSIS is exactly four forms, and every combination
- * this file accepts is one of them -- anything else is refused rather
- * than guessed at:
+ * tr(1p). XCU's SYNOPSIS is exactly four forms; __util_tr_main()'s
+ * argument-combination check enforces exactly this table -- anything
+ * else is refused rather than guessed at:
  *
  *   tr [-c|-C] [-s] string1 string2   translate, optionally squeeze
  *   tr -s [-c|-C] string1             squeeze only
  *   tr -d [-c|-C] string1             delete only
  *   tr -ds [-c|-C] string1 string2    delete, then squeeze
  *
- * __util_tr_main()'s argument-combination check enforces exactly this
- * table: string2 is required with -ds and with plain translate, absent
- * with plain -d, and optional with plain -s.  tr(1p) takes no file
- * operands at all -- input is always standard input, output always
- * standard output -- so this file has none of the sibling utilities'
- * per-operand file loop.
+ * tr(1p) takes no file operands -- input is always stdin, output stdout.
  *
  * ---- string1/string2 grammar (expand_spec() below) ---------------------
  *
@@ -23,76 +18,53 @@
  * bytes:
  *   - an ordinary character stands for itself;
  *   - \\, \a, \b, \f, \n, \r, \t, \v are the named escapes; \ddd is 1-3
- *     octal digits (0-7).  A backslash followed by anything else is
- *     "unspecified" per the standard -- this build resolves that
- *     leniently, as the literal character after the backslash, rather
- *     than refusing, so a script that over-escapes an ordinary
- *     character (`tr -d '\.'` for a literal dot) still does what it
- *     looks like it does; a lone trailing backslash is likewise its own
- *     literal character;
+ *     octal digits (0-7). A backslash followed by anything else is
+ *     "unspecified" per the standard; this build resolves it leniently,
+ *     as the literal character after the backslash, so an over-escaped
+ *     ordinary character still does what it looks like it does. A lone
+ *     trailing backslash is likewise its own literal character.
  *   - c-c is an ascending range (descending is refused, not reversed);
  *   - [:class:] is one of the twelve POSIX named classes, expanded via
- *     this build's own <ctype.h> (alnum/alpha/blank/cntrl/digit/graph/
- *     lower/print/punct/space/upper/xdigit);
+ *     this build's own <ctype.h>;
  *   - [=c=] is an equivalence class of exactly one character c -- with
  *     no real collation database beyond the POSIX/C locale, "the
- *     characters equivalent to c" is just {c} itself, same simplification
- *     every C-locale-only tr makes;
- *   - [x*n] repeats x n times and is valid only in string2 ("this
- *     expression is used to map multiple characters to one"); using it
- *     in string1 is refused.  n omitted or 0 means "however many are
- *     needed to make string2's expansion as long as string1's" -- at
- *     most one such wildcard per string is supported (a second is
- *     refused rather than guessed at); n with a leading zero is octal,
- *     otherwise decimal, exactly as specified.  n itself is accepted
- *     (not refused) however large the input spells it -- but expand_spec()
- *     never materializes more than one byte past string1's expansion
- *     length's worth of repeats, since nothing downstream -- xtab's
- *     construction, -s's squeeze set -- ever looks at a byte of string2's
- *     expansion past that point or cares how many identical copies of it
- *     exist; a handful of argv bytes spelling out a huge n is refused the
- *     unbounded allocation that a literal reading would otherwise hand
- *     it, with no change to any observable output.
+ *     characters equivalent to c" is just {c} itself, the same
+ *     simplification every C-locale-only tr makes;
+ *   - [x*n] repeats x n times and is valid only in string2; using it in
+ *     string1 is refused. n omitted or 0 fills string2's expansion out
+ *     to string1's length; at most one such wildcard per string. n with
+ *     a leading zero is octal, otherwise decimal. However large the
+ *     input spells n, expand_spec() never materializes more than one
+ *     byte past string1's expansion length worth of repeats, since
+ *     nothing downstream (xtab's construction, -s's squeeze set) ever
+ *     looks past that point -- so a few argv bytes spelling a huge n
+ *     can't demand an unbounded allocation.
  *
  * If string2's expansion is shorter than string1's (post-complement)
- * one once both are known, "the results are unspecified" per the
- * standard, whose own RATIONALE names the two historical answers -- BSD
- * padded with string2's last character, System V did not -- and tells
- * portable scripts to use [x*n] instead of relying on either.  This
- * build takes the BSD reading (pad with the last character) since a
- * silent short read of the translation table would otherwise leave
- * some of string1's characters not just untranslated but unaccounted
- * for.
+ * once both are known, "the results are unspecified" per the standard,
+ * whose RATIONALE names the two historical answers -- BSD padded with
+ * string2's last character, System V did not. This build takes the BSD
+ * reading, since a silent short read of the translation table would
+ * otherwise leave some of string1's characters unaccounted for.
  *
  * ---- -c/-C (complement) --------------------------------------------
  *
- * The standard distinguishes -c ("complement of the *values*", ascending
- * binary order) from -C ("complement of the *characters*", ascending
- * *collation* order, over LC_CTYPE's character set) -- a real distinction
- * only where a multi-byte character set and a non-trivial collation
- * order both exist.  This file treats every string1/string2 byte as an
- * opaque value 0-255, with no multi-byte decoding and no collation
- * order beyond plain numeric order (unlike src/util/cut.c and
- * src/util/fold.c, which do have a real UTF-8 decoder to reach for --
- * see either file's header): tr's own "characters" are its unit of
- * translation, and a byte-for-byte translation table has no
- * well-defined meaning once one input byte can be part of a multi-byte
- * sequence spanning several output positions.  So -c and -C are
- * accepted as exact synonyms here, both complementing string1's byte
- * set in ascending numeric order -- a stated scope limit, not a hidden
- * one.
+ * The standard distinguishes -c (complement of *values*, binary order)
+ * from -C (complement of *characters*, collation order) -- a real
+ * distinction only where a multi-byte charset and collation order both
+ * exist. This file treats every byte as an opaque 0-255 value with no
+ * multi-byte decoding (unlike src/util/cut.c and src/util/fold.c, which
+ * do have a real UTF-8 decoder -- see either file's header), so -c and
+ * -C are accepted as exact synonyms, both complementing string1's byte
+ * set in ascending numeric order.
  *
  * ---- which set squeeze (-s) applies to -------------------------------
  *
- * "When the -s option is specified, after any deletions or translations
- * have taken place, repeated sequences of the same character shall be
- * replaced by one occurrence of the same character, if the character is
- * found in the array specified by the last operand." That "last
- * operand" rule is uniform across all three -s-bearing forms: string2
- * when it is present (plain-translate-with-squeeze, and -ds), string1
- * (post-complement) when it is not (-s alone). set1[] below is always
- * string1's array with -c/-C already resolved, so it doubles as both
- * the deletion/translate-position array *and* the squeeze-only array
+ * Squeeze always applies to the array named by the standard's "last
+ * operand" rule: string2 when present (plain-translate-with-squeeze,
+ * and -ds), string1 (post-complement) when not (-s alone). set1[] below
+ * is always string1's array with -c/-C already resolved, so it doubles
+ * as both the deletion/translate-position array and the squeeze array
  * with no separate code path.
  */
 #include <stdio.h>
@@ -119,8 +91,10 @@ static size_t decode_escape(const char *p, unsigned char *out)
 	default:
 		if (p[1] >= '0' && p[1] <= '7') {
 			int v = 0, k;
-			for (k = 0; k < 3 && p[1 + k] >= '0' && p[1 + k] <= '7'; k++)
+			for (k = 0; k < 3; k++) {
+				if (p[1 + k] < '0' || p[1 + k] > '7') break;
 				v = v * 8 + (p[1 + k] - '0');
+			}
 			*out = (unsigned char)v;
 			return (size_t)k + 1;
 		}
@@ -239,26 +213,11 @@ static int expand_spec(const char *spec, const char *diagname, int allow_repeat,
 					wildcard_pos = (long)n;
 					wildcard_byte = xchar;
 				} else {
-					/* An explicit [x*N] repeats one identical byte, and
-					 * __util_tr_main() below only ever reads positions
-					 * < pad_hint out of string2's expansion (xtab's
-					 * construction indexes s2exp[] by position < set1n,
-					 * which is exactly pad_hint here) -- with -s's
-					 * squeeze set caring only whether xchar is present
-					 * at all, never how many times or where. So once
-					 * this buffer already reaches one byte past
-					 * pad_hint, further identical copies are
-					 * unobservable to every consumer downstream,
-					 * including a later [y*]/[y*0] wildcard's own fill
-					 * math further down in this function (which only
-					 * checks whether n has already reached pad_hint).
-					 * Capping what actually gets pushed to that point
-					 * is exact, not an approximation -- but it is load-
-					 * bearing: N is decimal/octal text, so a string2 of
-					 * a few dozen bytes can name a repeat count in the
-					 * billions, and pushing that many bytes for real
-					 * would let a short, attacker-controlled argv
-					 * demand an unbounded allocation. */
+					/* Nothing downstream reads past pad_hint bytes of
+					 * string2's expansion, so capping the push there is
+					 * exact, not approximate -- and load-bearing: N is
+					 * decimal/octal text, so a short string2 can name a
+					 * repeat count in the billions. */
 					size_t remaining = (pad_hint > n) ? (pad_hint - n) : 0;
 					size_t budget = remaining + 1;
 					long k, limit = ((size_t)count > budget) ? (long)budget : count;

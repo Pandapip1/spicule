@@ -1,73 +1,35 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * pr(1p): paginate one or more text files for a line-printer-style
- * device -- a page header (date/pathname/page number), a body of text,
- * and a trailer, repeated every `page length` lines, with a
- * page-length default of 66.
+ * pr(1p): paginate text files for a line-printer device -- a five-line
+ * header (blank, blank, "date pathname Page N", blank, blank; date via
+ * strftime("%b %e %H:%M %Y")), a body of `page length` lines (default
+ * 66), and a five-line trailer, repeated per page. Page numbering is
+ * continuous across every file operand; each operand always starts a
+ * fresh page, and every page (including a file's own short last one)
+ * is padded with blank filler lines before its trailer -- some real pr
+ * implementations leave the truly last page unpadded, this one does
+ * not.
  *
- * ---- SCOPE: this is the single biggest judgment call in this batch --
+ * SCOPE: only the default single-column mode is implemented solidly.
+ * Multi-column mode (bare `-column`, `-a`, `-w`'s real effect), `-m`
+ * (merge files side by side into columns), `-e`/`-i` (tab expansion),
+ * `-s` (XSI column separator), and `+page` need a different, buffering
+ * output engine this file does not implement -- all refused with a
+ * diagnostic and nonzero exit rather than half-implemented. `-w` is
+ * accepted and stored but inert here (it only affects multi-column
+ * output).
  *
- * pr(1p)'s full OPTIONS list covers three genuinely different output
- * modes: (1) the default single-column paginated mode this file
- * implements solidly; (2) multi-column mode (a bare `-column` count,
- * `-a` "across", `-w`/width interacting with column count); and (3)
- * `-m`, merging several files side by side into columns of their own.
- * Modes (2) and (3) are real pr(1p) but a different output engine
- * entirely -- column mode has to buffer and interleave lines from
- * multiple logical streams before a single line of *output* can be
- * written, which single-column mode never needs to do -- and are NOT
- * implemented here: any option that requests one (`-m`, a bare numeric
- * `-column`, `-a`) is refused with a diagnostic and a nonzero exit,
- * per this task's own instruction to refuse loudly rather than half-
- * implement a second engine.  `-e`/`-i` (input/output tab expansion)
- * and `-s` (XSI column separator) are refused the same way.  `+page`
- * (skip to a starting page) is refused too: it composes with column
- * mode/merge in ways this file's single-pass-per-file design does not
- * accommodate cleanly, and a silently-wrong starting page would be
- * worse than a diagnostic.
+ * IMPLEMENTED: -h header (replace pathname in header), -l lines (page
+ * length), -o offset (indent every output line), -n[char][width]
+ * (number text lines, default width 5, default separator <tab>), -t
+ * (omit header/trailer), -d (double-space), -F (form-feed page
+ * separator instead of the blank-line trailer; -f is a synonym -- this
+ * build has no terminal to pause in front of, -f's only real
+ * difference), -r (suppress "failed to open" diagnostics; still a
+ * nonzero exit).
  *
- * IMPLEMENTED, solidly, for the default single-column mode:
- *  -h header    replace the file's own pathname in the page header.
- *  -l lines     override the default page length of 66.
- *  -o offset    prepend `offset` <space> characters to every output
- *               line (header/text/trailer alike).
- *  -n[char][width]  number each text line (not header/trailer/filler
- *               lines), `width` digits (default 5) then `char`
- *               (default <tab>).
- *  -t           omit the header and trailer entirely.
- *  -d           double-space the text body.
- *  -F           use a single <form-feed> to separate pages instead of
- *               the default blank-line trailer; XSI's `-f` is treated
- *               as a synonym (this build has no terminal to usefully
- *               pause in front of, which is `-f`'s only documented
- *               difference from `-F`).
- *  -r           "Write no diagnostic reports on failure to open
- *               files" -- a file that fails to open is still an
- *               error (nonzero exit), just a silently-counted one.
- *  -w width     accepted and stored, but genuinely inert: pr(1p) says
- *               width is "for multiple text-column output only", and
- *               this build has no multiple-text-column output.
- *
- * PAGE HEADER, pr(1p) verbatim: the default page header format string
- * is `"\n\n%s %s Page %d\n\n\n"` (date/time, pathname-or--h-string,
- * page number) -- two leading blank lines, the one text line, three
- * trailing blank lines (five lines total, matching "the five-line
- * identifying header"); the trailer is "five-line[s] ... usually
- * blank".  The date/time uses the POSIX locale's own `date "+%b %e
- * %H:%M %Y"` rendering (e.g. "Jan  5 14:30 2024"), reproduced here via
- * strftime() with that exact format string.
- *
- * Page numbering is continuous across every file operand (a second
- * file's first page is not renumbered back to 1); each file operand
- * always starts on a fresh page, its own partial last page is never
- * shared with the next file's first lines, and every page (including a
- * file's own last, possibly-short one) is padded with blank filler
- * lines up to the full page length before its trailer -- a deliberate,
- * documented simplification: some real pr implementations leave a
- * file's truly last page unpadded.
- *
- * EXIT STATUS: "0 Successful completion." ">0 An error occurred."
+ * EXIT STATUS: 0 success, >0 error.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -97,10 +59,8 @@ static void emit_offset(const struct pr_opts *o)
 	for (i = 0; i < o->offset; i++) putchar(' ');
 }
 
-/* emit_offset() immediately followed by a bare newline: every blank
- * (no-content) output line in this file's header/trailer/filler
- * machinery is exactly this pair, so it is folded into one call here
- * instead of left for each call site to repeat. */
+/* Every blank output line in the header/trailer/filler machinery is
+ * offset+newline, so that pair is folded into one call here. */
 static void emit_blank_line(const struct pr_opts *o)
 {
 	emit_offset(o);
@@ -191,11 +151,8 @@ static int process_stream(const struct pr_opts *o, FILE *f, const char *fname)
 	size_t cap = 0;
 	int rc = 0, saved_errno = 0;
 
-	/* Every failure path below (increment_long(), start_page(),
-	 * page_body_fits()) does exactly this same three-step "record the
-	 * failure and unwind to the shared cleanup" on error -- folded into
-	 * one macro so a reader does not have to re-verify all three copies
-	 * are identical. */
+	/* Shared "record the failure and unwind to cleanup" step for every
+	 * failure path below. */
 #define PR_FAIL() do { rc = -1; saved_errno = errno; goto done; } while (0)
 
 	st.o = o;
@@ -289,13 +246,10 @@ int __util_pr_main(
 	int had_error = 0;
 	pr_output_failed = 0;
 
-	/* g_page_no is file-scope so emit_header()/emit_trailer() (called
-	 * many stack frames down, across every file operand) don't need it
-	 * threaded through every call -- but that means it has to be reset
-	 * here, explicitly, on every entry: as a shell builtin (bi_pr(),
-	 * src/sh/builtin.c) this function can run many times in the same
-	 * long-lived process, and a second `pr` invocation must start back
-	 * at page 1, not silently continue the first one's count. */
+	/* g_page_no is file-scope to avoid threading it through
+	 * emit_header()/emit_trailer(), but must be reset on every entry:
+	 * as a shell builtin (bi_pr(), src/sh/builtin.c) this can run many
+	 * times in one process, and each `pr` invocation restarts at page 1. */
 	g_page_no = 0;
 
 	o.page_len = 66;

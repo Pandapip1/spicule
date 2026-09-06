@@ -665,7 +665,7 @@ static char *collapse_dotdot(const char *pat withtok(null_terminated), int flags
 	stk.n = stk.cap = 0;
 	stk.trailing_slash = src.trailing_slash;
 
-	for (i = 0; i < src.n && ok; i++) {
+	for (i = 0; i < src.n; i++) {
 		struct comp c = src.v[i];
 		int canceled = 0;
 
@@ -680,7 +680,7 @@ static char *collapse_dotdot(const char *pat withtok(null_terminated), int flags
 				if (r) { stk.n--; canceled = 1; }
 			}
 		}
-		if (!canceled && comp_push(&stk, c.start, c.len, c.kind)) ok = 0;
+		if (!canceled && comp_push(&stk, c.start, c.len, c.kind)) { ok = 0; break; }
 	}
 	/* Zero n/cap along with v (zero_vacuous) so a freed pointer never
 	 * has a stale nonzero paired count. */

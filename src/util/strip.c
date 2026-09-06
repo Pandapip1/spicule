@@ -242,9 +242,11 @@ static int strip_elf(const unsigned char *buf, size_t size,
 		shstr = ok_to_strip ? (const char *)(buf + ss->sh_offset) : NULL;
 		shstr_sz = ok_to_strip ? ss->sh_size : 0;
 
-		for (i = 0; i < eh.e_shnum && ok_to_strip; i++) {
+		for (i = 0; i < eh.e_shnum; i++) {
 			Elf64_Shdr *sh = &shdrs[i];
 			const char *name = NULL;
+
+			if (!ok_to_strip) break;
 
 			/* SHT_NOBITS (.bss/.tbss) sections occupy no actual file
 			 * bytes -- sh_offset is only a nominal marker (real ELF
@@ -346,7 +348,7 @@ static int strip_elf(const unsigned char *buf, size_t size,
 		memcpy(ob, buf, (size_t)load_limit);
 		pos = load_limit;
 
-		for (i = 0; i < eh.e_shnum && compose_ok; i++) {
+		for (i = 0; i < eh.e_shnum; i++) {
 			Elf64_Shdr *sh = &shdrs[i];
 			uint64_t aligned;
 			if (sh->sh_offset < load_limit) continue; /* already covered verbatim */

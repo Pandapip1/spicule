@@ -336,7 +336,7 @@ int __util_csplit_main(
 
 	memset(&created, 0, sizeof created);
 
-	for (; i < argc && !had_error; i++) {
+	for (; i < argc; i++) {
 		const char *a = argv[i];
 		int target;
 

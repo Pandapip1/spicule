@@ -1,39 +1,24 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * comm(1p): `comm [-123] file1 file2`.  Both operands MUST already be
- * sorted (byte/collating order -- this library's only locale is "C",
- * src/misc/locale.c, so that is plain byte value); comm never sorts
- * anything itself and never checks that its inputs are sorted either --
- * a real, documented gotcha this file does not try to paper over by
- * second-guessing the input (see src/util/sort.c or the sort(1p) pipe
- * stage a caller is expected to have already run).
+ * comm(1p): `comm [-123] file1 file2`. Both files must already be
+ * sorted in byte order (this library's only locale is "C") -- comm
+ * never sorts or checks sortedness itself (see src/util/sort.c).
  *
- * OUTPUT: three columns -- lines only in file1, lines only in file2,
- * lines in both -- written as up to three *tab-separated* columns per
- * line, not three separate sections.  Column 1 has no leading tab.
- * Column 2 is preceded by a tab for every column *before* it that is
- * still being shown (0 or 1, i.e. one tab unless -1 suppressed column
- * 1).  Column 3 is preceded by a tab for every column before it that is
- * still shown (0, 1 or 2, i.e. -1 and -2 each drop one leading tab).
- * -1/-2/-3 suppress the corresponding column outright (that line is
- * just not printed at all, not printed with an empty field).
+ * OUTPUT: up to three tab-separated columns per line (only-in-file1,
+ * only-in-file2, in-both), not three sections. Column 1 has no
+ * leading tab; columns 2 and 3 are preceded by one tab per
+ * still-shown column before them. -1/-2/-3 suppress a column
+ * outright (the line is not printed, not printed with an empty
+ * field).
  *
- * MERGE: classic three-way sorted merge -- the cursor that holds the
- * lexicographically smaller of the two current lines always advances;
- * on a tie both advance together and the line goes to column 3.  EOF on
- * one side is handled by treating every remaining line of the other
- * side as if it always compared smaller (so it drains straight to its
- * own only-in-that-file column) -- see the loop below, which is where
- * this batch's "classic place for an off-by-one on which cursor
- * advances" warning actually bites if gotten wrong.
+ * MERGE: classic three-way sorted merge -- the cursor holding the
+ * lexicographically smaller line always advances; a tie advances both
+ * and goes to column 3. EOF on one side makes every remaining line of
+ * the other side compare smaller, draining it to its own column.
  *
- * EXIT STATUS: "0 All input files were output successfully.  >0 An
- * error occurred." -- the ordinary shape.  Worth stating plainly since
- * it would be easy to assume comm mirrors cmp(1p)/diff(1p)'s "0 same, 1
- * different, 2 trouble" convention; it does not -- comm has no notion
- * of "the files were identical" to report as a distinct exit code, only
- * success-or-error.
+ * EXIT STATUS: 0 success, >0 error -- unlike cmp(1p)/diff(1p), comm
+ * has no "files differed" exit code, only success-or-error.
  */
 #include <stdio.h>
 #include <stdlib.h>

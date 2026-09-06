@@ -126,7 +126,7 @@ int __hosts_lookup_reverse(const struct in_addr *addr, char *name, size_t namesz
 	f = fopen(__NSS_HOSTS_PATH(), "r");
 	if (!f) return 0;
 
-	while (!found && fgets(line, sizeof line, f) != NULL) {
+	while (fgets(line, sizeof line, f) != NULL) {
 		char *hash = strchr(line, '#');
 		struct in_addr a;
 		char *rest, *nametok;
@@ -152,6 +152,7 @@ int __hosts_lookup_reverse(const struct in_addr *addr, char *name, size_t namesz
 			name[n] = '\0';
 		}
 		found = 1;
+		break;
 	}
 
 	(void)fclose(f);

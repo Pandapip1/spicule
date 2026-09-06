@@ -3,71 +3,47 @@
  *
  * wc(1p): `wc [-c|-m] [-l] [-w] [file...]`
  *
- * DESCRIPTION: "The wc utility shall read one or more input files and,
- * by default, write the number of <newline> characters, words, and
- * bytes contained in each input file to the standard output."  "When any
- * option is specified, wc shall report only the information requested by
- * the specified options" -- but always in the fixed newlines/words/
- * bytes-or-chars column order below, never the order the options were
- * given on the command line.
+ * DESCRIPTION: by default, reports newlines, words, and bytes per input
+ * file. With options given, reports only the requested counts, always
+ * in the fixed newlines/words/bytes-or-chars column order below, never
+ * the order the options were given on the command line.
  *
- * OPTIONS: -l newlines, -w words ("a non-zero-length string of
- * characters delimited by white space" -- classified here with
- * isspace() on each raw byte; every ASCII whitespace character is a
- * single UTF-8 byte and no UTF-8 continuation or lead byte ever falls in
- * isspace()'s range, so this is exact for UTF-8 input regardless of
- * whether -m's multibyte decoding below is in play), -c bytes, -m
- * characters.  SYNOPSIS pairs -c and -m as mutually exclusive
- * (`[-c|-m]`); combining them is a usage error here rather than a silent
+ * OPTIONS: -l newlines, -w words (a run of non-whitespace bytes,
+ * classified with isspace() on each raw byte -- exact for UTF-8 input
+ * since no continuation or lead byte ever falls in isspace()'s range),
+ * -c bytes, -m characters. -c and -m are mutually exclusive per the
+ * SYNOPSIS; combining them is a usage error here, not a silent
  * "last one wins".
  *
  * ---- -m is a real, distinct count here, not -c under another name ----
  *
- * Unlike touch's -d (refused outright, see that file's header) or -u for
- * cat (accepted as a no-op because there is truly nothing left for it to
- * disable), -m has a real multibyte decode path to stand on:
- * src/stdlib/mbrtowc.c is a genuine, stateful UTF-8 decoder, already
- * exercised by this library's own wide-character stdio path
- * (src/stdio/wide.c) and src/misc/langinfo.c's own comment that "UTF-8
- * is the only encoding this library has ever supported" -- there is no
- * locale switch that changes that, so decoding as UTF-8 unconditionally
- * is exactly this platform's own answer to "the current locale", not a
- * shortcut around it.  count_chars() below drives mbrtowc() directly,
- * carrying a partial trailing sequence across successive read() blocks
- * in `carry`, the same "don't assume a decode boundary lines up with a
- * read() boundary" concern src/misc/iconv.c's own stream conversion has
- * to handle.
+ * -m has a real multibyte decode path to stand on: src/stdlib/mbrtowc.c
+ * is a genuine, stateful UTF-8 decoder, and UTF-8 is the only encoding
+ * this library has ever supported (src/misc/langinfo.c) -- so decoding
+ * as UTF-8 unconditionally is this platform's own answer to "the
+ * current locale". count_stream() below drives mbrtowc() directly,
+ * carrying a partial trailing sequence across read() blocks in `carry`.
  *
- * A byte sequence mbrtowc() rejects (return (size_t)-1) is counted as
- * one character and skipped one byte at a time, and a sequence still
- * incomplete at end-of-file is likewise counted one byte at a time --
- * matching common wc practice of never losing count of trailing bytes
- * to an encoding error, at the cost of not distinguishing "malformed" in
- * the character count itself (wc(1p) has no separate diagnostic for
- * that case to report).
+ * A byte sequence mbrtowc() rejects ((size_t)-1) is counted as one
+ * character and resynced one byte at a time, and a sequence still
+ * incomplete at EOF is likewise counted one byte at a time, so trailing
+ * bytes are never silently dropped even though "malformed" isn't
+ * distinguished in the character count itself.
  *
  * mbrtowc()'s (size_t)-3 return ("no bytes consumed, wide character
- * produced from state alone") is this decoder's own way of splitting a
- * non-BMP UTF-8 sequence into a UTF-16 surrogate pair (src/stdlib/
- * mbrtowc.c's header comment) -- both halves are one Unicode character,
- * so only the call that actually consumed bytes (the high surrogate)
- * counts; the trailing -3 drain call is not a second character.
+ * produced from state alone") is how this decoder splits a non-BMP
+ * UTF-8 sequence into a UTF-16 surrogate pair -- both halves are one
+ * Unicode character, so only the call that consumed bytes (the high
+ * surrogate) counts; the trailing -3 drain call is not a second one.
  *
- * OPERANDS: "If no file operands are specified, the standard input shall
- * be used."  STDOUT: `"%d %d %d %s\n", <newlines>, <words>, <bytes>,
- * <file>` for the default case, with the -m count replacing <bytes>
- * when -m is given, no pathname printed at all for the implicit-stdin
- * case (matching every wc this project has to interoperate with -- the
- * standard's own format string is silent on that case, since STDOUT
- * describes the per-file line), and a final "total" line, spelled
- * exactly like a pathname, when more than one file operand is given.
+ * OPERANDS: no file operands means standard input, with no pathname
+ * printed. A final "total" line, spelled exactly like a pathname, is
+ * printed when more than one file operand is given.
  *
- * EXIT STATUS: "0 Successful completion." ">0 An error occurred." --
- * diagnose-and-continue across operands, same shape as this project's
- * other utilities: one unreadable operand does not stop the rest from
- * being counted, and the final exit status is still nonzero.  A failed
- * operand contributes nothing to the totals line, the same as it
- * contributes no line of its own.
+ * EXIT STATUS: diagnose-and-continue across operands, same shape as
+ * this project's other utilities: one unreadable operand does not stop
+ * the rest from being counted, contributes nothing to the totals line,
+ * and the final exit status is still nonzero.
  *
  * Spec consulted: https://pubs.opengroup.org/onlinepubs/9699919799/utilities/wc.html
  */
@@ -106,12 +82,10 @@ static int add_count(long long *count, long long amount)
 	return 0;
 }
 
-/* Reads all of `fd`, filling `out` with exactly the newline/word/
- * byte-or-character counts count_stream() was asked for (`want_chars`
- * selects mbrtowc()-based character counting for the third field
- * instead of a raw byte count -- see this file's header on why that is
- * a real distinction here).  Returns 0 on success, -1 (with a
- * diagnostic already written) on a read failure partway through. */
+/* Reads all of `fd`, filling `out` with newline/word/byte-or-character
+ * counts (`want_chars` selects mbrtowc()-based character counting for
+ * the third field -- see this file's header). Returns 0 on success, -1
+ * (diagnostic already written) on a read failure partway through. */
 static int count_stream(int fd, int want_chars, struct wc_counts *out, const char *label) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
 	unsigned char buf[65536];

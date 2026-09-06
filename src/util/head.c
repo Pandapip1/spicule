@@ -41,6 +41,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include "util.h"
+#include "ownership_stubs.h"
 
 static int write_all(const char *buf withtok(readable_span(len)), size_t len)
 {
@@ -130,6 +131,14 @@ int __util_head_main(
 		for (; i < argc; i++) {
 			const char *path = argv[i];
 			int fd;
+
+			/* path is one of argv's own elements, genuinely
+			 * null-terminated by this function's own
+			 * elements_withtok(null_terminated, argc) contract on argv --
+			 * restated here since that token does not survive the
+			 * argv[i] -> const char * read this checker can trace on its
+			 * own. */
+			__ownership_string_terminated(path);
 
 			if (noperands > 1) {
 				printf("%s==> %s <==\n", first_banner ? "" : "\n", path);

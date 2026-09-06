@@ -40,16 +40,23 @@ runs:
     # source/rev) both live solely in flake.nix's `wineFork` derivation
     # now -- see that file's own comment on it for why the arch list is
     # forced to match this action's own downstream needs.
+    # --out-link result-wine, not the default `./result`: see
+    # setup-tinycc/action.yml's comment on the same choice there. Jobs
+    # that use both actions (posix-optsrun, ntlibc-suite, libc-test) run
+    # both `nix build` invocations in this same checkout directory, so a
+    # shared default link name means whichever action runs second
+    # clobbers the first's symlink -- silently repointing the PATH entry
+    # the first action already committed to $GITHUB_PATH.
     - name: Build patched Wine
       shell: bash
-      run: nix build .#wine-fork
+      run: nix build .#wine-fork --out-link result-wine
 
     - name: Verify and expose the patched Wine build
       shell: bash
       run: |
-        test -x "result/bin/wine"
-        test -x "result/bin/wineserver"
-        echo "$PWD/result/bin" >> "$GITHUB_PATH"
+        test -x "result-wine/bin/wine"
+        test -x "result-wine/bin/wineserver"
+        echo "$PWD/result-wine/bin" >> "$GITHUB_PATH"
 
     - name: Report Wine version
       shell: bash

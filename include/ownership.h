@@ -158,5 +158,32 @@
 	__ownership_attr("async_signal_safe")
 #define io_operation \
 	__ownership_attr("io_operation")
+/* A parameter-level marker for the strtol()/strtoul()/strtod()/...
+ * "endptr" shape: a T** at some parameter index K whose pointee, WHENEVER
+ * this function returns, the C standard requires to hold a pointer at or
+ * beyond wherever parameter 0's own T* pointed on entry -- never behind
+ * it, even on a completely failed conversion (then *endptr == parameter
+ * 0's own value, unchanged). This is a real, load-bearing contract
+ * (C11 7.22.1.1p5 and its strtoul/strtod/... siblings, all specified in
+ * the same terms), asserted here by hand exactly the way
+ * withtok(null_terminated) already asserts strlen()'s contract in
+ * string.h -- not independently reverified against these functions'
+ * bodies, which this project does not implement and Nature (or the host
+ * libc, if this codebase's own ntlibc doesn't provide it either) does.
+ *
+ * TotalityChecker.cpp's own recursive-descent-parser proof reads this
+ * back (see toleratedPointerReassign()) to recognize the extremely
+ * common `T *end; v = strtol(cursor, &end, base); cursor = end;` idiom
+ * as never moving a tracked parser cursor field BACKWARD -- which is all
+ * that idiom needs to be safe to fold into an already-established
+ * forward-progress proof from a witness elsewhere in the same
+ * recursive-descent step. It is deliberately not itself treated as a
+ * witness (a strict decrease): parameter 0 and *endptr are equal on a
+ * totally failed conversion, so by itself this call proves only "did not
+ * go backward", the same non-strict half of the proof a plain `x = x;`
+ * would contribute. Nothing else in this project's checkers reads this
+ * annotation. */
+#define endptr_advances \
+	__ownership_attr("qual:endptr_advances")
 
 #endif

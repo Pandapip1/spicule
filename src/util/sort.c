@@ -90,6 +90,7 @@
 #include <errno.h>
 #include <limits.h>
 #include "util.h"
+#include "ownership_stubs.h" /* __ownership_pointer_nonnull() */
 
 struct field { size_t start, end; };
 
@@ -110,9 +111,9 @@ struct sort_opts {
 };
 
 struct line {
-	char *text;
+	char *text withtok(heap_allocated);
 	size_t len;
-	struct field *fields;
+	struct field *fields withtok(heap_allocated);
 	size_t nfields;
 };
 
@@ -123,6 +124,8 @@ struct line {
  * into `out` would both lose the data already collected *and* leak that
  * original block -- the classic realloc mistake clang-tidy's bugprone-
  * suspicious-realloc-usage and cppcheck's memleakOnRealloc both flag. */
+static struct field *fields_grow(struct field *out, size_t *cap)
+	__attribute__((nonnull(2)));
 withtok(heap_allocated)
 static struct field *fields_grow(
 	struct field *out consume_if_nonnull_return(heap_allocated), size_t *cap)
@@ -140,6 +143,8 @@ static struct field *fields_grow(
  * fields_grow() first if not; on failure `*out` is freed and cleared so
  * every caller can propagate a single false return without repeating
  * fields_grow()'s own free-on-failure contract at each call site. */
+static int field_reserve(struct field **out, size_t *cap, size_t n)
+	__attribute__((nonnull(1, 2)));
 static int field_reserve(struct field **out withtok(heap_allocated), size_t *cap,
                          size_t n)
 {
@@ -152,6 +157,9 @@ static int field_reserve(struct field **out withtok(heap_allocated), size_t *cap
 	return 1;
 }
 
+static struct field *split_fields(const char *line, size_t len, const struct sort_opts *o, size_t *nout)
+	__attribute__((nonnull(1, 3, 4)));
+withtok(heap_allocated)
 static struct field *split_fields(const char *line, size_t len, const struct sort_opts *o, size_t *nout)
 {
 	struct field *out;
@@ -198,13 +206,31 @@ static struct field *split_fields(const char *line, size_t len, const struct sor
 
 /* ==== key range resolution ================================================ */
 
-static size_t key_start_off(const char *line, size_t len, const struct field *fields, size_t nf, int f, int c, int bflag) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
+static size_t key_start_off(const char *line withtok(readable_span(len)), size_t len,
+                            const struct field *fields, size_t nf,
+                            int f, int c, int bflag) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
 	struct field fl;
 	size_t start;
 
+	/* line is always a struct line's own text field, always live -- see
+	 * compare_by_key()'s call site. */
+	__ownership_pointer_nonnull(line);
 	if (f < 1) f = 1;
 	if ((size_t)(f - 1) >= nf) return len;
+	/* nf > 0 here, and struct line's own fields/nfields are always set
+	 * together (split_fields() never returns a count without a backing
+	 * array) -- so fields is live whenever an index below nf is taken. */
+	__ownership_pointer_nonnull(fields);
+	/* OPEN LINT FINDING (ntlibc.ValidPointer, "dereference extent is not
+	 * proven sufficient"): fields[f-1].end <= len always holds -- every
+	 * field split_fields() records has end set from an index that never
+	 * exceeds the line's own len -- so start < fl.end <= len is a safe
+	 * line[] access below. The checker can't correlate a struct field
+	 * value against a bound established in a different function
+	 * (split_fields) at a different time; no existing ownership.h
+	 * annotation expresses that relation, so this is left open rather
+	 * than papered over. */
 	fl = fields[f - 1];
 	start = fl.start;
 	if (bflag) while (start < fl.end && isblank((unsigned char)line[start])) start++;
@@ -214,14 +240,21 @@ static size_t key_start_off(const char *line, size_t len, const struct field *fi
 	return start;
 }
 
-static size_t key_end_off(const char *line, size_t len, const struct field *fields, size_t nf, int f, int c, int bflag) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
+static size_t key_end_off(const char *line withtok(readable_span(len)), size_t len,
+                          const struct field *fields, size_t nf,
+                          int f, int c, int bflag) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
 	struct field fl;
 	size_t fstart, end;
 
 	(void)len;
+	/* line is always live -- see key_start_off()'s identical note. */
+	__ownership_pointer_nonnull(line);
 	if (f < 1) f = 1;
 	if ((size_t)(f - 1) >= nf) return len;
+	/* nf > 0 here -- see key_start_off()'s identical fields/nfields note. */
+	__ownership_pointer_nonnull(fields);
+	/* OPEN LINT FINDING -- see key_start_off()'s identical note above. */
 	fl = fields[f - 1];
 	fstart = fl.start;
 	if (bflag) while (fstart < fl.end && isblank((unsigned char)line[fstart])) fstart++;
@@ -241,6 +274,8 @@ static size_t key_end_off(const char *line, size_t len, const struct field *fiel
  * or extreme, so this saturates to LLONG_MAX/LLONG_MIN -- "at least
  * this large" -- rather than erroring the line out; the overflow check
  * happens before each multiply/add so `v` never actually wraps. */
+static long long parse_numeric(const char *s, size_t len)
+	__attribute__((nonnull(1)));
 static long long parse_numeric(const char *s, size_t len)
 {
 	size_t i = 0;
@@ -267,6 +302,8 @@ static int char_passes(unsigned char c, int d, int i) // NOLINT(bugprone-easily-
 	return 1;
 }
 
+static int compare_range(const char *a, size_t as, size_t ae, const char *b, size_t bs, size_t be, int d, int f, int i, int n) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
+	__attribute__((nonnull(1, 4)));
 static int compare_range(const char *a, size_t as, size_t ae, const char *b, size_t bs, size_t be, int d, int f, int i, int n) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
 	if (n) {
@@ -318,6 +355,15 @@ static int compare_by_key(const struct sort_opts *o, const struct sort_key *k, c
 	size_t as, ae, bs, be;
 	int c;
 
+	/* o and a/b are always &o (or a value already traced back to it)
+	 * and &lines[i] at every real call site -- see line_compare()'s
+	 * identical note, one call up. k is always &o->keys[i] for some
+	 * i < o->nkeys <= the fixed-size o->keys[64] array -- always live,
+	 * never a bare NULL key pointer. */
+	__ownership_pointer_nonnull(o);
+	__ownership_pointer_nonnull(a);
+	__ownership_pointer_nonnull(b);
+	__ownership_pointer_nonnull(k);
 	if (k->has_mod) {
 		bflag = k->mb; dflag = k->md; fflag = k->mf;
 		iflag = k->mi; nflag = k->mn; rflag = k->mr;
@@ -326,10 +372,15 @@ static int compare_by_key(const struct sort_opts *o, const struct sort_key *k, c
 		iflag = o->i; nflag = o->n; rflag = o->r;
 	}
 
+	/* a->text/b->text are always allocated with exactly a->len/b->len
+	 * readable content bytes (plus a trailing NUL) -- see
+	 * read_all_lines()'s own struct line construction. */
+	__ownership_readable_span(a->text, a->len);
 	as = key_start_off(a->text, a->len, a->fields, a->nfields, k->f1, k->c1, bflag);
 	ae = k->has_end ? key_end_off(a->text, a->len, a->fields, a->nfields, k->f2, k->c2, bflag) : a->len;
 	if (ae < as) ae = as;
 
+	__ownership_readable_span(b->text, b->len);
 	bs = key_start_off(b->text, b->len, b->fields, b->nfields, k->f1, k->c1, bflag);
 	be = k->has_end ? key_end_off(b->text, b->len, b->fields, b->nfields, k->f2, k->c2, bflag) : b->len;
 	if (be < bs) be = bs;
@@ -342,6 +393,12 @@ static int line_compare(const struct sort_opts *o, const struct line *a, const s
 {
 	int c;
 
+	/* a and b are always &lines[i] for some i within a live lines[]
+	 * array (__util_sort_main's own nlines/lines invariant, restated in
+	 * merge_sort() and __util_sort_main() below), never a bare NULL
+	 * struct line pointer. */
+	__ownership_pointer_nonnull(a);
+	__ownership_pointer_nonnull(b);
 	if (o->nkeys) {
 		size_t i;
 		c = 0;
@@ -374,6 +431,11 @@ static void merge_sort(struct line *lines, size_t n, const struct sort_opts *o)
 	size_t width;
 
 	if (n < 2) return;
+	/* n >= 2 here, and __util_sort_main() only ever calls merge_sort()
+	 * with lines/nlines already populated by read_all_lines(), which
+	 * never leaves nlines nonzero without a matching heap-allocated
+	 * lines array -- so lines is live whenever n >= 2. */
+	__ownership_pointer_nonnull(lines);
 	tmp = __util_mallocarray(n, sizeof *tmp);
 	if (!tmp) return; /* input stays in original (still-valid) order */
 
@@ -423,6 +485,8 @@ static void parse_key_mods(const char **pp, struct sort_key *k)
 }
 
 static int parse_keydef(const char *spec, struct sort_key *k)
+	__attribute__((nonnull(1)));
+static int parse_keydef(const char *spec, struct sort_key *k)
 {
 	const char *p = spec;
 	char *end;
@@ -434,6 +498,11 @@ static int parse_keydef(const char *spec, struct sort_key *k)
 	if (v < 1) return -1;
 	k->f1 = (int)v;
 	p = end;
+	/* end is strtol()'s own endptr output: always a real, live pointer
+	 * into (or just past) p's original NUL-terminated text, never NULL,
+	 * whenever p itself was nonnull (C11 7.22.1.4p8) -- restated at
+	 * every p = end below for the same reason. */
+	__ownership_pointer_nonnull(p);
 	k->c1 = 1;
 	if (*p == '.') {
 		p++;
@@ -442,8 +511,12 @@ static int parse_keydef(const char *spec, struct sort_key *k)
 		if (v < 1) return -1;
 		k->c1 = (int)v;
 		p = end;
+		__ownership_pointer_nonnull(p);
 	}
 	parse_key_mods(&p, k);
+	/* parse_key_mods() only ever advances *pp forward from its own
+	 * (already nonnull) input by incrementing it -- never assigns NULL. */
+	__ownership_pointer_nonnull(p);
 	if (*p == ',') {
 		p++;
 		if (!isdigit((unsigned char)*p)) return -1;
@@ -451,6 +524,7 @@ static int parse_keydef(const char *spec, struct sort_key *k)
 		if (v < 1) return -1;
 		k->f2 = (int)v;
 		p = end;
+		__ownership_pointer_nonnull(p);
 		k->c2 = 0;
 		if (*p == '.') {
 			p++;
@@ -459,8 +533,11 @@ static int parse_keydef(const char *spec, struct sort_key *k)
 			if (v < 0) return -1;
 			k->c2 = (int)v;
 			p = end;
+			__ownership_pointer_nonnull(p);
 		}
 		parse_key_mods(&p, k);
+		/* see the first parse_key_mods() call's identical note above. */
+		__ownership_pointer_nonnull(p);
 		k->has_end = 1;
 	}
 	if (*p) return -1;
@@ -513,6 +590,9 @@ static void free_lines(struct line *lines, size_t n)
 {
 	size_t i;
 	for (i = 0; i < n; i++) {
+		/* i < n, and lines is heap-allocated with >= n entries whenever
+		 * n >= 1 -- see merge_sort()'s identical lines/n note. */
+		__ownership_pointer_nonnull(lines);
 		free(lines[i].text);
 		free(lines[i].fields);
 	}
@@ -566,6 +646,12 @@ int __util_sort_main(
 					if (++i >= argc) { __util_diagf("sort: -k: option requires an argument\n"); return 2; }
 					val = argv[i];
 				}
+				/* val is either an offset into argv[i]'s own bytes or
+				 * argv[i] itself with i < argc just checked -- both
+				 * genuinely never NULL by this function's own
+				 * elements_withtok(null_terminated, argc) contract on
+				 * argv. */
+				__ownership_pointer_nonnull(val);
 				if (o.nkeys >= sizeof keys / sizeof keys[0]) {
 					__util_diagf("sort: too many -k options\n");
 					return 2;
@@ -586,6 +672,10 @@ int __util_sort_main(
 					if (++i >= argc) { __util_diagf("sort: -t: option requires an argument\n"); return 2; }
 					val = argv[i];
 				}
+				/* val is either an offset into argv[i]'s own bytes or
+				 * argv[i] itself with i < argc just checked -- see the
+				 * -k case's identical note above. */
+				__ownership_pointer_nonnull(val);
 				if (val[0] == 0 || val[1] != 0) {
 					__util_diagf("sort: -t: field separator must be exactly one character\n");
 					return 2;
@@ -662,14 +752,20 @@ int __util_sort_main(
 	}
 
 	if (o.nkeys) {
-		for (li = 0; li < nlines; li++)
+		for (li = 0; li < nlines; li++) {
+			/* li < nlines, and lines is heap-allocated with >= nlines
+			 * entries whenever nlines >= 1 -- see merge_sort()'s
+			 * identical lines/n note. */
+			__ownership_pointer_nonnull(lines);
 			lines[li].fields = split_fields(lines[li].text, lines[li].len, &o, &lines[li].nfields);
+		}
 	}
 
 	if (opt_c) {
 		const char *srcname = nfiles ? files[0] : "-";
 		int result = 0;
 		for (li = 1; li < nlines; li++) {
+			__ownership_pointer_nonnull(lines);
 			int cmp = line_compare(&o, &lines[li - 1], &lines[li]);
 			if (cmp > 0) {
 				if (!opt_C)
@@ -704,11 +800,17 @@ int __util_sort_main(
 		}
 
 		for (write_i = 0; write_i < nlines; write_i++) {
+			/* write_i < nlines -- see the o.nkeys loop's identical
+			 * lines/nlines note above. */
+			__ownership_pointer_nonnull(lines);
 			if (o.u && keep > 0 && line_compare(&o, &lines[keep - 1], &lines[write_i]) == 0)
 				continue;
 			lines[keep++] = lines[write_i];
 		}
 		for (write_i = 0; write_i < keep; write_i++) {
+			/* keep <= nlines (set by the loop above), so keep > 0 here
+			 * implies nlines > 0 and lines is live, same invariant. */
+			__ownership_pointer_nonnull(lines);
 			if (fprintf(outf, "%s\n", lines[write_i].text) < 0) {
 				/* The output error fixes the result; close only releases outf. */
 				if (outfile) (void)fclose(outf);

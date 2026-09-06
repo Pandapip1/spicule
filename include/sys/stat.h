@@ -13,6 +13,7 @@ extern "C" {
 #endif
 
 #include <features.h>
+#include <ownership.h>
 
 #define __NEED_dev_t
 #define __NEED_ino_t
@@ -96,12 +97,17 @@ int stat(const char *__restrict, struct stat *__restrict);
 int fstat(int, struct stat *) __attribute__((nonnull(2)));
 int lstat(const char *__restrict, struct stat *__restrict);
 int fstatat(int, const char *__restrict, struct stat *__restrict, int);
+fallible
 int chmod(const char *, mode_t);
+fallible
 int fchmod(int, mode_t);
+fallible
 int fchmodat(int, const char *, mode_t, int);
 mode_t umask(mode_t);
+fallible
 int mkdir(const char *, mode_t);
 int mkfifo(const char *, mode_t);
+fallible
 int mkdirat(int, const char *, mode_t);
 int mkfifoat(int, const char *, mode_t);
 

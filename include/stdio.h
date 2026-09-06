@@ -79,21 +79,27 @@ FILE *freopen(const char *__restrict, const char *__restrict, FILE *__restrict) 
  * not designate an open file". fflush() is the deliberate exception:
  * fflush(NULL) is documented to flush every open stream, so its f is
  * left unmarked. */
+fallible
 int fclose(FILE *) __attribute__((nonnull(1)));
 
+fallible
 int remove(const char *);
+fallible
 int rename(const char *, const char *);
 
 int feof(FILE *) __attribute__((nonnull(1)));
 int ferror(FILE *) __attribute__((nonnull(1)));
+fallible
 int fflush(FILE *);
 void clearerr(FILE *) __attribute__((nonnull(1)));
 
+fallible
 int fseek(FILE *, long, int) __attribute__((nonnull(1)));
 long ftell(FILE *) __attribute__((nonnull(1)));
 void rewind(FILE *) __attribute__((nonnull(1)));
 
 int fgetpos(FILE *__restrict, fpos_t *__restrict) __attribute__((nonnull(1, 2)));
+fallible
 int fsetpos(FILE *, const fpos_t *) __attribute__((nonnull(1, 2)));
 
 size_t fread(void *__restrict ptr withtok(writable_span(size * nmemb)),
@@ -178,6 +184,7 @@ int putchar_unlocked(int);
  * covers their nullness, not an omission. */
 ssize_t getdelim(char **__restrict, size_t *__restrict, int, FILE *__restrict) __attribute__((nonnull(4)));
 ssize_t getline(char **__restrict, size_t *__restrict, FILE *__restrict) __attribute__((nonnull(3)));
+fallible
 int renameat(int, const char *, int, const char *);
 char *ctermid(char *);
 #define L_ctermid 20

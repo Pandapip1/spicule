@@ -111,7 +111,9 @@ void __pthread_cleanup_pop(struct __pthread_cleanup *, int);
 
 int pthread_create(pthread_t *__restrict, const pthread_attr_t *__restrict handle(pthread_attr),
 	void *(*)(void *), void *__restrict);
+fallible
 int pthread_join(pthread_t, void **);
+fallible
 int pthread_detach(pthread_t);
 pthread_t pthread_self(void);
 int pthread_equal(pthread_t, pthread_t);
@@ -145,16 +147,23 @@ int pthread_key_delete(pthread_key_t);
 void *pthread_getspecific(pthread_key_t);
 int pthread_setspecific(pthread_key_t, const void *);
 
+fallible
 int pthread_cancel(pthread_t);
 int pthread_setcancelstate(int, int *);
 int pthread_setcanceltype(int, int *);
 void pthread_testcancel(void);
 
+fallible
 int pthread_mutex_init(pthread_mutex_t *__restrict construct(pthread_mutex) static_handle(pthread_mutex) grant(pthread_mutex_unlocked), const pthread_mutexattr_t *__restrict handle(pthread_mutexattr));
+fallible
 int pthread_mutex_destroy(pthread_mutex_t * destroy(pthread_mutex) static_handle(pthread_mutex) consume(pthread_mutex_unlocked));
+fallible
 int pthread_mutex_lock(pthread_mutex_t * handle(pthread_mutex) static_handle(pthread_mutex) consume(pthread_mutex_unlocked) grant(pthread_mutex_locked));
+fallible
 int pthread_mutex_trylock(pthread_mutex_t * handle(pthread_mutex) static_handle(pthread_mutex) consume(pthread_mutex_unlocked) grant(pthread_mutex_locked));
+fallible
 int pthread_mutex_timedlock(pthread_mutex_t *__restrict handle(pthread_mutex) static_handle(pthread_mutex) consume(pthread_mutex_unlocked) grant(pthread_mutex_locked), const struct timespec *__restrict);
+fallible
 int pthread_mutex_unlock(pthread_mutex_t * handle(pthread_mutex) static_handle(pthread_mutex) consume(pthread_mutex_locked) grant(pthread_mutex_unlocked));
 int pthread_mutex_getprioceiling(const pthread_mutex_t *__restrict handle(pthread_mutex) static_handle(pthread_mutex), int *__restrict);
 int pthread_mutex_setprioceiling(pthread_mutex_t *__restrict handle(pthread_mutex) static_handle(pthread_mutex) withtok(pthread_mutex_unlocked), int, int *__restrict);
@@ -172,12 +181,18 @@ int pthread_mutexattr_setprioceiling(pthread_mutexattr_t * handle(pthread_mutexa
 int pthread_mutexattr_getrobust(const pthread_mutexattr_t *__restrict handle(pthread_mutexattr), int *__restrict);
 int pthread_mutexattr_setrobust(pthread_mutexattr_t * handle(pthread_mutexattr), int);
 
+fallible
 int pthread_cond_init(pthread_cond_t *__restrict construct(pthread_cond) static_handle(pthread_cond), const pthread_condattr_t *__restrict handle(pthread_condattr));
+fallible
 int pthread_cond_destroy(pthread_cond_t * destroy(pthread_cond) static_handle(pthread_cond));
+fallible
 int pthread_cond_wait(pthread_cond_t *__restrict handle(pthread_cond) static_handle(pthread_cond), pthread_mutex_t *__restrict handle(pthread_mutex) static_handle(pthread_mutex) withtok(pthread_mutex_locked));
+fallible
 int pthread_cond_timedwait(pthread_cond_t *__restrict handle(pthread_cond) static_handle(pthread_cond), pthread_mutex_t *__restrict handle(pthread_mutex) static_handle(pthread_mutex) withtok(pthread_mutex_locked),
 	const struct timespec *__restrict);
+fallible
 int pthread_cond_signal(pthread_cond_t * handle(pthread_cond) static_handle(pthread_cond));
+fallible
 int pthread_cond_broadcast(pthread_cond_t * handle(pthread_cond) static_handle(pthread_cond));
 int pthread_condattr_init(pthread_condattr_t * construct(pthread_condattr));
 int pthread_condattr_destroy(pthread_condattr_t * destroy(pthread_condattr));
@@ -186,33 +201,48 @@ int pthread_condattr_setclock(pthread_condattr_t * handle(pthread_condattr), clo
 int pthread_condattr_getpshared(const pthread_condattr_t *__restrict handle(pthread_condattr), int *__restrict);
 int pthread_condattr_setpshared(pthread_condattr_t * handle(pthread_condattr), int);
 
+fallible
 int pthread_rwlock_init(pthread_rwlock_t *__restrict construct(pthread_rwlock) static_handle(pthread_rwlock) grant(pthread_rwlock_unlocked), const pthread_rwlockattr_t *__restrict handle(pthread_rwlockattr));
+fallible
 int pthread_rwlock_destroy(pthread_rwlock_t * destroy(pthread_rwlock) static_handle(pthread_rwlock) consume(pthread_rwlock_unlocked));
+fallible
 int pthread_rwlock_rdlock(pthread_rwlock_t * handle(pthread_rwlock) static_handle(pthread_rwlock) consume_any(pthread_rwlock_unlocked) consume_any(pthread_rwlock_shared) grant(pthread_rwlock_shared));
+fallible
 int pthread_rwlock_tryrdlock(pthread_rwlock_t * handle(pthread_rwlock) static_handle(pthread_rwlock) consume_any(pthread_rwlock_unlocked) consume_any(pthread_rwlock_shared) grant(pthread_rwlock_shared));
 int pthread_rwlock_timedrdlock(pthread_rwlock_t *__restrict handle(pthread_rwlock) static_handle(pthread_rwlock) consume_any(pthread_rwlock_unlocked) consume_any(pthread_rwlock_shared) grant(pthread_rwlock_shared), const struct timespec *__restrict);
+fallible
 int pthread_rwlock_wrlock(pthread_rwlock_t * handle(pthread_rwlock) static_handle(pthread_rwlock) consume(pthread_rwlock_unlocked) grant(pthread_rwlock_exclusive));
+fallible
 int pthread_rwlock_trywrlock(pthread_rwlock_t * handle(pthread_rwlock) static_handle(pthread_rwlock) consume(pthread_rwlock_unlocked) grant(pthread_rwlock_exclusive));
 int pthread_rwlock_timedwrlock(pthread_rwlock_t *__restrict handle(pthread_rwlock) static_handle(pthread_rwlock) consume(pthread_rwlock_unlocked) grant(pthread_rwlock_exclusive), const struct timespec *__restrict);
+fallible
 int pthread_rwlock_unlock(pthread_rwlock_t * handle(pthread_rwlock) static_handle(pthread_rwlock) consume_any(pthread_rwlock_shared) consume_any(pthread_rwlock_exclusive) grant(pthread_rwlock_unlocked));
 int pthread_rwlockattr_init(pthread_rwlockattr_t * construct(pthread_rwlockattr));
 int pthread_rwlockattr_destroy(pthread_rwlockattr_t * destroy(pthread_rwlockattr));
 int pthread_rwlockattr_getpshared(const pthread_rwlockattr_t *__restrict handle(pthread_rwlockattr), int *__restrict);
 int pthread_rwlockattr_setpshared(pthread_rwlockattr_t * handle(pthread_rwlockattr), int);
 
+fallible
 int pthread_barrier_init(pthread_barrier_t *__restrict construct(pthread_barrier),
 	const pthread_barrierattr_t *__restrict handle(pthread_barrierattr), unsigned);
+fallible
 int pthread_barrier_destroy(pthread_barrier_t * destroy(pthread_barrier));
+fallible
 int pthread_barrier_wait(pthread_barrier_t * handle(pthread_barrier));
 int pthread_barrierattr_init(pthread_barrierattr_t * construct(pthread_barrierattr));
 int pthread_barrierattr_destroy(pthread_barrierattr_t * destroy(pthread_barrierattr));
 int pthread_barrierattr_getpshared(const pthread_barrierattr_t *__restrict handle(pthread_barrierattr), int *__restrict);
 int pthread_barrierattr_setpshared(pthread_barrierattr_t * handle(pthread_barrierattr), int);
 
+fallible
 int pthread_spin_init(pthread_spinlock_t * construct(pthread_spin) grant(pthread_spin_unlocked), int);
+fallible
 int pthread_spin_destroy(pthread_spinlock_t * destroy(pthread_spin) consume(pthread_spin_unlocked));
+fallible
 int pthread_spin_lock(pthread_spinlock_t * handle(pthread_spin) consume(pthread_spin_unlocked) grant(pthread_spin_locked));
+fallible
 int pthread_spin_trylock(pthread_spinlock_t * handle(pthread_spin) consume(pthread_spin_unlocked) grant(pthread_spin_locked));
+fallible
 int pthread_spin_unlock(pthread_spinlock_t * handle(pthread_spin) consume(pthread_spin_locked) grant(pthread_spin_unlocked));
 
 int pthread_atfork(void (*)(void), void (*)(void), void (*)(void));

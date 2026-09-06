@@ -148,7 +148,7 @@ struct servent *getservbyport(int port, const char *proto)
 	return NULL;
 }
 
-static FILE *g_servf;
+static FILE *g_servf withtok(file_stream_open);
 
 void setservent(int stayopen)
 {

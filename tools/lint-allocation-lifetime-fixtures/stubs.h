@@ -46,6 +46,17 @@ withtok(sentinel_allocated)
 void *sentinel_producer(int fail);
 void sentinel_release(void *object consume(sentinel_allocated));
 
+/* The real include/stdio.h/include/dirent.h shape: a producer/terminal-freer
+ * pair for an opaque handle type, exercising the exact mechanism
+ * file_stream_open (fopen/fclose) and directory_stream_open (opendir/
+ * closedir) both ride with no checker code of their own. */
+tokdef file_stream_open
+	dynamic_storage
+	implemented_by(heap_allocated);
+withtok(file_stream_open)
+void *fopen_stub(const char *);
+void fclose_stub(void *consume(file_stream_open));
+
 /* The real include/wordexp.h shape: an out-parameter struct whose field is
  * filled by an intermediate withtok-declared producer (pv_pack() there,
  * pack_items() here), not by a direct malloc() call in the same frame as

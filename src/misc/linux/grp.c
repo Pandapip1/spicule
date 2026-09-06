@@ -230,7 +230,7 @@ int getgrgid_r(gid_t gid, struct group *grp, char *buffer,
  * mirroring src/misc/linux/pwd.c's getpwent() exactly -- see that
  * file's own comment for why g_grent_line/g_grent_linesz persist
  * across calls while g_grent_f/g_grent_open_tried are reset together. */
-static FILE *g_grent_f;
+static FILE *g_grent_f withtok(file_stream_open);
 static int g_grent_open_tried;
 static char *g_grent_line;
 static size_t g_grent_linesz;

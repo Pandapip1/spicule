@@ -21,7 +21,7 @@
 
 #define SHELL_LINE_MAX 256
 
-static FILE *shells_fp;
+static FILE *shells_fp withtok(file_stream_open);
 static char shells_line[SHELL_LINE_MAX];
 
 void setusershell(void)

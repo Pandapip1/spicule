@@ -72,10 +72,16 @@
 
 struct field { size_t start, end; };
 
+/* text and fields are each their own heap allocation, released by
+ * free_jlines() -- marking them lets AllocationLifetimeChecker see
+ * read_all()'s `(*out)[*nout].text = text;`/`.fields = split_fields(...);`
+ * as transferring the obligation into the array, not leaking it (same
+ * "assignment into an annotated destination moves the obligation" as
+ * src/util/od.c's struct instream.cur). */
 struct jline {
-	char *text;
+	char *text withtok(heap_allocated);
 	size_t len;
-	struct field *fields;
+	struct field *fields withtok(heap_allocated);
 	size_t nfields;
 };
 
@@ -87,6 +93,7 @@ struct outspec { int file; int field; }; /* file: 0, 1 or 2 */
  * original block -- the classic realloc mistake clang-tidy's bugprone-
  * suspicious-realloc-usage and cppcheck's memleakOnRealloc both flag. */
 withtok(heap_allocated)
+__attribute__((nonnull(2)))
 static struct field *fields_grow(
 	struct field *out consume_if_nonnull_return(heap_allocated), size_t *cap)
 {
@@ -115,6 +122,7 @@ static int field_reserve(struct field **out withtok(heap_allocated), size_t *cap
 	return 1;
 }
 
+withtok(heap_allocated)
 static struct field *split_fields(const char *line, size_t len, int have_delim, char delim, size_t *nout) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
 	struct field *out;
@@ -152,6 +160,12 @@ static void free_jlines(struct jline *l, size_t n)
 {
 	size_t i;
 	for (i = 0; i < n; i++) {
+		/* l is read_all()'s own non-NULL output whenever n > 0 (only an
+		 * empty input file leaves it NULL, and that always pairs with
+		 * n == 0, which never enters this loop) -- restated here since
+		 * that struct-held-array invariant is not itself expressible in
+		 * ownership.h's vocabulary. */
+		__ownership_pointer_nonnull(l);
 		free(l[i].text);
 		free(l[i].fields);
 	}
@@ -172,11 +186,15 @@ static void join_write(const char *p, size_t len)
 		join_output_failed = 1;
 }
 
-static int read_all_failure(FILE *f, int error)
+/* use_stdin, not `f != stdin`, decides the fclose() below -- the checker
+ * can't prove opaque pointers unequal, so a direct comparison makes
+ * read_all()'s fopen() allocation look conditionally leaked (same idiom as
+ * src/util/sed.c's script_buf_append_file()). */
+static int read_all_failure(FILE *f, int use_stdin, int error)
 {
 	/* Closing an input is cleanup after the read/allocation failure.  Check
 	 * no further outcome here, but restore the primary errno for diagnosis. */
-	if (f != stdin) (void)fclose(f);
+	if (!use_stdin) (void)fclose(f);
 	errno = error;
 	return -1;
 }
@@ -190,11 +208,12 @@ static int read_all(const char *path, struct jline **out withtok(heap_allocated)
                     size_t *nout, int have_delim, char delim)
 {
 	FILE *f;
+	int use_stdin = !strcmp(path, "-");
 	char *buf = 0;
 	size_t bufcap = 0, cap = 0;
 	ssize_t got;
 
-	f = !strcmp(path, "-") ? stdin : fopen(path, "r");
+	f = use_stdin ? stdin : fopen(path, "r");
 	if (!f) return -1;
 
 	*out = 0; *nout = 0;
@@ -206,14 +225,14 @@ static int read_all(const char *path, struct jline **out withtok(heap_allocated)
 			size_t bytes;
 			if (!__util_size_add(len, 1, &bytes)) {
 				free(buf);
-				return read_all_failure(f, EOVERFLOW);
+				return read_all_failure(f, use_stdin, EOVERFLOW);
 			}
 			text = malloc(bytes);
 		}
 		if (!text) {
 			int saved = errno;
 			free(buf);
-			return read_all_failure(f, saved ? saved : ENOMEM);
+			return read_all_failure(f, use_stdin, saved ? saved : ENOMEM);
 		}
 	for (size_t i = 0; i < len; i++) text[i] = buf[i];
 		text[len] = 0;
@@ -222,13 +241,13 @@ static int read_all(const char *path, struct jline **out withtok(heap_allocated)
 			struct jline *g;
 			if (!__util_array_capacity(cap, *nout, 1, 64, sizeof **out, &newcap)) {
 				free(text); free(buf);
-				return read_all_failure(f, EOVERFLOW);
+				return read_all_failure(f, use_stdin, EOVERFLOW);
 			}
 			g = __util_reallocarray(*out, newcap, sizeof **out);
 			if (!g) {
 				int saved = errno;
 				free(text); free(buf);
-				return read_all_failure(f, saved ? saved : ENOMEM);
+				return read_all_failure(f, use_stdin, saved ? saved : ENOMEM);
 			}
 			*out = g;
 			cap = newcap;
@@ -239,15 +258,38 @@ static int read_all(const char *path, struct jline **out withtok(heap_allocated)
 		(*nout)++;
 	}
 	free(buf);
-	if (f != stdin && fclose(f) != 0) return -1;
+	if (!use_stdin && fclose(f) != 0) return -1;
 	return 0;
 }
 
+/* Always returns either "" or a real slice of l->text -- never NULL. */
+__attribute__((returns_nonnull))
 static const char *field_ptr(const struct jline *l, int field1based, size_t *outlen)
 {
 	if (!l || field1based < 1 || (size_t)(field1based - 1) >= l->nfields) { *outlen = 0; return ""; }
 	{
-		struct field fl = l->fields[field1based - 1];
+		struct field fl;
+		/* l->fields is split_fields()'s own non-NULL return whenever
+		 * l->nfields > 0 (only an OOM leaves it NULL, and that always
+		 * pairs with nfields == 0), with at least l->nfields elements
+		 * live (field_reserve() never lets nfields exceed the array's
+		 * own tracked capacity) -- both are struct-field invariants not
+		 * themselves expressible in ownership.h's vocabulary, so both
+		 * are restated here: nonnull the same way src/util/od.c uses
+		 * this axiom for its own struct-held array field, and the
+		 * extent via the same __ownership_readable_span() idiom
+		 * join_write() already uses for its own field-slice fact. */
+		__ownership_pointer_nonnull(l->fields);
+		__ownership_readable_span(l->fields, l->nfields * sizeof *l->fields);
+		/* The nonnull axiom above closes cleanly, but tools/lint.sh
+		 * ownership still reports this index as "dereference extent is
+		 * not proven sufficient" on all three arches even with the
+		 * readable_span restatement in place: left open, same accepted
+		 * class as src/util/du.c's documented residual findings -- a
+		 * true fact (field1based - 1 < l->nfields is guarded just above)
+		 * the linear/Z3 extent prover does not close via any annotation
+		 * this vocabulary offers. */
+		fl = l->fields[field1based - 1];
 		*outlen = fl.end - fl.start;
 		return l->text + fl.start;
 	}
@@ -259,6 +301,14 @@ static int keys_equal(const struct jline *a, int fa, const struct jline *b, int 
 	const char *pa = field_ptr(a, fa, &la);
 	const char *pb = field_ptr(b, fb, &lb);
 	if (la != lb) return 0;
+	/* field_ptr() always returns either "" with *outlen == 0, or a real
+	 * slice of a->text/b->text with *outlen == that slice's own byte
+	 * count -- restated here the same way join_write() restates an
+	 * analogous field-slice fact for fwrite(). */
+	__ownership_pointer_nonnull(pa);
+	__ownership_pointer_nonnull(pb);
+	__ownership_readable_span(pa, la);
+	__ownership_readable_span(pb, lb);
 	for (size_t i = 0; i < la; i++) if (pa[i] != pb[i]) return 0;
 	return 1;
 }
@@ -279,7 +329,16 @@ static int keys_cmp(const struct jline *a, int fa, const struct jline *b, int fb
 
 static void put_field_raw(const char *p, size_t len, const char *empty_repl)
 {
-	if (len == 0 && empty_repl) join_write(empty_repl, strlen(empty_repl));
+	if (len == 0 && empty_repl) {
+		/* empty_repl, whenever non-NULL, is always -e's own argv element
+		 * (or a slice of one), genuinely null-terminated by
+		 * __util_join_main's elements_withtok(null_terminated, argc)
+		 * contract on argv -- restated here since the checker does not
+		 * trace that fact through put_field_raw()'s and print_o()'s
+		 * plain `const char *` parameters. */
+		__ownership_string_terminated(empty_repl);
+		join_write(empty_repl, strlen(empty_repl));
+	}
 	else join_write(p, len);
 }
 
@@ -335,6 +394,11 @@ static void print_o(const struct outspec *specs, size_t nspecs, const struct jli
 	size_t i;
 	for (i = 0; i < nspecs; i++) {
 		size_t len; const char *p;
+		/* specs is parse_o_list()'s own non-NULL output whenever
+		 * nspecs > 0 (specs is only ever left NULL alongside nspecs == 0)
+		 * -- restated here since that struct-held-array invariant is not
+		 * itself expressible in ownership.h's vocabulary. */
+		__ownership_pointer_nonnull(specs);
 		if (i) join_putc(outsep);
 		if (specs[i].file == 0) {
 			if (l1) p = field_ptr(l1, jf1, &len);
@@ -351,6 +415,8 @@ static void print_o(const struct outspec *specs, size_t nspecs, const struct jli
 	join_putc('\n');
 }
 
+/* val is always -o's own argv-derived argument, never NULL. */
+__attribute__((nonnull(1)))
 static int parse_o_list(const char *val, struct outspec **specs withtok(heap_allocated),
                         size_t *nspecs, size_t *cap)
 {
@@ -457,6 +523,12 @@ int __util_join_main(
 			const char *val;
 			if (arg[2]) val = arg + 2;
 			else { if (++i >= argc) { __util_diagf("join: -t: option requires an argument\n"); goto bad; } val = argv[i]; }
+			/* val is either an offset into argv[i] or argv[i] itself,
+			 * genuinely never NULL by this function's own
+			 * elements_withtok(null_terminated, argc) contract on argv --
+			 * restated here since the checker does not trace that fact
+			 * through the two assignments above. */
+			__ownership_pointer_nonnull(val);
 			if (val[0] == 0 || val[1] != 0) { __util_diagf("join: -t: field separator must be exactly one character\n"); goto bad; }
 			delim = val[0];
 			have_delim = 1;
@@ -504,7 +576,19 @@ int __util_join_main(
 	{
 		size_t i1 = 0, i2 = 0;
 		while (i1 < n1 && i2 < n2) {
-			int cmp = keys_cmp(&L1[i1], jf1, &L2[i2], jf2);
+			int cmp;
+			/* L1/L2 are read_all()'s own non-NULL output whenever n1/n2
+			 * are nonzero (only an empty input file leaves a heap array
+			 * NULL, and that always pairs with n == 0) -- i1 < n1 and
+			 * i2 < n2 are already established by this loop's own
+			 * condition, so both are genuinely nonnull for every index
+			 * derived from i1/i2 below (g1s/g1e/g2s/g2e/x/y are all
+			 * bounded within [0, n1) / [0, n2)). Restated here since that
+			 * struct-held-array invariant is not itself expressible in
+			 * ownership.h's vocabulary. */
+			__ownership_pointer_nonnull(L1);
+			__ownership_pointer_nonnull(L2);
+			cmp = keys_cmp(&L1[i1], jf1, &L2[i2], jf2);
 			if (cmp == 0) {
 				size_t g1s = i1, g2s = i2, g1e, g2e, x, y;
 				while (i1 < n1 && keys_equal(&L1[i1], jf1, &L1[g1s], jf1)) i1++;

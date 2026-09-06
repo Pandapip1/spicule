@@ -299,6 +299,17 @@ static int od_run(struct instream *is, const struct od_opts *o)
 			if (got == 0) break; /* skip past EOF: not an error, per -N's own "missing data isn't an error" spirit */
 			left -= (long long)got;
 		}
+		/* od(1p): the offset column is the byte's real position in the
+		 * (concatenated) input, so a -j skip must be reflected in every
+		 * offset printed afterward -- including the final "total bytes"
+		 * closing line -- not just in which bytes get displayed. `off`
+		 * starting at 0 here would print offset 0 for the first
+		 * post-skip row even though that row's first byte is actually
+		 * o->skip bytes into the input. Use o->skip - left (the bytes
+		 * actually consumed above) rather than o->skip itself so a skip
+		 * that ran past EOF still reports the true, possibly-shorter,
+		 * number of bytes skipped. */
+		off = (unsigned long long)(o->skip - left);
 	}
 
 	for (;;) {

@@ -295,6 +295,21 @@ static void test_od_j_skip_and_N_count(void)
 	check_ok_out_contains(run(od_path, argv), " 32 33 34"); /* skips "01", reads "234" */
 }
 
+/* od(1p): the offset column is the byte's real position in the input,
+ * so a -j skip must be reflected in every offset printed afterward --
+ * `off` was left at 0 across the skip, so the first post-skip row was
+ * mislabeled offset 0 instead of the real skip-relative offset. */
+static void test_od_j_skip_offset_reflects_skip(void)
+{
+	char *argv[] = { (char *)"od", (char *)"-A", (char *)"d", (char *)"-t", (char *)"x1",
+	                  (char *)"-j", (char *)"4", (char *)"scratch/od_in5", 0 };
+	make_file("scratch/od_in5", "0123456789", 10);
+	/* First (only) data row starts at byte 4 ("456789"), not byte 0. */
+	check_ok_out_contains(run(od_path, argv), "0000004 34 35 36 37 38 39");
+	/* Closing total-offset line: 10 bytes total, not 6 (10 - skipped 4). */
+	CHECK(out_contains("0000010\n"));
+}
+
 static void test_od_invalid_type_is_an_error(void)
 {
 	char *argv[] = { (char *)"od", (char *)"-t", (char *)"q9", (char *)"scratch/od_in1", 0 };
@@ -514,6 +529,7 @@ static void rmtree_scratch(void)
 {
 	unlink("scratch/od_in1"); unlink("scratch/od_in2");
 	unlink("scratch/od_in3"); unlink("scratch/od_in4");
+	unlink("scratch/od_in5");
 	unlink("scratch/pr_in1"); unlink("scratch/pr_in2");
 	unlink("scratch/split_in1"); unlink("scratch/split_in2");
 	unlink("scratch/sl_aa"); unlink("scratch/sl_ab"); unlink("scratch/sl_ac");
@@ -581,6 +597,7 @@ int main(int argc, char **argv)
 	test_od_dash_t_c_escape_table();
 	test_od_elides_repeated_rows();
 	test_od_j_skip_and_N_count();
+	test_od_j_skip_offset_reflects_skip();
 	test_od_invalid_type_is_an_error();
 
 	test_pr_dash_t_pads_short_page();

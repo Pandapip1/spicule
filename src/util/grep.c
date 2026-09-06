@@ -199,7 +199,14 @@ static int add_pattern_file(struct pat_list *pl, const char *path)
 		if (pl_add(pl, line, (size_t)len) < 0) { rc = -1; break; }
 	}
 	free(line);
-	(void)fclose(f);
+	{
+		/* fclose(f) is cleanup, not the operation being diagnosed; if
+		 * rc < 0 (pl_add() failed, e.g. errno == ENOMEM on its realloc
+		 * path), a failure here must not overwrite that reason. */
+		int saved_errno = errno;
+		(void)fclose(f);
+		errno = saved_errno;
+	}
 	return rc;
 }
 

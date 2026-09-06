@@ -152,13 +152,21 @@
           # revision.
           #
           # `wineWow64Packages.minimal`, not `.full` or plain `wine`, is
-          # the base: `minimal` already builds with every optional
-          # subsystem (X11, Vulkan, GStreamer, sane, usb, udev, dbus,
-          # cups, ...) off, matching setup-wine/action.yml's own
-          # --without-x/--without-freetype/--without-vulkan/... configure
-          # flags without needing to repeat them here -- CI turns those
-          # off explicitly; nixpkgs' `minimal` variant never turns them
-          # on. It also builds both i386 and x86_64 PE guest archs
+          # the base: `minimal` already excludes Vulkan, GStreamer, sane,
+          # usb, udev, dbus and cups from its buildInputs entirely, so
+          # Wine's own ./configure autodetects them absent and disables
+          # each the same way setup-wine/action.yml's explicit
+          # --without-vulkan/--without-gstreamer/... flags do -- CI turns
+          # those off explicitly; nixpkgs' `minimal` variant never turns
+          # them on in the first place. freetype is the one exception:
+          # `minimal` keeps it as a real buildInput (confirmed via `nix
+          # derivation show`), so without an explicit --without-freetype
+          # here Wine would detect and enable FreeType-based font support
+          # that setup-wine/action.yml's CI build has never had (that
+          # job's apt package list installs no libfreetype-dev either) --
+          # forced off below, the same way --enable-archs is forced,
+          # rather than silently gaining a capability CI has never
+          # validated. It also builds both i386 and x86_64 PE guest archs
           # (WoW64), which is what ntlibc-suite/libc-test/posix-optsrun's
           # i386-win32/x86_64-win32 matrix legs need `wine <exe>.exe` to
           # run. Only `src`/`version`/`patches` change below; every
@@ -192,7 +200,7 @@
           # sync with that file by hand, same as `tcc` above -- there is
           # no automated link between a GitHub Actions env var and a Nix
           # derivation.
-          wineFork = pkgs.wineWow64Packages.minimal.overrideAttrs (_: {
+          wineFork = pkgs.wineWow64Packages.minimal.overrideAttrs (old: {
             version = "52fef96f6";
             src = pkgs.fetchFromGitHub {
               owner = "Pandapip1";
@@ -201,6 +209,24 @@
               hash = "sha256-0WApht2wtfugN0lby3wbZPcqov1BTodGQMCDIlJ+D2E=";
             };
             patches = [ ];
+
+            # `wineWow64Packages.minimal`'s own configureFlags picks
+            # --enable-archs by *build host* arch (pkgs/applications/
+            # emulators/wine/packages.nix): "x86_64,i386" on an x86_64
+            # host, but "aarch64,x86_64,i386" on aarch64 -- three guest
+            # archs, not two, purely because this derivation happens to
+            # be evaluated on an aarch64 dev machine. setup-wine/
+            # action.yml's CI build passes --enable-archs=i386,x86_64
+            # unconditionally (its runner is always x86_64), so an
+            # unforced aarch64-host build of this override silently
+            # diverges from what CI validates the fork against, and
+            # runs test PE binaries against wine guest DLLs CI never
+            # built. Filtering out whichever --enable-archs=... `minimal`
+            # picked and appending the CI one keeps every other flag
+            # (e.g. --without-x) `minimal` already computed intact.
+            configureFlags =
+              (pkgs.lib.filter (f: !(pkgs.lib.hasPrefix "--enable-archs=" f)) old.configureFlags)
+              ++ [ "--enable-archs=i386,x86_64" "--without-freetype" ];
           });
 
           # tools/lint.sh's Z3-backed stages (sizearith, totality, arithub,

@@ -4535,7 +4535,16 @@ static int man_read_file(const char *path, char **out, size_t *outlen)
 			__util_diagf("man: %s: page too large, truncating at %d bytes\n", path, MAN_MAX_PAGE_SIZE);
 			break;
 		}
-		if (!mbuf_append(&b, chunk, r)) { mbuf_free(&b); (void)fclose(f); return 0; }
+		if (!mbuf_append(&b, chunk, r)) {
+			/* fclose(f) is cleanup for the mbuf_append() failure just
+			 * diagnosed (errno == ENOMEM on the realloc paths); if it
+			 * fails too, its own errno must not overwrite that reason. */
+			int saved_errno = errno;
+			mbuf_free(&b);
+			(void)fclose(f);
+			errno = saved_errno;
+			return 0;
+		}
 	}
 	(void)fclose(f);
 	*out = b.data ? b.data : strdup("");

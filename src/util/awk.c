@@ -139,9 +139,20 @@ void awk_unwind_fatal(void)
 
 static void buf_grow_append(char **buf, size_t *len, size_t *cap, const char *s, size_t n)
 {
-	if (*len + n + 1 > *cap) {
-		size_t newcap = *cap ? *cap * 2 : 256;
-		while (newcap < *len + n + 1) newcap *= 2;
+	/* *len + n + 1, computed raw, wraps for an adversarial n (a huge
+	 * -f program file) and would then wrongly compare as "already
+	 * fits" against *cap -- same fix as this file's sibling
+	 * awk_run.c's buf_append(). */
+	size_t need;
+	if (!__util_size_add(*len, n, &need) || !__util_size_add(need, 1, &need)) {
+		__util_diagf("awk: out of memory\n"); awk_unwind_fatal();
+	}
+	if (need > *cap) {
+		size_t newcap = *cap ? *cap : 256;
+		while (newcap < need) {
+			if (newcap > (size_t)-1 / 2) { __util_diagf("awk: out of memory\n"); awk_unwind_fatal(); }
+			newcap *= 2;
+		}
 		*buf = realloc(*buf, newcap);
 		if (!*buf) { __util_diagf("awk: out of memory\n"); awk_unwind_fatal(); }
 		*cap = newcap;

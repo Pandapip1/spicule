@@ -242,13 +242,18 @@ static int linebuf_insert_block(struct linebuf *lb, size_t at, const struct line
 {
 	size_t need = block->n, i;
 	if (!need) return 1;
-	if (lb->n + need > lb->cap) {
+	/* lb->n + need, computed raw, wraps for an adversarial need (a huge
+	 * inserted block) and would then wrongly compare as "already fits",
+	 * skipping the realloc below -- let __util_array_capacity's own
+	 * overflow-checked test decide instead. */
+	{
 		size_t newcap;
-		struct pline *g;
 		if (!__util_array_capacity(lb->cap, lb->n, need, 64, sizeof *lb->v, &newcap)) return 0;
-		g = __util_reallocarray(lb->v, newcap, sizeof *lb->v);
-		if (!g) return 0;
-		lb->v = g; lb->cap = newcap;
+		if (newcap != lb->cap) {
+			struct pline *g = __util_reallocarray(lb->v, newcap, sizeof *lb->v);
+			if (!g) return 0;
+			lb->v = g; lb->cap = newcap;
+		}
 	}
 	for (i = lb->n; i > at; i--) lb->v[i + need - 1] = lb->v[i - 1];
 	for (i = 0; i < need; i++) {

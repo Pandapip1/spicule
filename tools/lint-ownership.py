@@ -42,7 +42,9 @@ DIAGNOSTIC = re.compile(
     r"dereference alignment is not proven valid|"
     r"dereference accesses consumed storage|resource is not proven live|"
     r"resource is already released|operation uses a released resource|"
-    r"resource family does not match operation); origin '(.*)'; context '(.*)'; "
+    r"resource family does not match operation|"
+    r"resource is not proven released before function exit); "
+    r"origin '(.*)'; context '(.*)'; "
     r"expression '(.*)'; site '(.*)' "
     r"\[ntlibc\.(Ownership|OwnedConstruct|CapabilityToken|OwnershipType|ValidPointer|Resource)\]$"
 )

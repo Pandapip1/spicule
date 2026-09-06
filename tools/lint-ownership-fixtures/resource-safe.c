@@ -7,6 +7,7 @@ int open(const char *, int, ...);
 int close(int);
 long write(int, const void *, size_t);
 FILE *fopen(const char *, const char *);
+FILE *fdopen(int, const char *);
 int fclose(FILE *);
 int fflush(FILE *);
 int mkstemp(char *);
@@ -163,4 +164,150 @@ void close_pipe_array(int pipes[][2], char *deferred, int n)
 	for (i = 0; i < n; i++)
 		if (deferred[i] && i + 1 < n)
 			close(pipes[i][1]);
+}
+
+/* Adversarial cases for checkEndFunction's leak-at-exit scan: each of
+ * these acquires a real, trackable resource and must NOT be flagged. */
+
+/* Two differently-shaped branches, each releasing on its own -- unlike
+ * the single shared `if (... || fclose(g) ...)` release call this check
+ * exists to catch (see resource-unsafe.c's short_circuit_leak), neither
+ * branch here skips the release call it does reach. */
+void mode_branch_release(int mode)
+{
+	FILE *g = fopen("name", "w");
+	if (!g)
+		return;
+	if (mode) {
+		fflush(g);
+		fclose(g);
+	} else {
+		fclose(g);
+	}
+}
+
+/* A resource closed by a small helper this analysis inlines, not by the
+ * acquiring function itself -- ResourceMap's ordinary release-call check
+ * already discharges it wherever the actual fclose() call is reached, so
+ * the leak scan (keyed on ResourceMap, not on which lexical function
+ * issued the call) sees it released same as any other. */
+static void release_stream(FILE *f)
+{
+	fclose(f);
+}
+
+void cleanup_helper_release(void)
+{
+	FILE *g = fopen("name", "w");
+	if (!g)
+		return;
+	release_stream(g);
+}
+
+/* Returning the resource is a deliberate hand-off to the caller, the
+ * same "borrow across a function boundary is opaque to this per-function
+ * analysis, so trust it" reasoning descriptor_borrow/handle_borrow above
+ * already rely on, just crossed outward instead of inward. */
+FILE *open_log(void)
+{
+	return fopen("name", "a");
+}
+
+/* src/stdio/file.c's own __stdio_exit(): iterates a global list of
+ * already-open streams flushing each one before the process exits,
+ * without closing any of them (NtTerminateProcess reclaims everything
+ * at once). None of these FILE*s were acquired by this function --
+ * belongsToFrame's own frame-scoping is exactly what keeps a resource
+ * this function only borrowed from a global out of its own obligation,
+ * the same reasoning descriptor_borrow/handle_borrow rely on for a
+ * parameter instead of a global. */
+static FILE *open_files;
+void flush_all_open_streams(void)
+{
+	FILE *f;
+	for (f = open_files; f; f = 0)
+		fflush(f);
+}
+
+/* NT's out-parameter handles that escape straight into the caller's own
+ * storage (this codebase's dominant shape, e.g.
+ * src/thread/nt/plat_thread.c's __plat_semaphore_create()) are never this
+ * frame's obligation at all -- see checkPostCall's own
+ * isDirectParameterArgument() carve-out. */
+typedef long NTSTATUS;
+typedef void *HANDLE;
+NTSTATUS NtCreateSemaphore(HANDLE *, int, void *, long, long);
+int make_semaphore(HANDLE *out)
+{
+	return NtCreateSemaphore(out, 0, 0, 0, 0);
+}
+
+/* src/misc/linux/grp.c's getgrent() shape: a static/global FILE* cache,
+ * stored into directly (no struct field, no out-parameter) and never
+ * fclose()d by this function on purpose -- later calls reuse it, and
+ * process exit reclaims it. isTrustedResourceDestination() has to trust
+ * a plain global-storage destination unconditionally, the same way it
+ * already trusts a struct field, or every getXXXent()/setXXXent() cache
+ * in this codebase would still be a false leak. */
+static FILE *g_cached_stream;
+void cache_into_global(void)
+{
+	if (!g_cached_stream)
+		g_cached_stream = fopen("name", "r");
+}
+
+/* src/socket/socketpair.c's `pair[0] = client;`: the out-parameter-deref
+ * shape above (make_semaphore) spelled with subscript sugar on a `T *`
+ * parameter instead of an explicit `*out = `. Semantically identical --
+ * `pair[0]` is `*(pair + 0)` -- but a different AST shape
+ * isTrustedResourceDestination() has to recognize separately. */
+void store_into_out_array(int pair[2])
+{
+	pair[0] = open("name", 0);
+}
+
+/* src/dirent/opendir.c's opendir()/alloc_dir() shape: open() acquires fd
+ * in THIS frame, then hands it by value into a small same-TU helper that
+ * the analyzer inlines, which stores it into a struct field from ITS OWN
+ * (callee) frame. isTrustedResourceDestination() trusts the store
+ * unconditionally, but checkPostStmt must not additionally require the
+ * store to happen in the acquiring frame -- ownership transfer is a fact
+ * about the value, not about which frame's instruction does the store. */
+struct wrapper { int fd; };
+static struct wrapper *wrap_fd(int fd)
+{
+	static struct wrapper w;
+	w.fd = fd;
+	return &w;
+}
+
+void store_via_inlined_helper(void)
+{
+	int fd = open("name", 0);
+	if (fd < 0)
+		return;
+	(void)wrap_fd(fd);
+}
+
+/* src/util/crontab.c's do_edit()/src/util/spool.c's __spool_new_job()
+ * shape: mkstemp()'s fd is immediately handed to fdopen(), which on
+ * success absorbs it into the FILE* it returns instead of ever calling
+ * close() on it directly -- fclose() on the FILE* closes the fd from
+ * here on. consumedDescriptorArgument() has to know fdopen() (and
+ * src/stdio/file.c's __file_new(), fopen()/fdopen()/tmpfile()'s own
+ * shared helper) retires the fd argument on success, or every
+ * mkstemp()+fdopen() pairing in this codebase is a false leak -- and the
+ * retirement has to be success-gated, not unconditional like close()'s
+ * own release() entry, or the real close(fd) on fdopen()'s OWN failure
+ * path right below becomes a false double-release instead. */
+void fd_retired_via_fdopen(void)
+{
+	char tmpl[] = "nameXXXXXX";
+	int fd = mkstemp(tmpl);
+	FILE *f;
+	if (fd < 0)
+		return;
+	f = fdopen(fd, "w");
+	if (!f) { close(fd); return; }
+	fclose(f);
 }

@@ -806,11 +806,18 @@ stage_shell() {
 	out=$builddir/shellcheck.log
 	mkdir -p "$builddir"
 	# No -s: these scripts are a deliberate mix of #!/bin/sh (configure,
-# the hook, install.sh, run-tests.py, this file) and #!/usr/bin/env bash
-	# (the two generators), and forcing one dialect would report the other
-	# half's perfectly valid syntax as errors.  shellcheck reads the
-	# shebangs itself.
-	shellcheck configure .githooks/pre-commit tools/*.sh > "$out" 2>&1
+	# the hooks, install.sh, this file) and #!/usr/bin/env bash (the two
+	# generators), and forcing one dialect would report the other half's
+	# perfectly valid syntax as errors.  shellcheck reads the shebangs
+	# itself.
+	#
+	# .githooks/commit-msg and fuzz/coverage.sh were both added (28cef016,
+	# 8fe4e4ea) after this line was last written and never joined it, so
+	# this stage had never once checked either file -- confirmed by
+	# running the tool on them directly, outside this script, before
+	# this fix.
+	shellcheck configure .githooks/pre-commit .githooks/commit-msg \
+		fuzz/coverage.sh tools/*.sh > "$out" 2>&1
 	rc=$?
 	n=$(grep -cE '^In .* line [0-9]+:' "$out")
 	note "shellcheck: $n finding(s) -> $out"
@@ -829,7 +836,8 @@ stage_shell() {
 	# never pays for or sees this second pass at all.
 	if [ "${GITHUB_ACTIONS:-}" = true ]; then
 		gccout=$builddir/shellcheck.gcc.log
-		shellcheck -f gcc configure .githooks/pre-commit tools/*.sh > "$gccout" 2>&1
+		shellcheck -f gcc configure .githooks/pre-commit .githooks/commit-msg \
+			fuzz/coverage.sh tools/*.sh > "$gccout" 2>&1
 		tools/lint-gh-annotate.sh warning "$gccout"
 	fi
 	[ "$rc" -eq 0 ] && return 0

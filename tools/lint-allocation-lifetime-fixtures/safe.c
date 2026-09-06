@@ -9,6 +9,12 @@ void local_release(void)
 	free(p);
 }
 
+void file_correct_usage(void)
+{
+	void *f = fopen_stub("path");
+	if (f) fclose_stub(f);
+}
+
 withtok(heap_allocated)
 void *heap_boundary(size_t size)
 {
@@ -199,4 +205,19 @@ void missing_release_is_not_caught(void)
 	struct word_vector wv;
 	fill_word_vector(&wv);
 	(void)wv;
+}
+
+/* foreign_terminal_allocated has no implemented_by(...) -- there is no
+ * further, more-primitive family for this body to route a release
+ * through, so consume(...) on this function's own signature IS the
+ * release, trusted the same way it already is at every CALL site to any
+ * consume(...)-annotated function (including one with no body at all to
+ * inspect). This is the real include/locale.h locale_opened/freelocale()
+ * shape: a correct no-op body for a family with nothing further to
+ * decompose into. Contrast broken_destroy() in unsafe.c, whose family
+ * (broken_allocated) DOES declare implemented_by(heap_allocated) and so
+ * still must, and does, get flagged for the identical no-op body. */
+void terminal_release(void *object consume(foreign_terminal_allocated))
+{
+	(void)object;
 }

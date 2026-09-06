@@ -120,6 +120,13 @@ static int out_contains(const char *needle)
 	return strstr(buf, needle) != 0;
 }
 
+static int err_contains(const char *needle)
+{
+	char buf[8192];
+	slurp_into(ERRFILE, buf, sizeof buf);
+	return strstr(buf, needle) != 0;
+}
+
 static int files_equal(const char *a, const char *b)
 {
 	char ba[8192], bb[8192];
@@ -328,6 +335,163 @@ static void test_pax_builtin(void)
 	CHECK(out_contains("scratch/pb1.txt"));
 }
 
+/* ==== pax(1p) extraction-safety regression tests ==========================
+ *
+ * src/util/pax.c's own name_is_safe()/ensure_parent_dirs() only defend
+ * against a *hostile* archive -- one this project's own -w side never
+ * produces, since ustar_split_name()/write_cpio_header() only ever emit
+ * '/'-separated, non-".."  names. Exercising that defense therefore
+ * means hand-building raw ustar member blocks below (pax -w has no way
+ * to ask for a traversal-unsafe name, a foreign-linkname hardlink, or a
+ * symlink planted ahead of a member that walks through it), the same
+ * way test/util-patch.c hand-derives its four diff format fixtures. */
+
+static void ustar_put_oct_raw(unsigned char *field, int width, unsigned long value)
+{
+	char tmp[24];
+	int i;
+	snprintf(tmp, sizeof tmp, "%0*lo", width - 1, value);
+	for (i = 0; i < width - 1; i++) field[i] = tmp[i];
+	field[width - 1] = 0;
+}
+
+/* Appends one raw 512-byte ustar header (+ NUL-padded data, if any) to
+ * `fd` for a member with the given name/typeflag/linkname -- deliberately
+ * bypassing write_ustar_header()'s own name_is_safe()-adjacent
+ * refusals, so the member can carry exactly the traversal-unsafe shape
+ * this file's tests below need. */
+static void write_raw_ustar_member(int fd, const char *name, char typeflag,
+                                     const char *linkname, const char *data, size_t datalen)
+{
+	unsigned char block[512];
+	unsigned long sum;
+	size_t i, namelen = strlen(name);
+
+	memset(block, 0, sizeof block);
+	memcpy(block, name, namelen < 100 ? namelen : 100);
+	ustar_put_oct_raw(block + 100, 8, 0644);
+	ustar_put_oct_raw(block + 108, 8, 0);
+	ustar_put_oct_raw(block + 116, 8, 0);
+	ustar_put_oct_raw(block + 124, 12, (unsigned long)datalen);
+	ustar_put_oct_raw(block + 136, 12, 0);
+	memset(block + 148, ' ', 8);
+	block[156] = (unsigned char)typeflag;
+	if (linkname) strncpy((char *)block + 157, linkname, 100);
+	memcpy(block + 257, "ustar", 6);
+	memcpy(block + 263, "00", 2);
+
+	sum = 0;
+	for (i = 0; i < sizeof block; i++) sum += block[i];
+	{
+		char tmp[8];
+		snprintf(tmp, sizeof tmp, "%06lo", sum & 0777777UL);
+		memcpy(block + 148, tmp, 6);
+		block[154] = 0;
+		block[155] = ' ';
+	}
+
+	write(fd, block, sizeof block);
+	if (datalen) {
+		size_t pad = (512 - (datalen % 512)) % 512;
+		write(fd, data, datalen);
+		if (pad) {
+			char zero[512];
+			memset(zero, 0, sizeof zero);
+			write(fd, zero, pad);
+		}
+	}
+}
+
+static void write_ustar_trailer_raw(int fd)
+{
+	unsigned char zero[1024];
+	memset(zero, 0, sizeof zero);
+	write(fd, zero, sizeof zero);
+}
+
+/* A member name using '\\' (rather than '/') to spell a ".." traversal
+ * is exactly what a hostile archive would use to escape the extraction
+ * directory on the NT/tcc target, where backslash is a real path
+ * separator (see src/internal/nt/path.c); name_is_safe() must catch it
+ * on every build, not just that one. Checks the member is refused
+ * (exit 1, diagnostic) and nothing is ever created under that literal
+ * name. */
+static void test_pax_rejects_backslash_traversal(void)
+{
+	int fd;
+	char *r[] = { (char *)"pax", (char *)"-r", (char *)"-f", (char *)"scratch/paxbstrav.tar", 0 };
+	struct stat st;
+
+	unlink("scratch/paxbstrav.tar");
+	unlink("scratch\\..\\..\\paxbstrav_out.txt");
+	fd = open("scratch/paxbstrav.tar", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	CHECK(fd >= 0);
+	if (fd < 0) return;
+	write_raw_ustar_member(fd, "scratch\\..\\..\\paxbstrav_out.txt", '0', NULL, "x", 1);
+	write_ustar_trailer_raw(fd);
+	close(fd);
+
+	CHECK(run(pax_path, r) == 1);
+	CHECK(err_contains("refusing to extract"));
+	CHECK(stat("scratch\\..\\..\\paxbstrav_out.txt", &st) != 0);
+}
+
+/* A ustar hardlink member's linkname (typeflag '1') is fed straight to
+ * link() as the file to link *from* -- an unchecked "../etc/passwd"-
+ * style linkname would alias an arbitrary existing file into the
+ * extraction tree the instant this one member is processed, no second
+ * member required. Checks the member is refused before link() is ever
+ * called (the destination path is never created). */
+static void test_pax_hardlink_linkname_traversal_refused(void)
+{
+	int fd;
+	char *r[] = { (char *)"pax", (char *)"-r", (char *)"-f", (char *)"scratch/paxhl.tar", 0 };
+	struct stat st;
+
+	unlink("scratch/paxhl.tar");
+	unlink("scratch/hltrav.txt");
+	fd = open("scratch/paxhl.tar", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	CHECK(fd >= 0);
+	if (fd < 0) return;
+	write_raw_ustar_member(fd, "scratch/hltrav.txt", '1', "../../etc/passwd", NULL, 0);
+	write_ustar_trailer_raw(fd);
+	close(fd);
+
+	CHECK(run(pax_path, r) == 1);
+	CHECK(err_contains("refusing to extract"));
+	CHECK(stat("scratch/hltrav.txt", &st) != 0);
+}
+
+/* Both member names here individually pass name_is_safe() (neither is
+ * absolute nor contains ".."), but the first is a symlink and the
+ * second's name walks through it: "trapdir" -> "scratch", then
+ * "trapdir/evil.txt". Without ensure_parent_dirs() refusing to walk
+ * through an already-extracted non-directory component, the second
+ * member lands as "scratch/evil.txt" via the symlink -- exactly the
+ * "extract a symlink, then extract through it" attack. Checks that
+ * path never gets created. */
+static void test_pax_symlink_component_escape_refused(void)
+{
+	int fd;
+	char *r[] = { (char *)"pax", (char *)"-r", (char *)"-f", (char *)"scratch/paxsym.tar", 0 };
+	struct stat st;
+
+	unlink("scratch/paxsym.tar");
+	unlink("trapdir");
+	unlink("scratch/evil.txt");
+	fd = open("scratch/paxsym.tar", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	CHECK(fd >= 0);
+	if (fd < 0) return;
+	write_raw_ustar_member(fd, "trapdir", '2', "scratch", NULL, 0);
+	write_raw_ustar_member(fd, "trapdir/evil.txt", '0', NULL, "pwned", 5);
+	write_ustar_trailer_raw(fd);
+	close(fd);
+
+	CHECK(run(pax_path, r) == 1);
+	CHECK(stat("scratch/evil.txt", &st) != 0);
+	unlink("trapdir");
+}
+
 /* ==== scratch directory setup/teardown ==================================== */
 
 static void rmtree_scratch(void)
@@ -348,6 +512,9 @@ static void rmtree_scratch(void)
 	unlink("scratch/paxcopydir/scratch/py2.txt");
 	rmdir("scratch/paxcopydir/scratch");
 	rmdir("scratch/paxcopydir");
+	unlink("scratch/paxbstrav.tar"); unlink("scratch\\..\\..\\paxbstrav_out.txt");
+	unlink("scratch/paxhl.tar"); unlink("scratch/hltrav.txt");
+	unlink("scratch/paxsym.tar"); unlink("scratch/evil.txt"); unlink("trapdir");
 	unlink("scratch/.keep");
 	rmdir("scratch");
 }
@@ -400,6 +567,9 @@ int main(int argc, char **argv)
 	test_pax_cpio_roundtrip();
 	test_pax_copy_mode();
 	test_pax_builtin();
+	test_pax_rejects_backslash_traversal();
+	test_pax_hardlink_linkname_traversal_refused();
+	test_pax_symlink_component_escape_refused();
 
 	cleanup_artifacts();
 

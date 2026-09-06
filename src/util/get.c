@@ -321,7 +321,21 @@ static int get_one(const char *path, int pflag, const char *rflag)
 
 		g = fopen(gpath, "wb");
 		if (!g) { __util_diagf("get: %s: %s\n", gpath, strerror(errno)); rc = 1; goto out; }
-		if (write_body(g, lines, nlines) != 0 || fclose(g) != 0) {
+		/* fclose(g) must run whether or not write_body() failed --
+		 * short-circuit || here used to skip it on a write failure,
+		 * leaking g (caught by include/stdio.h's file_stream_open
+		 * contract on fopen()/fclose()). errno is saved across the
+		 * unconditional fclose() so a real write_body() failure is
+		 * still what strerror() reports, the same convention
+		 * read_whole_file() above already uses for this exact
+		 * fclose-after-a-diagnosed-failure shape. */
+		if (write_body(g, lines, nlines) != 0) {
+			int saved_errno = errno;
+			(void)fclose(g);
+			errno = saved_errno;
+			__util_diagf("get: %s: %s\n", gpath, strerror(errno));
+			rc = 1;
+		} else if (fclose(g) != 0) {
 			__util_diagf("get: %s: %s\n", gpath, strerror(errno));
 			rc = 1;
 		}

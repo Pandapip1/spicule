@@ -116,6 +116,7 @@ static struct newlocale_result newlocale_compute(int mask, const char *name)
 	return r;
 }
 
+withtok(locale_opened)
 locale_t newlocale(int mask, const char *name, locale_t base)
 {
 	(void)base;
@@ -124,11 +125,16 @@ locale_t newlocale(int mask, const char *name, locale_t base)
 	return r.value;
 }
 
-void freelocale(locale_t l)
+/* Correctly a no-op: every locale_t in this implementation names the one
+ * immutable static object below, never a real allocation (see
+ * include/locale.h's tokdef comment for why consume(locale_opened) is
+ * still sound here). */
+void freelocale(locale_t l consume(locale_opened))
 {
 	(void)l;
 }
 
+withtok(locale_opened)
 locale_t duplocale(locale_t l)
 {
 	(void)l;

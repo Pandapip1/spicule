@@ -209,6 +209,15 @@ struct wfile_table {
 	size_t n, cap;
 };
 
+/* Deliberately NOT withtok(file_stream_open): unlike a plain producer,
+ * this cache sometimes returns a FILE* it already owns from a previous
+ * call (t->entries[i].f, read back below) rather than a fresh
+ * acquisition -- annotating it produced a real false leak at every
+ * caller that merely uses the cached result without itself closing it
+ * (e.g. wfile_write_line()), since the checker cannot distinguish "just
+ * minted" from "borrowed back from our own cache" on a producer's
+ * return value. wfile_table_close() below is what actually proves this
+ * cache leaks nothing. */
 static FILE *wfile_get(struct wfile_table *t, const char *name)
 {
 	size_t i;

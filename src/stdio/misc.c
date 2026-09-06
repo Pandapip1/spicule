@@ -78,6 +78,7 @@ static const char *tmpdir(void)
 	return d;
 }
 
+withtok(file_stream_open)
 FILE *tmpfile(void)
 {
 	const char *dir = tmpdir();
@@ -172,6 +173,7 @@ char *ctermid(char *s)
 	return buf;
 }
 
+withtok(piped_stream_open)
 FILE *popen(const char *cmd, const char *mode) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
 	int rw = mode[0] == 'w';
@@ -243,7 +245,7 @@ FILE *popen(const char *cmd, const char *mode) // NOLINT(bugprone-easily-swappab
 	return f;
 }
 
-int pclose(FILE *f)
+int pclose(FILE *f consume(piped_stream_open))
 {
 	int status;
 	pid_t pid = f->pid;

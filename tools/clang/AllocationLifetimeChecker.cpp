@@ -79,6 +79,36 @@ static bool isDynamicStorageToken(ASTContext &Context, StringRef Name) {
   return hasQualifier(findTokenSort(Context, Name), "qual:dynamic_storage");
 }
 
+/* A family with no implemented_by(...) names no further, more-primitive
+ * family for its consume(...) site to decompose into -- it IS the leaf of
+ * the nominal graph (see include/allocation_tokens.h's terminal
+ * platform_heap_allocated/platform_pages_allocated on Linux, or a future
+ * locale_opened with no real backing storage). Every consume(...)
+ * annotation is already trusted, unconditionally, at every CALL SITE
+ * (checkPreCall never re-inspects a callee's body -- it cannot, for an
+ * opaque external declaration with no visible body at all). Requiring a
+ * terminal family's OWN designated releaser to additionally re-derive its
+ * own release from inside its own body demands strictly more proof of
+ * that one annotation than any caller anywhere is ever required to
+ * produce -- not a real soundness gap, just an inconsistency. A family
+ * that DOES declare implemented_by(...) is different: it names a real,
+ * further family, and requiring this body to actually reach a release of
+ * THAT family (checkPreCall's existing morphism-discharge path) is a
+ * genuine, load-bearing proof that catches an annotation that lies about
+ * its own implementation (see closedir()/catclose()/iconv_close(), whose
+ * families all route to a further heap family this way) -- unaffected by
+ * this. Anything other than a clean absent-qualifier (a malformed,
+ * conflicting, or otherwise broken implemented_by(...)) is left to the
+ * existing contract validation to report instead of being silently
+ * treated as terminal. */
+static bool isTerminalDynamicStorageFamily(ASTContext &Context,
+                                           const IdentifierInfo *Family) {
+  if (!Family)
+    return false;
+  return rawTokenImplementation(findTokenSort(Context, Family->getName()))
+             .Status == TokenImplementationStatus::Missing;
+}
+
 static const IdentifierInfo *annotationFamily(const Decl *Declaration,
                                               StringRef Prefix) {
   if (!Declaration)
@@ -781,8 +811,22 @@ public:
       auto Observation = observeLifecycleExit(lifecycleFor(State, Symbol));
       if (Observation.Events == LifecycleEvent::None)
         continue;
-      const Stmt *const *Origin = State->get<AllocationOrigin>(Symbol);
       const bool *Freer = State->get<FreerObligation>(Symbol);
+      /* Exempt only a cleanly-untouched terminal-family Freer obligation
+       * (nothing in the body ever attempted, and failed, to do anything
+       * with it) -- StateUnproven here means some in-body operation DID
+       * touch this value and got a real mismatch (wrong family, wrong
+       * morphism, ...), which stays a genuine bug regardless of whether
+       * the family is terminal. */
+      if (!contains(Observation.Events, LifecycleEvent::StateUnproven) &&
+          Freer && *Freer) {
+        const IdentifierInfo *const *Family =
+            State->get<AllocationFamily>(Symbol);
+        if (Family &&
+            isTerminalDynamicStorageFamily(C.getASTContext(), *Family))
+          continue;
+      }
+      const Stmt *const *Origin = State->get<AllocationOrigin>(Symbol);
       const Stmt *Site = Origin ? *Origin
                                 : (Return ? static_cast<const Stmt *>(Return)
                                    : Function ? Function->getBody()

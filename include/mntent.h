@@ -45,6 +45,7 @@ struct mntent {
 #define MNTOPT_NOSUID   "nosuid"
 #define MNTOPT_NOAUTO   "noauto"
 
+withtok(file_stream_open)
 FILE *setmntent(const char *, const char *);
 struct mntent *getmntent(FILE *);
 struct mntent *getmntent_r(FILE *__restrict, struct mntent *__restrict,

@@ -169,6 +169,12 @@ static void free_node(struct node *n consume(find_expression_allocated))
 	if (!n) return;
 	free_node(n->a);
 	free_node(n->b);
+	/* n->acc is only ever grown by do_exec_plus_accumulate() below, which
+	 * always sets it to a checked-nonnull realloc() result before it ever
+	 * increments n->acc_n -- so n->acc_n > 0 here means n->acc was
+	 * already set, a fact this per-function analysis can't see across
+	 * the call boundary. */
+	if (n->acc_n > 0) __ownership_pointer_nonnull(n->acc);
 	for (i = 0; i < n->acc_n; i++) free(n->acc[i]);
 	free(n->acc);
 	free(n);
@@ -185,6 +191,12 @@ static void ferr(struct find_ctx *c, const char *msg)
 static const char *peek(struct find_ctx *c) __attribute__((nonnull(1)));
 static const char *peek(struct find_ctx *c)
 {
+	/* c->v is set exactly once, in __util_find_main() right from its own
+	 * (elements_withtok(null_terminated, argc)) argv parameter, and never
+	 * reassigned -- genuinely never NULL for this find_ctx's whole
+	 * lifetime, but that fact does not survive a struct field read this
+	 * per-function analysis cannot see through. */
+	__ownership_pointer_nonnull(c->v);
 	return c->i < c->n ? c->v[c->i] : NULL;
 }
 
@@ -197,6 +209,7 @@ static const char *consume_arg(struct find_ctx *c, const char *name)
 		ferr(c, msg);
 		return "";
 	}
+	__ownership_pointer_nonnull(c->v); /* see peek()'s own comment above */
 	return c->v[c->i++];
 }
 
@@ -236,6 +249,7 @@ static struct node *parse_primary(struct find_ctx *c)
 	const char *t;
 
 	if (c->i >= c->n) { ferr(c, "expression expected"); return alloc_node(P_PRINT); }
+	__ownership_pointer_nonnull(c->v); /* see peek()'s own comment */
 	t = c->v[c->i];
 	__ownership_string_terminated(t);
 
@@ -375,6 +389,7 @@ static struct node *parse_primary(struct find_ctx *c)
 		start = c->i;
 		for (;;) {
 			if (c->i >= c->n) break;
+			__ownership_pointer_nonnull(c->v); /* see peek()'s own comment */
 			term = c->v[c->i];
 			__ownership_string_terminated(term);
 			if (!strcmp(term, ";") || !strcmp(term, "+")) break;
@@ -529,9 +544,17 @@ static void add_pruned(const char *path withtok(null_terminated))
 	{
 		size_t len = strlen(path) + 1;
 		char *copy = malloc(len);
+		char **pr = g_find.pruned;
 		if (!copy) { g_find.fatal = 1; return; }
 		memcpy(copy, path, len);
-		g_find.pruned[g_find.pruned_n++] = copy;
+		/* g_find.pruned_cap is > 0 at this point (just grown above, or
+		 * already grown by a prior call and never reset except together
+		 * with g_find.pruned itself in free_find_global()), and
+		 * g_find.pruned is only ever non-NULL exactly when
+		 * g_find.pruned_cap > 0 -- a whole-program invariant this
+		 * per-function analysis cannot see across earlier calls. */
+		__ownership_pointer_nonnull(pr);
+		pr[g_find.pruned_n++] = copy;
 	}
 }
 
@@ -539,20 +562,36 @@ static int under_pruned(const char *path) __attribute__((nonnull(1)));
 static int under_pruned(const char *path)
 {
 	size_t i;
+	/* add_pruned() above stores each entry via malloc()+memcpy(), always
+	 * NUL-terminated, and g_find.pruned_n > 0 here implies
+	 * g_find.pruned_cap > 0 implies g_find.pruned != NULL -- see
+	 * add_pruned()'s own comment above. Read into a local once: the
+	 * checker's nonnull axiom fact does not survive re-reading a global
+	 * variable's field expression at each loop iteration, only a stable
+	 * local binding. */
+	char **pr = g_find.pruned;
 	for (i = 0; i < g_find.pruned_n; i++) {
 		size_t pl;
-		/* add_pruned() below stores each entry via malloc()+memcpy(), always NUL-terminated. */
-		__ownership_string_terminated(g_find.pruned[i]);
-		pl = strlen(g_find.pruned[i]);
-		if (!strncmp(path, g_find.pruned[i], pl) && path[pl] == '/') return 1;
+		__ownership_pointer_nonnull(pr);
+		__ownership_string_terminated(pr[i]);
+		pl = strlen(pr[i]);
+		if (!strncmp(path, pr[i], pl) && path[pl] == '/') return 1;
 	}
 	return 0;
 }
 
 static void clear_pruned_from(size_t first)
 {
-	while (g_find.pruned_n > first)
-		free(g_find.pruned[--g_find.pruned_n]);
+	/* see under_pruned()'s own comment above on why this is read into a
+	 * local once rather than re-reading g_find.pruned each iteration. */
+	char **pr = g_find.pruned;
+	while (g_find.pruned_n > first) {
+		/* g_find.pruned_n > first >= 0 here implies g_find.pruned_n > 0,
+		 * hence g_find.pruned != NULL -- see add_pruned()'s own comment
+		 * above. */
+		__ownership_pointer_nonnull(pr);
+		free(pr[--g_find.pruned_n]);
+	}
 }
 
 static void free_find_global(void)
@@ -613,6 +652,13 @@ static int do_exec_semi(struct node *n, const char *path)
 	int rc;
 	if (!argv2) { g_find.exit_status = 1; return 0; }
 	for (i = 0; i < n->exec_argc; i++) {
+		/* parse_primary()'s own -exec/-ok handling sets n->exec_argc and
+		 * n->exec_argv together in the same statement pair, only ever
+		 * on the non-error path (exec_argc is otherwise left at its
+		 * calloc()'d 0) -- so exec_argc > 0 here genuinely implies
+		 * exec_argv != NULL, a fact that does not survive the struct
+		 * field read across this function boundary. */
+		__ownership_pointer_nonnull(n->exec_argv);
 		__ownership_string_terminated(n->exec_argv[i]);
 		argv2[i] = !strcmp(n->exec_argv[i], "{}") ? (char *)path : (char *)n->exec_argv[i];
 	}
@@ -642,6 +688,14 @@ static int do_exec_plus_accumulate(struct node *n, const char *path withtok(null
 		char *copy = malloc(len);
 		if (!copy) { g_find.fatal = 1; return 1; }
 		memcpy(copy, path, len);
+		/* n->acc_cap is > 0 at this point (just grown above, or already
+		 * grown by a prior call to this same function -- n->acc_cap is
+		 * never reset once nonzero, mirroring g_find.pruned/pruned_cap's
+		 * own invariant, see add_pruned()'s comment), and n->acc is only
+		 * ever non-NULL exactly when n->acc_cap > 0 -- a fact that does
+		 * not survive across those earlier calls in this per-function
+		 * analysis. */
+		__ownership_pointer_nonnull(n->acc);
 		n->acc[n->acc_n++] = copy;
 	}
 	return 1; /* "{} +" always evaluates true */
@@ -721,6 +775,9 @@ static void flush_plus(struct node *n)
 	if ((n->type == P_EXEC || n->type == P_OK) && n->exec_plus && n->acc_n > 0) {
 		size_t fixed_argc = n->exec_argc - 1; /* excludes the trailing "{}" marker */
 		size_t i = 0;
+		/* n->acc_n > 0 here implies n->acc_cap > 0 implies n->acc != NULL
+		 * -- see do_exec_plus_accumulate()'s own comment. */
+		__ownership_pointer_nonnull(n->acc);
 		while (i < n->acc_n) {
 			size_t j = i, bytes = 0, k;
 			char **argv2;
@@ -731,6 +788,12 @@ static void flush_plus(struct node *n)
 			}
 			argv2 = __util_mallocarray(fixed_argc + (j - i) + 1, sizeof(char *));
 			if (!argv2) { g_find.exit_status = 1; return; }
+			/* n->exec_plus (checked above) is only ever set once
+			 * n->exec_argc/n->exec_argv have both been set in
+			 * parse_primary()'s own -exec/-ok "+" handling -- see
+			 * do_exec_semi()'s own comment on that same exec_argc/
+			 * exec_argv invariant. */
+			__ownership_pointer_nonnull(n->exec_argv);
 			for (k = 0; k < fixed_argc; k++) argv2[k] = (char *)n->exec_argv[k];
 			for (k = 0; k < j - i; k++) argv2[fixed_argc + k] = n->acc[i + k];
 			argv2[fixed_argc + (j - i)] = 0;
@@ -753,6 +816,12 @@ int __util_find_main(
 
 	while (i < argc) {
 		const char *a = argv[i];
+		/* a is one of argv's own elements (i < argc), genuinely never
+		 * NULL by this function's own elements_withtok(null_terminated,
+		 * argc) contract on argv -- restated here the same way
+		 * src/util/od.c's __util_od_main() restates its own analogous
+		 * argv-slice fact. */
+		__ownership_pointer_nonnull(a);
 		if (a[0] == '-' || !strcmp(a, "(") || !strcmp(a, "!")) break;
 		if (npaths >= (int)(sizeof paths / sizeof paths[0])) {
 			__util_diagf("find: too many path operands\n");

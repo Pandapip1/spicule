@@ -548,6 +548,13 @@ static int do_delete(const char *archive, char **files, int nfiles, int verbose)
 	}
 	fwrite(AR_MAGIC, 1, AR_MAGIC_LEN, tmp);
 
+	/* read_all_headers() only ever sets *nout > 0 together with a
+	 * checked-nonnull *out (every element is stored into arr right after
+	 * a checked reallocarray(), the same 0-capacity-forces-first-growth
+	 * pattern as this project's other growable arrays) -- so n > i here
+	 * implies arr != NULL, a fact that does not survive that call's own
+	 * out-parameter return. */
+	if (n > 0) __ownership_pointer_nonnull(arr);
 	for (i = 0; i < n; i++) {
 		if (name_wanted(arr[i].m.name, files, nfiles)) {
 			if (verbose) printf("d - %s\n", arr[i].m.name);
@@ -677,6 +684,12 @@ int __util_ar_main(
 
 	{
 		char *p = argv[1];
+		/* argc >= 3 (checked above), so argv[1] is genuinely one of
+		 * argv's own elements, never NULL by this function's own
+		 * elements_withtok(null_terminated, argc) contract on argv --
+		 * restated here the same way src/util/od.c's __util_od_main()
+		 * restates its own analogous argv-slice fact. */
+		__ownership_pointer_nonnull(p);
 		if (*p == '-') p++;
 		for (; *p; p++) {
 			switch (*p) {

@@ -888,6 +888,11 @@ static int do_receive(const struct passwd *me, const char *path, int headers_onl
 	}
 	if (!no_summary) {
 		size_t i;
+		/* parse_mbox() always allocates at least one element (its own
+		 * `nb ? nb : 1` reallocarray() count) whenever it returns
+		 * success, so msgs is unconditionally non-NULL here -- a fact
+		 * that does not survive that call's own out-parameter return. */
+		__ownership_pointer_nonnull(msgs);
 		printf("Mailbox %s: %zu message%s\n", path, n, n == 1 ? "" : "s");
 		for (i = 1; i <= n; i++) print_summary_line(buf, &msgs[i - 1], i, 1);
 	}

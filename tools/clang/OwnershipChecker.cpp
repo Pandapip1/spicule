@@ -97,6 +97,8 @@ using ntlibc::algebra::absentLifecycle;
 using ntlibc::algebra::applyLifecycleOperation;
 using ntlibc::algebra::contains;
 using ntlibc::algebra::liveLifecycle;
+using ntlibc::algebra::SentinelSplit;
+using ntlibc::algebra::splitOnExcludedSentinel;
 using ntlibc::algebra::unknownLifecycle;
 
 struct CapabilityPresence {
@@ -1549,17 +1551,14 @@ class AggregateElementTokenChecker
     if (!Defined)
       return nullptr;
     QualType Type = Value.getType(C.getASTContext());
-    if (Type->isPointerType())
-      return *Sentinel == 0 ? State->assume(*Defined, true) : nullptr;
-    if (!Type->isIntegralOrEnumerationType())
+    if (!Type->isPointerType() && !Type->isIntegralOrEnumerationType())
       return nullptr;
-    SVal NotSentinel = C.getSValBuilder().evalBinOp(
-        State, BO_NE, *Defined,
-        C.getSValBuilder().makeIntVal(*Sentinel, Type),
-        C.getSValBuilder().getConditionType());
-    std::optional<DefinedOrUnknownSVal> Condition =
-        NotSentinel.getAs<DefinedOrUnknownSVal>();
-    return Condition ? State->assume(*Condition, true) : nullptr;
+    /* This caller only wants the "definitely not the sentinel" half of the
+     * split -- the half where the value already carries real ownership --
+     * and drops the sentinel-equal half entirely. */
+    return splitOnExcludedSentinel(State, *Defined, Type, *Sentinel,
+                                   C.getSValBuilder())
+        .NonSentinel;
   }
 
   static bool parameterIsReadOnly(const FunctionDecl *Function,

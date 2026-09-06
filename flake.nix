@@ -10,8 +10,9 @@
   # above `versionedLlvm18` below for the one nontrivial wrinkle (Debian-style
   # `clang-18`-shaped binary names that nixpkgs does not itself provide), and
   # the comment above `tcc` for the one package with no nixpkgs equivalent at
-  # all -- its derivation reproduces .github/actions/setup-tinycc's own
-  # clone/patch/build steps instead of an existing nixpkgs combination.
+  # all -- its own derivation is the pinned tinycc's sole clone/patch/build
+  # recipe now, and .github/actions/setup-tinycc just runs `nix build .#tcc`
+  # rather than duplicating it.
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -26,11 +27,12 @@
         let
           llvm18 = pkgs.llvmPackages_18;
 
-          # The NT/win32 build's actual compiler, reproduced through Nix
-          # instead of .github/actions/setup-tinycc's `git clone`/`git
-          # apply`/`./configure`/`make` sequence. nixpkgs' own `tinycc`
-          # package (pkgs/by-name/ti/tinycc) is NOT a substitute: it pins
-          # upstream tinycc.git (repo.or.cz) at f6385c05, 238 commits
+          # The NT/win32 build's actual compiler, built by this derivation's
+          # own `git clone`/`git apply`/`./configure`/`make` sequence --
+          # .github/actions/setup-tinycc just runs `nix build .#tcc` rather
+          # than carrying a second copy of that sequence. nixpkgs' own
+          # `tinycc` package (pkgs/by-name/ti/tinycc) is NOT a substitute: it
+          # pins upstream tinycc.git (repo.or.cz) at f6385c05, 238 commits
           # behind this project's own fork/pin below, and that gap is
           # exactly where upstream grew arm64-win32 support (grischka's
           # "arm64-win32 review: fix problems and pass tests" and Benjamin
@@ -48,11 +50,9 @@
           # what it produces.
           tcc = pkgs.stdenv.mkDerivation {
             pname = "ntlibc-tcc";
-            # Matches .github/workflows/ci.yml's TINYCC_SHA. Keep this,
-            # the `rev`/`hash` below, and the patch below in sync with
-            # that file and .github/actions/setup-tinycc/action.yml by
-            # hand -- there is no automated link between a GitHub Actions
-            # env var and a Nix derivation.
+            # This `version`, the `rev`/`hash` below, and the patch below
+            # are the sole pin for tinycc now -- .github/actions/setup-
+            # tinycc has no copy of its own to drift out of sync with.
             version = "69eed4d3";
 
             src = pkgs.fetchFromGitHub {
@@ -62,12 +62,11 @@
               hash = "sha256-fCfxxlGwvZ6UzWReC+7saiH9lGC6trG5bgETFwiiHlY=";
             };
 
-            # Identical to the heredoc setup-tinycc/action.yml applies at
-            # CI time: the pinned delay-import change calls its
-            # unsupported-target stub unconditionally, which rejects
-            # every ordinary arm64 PE link even when --delay-all was not
-            # requested. Keep the rejection for an actual unsupported
-            # request, but leave normal arm64 imports alone.
+            # The pinned delay-import change calls its unsupported-target
+            # stub unconditionally, which rejects every ordinary arm64 PE
+            # link even when --delay-all was not requested. Keep the
+            # rejection for an actual unsupported request, but leave
+            # normal arm64 imports alone.
             patches = [
               (pkgs.writeText "tcc-delay-all-arm64.patch" ''
                 diff --git a/tccpe.c b/tccpe.c
@@ -99,16 +98,17 @@
 
             # tinycc's ./configure is a hand-rolled script, not autoconf
             # -- it does not understand genericBuild's usual
-            # --bindir=/--mandir=/etc. injection, so this reproduces
-            # setup-tinycc's own `./configure --enable-cross
-            # --prefix=...` by hand instead of relying on mkDerivation's
-            # default configure flags.
+            # --bindir=/--mandir=/etc. injection, so this invokes
+            # `./configure --enable-cross --prefix=...` by hand instead of
+            # relying on mkDerivation's default configure flags.
             #
-            # The three extra flags below are NOT part of setup-tinycc's
-            # own invocation -- CI's ubuntu-24.04 runner has a real
-            # /usr/include and a real dynamic linker at a fixed path, so
-            # plain `./configure --enable-cross --prefix=...` there
-            # already finds both. Nix's non-FHS layout has neither, and
+            # The three extra flags below are NOT needed by a plain FHS
+            # Linux build of tinycc (e.g. directly on CI's ubuntu-24.04
+            # runner, which is how this project built it before this
+            # derivation existed): that runner has a real /usr/include
+            # and a real dynamic linker at a fixed path, so plain
+            # `./configure --enable-cross --prefix=...` there already
+            # finds both. Nix's non-FHS layout has neither, and
             # without these `make`'s default target fails past every
             # win32 cross target (those already build fine, self-hosted
             # off their own -B../win32/-I../include, same as on CI) once
@@ -128,14 +128,14 @@
 
             enableParallelBuilding = true;
 
-            # No `make test`/`make check`: setup-tinycc doesn't run one
-            # either, and ntlibc's own gate.sh/CI matrix is what actually
-            # exercises these cross compilers (against real ntlibc
-            # sources), not tinycc's own bundled test suite.
+            # No `make test`/`make check`: the pinned tinycc build has
+            # never run one, and ntlibc's own gate.sh/CI matrix is what
+            # actually exercises these cross compilers (against real
+            # ntlibc sources), not tinycc's own bundled test suite.
             doCheck = false;
 
             meta = {
-              description = "ntlibc's pinned tinycc cross toolchain (i386/x86_64/arm64 win32), built via Nix instead of setup-tinycc's git clone+patch+make";
+              description = "ntlibc's pinned tinycc cross toolchain (i386/x86_64/arm64 win32); .github/actions/setup-tinycc just runs `nix build .#tcc`";
               mainProgram = "x86_64-win32-tcc";
             };
           };

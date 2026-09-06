@@ -59,6 +59,8 @@ using ntlibc::algebra::ReplacementOutcome;
 using ntlibc::algebra::RawTokenImplementation;
 using ntlibc::algebra::rawTokenImplementation;
 using ntlibc::algebra::retagLifecycle;
+using ntlibc::algebra::SentinelSplit;
+using ntlibc::algebra::splitOnExcludedSentinel;
 using ntlibc::algebra::TokenImplementation;
 using ntlibc::algebra::TokenImplementationStatus;
 using ntlibc::algebra::tokenImplementation;
@@ -488,15 +490,12 @@ public:
         ProgramStateRef ValueState = State;
         if (std::optional<int64_t> Sentinel = excludedSentinel(
                 findTokenSort(Function->getASTContext(), Family->getName()))) {
-          DefinedSVal SentinelValue = C.getSValBuilder().makeIntVal(
-              static_cast<uint64_t>(*Sentinel), Parameter->getType());
-          DefinedOrUnknownSVal IsSentinel =
-              C.getSValBuilder().evalEQ(ValueState, *Defined, SentinelValue);
-          auto [SentinelState, NonSentinelState] =
-              ValueState->assume(IsSentinel);
-          if (SentinelState)
-            NextStates.push_back(SentinelState);
-          ValueState = NonSentinelState;
+          SentinelSplit Split = splitOnExcludedSentinel(
+              ValueState, *Defined, Parameter->getType(), *Sentinel,
+              C.getSValBuilder());
+          if (Split.Sentinel)
+            NextStates.push_back(Split.Sentinel);
+          ValueState = Split.NonSentinel;
           if (!ValueState) {
             Changed = true;
             continue;
@@ -632,16 +631,14 @@ public:
       return;
     if (std::optional<int64_t> Sentinel = excludedSentinel(findTokenSort(
             Function->getASTContext(), Returns->Family->getName()))) {
-      DefinedSVal SentinelValue = C.getSValBuilder().makeIntVal(
-          static_cast<uint64_t>(*Sentinel), Function->getReturnType());
-      DefinedOrUnknownSVal IsSentinel =
-          C.getSValBuilder().evalEQ(State, *Defined, SentinelValue);
-      auto [SentinelState, ValueState] = State->assume(IsSentinel);
-      if (SentinelState)
-        C.addTransition(SentinelState);
-      if (!ValueState)
+      SentinelSplit Split = splitOnExcludedSentinel(
+          State, *Defined, Function->getReturnType(), *Sentinel,
+          C.getSValBuilder());
+      if (Split.Sentinel)
+        C.addTransition(Split.Sentinel);
+      if (!Split.NonSentinel)
         return;
-      State = ValueState;
+      State = Split.NonSentinel;
     }
     auto [NonNullState, NullState] = State->assume(*Defined);
     std::optional<unsigned> Reallocated = reallocatedArgument(Function);

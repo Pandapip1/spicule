@@ -2,66 +2,39 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 name: Set up tinycc
-description: Restore ntlibc's pinned cross toolchain, optionally building it on a cache miss
-
-inputs:
-  repository:
-    description: Repository containing the pinned tinycc revision
-    required: true
-  revision:
-    description: Pinned tinycc commit
-    required: true
-  build-on-miss:
-    description: Build and cache the toolchain when it is not already cached
-    required: false
-    default: "false"
+description: Build ntlibc's pinned cross toolchain via flake.nix's `tcc` package, restoring it from cache on a hit
 
 runs:
   using: composite
   steps:
-    - name: Restore tinycc toolchain
-      id: cache
-      uses: actions/cache@v6
+    # cachix/install-nix-action, not DeterminateSystems/nix-installer-action
+    # -- see .github/workflows/ci.yml's `linux-builds` job for the full
+    # rationale (no FlakeHub registration here, so the Determinate
+    # installer's default FlakeHub login always fails).
+    - name: Install Nix
+      uses: cachix/install-nix-action@v31
       with:
-        path: ~/tinycc-install
-        key: tinycc-${{ inputs.revision }}-${{ runner.os }}-arm64-pe-v1
+        github_access_token: ${{ github.token }}
+    - name: Set up Magic Nix Cache
+      uses: DeterminateSystems/magic-nix-cache-action@v14
+      with:
+        # use-flakehub: false / diagnostic-endpoint: "" -- see ci.yml's
+        # `linux-builds` job for the full rationale.
+        use-flakehub: false
+        diagnostic-endpoint: ""
 
-    - name: Build tinycc after a cache miss
-      if: steps.cache.outputs.cache-hit != 'true' && inputs.build-on-miss == 'true'
+    # The pinned revision, the arm64 delay-import patch, and the cross
+    # build recipe itself all live solely in flake.nix's `tcc` derivation
+    # now -- see that file's own comment on `tcc` for why nixpkgs' own
+    # `tinycc` package is not a substitute.
+    - name: Build tinycc
       shell: bash
-      env:
-        TINYCC_REPOSITORY: ${{ inputs.repository }}
-        TINYCC_REVISION: ${{ inputs.revision }}
-      run: |
-        git clone "$TINYCC_REPOSITORY" "$RUNNER_TEMP/tinycc"
-        git -C "$RUNNER_TEMP/tinycc" checkout "$TINYCC_REVISION"
-        # The pinned delay-import change calls its unsupported-target stub
-        # unconditionally, which rejects every ordinary arm64 PE link even
-        # when --delay-all was not requested. Keep the rejection for an
-        # actual unsupported request, but leave normal arm64 imports alone.
-        git -C "$RUNNER_TEMP/tinycc" apply <<'PATCH'
-        diff --git a/tccpe.c b/tccpe.c
-        --- a/tccpe.c
-        +++ b/tccpe.c
-        @@ -1307,6 +1307,7 @@ static void pe_build_delay_imports(struct pe_info *pe)
-         static void pe_build_delay_imports(struct pe_info *pe)
-         {
-             TCCState *s1 = pe->s1;
-        -    tcc_error_noabort("--delay-all is only supported for the i386 and x86_64 targets");
-        +    if (s1->pe_all_delay)
-        +        tcc_error_noabort("--delay-all is only supported for the i386 and x86_64 targets");
-         }
-         #endif
-        PATCH
-        cd "$RUNNER_TEMP/tinycc"
-        ./configure --enable-cross --prefix="$HOME/tinycc-install"
-        make -j"$(nproc)"
-        make install
+      run: nix build .#tcc
 
     - name: Verify and expose the cross compilers
       shell: bash
       run: |
-        test -x "$HOME/tinycc-install/bin/i386-win32-tcc"
-        test -x "$HOME/tinycc-install/bin/x86_64-win32-tcc"
-        test -x "$HOME/tinycc-install/bin/arm64-win32-tcc"
-        echo "$HOME/tinycc-install/bin" >> "$GITHUB_PATH"
+        test -x "result/bin/i386-win32-tcc"
+        test -x "result/bin/x86_64-win32-tcc"
+        test -x "result/bin/arm64-win32-tcc"
+        echo "$PWD/result/bin" >> "$GITHUB_PATH"

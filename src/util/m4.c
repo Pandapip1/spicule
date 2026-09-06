@@ -1,201 +1,111 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * m4(1p): `m4 [-s] [-D name[=val]]... [-U name]... [file...]`.
+ * m4(1p): `m4 [-s] [-D name[=val]]... [-U name]... [file...]`. Checked
+ * against https://pubs.opengroup.org/onlinepubs/9699919799/utilities/m4.html.
  *
- * Spec pages consulted (https://pubs.opengroup.org/onlinepubs/9699919799/):
- * utilities/m4.html.
- *
- * ==== THE SCANNING MODEL =====================================================
+ * ==== THE SCANNING MODEL ====
  *
  * scan() is the one recursive text scanner, used both for the top-level
- * input stream and for collecting each macro call's own arguments -- there
- * is no separate "raw argument text" pass. Both jobs copy comments through
- * verbatim, copy quoted regions through with delimiters stripped and their
- * content never scanned for macro names (m4.html: quoted text "shall not
- * be interpreted for macro names"), and invoke any recognized,
- * currently-defined macro name, pushing its expansion back onto the input
- * to be rescanned before continuing.
+ * input and for collecting a macro call's arguments -- there is no
+ * separate "raw argument text" pass. Quoted regions are copied through
+ * with delimiters stripped and never scanned for macro names; comments
+ * are copied through verbatim. Because argument collection runs through
+ * this same scanner, arguments ARE expanded as they are collected unless
+ * quoted -- real m4 semantics (and why idiomatic m4 quotes macro-name
+ * arguments: `define(x,1)undefine(x)` undefines "1", not "x", since x is
+ * expanded before undefine's C code ever runs).
  *
- * Because argument collection runs through this same scanner, a macro
- * call's arguments ARE expanded as they are collected unless quoted --
- * real m4 semantics, and the reason idiomatic m4 quotes macro-name
- * arguments and definition bodies: `define(x,1)undefine(x)` undefines
- * "1", not "x", because x is already expanded before undefine's C code
- * runs. This file does not special-case any builtin's argument handling
- * to avoid it; doing so would deviate from real m4.
+ * A macro's expansion is pushed back onto the input (push_frame()) rather
+ * than recursed into, so a long CHAIN of macros expanding into one
+ * another costs no C stack depth. Only genuinely NESTED calls in one
+ * argument list (`foo(bar(baz(1)))`) use real C recursion, one level per
+ * open paren.
  *
- * A macro's expansion is pushed back onto the input rather than recursed
- * into, so a long CHAIN of macros expanding into one another costs no C
- * stack depth -- it's one loop reading whatever is on top of the
- * input-frame stack. Only genuinely NESTED calls in one argument list
- * (e.g. `foo(bar(baz(1)))`) use real C recursion, one level per open
- * paren.
- *
- * QUOTING is depth-counted: an inner left-quote inside an already-open
+ * Quoting is depth-counted: an inner left-quote inside an already-open
  * region increases a nesting counter and is kept as literal content; only
- * the depth-1-to-0 transition strips delimiters. This matches real m4
- * quote nesting and lets quoted text safely contain a stray quote
- * character.
+ * the depth-1-to-0 transition strips delimiters.
  *
- * ==== BUILTINS IMPLEMENTED ===================================================
+ * ==== BUILTINS ====
  *
- * All thirty-two: define, undefine, defn, pushdef, popdef, ifdef,
- * ifelse, shift, dnl, changequote, changecom, include, sinclude,
- * divert, undivert, divnum, len, index, substr, translit, dumpdef,
- * eval, incr, decr, syscmd, sysval, maketemp, mkstemp, m4exit, m4wrap,
- * traceon, traceoff.
+ * All thirty-two POSIX builtins: define, undefine, defn, pushdef, popdef,
+ * ifdef, ifelse, shift, dnl, changequote, changecom, include, sinclude,
+ * divert, undivert, divnum, len, index, substr, translit, dumpdef, eval,
+ * incr, decr, syscmd, sysval, maketemp, mkstemp, m4exit, m4wrap, traceon,
+ * traceoff. GNU extensions (__file__, __line__, errprint, esyscmd,
+ * format, patsubst, regexp, indir, builtin, and undivert's file-based
+ * argument form) are deliberately not implemented.
  *
- * GNU-extension builtins that are NOT POSIX m4(1p) and are deliberately
- * NOT implemented: __file__, __line__, errprint, esyscmd, format,
- * patsubst, regexp, indir, builtin, and undivert's file-based (rather
- * than numeric) argument form.
+ * Notable behaviors:
+ *  - shift() quotes each output argument like $@ does, not bare like $*.
+ *  - syscmd(cmd) runs cmd via system(), leaves stdout/stderr on the
+ *    process's existing fds (m4.html says no redirection), expands to
+ *    the empty string, and records the exit status for sysval. Capturing
+ *    output is esyscmd, a GNU extension excluded above.
+ *  - ifelse() with 6+ arguments and the first two unequal: "discard the
+ *    first three and restart" -- bi_ifelse() is a plain loop doing that.
+ *  - defn() of a builtin must preserve its builtin-ness through define()
+ *    (`define(new, defn(old))`). Since argument collection already
+ *    expands defn(old) before define() sees it, defn() emits a
+ *    control-character-prefixed sentinel (M4_BUILTIN_MAGIC + decimal id),
+ *    wrapped in the current quote strings so rescan strips the quotes but
+ *    leaves the sentinel; define()/pushdef() recognize it
+ *    (parse_builtin_sentinel()) before falling back to plain text. A
+ *    bare, non-defn-argument use of `defn(somebuiltin)` prints this
+ *    sentinel literally -- a narrow, cosmetic-only gap.
+ *  - eval(): int32_t/uint32_t throughout, never `long` (not guaranteed 32
+ *    bits on every host -- see src/wordexp/arith.c). Overflow wraps
+ *    modulo 2^32 via unsigned arithmetic. Division/modulus truncate
+ *    toward zero. A negative result renders as '-' plus the magnitude's
+ *    digits. Radix digits above 9 use lowercase 'a'..'z'.
+ *  - translit(): every byte of `from` maps one-for-one by index to the
+ *    same-index byte of `to` (deleted if `to` is shorter/absent) -- no
+ *    '-' range expansion; m4.html leaves this unspecified.
+ *  - `foo()` is one empty argument ($#==1, $1==""), matching every real
+ *    m4, though m4.html doesn't define this case.
+ *  - changequote's single-argument (or any-empty-argument) form is
+ *    diagnosed and left a no-op rather than guessed at (m4.html:
+ *    unspecified). Delimiter strings are capped at M4_MAXDELIM (32)
+ *    bytes, diagnosed and refused past that.
+ *  - divert()/undivert(): the nine numbered buffers are growable
+ *    in-memory byte buffers, never a temp file. divert(n) for n>9 is
+ *    diagnosed and refused; n<0 discards output. undivert() with no
+ *    arguments empties 1..9 in order into the CURRENT diversion. At
+ *    end-of-input, any diversion still holding data is flushed straight
+ *    to stdout regardless of current diversion, on every return path
+ *    (including an early m4exit()). undivert()'s argument form only
+ *    accepts numbers -- GNU's filename form is excluded above.
+ *  - -s is parsed and ignored: no downstream c99 preprocessor consumes
+ *    `#line` output here yet.
+ *  - traceon/traceoff format is unspecified by m4.html; this prints one
+ *    "m4trace: name(args)" line per traced call to stderr.
+ *  - mkstemp() wraps this library's own real mkstemp()
+ *    (src/stdlib/mktemp.c). maketemp() (spec-obsolescent) replaces a
+ *    trailing run of 'X' with decimal getpid() -- not collision-safe,
+ *    but the simplest conforming reading.
+ *  - include(): every string that flows through a macro's C return value
+ *    is an ordinary NUL-terminated C string, so file content past an
+ *    embedded NUL is lost. Top-level file/stdin operands don't have this
+ *    limit -- slurp() carries a real byte count.
  *
- * ---- shift() DOES quote its output -----------------------------------------
- * m4.html: shift's defining text is its arguments after the first, "each
- * ... quoted using the current quoting strings" -- so shift's output is
- * per-argument quoted like $@'s, not bare like $*'s.
+ * ==== IN-PROCESS SAFETY ====
  *
- * ---- syscmd does not capture output ----------------------------------------
- * m4.html both implies syscmd's result is the command's output AND states
- * "[n]o output redirection shall be performed" -- contradictory read
- * literally. Read against every real m4 (capturing output is esyscmd, the
- * GNU extension excluded above): syscmd(cmd) runs cmd via system(), leaves
- * stdout/stderr on the process's existing fds, expands to the empty
- * string, and records the exit status for sysval.
- *
- * ---- ifelse's 6+-argument recursion ----------------------------------------
- * m4.html, implemented exactly: with 6+ arguments and the first two
- * unequal, "the first three arguments shall be discarded and processing
- * shall restart with the remaining arguments" -- bi_ifelse() below is a
- * plain loop doing that.
- *
- * ---- defn of a builtin preserves builtin-ness ------------------------------
- * `define(new, defn(old))` must make NEW run old's real C logic, not
- * old's name as inert text. Since argument collection already expands
- * defn(old) before define() sees it, defn() cannot hand define() a raw
- * call to special-case; instead, for a builtin, defn() emits a short
- * control-character-prefixed sentinel (M4_BUILTIN_MAGIC + decimal id +
- * trailing 0x01), wrapped in the current quote strings so the rescan
- * between defn's return and define()'s argument strips the quotes but
- * leaves the sentinel (starting with 0x01, never a macro-name byte)
- * untouched. define()/pushdef() check their second argument against this
- * pattern (parse_builtin_sentinel()) before falling back to plain text.
- * Collision with genuine user text is accepted as astronomically
- * unlikely. A bare, non-defn-argument use of `defn(somebuiltin)` prints
- * this sentinel literally -- a narrow, cosmetic-only gap, since defn of a
- * builtin is only ever idiomatically used as define/pushdef's own second
- * argument.
- *
- * ---- eval(): 32-bit width, modular wraparound, C-style truncating division -
- * m4.html requires "signed integer arithmetic with at least 32-bit
- * precision"; this file uses int32_t/uint32_t explicitly, never `long`
- * (not guaranteed 32 bits on every host -- see src/wordexp/arith.c's note
- * on native-vs-target `long` width). Overflow wraps modulo 2^32 via
- * unsigned arithmetic, the same technique as arith.c's wrap_to_long()
- * (signed overflow is undefined by ISO C, POSIX doesn't mandate trapping
- * it, and wraparound is what users expect). Division/modulus truncate
- * toward zero (C99 6.5.5p6). A negative result renders as '-' plus the
- * magnitude's digits (never two's-complement bits); radix digits above 9
- * use lowercase 'a'..'z' (m4.html leaves case unspecified).
- *
- * ---- translit(): literal byte mapping only, no '-' range expansion --------
- * m4.html leaves duplicate-byte and '-'-range behavior in from/to
- * unspecified; this implements the simplest conforming reading -- every
- * byte of `from` maps one-for-one by index to the same-index byte of `to`
- * (deleted if `to` is shorter/absent), with no special '-' meaning.
- *
- * ---- foo() is one empty argument, not zero ---------------------------------
- * m4.html doesn't define an empty parenthesized call's argument count;
- * every real m4 treats `foo()` as one empty argument ($#==1, $1==""), and
- * this file matches that common convention.
- *
- * ---- changequote's single-argument form is refused, not guessed at --------
- * m4.html: "[t]he behavior is unspecified if there is a single argument
- * or either argument is null." Such a call is diagnosed to stderr and
- * left a no-op (quoting unchanged) -- loud refusal over guessing,
- * matching this project's house style (e.g. src/util/sort.c's -m).
- * Delimiter strings are capped at M4_MAXDELIM (32) bytes, diagnosed and
- * refused past that.
- *
- * ---- divert()/undivert(): in-memory buffers, only 1-9, n>9 refused --------
- * The nine numbered buffers m4.html specifies are growable in-memory byte
- * buffers (__util_mallocarray/__util_reallocarray/__util_array_capacity,
- * never a temp file). divert(n) for n>9 is diagnosed and refused (current
- * diversion unchanged); n<0 discards output, per m4.html. undivert() with
- * no arguments empties 1..9 in numeric order into whatever the CURRENT
- * diversion is, matching m4.html's "[b]uffers can be undiverted into
- * other temporary buffers". At end-of-input, any diversion still holding
- * data is auto-flushed straight to real stdout regardless of current
- * diversion (m4.html: "shall be written to standard output"), on every
- * return path out of __util_m4_main() including an early m4exit() --
- * discarding already-produced output would be a worse surprise than
- * honoring m4exit(). undivert()'s argument form only accepts numbers, per
- * m4.html; GNU's filename form is one of the extensions excluded above.
- *
- * ---- -s is accepted and ignored --------------------------------------------
- * `#line` output for a downstream c99 preprocessor phase has no consumer
- * here yet; -s is parsed (so scripts passing it don't fail) and does
- * nothing.
- *
- * ---- traceon/traceoff: minimal, functioning, not load-bearing -------------
- * m4.html leaves the trace format unspecified. This file tracks an on/off
- * set of traced names (or "trace everything") and prints one
- * "m4trace: name(args)" line per traced call to stderr.
- *
- * ---- mkstemp() is this library's own real mkstemp(), not reimplemented ----
- * include/stdlib.h / src/stdlib/mktemp.c already provide a real
- * O_CREAT|O_EXCL mkstemp(); the builtin is a thin wrapper (copy the
- * template to a mutable buffer, call it, close() the descriptor
- * immediately, expand to the resulting pathname). maketemp() is kept for
- * spec completeness only (m4.html: "should use mkstemp instead of the
- * obsolescent maketemp") and implemented as the simplest non-collision-
- * safe reading: trailing 'X' run replaced by decimal getpid().
- *
- * ---- text-only buffers: no embedded-NUL guarantee inside include() --------
- * Every string threaded through a macro's own C return value (a
- * builtin's result, a stored macro body, an argument value) is an
- * ordinary NUL-terminated C string. This narrows include(): file content
- * past an embedded NUL is lost. Top-level file/stdin operands are not
- * subject to this -- slurp() reads them with an explicit byte count and
- * pushes them onto the input stack with a real length, not through a
- * `char *` return.
- *
- * ---- exit() / _exit() are never called, and no state survives one call ----
  * __util_m4_main() can run in-process as a shell builtin
- * (src/sh/builtin.c's bi_m4()), sharing the calling shell's process --
- * see src/internal/util.h's Tier 4 comment and src/util/dd.c's header for
- * why calling exit()/_exit() from here would be a defect. m4exit() only
- * sets `st.exit_pending`/`st.exit_code` on the local `struct m4_state`;
- * every loop in scan()/collect_args() checks that flag each iteration and
- * unwinds cooperatively to an ordinary `return status;`. m4wrap() text is
- * scanned through the same loop, so an m4exit() reached while processing
- * wrap text stops promptly without calling exit(). Every byte of `struct
- * m4_state` (macro table, quote/comment strings, diversion buffers,
- * input-frame stack, wrap queue, trace set) is allocated on entry and
- * freed on every return path (m4_free()), so sequential invocations in
- * the same shell session never share state.
+ * (src/sh/builtin.c's bi_m4()), so exit()/_exit() are never called (see
+ * src/util/dd.c's header for why). m4exit() only sets
+ * st.exit_pending/st.exit_code; every loop in scan()/collect_args()
+ * checks that flag each iteration and unwinds cooperatively to an
+ * ordinary `return status;`. Every byte of `struct m4_state` is
+ * allocated on entry and freed on every return path (m4_free()), so
+ * sequential invocations in the same shell session never share state.
  *
- * ---- runaway expansion is bounded, and why that is not a correctness fix --
- * `define(a,a)a` loops forever by design -- real m4 implementations hang
- * on this input too, the same way `while true; do :; done` does. Nothing
- * here changes that expansion can run forever for a hostile or careless
- * script. What IS bounded is how long that can go on for code running
- * IN-PROCESS AS A SHELL BUILTIN, with no separate process to kill and no
- * signal-check to poll for interruption. Two independent caps, checked at
- * their one call site in dispatch_macro():
- *
- *   M4_MAX_EXPANSIONS bounds total macro invocations (the `define(a,a)a`
- *   shape -- a long flat chain, no extra C-stack depth per call);
- *
- *   M4_MAX_DEPTH bounds real C-stack recursion depth (the
- *   `len(len(len(...)))` shape -- genuinely nested calls, one C frame per
- *   level).
- *
- * Both unwind through the same cooperative path m4exit() uses
- * (st->exit_pending/st->exit_code) to an ordinary `return status;`, with
- * a nonzero status and one diagnostic line. A legitimate script is
- * expected to stay far under either limit.
+ * `define(a,a)a` loops forever by design, same as real m4 -- nothing
+ * here changes that. What IS bounded, because this can run in-process
+ * with no separate process to kill: M4_MAX_EXPANSIONS caps total macro
+ * invocations (a long flat chain, checked in dispatch_macro());
+ * M4_MAX_DEPTH caps real C-stack recursion depth (genuinely nested
+ * calls, one C frame per level). Both unwind through the same
+ * st->exit_pending path as m4exit().
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -235,36 +145,26 @@ static const char *const m4_builtin_names[BI_COUNT] = {
 #define M4_MAXDELIM 32
 #define M4_BUILTIN_MAGIC "\x01M4BUILTIN:"
 
-/* ---- M4_MAX_EXPANSIONS: a deliberate, harness-motivated safety net, NOT
- * a correctness fix -- see this file's header comment, "runaway
- * expansion is bounded, and why that is not a correctness fix," for the
- * reasoning in full.  Kept here, next to M4_MAXDELIM, because both are
- * "one number a caller might reasonably want to raise someday" rather
- * than load-bearing implementation detail. */
+/* Total macro invocations, not C-stack depth -- see the header's
+ * "IN-PROCESS SAFETY" section. */
 #define M4_MAX_EXPANSIONS 2000000UL
 
 /* Real C-stack recursion depth, not total invocation count -- see the
  * comment at its one check site in dispatch_macro(). 5000 is well
  * inside any thread's default stack for this file's per-frame cost
- * (scan()'s wbuf[256] dominates it), and is many times deeper than any
- * legitimate, humanly-written m4 script's own macro-call nesting. */
+ * (scan()'s wbuf[256] dominates it). */
 #define M4_MAX_DEPTH 5000
 
-/* eval()'s own recursive-descent parser (ev_primary()'s '(' handling
- * and ev_unary()'s unary-operator self-recursion, further below) is a
- * SEPARATE source of unbounded C-stack recursion from the
- * dispatch_macro()/collect_args()/scan() cycle M4_MAX_DEPTH guards --
- * it recurses once per '(' or per leading '+'/'-'/'~'/'!' character
- * inside a single eval() argument string, with no macro call and no
- * dispatch_macro() re-entry involved at all, so M4_MAX_DEPTH's check
- * never sees it. A single eval() call whose first argument is a few
- * hundred thousand nested parens (`eval(` + `(`*N + `1` + `)`*N + `)`)
- * crashed with a real stack overflow before this cap existed -- verified
- * with N=200000 against a real m4_state before this fix landed. Each
- * ev_*() frame here is small (no wbuf[256]-sized locals, unlike the
- * dispatch chain), so this can afford to be generous while still being
- * a hard, finite bound; legitimate eval() expressions nest nowhere near
- * this deep. */
+/* eval()'s own recursive-descent parser (ev_primary()'s '(' handling and
+ * ev_unary()'s unary-operator self-recursion) is a SEPARATE source of
+ * unbounded C-stack recursion from the dispatch_macro()/collect_args()/
+ * scan() cycle M4_MAX_DEPTH guards -- it recurses once per '(' or per
+ * leading unary operator within a single eval() argument string, never
+ * re-entering dispatch_macro(). A single eval() call with a few hundred
+ * thousand nested parens crashed with a real stack overflow before this
+ * cap existed (verified with N=200000). Each ev_*() frame is small
+ * (unlike the dispatch chain's wbuf[256]), so this can afford to be
+ * generous while still being a hard, finite bound. */
 #define M4_EVAL_MAX_DEPTH 2500
 
 /* ==== growable byte buffer ================================================== */
@@ -476,21 +376,13 @@ static int getc_raw(struct m4_state *st)
 	}
 }
 
-/* Pushes `c` back so the next getc_raw() returns it again, by pushing a
- * one-byte frame onto the SAME input-frame stack push_frame() uses --
- * deliberately not a separate pushback buffer.  A separate buffer that
- * getc_raw() always drained first (regardless of arrival order relative
- * to frames) would put a just-ungotten character ahead of a macro
- * expansion pushed by push_frame() AFTER it, even when the ungetc
- * logically happened first and the expansion belongs in between: e.g.
- * dispatch_macro() reads one lookahead byte to check for '(', ungets it
- * when absent, and only then pushes the macro's own expansion -- that
- * expansion must be read (and rescanned) before the lookahead byte, since
- * the byte lexically follows the macro call in the real input, while the
- * expansion replaces the call itself. Sharing one LIFO frame stack for
- * both makes "most recently pushed, whether by ungetc or by a macro
- * expansion, is read first" automatic instead of two competing
- * priorities. */
+/* Pushes `c` back by pushing a one-byte frame onto the SAME input-frame
+ * stack push_frame() uses, deliberately not a separate pushback buffer:
+ * dispatch_macro() ungets a lookahead byte when a macro call has no '(',
+ * then pushes the macro's expansion -- that expansion must be read
+ * before the ungotten byte even though the ungetc happened first, since
+ * the expansion replaces the call the byte lexically follows. One LIFO
+ * stack for both makes "most recently pushed wins" automatic. */
 static void ungetc_raw(struct m4_state *st, int c)
 {
 	char *buf;
@@ -501,14 +393,12 @@ static void ungetc_raw(struct m4_state *st, int c)
 	push_frame(st, buf, 1);
 }
 
-/* Attempts to match `delim` starting at the current input position; on
- * a full match, consumes it and returns 1; on any mismatch, pushes
- * every character it had to read back (in the correct order) and
- * returns 0 having consumed nothing net.  getc_raw()/ungetc_raw() both
- * transparently cross input-frame boundaries (frames are popped as
- * they're exhausted, and pushback is itself just another frame on the
- * same stack), so this matches correctly even when `delim` straddles the
- * seam between a just-pushed macro expansion and the text beneath it. */
+/* Attempts to match `delim` at the current input position; on a full
+ * match, consumes it and returns 1; on mismatch, pushes back every
+ * character it read (in order) and returns 0 having consumed nothing
+ * net. Works correctly even when `delim` straddles the seam between a
+ * just-pushed macro expansion and the text beneath it, since pushback is
+ * itself just another frame on the same input-frame stack. */
 static int peek_match(struct m4_state *st, const char *delim)
 {
 	size_t n = strlen(delim);
@@ -615,14 +505,10 @@ struct m4_eval { const char *p; int err; int live; int depth; };
 
 static void ev_fail(struct m4_eval *e) { if (e->live && !e->err) e->err = 1; }
 
-/* Shared by ev_primary()'s '(' case and ev_unary()'s unary-operator
- * self-recursion below -- both are real C-stack recursion through this
- * one struct's `depth` counter, so a mix of the two (e.g.
- * `eval(-(-(-(...))))`) is bounded by their COMBINED depth, matching
- * how much C stack is actually in use. On hitting the cap this fails
- * the expression and returns 0 WITHOUT recursing further, so the
- * caller's own stack frames unwind normally instead of the cap being
- * just a diagnostic bolted onto an unbounded call. */
+/* Shared by ev_primary()'s '(' case and ev_unary()'s self-recursion, so
+ * a mix of the two (`eval(-(-(-(...))))`) is bounded by their COMBINED
+ * depth. On hitting the cap this fails the expression and returns 0
+ * without recursing further. */
 static int ev_depth_ok(struct m4_eval *e)
 {
 	if (++e->depth > M4_EVAL_MAX_DEPTH) {
@@ -855,12 +741,17 @@ static char *format_radix(int32_t value, int radix __arith_range(2, 36),
 	else mag = neg ? (uint32_t)(-value) : (uint32_t)value;
 
 	if (mag == 0) digits[n++] = '0';
-	while (mag && n < (int)sizeof digits) {
-		int d = (int)(mag % (uint32_t)radix);
+	while (mag) {
+		int d;
+		if (n >= (int)sizeof digits) break;
+		d = (int)(mag % (uint32_t)radix);
 		digits[n++] = (char)(d < 10 ? '0' + d : 'a' + d - 10);
 		mag /= (uint32_t)radix;
 	}
-	while (n < width && n < (int)sizeof digits) digits[n++] = '0';
+	while (n < width) {
+		if (n >= (int)sizeof digits) break;
+		digits[n++] = '0';
+	}
 
 	if (neg) strbuf_append(&b, "-", 1);
 	for (i = n - 1; i >= 0; i--) strbuf_append(&b, &digits[i], 1);
@@ -1582,19 +1473,11 @@ static void dispatch_macro(struct m4_state *st, struct m4_macro *m, const char *
 	struct m4_macro_def *def = m->top;
 	if (!def) return;
 
-	/* M4_MAX_EXPANSIONS: every macro invocation -- builtin or
-	 * user-defined, dnl included -- passes through here exactly once,
-	 * so this is the one place a per-run cap on total macro
-	 * invocations can live without threading a counter through
-	 * scan()/collect_args() by hand.  See the file header, "runaway
-	 * expansion is bounded, and why that is not a correctness fix."
-	 * st->exit_pending is the SAME cooperative-unwind flag m4exit()
-	 * uses (see the header's "exit() / _exit() are never called"
-	 * section) -- every loop in scan()/collect_args() already checks
-	 * it first thing on every iteration, so setting it here reaches
-	 * an ordinary `return status;` at the bottom of
-	 * __util_m4_main() exactly the way a real m4exit() would, with no
-	 * new unwind path to get wrong. */
+	/* Every macro invocation -- builtin or user-defined, dnl included --
+	 * passes through here exactly once, so this is the one place a
+	 * per-run cap on total invocations can live. st->exit_pending is the
+	 * same cooperative-unwind flag m4exit() uses -- see the header's
+	 * "IN-PROCESS SAFETY" section. */
 	if (++st->expansions > M4_MAX_EXPANSIONS) {
 		if (!st->exit_pending)
 			__util_diagf("m4: expansion limit exceeded (possible infinite recursion), aborting\n");
@@ -1620,23 +1503,12 @@ static void dispatch_macro(struct m4_state *st, struct m4_macro *m, const char *
 		int nargs = 0;
 		char *result;
 
-		/* M4_MAX_DEPTH: the OTHER half of the header's "runaway
-		 * expansion is bounded" note, and a different dimension from
-		 * M4_MAX_EXPANSIONS above -- that counter bounds a LONG FLAT
-		 * chain (any number of macro calls, one open at a time,
-		 * costing no extra C stack per the file header's "one loop"
-		 * description); this one bounds real C-stack depth, which
-		 * only grows through THIS call: dispatch_macro() ->
-		 * collect_args() -> scan() -> dispatch_macro() again, one
-		 * level per open, unmatched '(' in a macro call's own
-		 * argument list (`foo(bar(baz(...))))`).  Every one of
-		 * POSIX's 32 builtins is predefined from m4_init() before a
-		 * byte of input is read, so this recursion needs no prior
-		 * define() to reach -- `len(len(len(...)))` alone drives it.
-		 * Guarded here, not by a separate parameter threaded through
-		 * collect_args()/scan(), so the two functions stay exactly
-		 * as the header describes them; only the one call site that
-		 * can actually recurse pays for the check. */
+		/* The other half of the header's expansion-bounding note:
+		 * unlike M4_MAX_EXPANSIONS (a long flat chain), this bounds
+		 * real C-stack depth, which only grows through THIS call --
+		 * dispatch_macro() -> collect_args() -> scan() ->
+		 * dispatch_macro() again, one level per open, unmatched '('
+		 * in a macro call's argument list (`foo(bar(baz(...))))`). */
 		if (c == '(') {
 			if (++st->depth > M4_MAX_DEPTH) {
 				if (!st->exit_pending)
@@ -1796,9 +1668,11 @@ int __util_m4_main(
 	 * is processed, in call order, once true end-of-input is reached;
 	 * m4wrap() called while processing wrap text can append further
 	 * text, which this loop picks up naturally by re-checking nwraps
-	 * each iteration; an m4exit() reached in here stops promptly. */
-	while (!st.exit_pending && st.wrap_pos < st.nwraps) {
-		char *w = st.wraps[st.wrap_pos];
+	 * each iteration. */
+	while (st.wrap_pos < st.nwraps) {
+		char *w;
+		if (st.exit_pending) break;
+		w = st.wraps[st.wrap_pos];
 		st.wraps[st.wrap_pos] = NULL;
 		st.wrap_pos++;
 		push_frame(&st, w, strlen(w));

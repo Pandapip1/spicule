@@ -117,8 +117,8 @@ struct dd_opts {
 };
 
 /* conv=value[,value...] -- see this file's header for the implemented
- * subset. On 0 return, *notrunc/*sync/*noerror are all set; on -1 a
- * diagnostic is already on stderr and the caller must not trust them. */
+ * subset. On 0 return, *notrunc, *sync, and *noerror are all set; on -1
+ * a diagnostic is already on stderr and the caller must not trust them. */
 static int parse_conv(const char *val, int *notrunc, int *sync, int *noerror)
 {
 	char buf[256];

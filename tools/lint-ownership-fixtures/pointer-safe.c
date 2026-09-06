@@ -399,3 +399,58 @@ char *doubled_extent_via_multiplication_index(size_t n)
 	d[2 * n] = 0;
 	return d;
 }
+
+/* __ownership_pointer_nonnull(): the leaf axiom src/internal/
+ * ownership_stubs.h declares for exactly this gap, pinned end to end
+ * here the way every other axiom in this file is. struct argv_slice
+ * mirrors src/util/test.c's real struct texpr (`char **v`, sliced out of
+ * argv and never reassigned within the accessor) and src/util/find.c's
+ * byte-for-byte identical struct find_ctx: a struct field holding a
+ * `char **` array that is genuinely always live by construction (it
+ * always traces back to a real argv), read back out through the
+ * struct's own accessor via a MemberExpr immediately followed by an
+ * ArraySubscriptExpr. No existing withtok(readable_elements(...))/
+ * elements_withtok(...) annotation on this field makes
+ * ValidPointerChecker::checkPointerExpression's native
+ * isNonNull()-based proof treat that read's *own* value as nonnull: a
+ * struct field read yields a fresh, unconstrained symbol every time it
+ * is evaluated, and this project's other grant()/consume() token
+ * annotations operate on a wholly separate state map (see
+ * CapabilityTokenChecker) that checkPointerExpression's native-
+ * constraint proof never consults -- confirmed by
+ * struct_field_array_element_is_flagged_without_the_axiom below, the
+ * identical shape with the __ownership_pointer_nonnull() call removed,
+ * which still reports.
+ *
+ * The element index is deliberately the literal 0, not a second struct
+ * field the way test.c's real `t->v[t->i]` reads it: indexing by a
+ * runtime-computed field would *also* need a genuine dynamic-extent
+ * proof for slice->v's own allocation (a completely separate, harder
+ * gap this axiom does not claim to close -- checkLocation's own extent
+ * check has no leniency for a symbolic array offset with no established
+ * extent, only for a fixed one), and mixing that unresolved, unrelated
+ * finding into this fixture would no longer isolate the ONE fact this
+ * axiom exists to prove. A literal, fixed offset keeps this fixture
+ * "safe" in the same narrow sense opaque_borrow/local_object above are:
+ * every OTHER proof obligation this access carries is already trusted
+ * by the type ("dereference extent is not proven sufficient" grants a
+ * fixed offset the same "trust the type" leniency it already grants
+ * opaque_borrow's own implicit *pointer), leaving nonnull-ness the one
+ * remaining, genuinely open question -- exactly the one this axiom
+ * answers. */
+struct argv_slice { char **v; size_t i; };
+
+#ifdef __clang_analyzer__
+void __ownership_pointer_nonnull(const void *object);
+#else
+#define __ownership_pointer_nonnull(object) ((void)0)
+#endif
+
+char *struct_field_array_element_nonnull_axiom_is_trusted(
+    struct argv_slice *slice) __attribute__((nonnull(1)));
+char *struct_field_array_element_nonnull_axiom_is_trusted(
+    struct argv_slice *slice)
+{
+	__ownership_pointer_nonnull(slice->v);
+	return slice->v[0];
+}

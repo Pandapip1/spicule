@@ -124,5 +124,14 @@
  * back off the callee instead of keeping its own hardcoded name list. */
 #define fallible \
 	__ownership_attr("fallible")
+/* A bare qualifier on a tokdef: this token names a lock actually held (a
+ * mutex/rwlock/spinlock's locked, shared, or exclusive state), as opposed
+ * to that same lock's unlocked state. tools/clang/LockAlgebra.h reads
+ * this back off a consume:/consume_any:/grant:/withtok: token name to
+ * classify a pthread.h lock call's real protocol, instead of matching the
+ * literal substrings _locked/_shared/_exclusive against the token's own
+ * spelling. */
+#define lock_held \
+	__ownership_attr("qual:lock_held")
 
 #endif

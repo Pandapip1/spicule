@@ -69,6 +69,7 @@
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/AnalysisManager.h"
 #include "clang/StaticAnalyzer/Frontend/CheckerRegistry.h"
+#include "LockAlgebra.h"
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
@@ -114,30 +115,33 @@ bool isLocalOnlyWriteBuiltin(StringRef Name) {
   return false;
 }
 
-// Mirrors LockDisciplineChecker.cpp's own protocolFor() table: every
-// pthread entry point that acquires, releases, waits on, initializes, or
-// destroys a lock has an observable side effect on lock state independent
-// of its return value.
-constexpr llvm::StringLiteral LockNames[] = {
-    "pthread_mutex_init",         "pthread_mutex_lock",
-    "pthread_mutex_trylock",      "pthread_mutex_timedlock",
-    "pthread_mutex_unlock",       "pthread_mutex_destroy",
-    "pthread_rwlock_init",        "pthread_rwlock_rdlock",
-    "pthread_rwlock_tryrdlock",   "pthread_rwlock_timedrdlock",
-    "pthread_rwlock_wrlock",      "pthread_rwlock_trywrlock",
-    "pthread_rwlock_timedwrlock", "pthread_rwlock_unlock",
-    "pthread_rwlock_destroy",     "pthread_spin_init",
-    "pthread_spin_lock",          "pthread_spin_trylock",
-    "pthread_spin_unlock",        "pthread_spin_destroy",
-    "pthread_cond_wait",          "pthread_cond_timedwait",
-    "pthread_cond_signal",        "pthread_cond_broadcast",
-};
+// pthread_cond_signal()/pthread_cond_broadcast() are deliberately NOT part
+// of LockAlgebra.h's shared classification below: neither one consumes or
+// grants any lock-family token at all (see their own include/pthread.h
+// declarations -- just a bare handle(pthread_cond)), because neither
+// acquires or releases anything LockDisciplineChecker.cpp's
+// ntlibc.LockDiscipline tracks. But a real, disqualifying-for-purity side
+// effect remains: either call can wake another thread blocked in
+// pthread_cond_wait()/pthread_cond_timedwait(), an observable change to
+// that thread's own scheduling state no less real than a lock release, so
+// purity must still refuse them. This is the one place PurityChecker.cpp's
+// own lock-related concern is genuinely broader than LockDisciplineChecker's
+// -- not the accidental drift the two independent name lists this file used
+// to carry had allowed (this file's old LockNames[] also had them; the old
+// LockDisciplineChecker.cpp table never did).
+bool isConditionVariableSignal(StringRef Name) {
+  return Name == "pthread_cond_signal" || Name == "pthread_cond_broadcast";
+}
 
-bool isLockCall(StringRef Name) {
-  for (StringRef Name2 : LockNames)
-    if (Name == Name2)
-      return true;
-  return false;
+// ntlibc::lock::isLockProtocolCall() reads the real consume:/consume_any:/
+// grant:/withtok: token annotations off Function's own declaration --
+// exactly the annotations LockDisciplineChecker.cpp's own
+// ntlibc.LockDiscipline checker independently reads off the same
+// declarations, via the same shared LockAlgebra.h -- instead of this
+// checker keeping its own separately hand-maintained name list.
+bool isLockCall(const FunctionDecl *Function, StringRef Name) {
+  return ntlibc::lock::isLockProtocolCall(Function) ||
+        isConditionVariableSignal(Name);
 }
 
 // A conservative, explicit list of I/O and syscall-adjacent entry points.
@@ -369,7 +373,7 @@ class PurityChecker : public Checker<check::ASTCodeBody> {
       }
       if (isTrustedPrimitive(Name))
         return true;
-      if (isLockCall(Name)) {
+      if (isLockCall(Function, Name)) {
         fail("acquires or releases a lock", Call);
         return true;
       }

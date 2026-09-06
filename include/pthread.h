@@ -47,12 +47,12 @@ typedef struct { volatile int __value; } pthread_spinlock_t;
 
 
 tokdef pthread_mutex_unlocked;
-tokdef pthread_mutex_locked l_unlimited;
+tokdef pthread_mutex_locked l_unlimited lock_held;
 tokdef pthread_rwlock_unlocked;
-tokdef pthread_rwlock_shared l_unlimited;
-tokdef pthread_rwlock_exclusive;
+tokdef pthread_rwlock_shared l_unlimited lock_held;
+tokdef pthread_rwlock_exclusive lock_held;
 tokdef pthread_spin_unlocked;
-tokdef pthread_spin_locked l_unlimited;
+tokdef pthread_spin_locked l_unlimited lock_held;
 
 #define PTHREAD_CREATE_JOINABLE 0
 #define PTHREAD_CREATE_DETACHED 1

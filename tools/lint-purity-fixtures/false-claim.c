@@ -56,10 +56,18 @@ int bad_callee(int x)
 	return helper(x); /* purity-expect */
 }
 
-/* 6. locking. */
+/* 6. locking. Real, source-visible tokens mirroring include/pthread.h's
+ * own pthread_mutex_locked/pthread_mutex_unlocked pair --
+ * LockAlgebra.h's classifyCall() (shared with LockDisciplineChecker.cpp)
+ * classifies a lock call from these annotations alone, not from the
+ * callee's own name, so this fixture's local prototypes must carry the
+ * same real annotation shapes the real declarations do. */
+#include "../../include/ownership.h"
+tokdef mutex_unlocked;
+tokdef mutex_locked lock_held;
 typedef struct mutex mutex_t;
-int pthread_mutex_lock(mutex_t *);
-int pthread_mutex_unlock(mutex_t *);
+int pthread_mutex_lock(mutex_t * handle(mutex) consume(mutex_unlocked) grant(mutex_locked));
+int pthread_mutex_unlock(mutex_t * handle(mutex) consume(mutex_locked) grant(mutex_unlocked));
 int bad_lock(mutex_t *m, int x) __attribute__((pure));
 int bad_lock(mutex_t *m, int x)
 {

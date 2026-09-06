@@ -26,6 +26,31 @@ char *tzname[2] = { (char *)"UTC", (char *)"UTC" };
 static char __tzname_std[32] = "UTC"; // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- libc-internal name is intentionally reserved against application collision
 static char __tzname_dst[32] = "UTC"; // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- libc-internal name is intentionally reserved against application collision
 
+/* v*factor, saturated to +-bound instead of wrapping.  v can be as
+ * large as this build's own `long` (h/mn/s all come from strtol()), and
+ * on an LP64 target `long` and `long long` are the same width, so
+ * `bound` itself (the target's LONG_MAX, passed in by the caller) can
+ * equal LLONG_MAX -- comparing against bound/factor first, rather than
+ * forming v*factor and checking afterward, means the multiplication
+ * itself never runs unless it is already known to fit. */
+static long long mul_sat(long long v, long long factor, long long bound)
+{
+	if (v > bound / factor) return bound;
+	if (v < -(bound / factor)) return -bound;
+	return v * factor;
+}
+
+/* a+b, saturated to +-bound.  Both a and b are already within
+ * [-bound, bound] at every call site below, which is what keeps
+ * `bound - b` and `-bound - b` themselves from overflowing even when
+ * bound is LLONG_MAX: b in [0, bound] puts bound-b in [0, bound], and b
+ * in [-bound, 0) puts -bound-b in (-bound, 0]. */
+static long long add_sat(long long a, long long b, long long bound)
+{
+	if (b >= 0) return a > bound - b ? bound : a + b;
+	return a < -bound - b ? -bound : a + b;
+}
+
 static void read_name(const char **input, char *out, size_t cap)
 {
 	const char *p = *input;
@@ -82,31 +107,38 @@ void tzset(void)
 	if (!__tzname_dst[0])
 		(void)strlcpy(__tzname_dst, __tzname_std, sizeof __tzname_dst);
 	tzname[1] = __tzname_dst;
-	/* Combined in `long long`, not in `long`.  h, mn and s come out of
-	 * strtol(), which saturates at LONG_MAX -- 2147483647 on this
-	 * LLP64 target -- and `h * 3600` at that value overflows a 32-bit
-	 * `long`: undefined behaviour, reachable from nothing more exotic
-	 * than TZ=X2147483647 in the environment, which is to say from
-	 * whoever started the process.  The product needs 43 bits and gets
-	 * them; the result is then clamped rather than wrapped, so every
-	 * TZ whose offset already fitted keeps exactly the value it had
-	 * and only the ones that did not fit change -- from undefined to
-	 * saturated.
+	/* h, mn and s come out of strtol(), which saturates at LONG_MAX --
+	 * and on arch/aarch64/bits/limits.h's non-_WIN32 (aarch64-linux)
+	 * branch, an LP64 target, `long` and `long long` are the same
+	 * 64-bit width, so that saturated LONG_MAX IS LLONG_MAX: naively
+	 * combining in `long long` (`h*3600 + mn*60 + s`, then clamping the
+	 * result) overflows the multiplication itself before the clamp ever
+	 * sees a meaningful value.  TZ=X9223372036854775807 used to wrap
+	 * h*3600 to -3600, which is neither above LONG_MAX nor below
+	 * -LONG_MAX, so the old clamp let it through unchanged and tzset()
+	 * silently adopted a bogus UTC-1 offset instead of saturating.
+	 * (The 32-bit-`long` LLP64 target this used to guard against --
+	 * x86_64-win32 -- never had this problem: strtol() there already
+	 * saturates at 2147483647, and `2147483647 * 3600` fits `long long`
+	 * with room to spare.)
 	 *
-	 * Found by fuzz/fuzz_time.c, which cannot see the overflow itself:
-	 * `long` is 64 bits in the native fuzzing build and 32 on the
-	 * target, so UBSan never fires there.  What it checks instead is
-	 * the value -- that whatever tzset() computes is representable in
-	 * the target's `long` -- and TZ=X9999999999999999 produced
-	 * 7730941129200 for a field that holds at most 2147483647. */
+	 * mul_sat()/add_sat() below saturate at LONG_MAX -- the target's,
+	 * which can itself equal LLONG_MAX -- one term at a time, so no
+	 * intermediate product or partial sum is ever allowed to need more
+	 * range than the final answer does regardless of how wide `long` is
+	 * on the target; real TZ offsets (h within a day, mn/s within a
+	 * minute) are nowhere near these bounds, so this changes only the
+	 * previously-wrapping cases. */
 	{
-		long long total = (long long)h * 3600 + (long long)mn * 60 + (long long)s;
-		if (sign < 0) total = -total;
-		if (total > LONG_MAX) total = LONG_MAX;
+		long long total = mul_sat(h, 3600, LONG_MAX);
+		total = add_sat(total, mul_sat(mn, 60, LONG_MAX), LONG_MAX);
+		total = add_sat(total, s, LONG_MAX);
 		/* localtime_r publishes -timezone in the same signed-long
 		 * representation.  Keep the negative endpoint symmetric so that
-		 * inverse is representable too; LONG_MIN has no positive mate. */
-		else if (total < -LONG_MAX) total = -LONG_MAX;
+		 * inverse is representable too; LONG_MIN has no positive mate.
+		 * Safe to negate directly: total is already within
+		 * [-LONG_MAX, LONG_MAX] by construction. */
+		if (sign < 0) total = -total;
 		timezone = (long)total;
 	}
 }

@@ -47,13 +47,32 @@ extern "C" {
 #endif
 
 #include <features.h>
+#include <allocation_tokens.h>
+#include <ownership.h>
 
 #define __NEED_size_t
 #include <bits/alltypes.h>
 
+/* we_wordv is the one field wordfree() releases as a single unit (the
+ * pointer array itself, from src/wordexp/wordexp.c's pv_pack()); the
+ * individual char* entries it holds are a separate, unannotated concern
+ * shared with <glob.h>'s equally untracked gl_pathv (see that header's own
+ * comment). Unlike <dirent.h>'s DIR*, wordexp() has no pointer-typed return
+ * to hang withtok(...) on -- it returns int and reaches this field only
+ * through one level of struct-member access on an out-parameter, which
+ * AllocationLifetimeChecker's checkPostCall never turns into a freshly
+ * tracked fact at a CALLER's call site (only a producer's own pointer-typed
+ * return, or an argument echoed back unchanged, ever does that). This
+ * annotation therefore proves wordexp()'s *own* implementation never leaks
+ * or double-transfers we_wordv on any internal path; it cannot, and does
+ * not claim to, prove that a caller of wordexp()/wordfree() always pairs
+ * them (see src/wordexp/wordexp.c's pv_pack() and
+ * tools/lint-allocation-lifetime-fixtures/safe.c's
+ * missing_release_is_not_caught() for the same limit demonstrated
+ * generically). */
 typedef struct {
 	size_t we_wordc;	/* count of words */
-	char **we_wordv;	/* list of expanded words */
+	char **we_wordv withtok(internal_heap_allocated);	/* list of expanded words */
 	size_t we_offs;		/* slots to reserve at we_wordv's front, if WRDE_DOOFFS */
 } wordexp_t;
 

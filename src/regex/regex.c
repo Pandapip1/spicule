@@ -95,9 +95,9 @@ struct bracket {
 };
 
 struct rx {
-	struct inst *prog;
+	struct inst *prog withtok(heap_allocated);
 	int nprog, capprog;
-	struct bracket *sets;
+	struct bracket *sets withtok(heap_allocated);
 	int nsets, capsets;
 	int ncap;	/* re_nsub + 1 */
 	int cflags;
@@ -834,7 +834,7 @@ struct mstate {
 	int nslot;
 	struct rx *rx;
 	regoff_t *progress;	/* last subject offset at each backward edge */
-	struct bt *bt;		/* backtracking stack, grown on demand */
+	struct bt *bt withtok(heap_allocated);	/* backtracking stack, grown on demand */
 	int nbt, capbt;
 };
 
@@ -1056,7 +1056,7 @@ static int run(struct mstate *ms, int pc, const char *sp)
 	return -1;
 }
 
-int regexec(const regex_t *__restrict preg handle(regex_compiled), const char *__restrict string,
+int regexec(const regex_t *__restrict preg handle(regex_compiled), const char *__restrict string withtok(null_terminated),
 	    size_t nmatch, regmatch_t pmatch[__restrict], int eflags)
 {
 	struct rx *rx = preg->__opaque;

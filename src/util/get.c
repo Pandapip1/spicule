@@ -91,7 +91,15 @@ static int read_whole_file(const char *path, struct sfile *out)
 
 	if (!f) return -1;
 	buf = malloc(cap);
-	if (!buf) { (void)fclose(f); return -1; }
+	if (!buf) {
+		/* fclose(f) is cleanup for the malloc() failure just diagnosed
+		 * (errno == ENOMEM); if it fails too, its own errno must not
+		 * overwrite that reason. */
+		int saved_errno = errno;
+		(void)fclose(f);
+		errno = saved_errno;
+		return -1;
+	}
 	for (;;) {
 		size_t got;
 		if (len + 1 >= cap) {
@@ -99,7 +107,13 @@ static int read_whole_file(const char *path, struct sfile *out)
 			char *g;
 			if (!__util_array_capacity(cap, cap, 1, 65536, 1, &newcap)) { free(buf); (void)fclose(f); return -1; }
 			g = realloc(buf, newcap);
-			if (!g) { free(buf); (void)fclose(f); return -1; }
+			if (!g) {
+				int saved_errno = errno;
+				(void)fclose(f);
+				errno = saved_errno;
+				free(buf);
+				return -1;
+			}
 			buf = g; cap = newcap;
 		}
 		__ownership_writable_span(buf + len, cap - len - 1);
@@ -107,7 +121,16 @@ static int read_whole_file(const char *path, struct sfile *out)
 		len += got;
 		if (got == 0) break;
 	}
-	if (ferror(f)) { free(buf); (void)fclose(f); return -1; }
+	if (ferror(f)) {
+		/* fclose(f) is cleanup for the fread() failure just diagnosed;
+		 * if it fails too, its own errno must not overwrite the real
+		 * read error. */
+		int saved_errno = errno;
+		free(buf);
+		(void)fclose(f);
+		errno = saved_errno;
+		return -1;
+	}
 	(void)fclose(f);
 	buf[len] = 0;
 	out->buf = buf;

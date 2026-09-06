@@ -113,7 +113,8 @@ static int df_report(const char *path, unsigned long blocksize)
 	return 0;
 }
 
-int __util_df_main(int argc, char **argv)
+int __util_df_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int i = 1;
 	unsigned long blocksize = 512;

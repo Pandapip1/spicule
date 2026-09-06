@@ -75,7 +75,8 @@ static int emit_uniform_tabs(int n)
 	return fflush(stdout) == 0 ? 0 : -1;
 }
 
-int __util_tabs_main(int argc, char **argv)
+int __util_tabs_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int i;
 	int interval = 8; /* tabs(1p): no operands "shall be equivalent to tabs -8" */

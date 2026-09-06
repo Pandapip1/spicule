@@ -387,7 +387,8 @@ static int parse_o_list(const char *val, struct outspec **specs withtok(heap_all
 	return 0;
 }
 
-int __util_join_main(int argc, char **argv)
+int __util_join_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int jf1 = 1, jf2 = 1;
 	int a1 = 0, a2 = 0;

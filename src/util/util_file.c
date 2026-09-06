@@ -260,7 +260,8 @@ static int file_one(const char *path, const struct file_opts *o)
 	return 0;
 }
 
-int __util_file_main(int argc, char **argv)
+int __util_file_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	struct file_opts o;
 	int i, status = 0;

@@ -216,7 +216,8 @@ static void print_counts(const struct wc_counts *c, int want_l, int want_w, int 
 	printf("\n");
 }
 
-int __util_wc_main(int argc, char **argv)
+int __util_wc_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int i;
 	int opt_c = 0, opt_m = 0, opt_l = 0, opt_w = 0;

@@ -340,7 +340,8 @@ static int parse_signed_number(const char *s, int *from_end, long long *number)
 	return 0;
 }
 
-int __util_tail_main(int argc, char **argv)
+int __util_tail_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int i;
 	enum tail_mode mode = TAIL_LINES;

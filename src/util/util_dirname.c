@@ -17,7 +17,8 @@
 #include <libgen.h>
 #include "util.h"
 
-int __util_dirname_main(int argc, char **argv)
+int __util_dirname_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	if (argc != 2) {
 		__util_diagf("dirname: usage: dirname string\n");

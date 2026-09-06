@@ -340,7 +340,8 @@ oom:
 
 /* ==== option parsing and the four SYNOPSIS forms ========================= */
 
-int __util_tr_main(int argc, char **argv)
+int __util_tr_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int opt_c = 0, opt_d = 0, opt_s = 0;
 	int i = 1;

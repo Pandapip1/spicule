@@ -96,7 +96,8 @@ static int mv_one(const char *src, const char *dst)
 	return 0;
 }
 
-int __util_mv_main(int argc, char **argv)
+int __util_mv_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	size_t i = 1;
 	size_t nargs = argc > 0 ? (size_t)argc : 0;

@@ -1,50 +1,29 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * unexpand(1p): `unexpand [-a | -t tablist] [file...]`.  DESCRIPTION:
- * "copy files or standard input to standard output, converting <blank>
- * characters at the beginning of each line into the maximum number of
- * <tab> characters followed by the minimum number of <space> characters
- * needed to fill the same column positions" -- that conversion always
- * runs on each line's leading run of <blank> (space/tab) characters,
- * with no minimum run length.
+ * unexpand(1p): `unexpand [-a | -t tablist] [file...]` -- converts each
+ * line's leading run of <blank> characters into the maximum tabs plus
+ * minimum spaces needed to fill the same columns, with no minimum run
+ * length.
  *
- * -a: "In addition to translating <blank> characters at the beginning
- * of each line, translate all sequences of two or more <blank>
- * characters immediately preceding a tab stop" -- everywhere else in
- * the line too, but *only* runs of two or more; a single mid-line blank
- * is left alone even if it happens to land exactly on a tab stop.
+ * -a: also convert any run of two or more <blank>s elsewhere in the
+ * line -- a single mid-line blank is left alone even on a tab stop.
  *
  * -t tablist (src/util/tablist.c/.h, shared with src/util/expand.c's own
- * -t): "When -t is specified, the presence or absence of the -a option
- * shall be ignored; conversion shall not be limited to the processing
- * of leading <blank> characters" -- -t alone therefore behaves like
- * `-a -t tablist`, not like plain -t with -a's "two or more" restriction
- * un-lifted; effective_a below is opt_a || have_t for exactly that
- * reason. This build accepts -a and -t together too (not just as
- * alternatives, despite the SYNOPSIS's "|"): the standard's own words
- * for what -t does already say -a's presence "shall be ignored", so
- * accepting both together produces the identical behaviour -t alone
- * does, and refusing the combination outright would only make a
- * harmless, self-consistent invocation an error for no behavioural
- * reason.
+ * -t): per POSIX, -t ignores -a and isn't limited to leading blanks, so
+ * -t alone behaves like `-a -t tablist`; effective_a below is
+ * opt_a || have_t for that reason. This build also accepts -a and -t
+ * together (despite the SYNOPSIS's "|"): -t's own semantics already
+ * make -a's presence a no-op, so refusing the combination would only
+ * reject a harmless, self-consistent invocation for no reason.
  *
- * DESCRIPTION on backspace: "Each <backspace> shall be copied to the
- * output, and shall cause the column position count for tab
- * calculations to be decremented; the count shall never be decremented
- * to a value less than one." -- same `col` convention as
- * src/util/expand.c (1-based, next character's column), floor 1 here
- * matches that sentence directly (expand.c's own floor-zero sentence is
- * the same physical rule under expand.c's own col-minus-one framing;
- * see that file's header).
+ * Backspace: same 1-based `col` convention as src/util/expand.c, floored
+ * at one.
  *
- * A run being "converted" always re-derives its own end column by
- * walking its original characters (tabs advance to their own next
- * stop, spaces by one) before emitting the maximal-tabs/minimal-spaces
- * replacement -- so a run that already produces no visible change (an
- * insufficient run that cannot reach a further stop) really does come
- * back out unchanged, matching DESCRIPTION's "insufficient blanks
- * remain as spaces" without a separate code path for that case.
+ * emit_converted_run() re-derives a run's end column by walking its
+ * original characters before emitting the replacement, so a run too
+ * short to reach another stop naturally comes back out unchanged -- no
+ * separate code path needed for that case.
  *
  * EXIT STATUS: "0 Successful completion. >0 An error occurred."
  */

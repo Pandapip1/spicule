@@ -1,53 +1,33 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * uudecode(1p): "The uudecode utility shall read a file, or standard
- * input if no file operand is given, that was created by uuencode, and
- * shall recreate the original file, including the file mode."
+ * uudecode(1p): reads a uuencoded file (or stdin) and recreates the
+ * original file, including its mode.
  *
- * SYNOPSIS: `uudecode [-o outfile] [file]` (-o is the one real POSIX
- * option: "Use outfile, rather than the pathname contained inside the
- * file, as the name of the recreated file.").
+ * SYNOPSIS: `uudecode [-o outfile] [file]` (-o: use outfile instead of
+ * the pathname named inside the file).
  *
- * ---- parsing, mirroring src/util/uuencode.c's format exactly -----------
+ * Parsing mirrors src/util/uuencode.c's format exactly: leading lines
+ * before "begin mode filename" are skipped -- historical mail transports
+ * prepend headers, and uudecode has always tolerated that; no such line
+ * at all is a diagnosed error. mode is parsed as octal; filename is the
+ * rest of the line after the mode field, so a filename with spaces still
+ * reads correctly. Each data line's first character is a length
+ * (src/util/uucode.h's UUDEC()); a length of 0 ends the data and must be
+ * followed by a line reading "end" -- anything else (including EOF) is a
+ * truncated-stream error. Every data character is checked with
+ * uu_valid_char() first: anything outside the uuencoding alphabet is a
+ * diagnosed error immediately, never decoded into a plausible-looking
+ * wrong byte.
  *
- *  - Any lines before "begin mode filename" are skipped -- historical
- *    uudecode has always tolerated (and even expected) leading mail
- *    headers a transport prepended, and DESCRIPTION's own "shall ignore
- *    any leading header lines" language matches: only the first line
- *    that actually starts with "begin " is treated as the real header.
- *    No such line at all is a diagnosed error, not a silent no-op.
- *  - mode is parsed as octal (strtoul(..., 8)); filename is the rest of
- *    the line after the mode field, so a filename containing spaces is
- *    still read correctly (only the mode field is whitespace-delimited).
- *  - Each data line's first character is a length (src/util/uucode.h's
- *    UUDEC()); a decoded length of 0 marks the end of the data and must
- *    be followed by a line reading "end" -- anything else there
- *    (including EOF) is a truncated-stream error, diagnosed and refused
- *    rather than treated as an implicit terminator.
- *  - Every character read as data is validated via uu_valid_char()
- *    first: a byte outside the uuencoding alphabet (corruption, or a
- *    stream mangled by a text-mode transfer, or simply not
- *    uuencoded data at all) is a diagnosed error immediately, never
- *    silently decoded into a plausible-looking wrong byte.
+ * The output file's mode is chmod()'d after it's fully written, to the
+ * octal value from the begin line masked to the permission bits (07777,
+ * same mask as src/util/modeparse.h) -- applied even under -o, since -o
+ * only changes where the file goes, not what mode it gets.
  *
- * ---- the output file's mode --------------------------------------------
- *
- * "shall recreate the original file, including the file mode" --
- * chmod()'d, after the file is fully written, to exactly the mode octal
- * value parsed from the begin line (masked to the permission bits,
- * 07777, the same mask src/util/modeparse.h's own contract uses) --
- * applied even when -o overrides the filename the header itself names,
- * since -o only replaces *where* the file goes, not what mode it is
- * supposed to have.
- *
- * No path sanitization is applied to the header's filename (or -o's
- * value): whatever names a creatable, writable path on this platform is
- * used as given, exactly the literal behaviour the standard describes
- * ("the pathname contained inside the file"). This is the same trust
- * model src/util/rm.c's/cp.c's own operand handling already has for any
- * other pathname operand -- nothing here treats a uuencoded stream as
- * more or less trustworthy input than an ordinary command-line pathname.
+ * No path sanitization is applied to the header's filename or -o's
+ * value; used as given, the same trust model src/util/rm.c's/cp.c's own
+ * pathname operands already have.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -64,11 +44,9 @@ static size_t chomp(char *s, size_t n)
 	return n;
 }
 
-/* A diagnostic for the failure that selected this path has already been
- * written by the caller; this only owns the "close whatever is still open,
- * then report failure" half every early-exit site below shares. `in` is
- * closed only when it came from a real path (not stdin); always returns 1
- * so a call site can end with `return uudecode_fail_in(in_path, in);`. */
+/* Shared cleanup for early-exit failure paths below: closes `in` if it
+ * came from a real path (not stdin), and always returns 1. Caller has
+ * already written the diagnostic. */
 static int uudecode_fail_in(const char *in_path, FILE *in)
 {
 	if (in_path) (void)fclose(in);
@@ -86,13 +64,10 @@ static int decode_line(const char *prog, const char *line, size_t have,
 	size_t pos, written = 0;
 
 	if (have < needed) {
-		/* %zu assumes the host libc's own size_t; this tree's size_t is
-		 * always "unsigned _Addr" (unsigned long long) regardless of
-		 * target, which a bare 'z' length modifier does not name on an
-		 * LP64 host. __util_diagf is the one printf-family function
-		 * here with an explicit format(printf) attribute (see dd.c's
-		 * identical %ju fix and PRIuMAX's own comment in
-		 * include/inttypes.h), so cast to uintmax_t and use PRIuMAX. */
+		/* size_t here is this tree's "unsigned _Addr", which a bare 'z'
+		 * length modifier doesn't name on an LP64 host; __util_diagf has
+		 * a real format(printf) attribute (see dd.c's identical fix), so
+		 * cast to uintmax_t and use PRIuMAX. */
 		__util_diagf("%s: truncated data line (need %" PRIuMAX " characters, got %" PRIuMAX ")\n",
 			prog, (uintmax_t)needed, (uintmax_t)have);
 		return -1;
@@ -136,7 +111,8 @@ int __util_uudecode_main(
 	char *p, *end;
 	const char *filename, *outname;
 
-	for (; i < argc && argv[i][0] == '-' && argv[i][1]; i++) {
+	for (; i < argc; i++) {
+		if (argv[i][0] != '-' || !argv[i][1]) break;
 		if (!strcmp(argv[i], "--")) { i++; break; }
 		if (!strcmp(argv[i], "-o")) {
 			if (i + 1 >= argc) { __util_diagf("uudecode: -o: option requires an argument\n"); return 1; }
@@ -234,8 +210,8 @@ int __util_uudecode_main(
 	return status;
 
 fail:
-	/* A decode/parse failure selected this path; both closes are cleanup and
-	 * cannot supersede that primary nonzero result. */
+	/* Diagnostic already written by the failing step; these closes are
+	 * cleanup only. */
 	(void)fclose(out);
 	if (in_path) (void)fclose(in);
 	return 1;

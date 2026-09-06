@@ -1,77 +1,45 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * admin(1p): SCCS (Source Code Control System) administration -- the
- * utility that creates an `s.file`.
+ * admin(1p): SCCS administration -- creates an s.file in the real
+ * historical SCCS delta-encoding format (sccsfile(5)), not a fake
+ * placeholder; the s.file this writes is byte-for-byte the shape a real
+ * historical SCCS admin/get would produce, modulo the narrowing below.
  *
- * ---- why this exists at all --------------------------------------------
- *
- * admin(1p) is functionally obsolescent -- SCCS has been displaced by
- * every later version-control system for decades, and no real workflow
- * this project's own bootstrap use case needs touches it -- but is
- * implemented here anyway, as a well-specified, bounded XCU page worth
- * having.  Implemented here: real SCCS delta-encoding text format
- * (term(5)-equivalent: sccsfile(5)),
- * not a fake placeholder -- an `s.file` this writes is byte-for-byte the
- * same shape a real historical SCCS `admin`/`get` would produce for the
- * same input, modulo the deliberate feature narrowing documented below.
- *
- * ---- SYNOPSIS / OPTIONS actually implemented (POSIX admin.html,
- * verified against the live spec text before writing this file) --------
- *
+ * Implemented:
  *   admin -i[name] [-t[name]] [-y[comment]] newfile
  *   admin -n [-t[name]] [-y[comment]] newfile...
  *
- *  -i[name]  "Specify the name of a file from which the text for a new
- *             SCCS file shall be taken... If the -i option is used, but
- *             the name option-argument is omitted, the text shall be
- *             obtained by reading the standard input."
- *  -n        "Create a new SCCS file. When -n is used without -i, the
- *             SCCS file shall be created with control information but
- *             without any file data."
- *  -t[name]  "Specify the name of a file from which descriptive text for
- *             the SCCS file shall be taken." Narrowed here: a name is
- *             always required (no bare -t) -- the real, undocumented-by-
- *             POSIX default behaviour of a bare -t is "delete existing
- *             descriptive text" on an already-existing file, which does
- *             not apply to this implementation's create-only scope
- *             below, so it is refused rather than guessed at.
- *  -y[comment]  "Insert the comment text into the SCCS file as a comment
- *             for the initial delta." When -y is omitted entirely (not
- *             just given empty), this implementation synthesizes the
- *             same default real historical SCCS admin has always used:
- *             "date and time created YY/MM/DD HH:MM:SS by USER".
+ *  -i[name]  text for the new file, from `name`, or stdin if omitted.
+ *  -n        create with control information but no file data.
+ *  -t[name]  descriptive text file. Narrowed here: a name is always
+ *            required -- the real, undocumented-by-POSIX behaviour of a
+ *            bare -t (delete existing descriptive text on an
+ *            already-existing file) doesn't apply to this create-only
+ *            scope, so it's refused rather than guessed at.
+ *  -y[comment]  comment for the initial delta. When omitted entirely
+ *            (not just empty), defaults to the same text real historical
+ *            SCCS admin always has: "date and time created
+ *            YY/MM/DD HH:MM:SS by USER".
  *
- * Per POSIX's own OPERANDS: "newfile: A pathname of an SCCS file to be
- * created," and DESCRIPTION: "All SCCS files must follow the naming
- * pattern s.filename" and "New SCCS files shall be given read-only
- * permission mode" -- both enforced below (basename must start "s.",
- * chmod 0444 after writing).
+ * Per POSIX: newfile's basename must start "s." and the created file is
+ * chmod'd 0444 (both enforced below).
  *
- * ---- what is deliberately NOT implemented, and why ---------------------
+ * Not implemented: the third SYNOPSIS form that modifies an
+ * already-existing s.file (`-a`/`-d`/`-m`/`-r`/`-t`/`-y` file...), plus
+ * `-h` (checksum audit) and `-z` (checksum recompute) -- this file only
+ * ever creates a brand-new s.file. Given an existing operand, or neither
+ * `-i` nor `-n`, this refuses with a diagnostic rather than silently
+ * doing nothing (same "unsupported option must not look like it worked"
+ * rule as src/util/dd.c/touch.c). `-a`/`-d`/`-e`/`-f`/`-m`/`-r` are
+ * refused the same way. Every s.file this creates has the fixed initial
+ * SID "1.1" (real admin's own default when `-r` is omitted, so a real
+ * default, just with no override).
  *
- * The admin.html SYNOPSIS also lists a third form -- `admin [-a login]
- * [-d flag] [-m mrlist] [-r rel] [-t[name]] [-y[comment]] file...`,
- * modifying parameters of an ALREADY-EXISTING s.file -- plus `-h`
- * (checksum audit) and `-z` (checksum recompute). None of that is
- * implemented: this file only ever creates a brand-new s.file (the
- * `-i`/`-n` forms above). Given an operand that already exists, or no
- * `-i`/`-n` at all, this refuses loudly with a diagnostic rather than
- * silently doing nothing -- this project's established "an unsupported
- * option must not look like it worked" rule (src/util/dd.c, src/util/
- * touch.c's own header comments make the same call). `-a`/`-d`/`-e`/
- * `-f`/`-m`/`-r` are refused the same way if given at all. `-r` in
- * particular means every s.file this creates has the same fixed initial
- * SID, "1.1" -- real admin's own default when `-r` is omitted, so this
- * is a real default, not a fabricated one, just with no override.
- *
- * Since there is no delta(1p) in this project (see this file's own
- * "round-trip scope" note below and src/util/get.c's header comment),
- * an s.file this creates never grows a second delta -- so the user list
- * (-a/-e) and flags (-f) that real admin's ongoing-maintenance form
- * exists to edit have nothing to matter for; the ^Au/^AU and ^At/^AT
- * brackets are still written (a structurally complete, real s.file),
- * just always empty/single-delta.
+ * This project has no delta(1p), so an s.file created here never grows a
+ * second delta -- the user list (^Au/^AU) and flags (^At/^AT) that real
+ * admin's maintenance form exists to edit are still written (a
+ * structurally complete s.file), just always empty.
  */
 
 /* This translation unit implements ntlibc's freestanding -nostdinc
@@ -89,12 +57,10 @@
 #include <sys/stat.h>
 #include "util.h"
 
-/* The real historical SCCS checksum: sccsfile(5), "the sum of all
- * characters [bytes], except those contained in the first [^Ah] line",
- * accumulated in a real unsigned short so it wraps at 65536 the same
- * way historical SCCS implementations (storing it in exactly that C
- * type) always did -- declared in src/internal/util.h, shared with
- * src/util/get.c's verification of the same value on read. */
+/* The real historical SCCS checksum (sccsfile(5)): sum of all bytes
+ * except the first (^Ah) line, in an unsigned short so it wraps at
+ * 65536 like historical SCCS. Shared with src/util/get.c's verification
+ * of the same value on read. */
 unsigned __util_sccs_checksum(const char *buf, size_t len)
 {
 	unsigned short sum = 0;
@@ -183,10 +149,8 @@ static void write_comment(FILE *rest, const char *comment)
 }
 
 /* Builds and writes one s.file: the checksum line, then everything
- * captured through open_memstream() below (the delta table, empty user
- * list, descriptive text, and the whole input as one ^AI 1/^AE 1 body
- * block -- see this file's own header comment for the exact shape and
- * every section this omits). */
+ * captured via open_memstream() below (delta table, empty user list,
+ * descriptive text, and the input as one ^AI 1/^AE 1 body block). */
 static int create_one(const char *path, const struct line_array *body,
 	const struct line_array *text, const char *comment)
 {
@@ -301,9 +265,8 @@ int __util_admin_main(
 		if (f != stdin) (void)fclose(f);
 	}
 
-	/* -t's descriptive text, if given -- required to name a real file
-	 * in this implementation's narrowed scope (this file's own header
-	 * comment). */
+	/* -t's descriptive text, if given (a name is always required here --
+	 * see header). */
 	if (have_t) {
 		FILE *f;
 		if (!*tname) {
@@ -325,9 +288,8 @@ int __util_admin_main(
 		(void)fclose(f);
 	}
 
-	/* -y's comment, or the same default real historical SCCS admin
-	 * synthesizes when -y is omitted entirely (this file's own header
-	 * comment). */
+	/* -y's comment, or the default synthesized below when -y is omitted
+	 * entirely (see header). */
 	if (have_y) {
 		comment = ycomment;
 	} else {

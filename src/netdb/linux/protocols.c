@@ -124,7 +124,7 @@ struct protoent *getprotobynumber(int proto)
 	return NULL;
 }
 
-static FILE *g_protof;
+static FILE *g_protof withtok(file_stream_open);
 
 void setprotoent(int stayopen)
 {

@@ -2434,7 +2434,8 @@ static int man_do_ds(struct man_ctx *c, struct man_argv *a)
 	if (a->n < 1) return 1; /* ".ds" with no name: nothing to define */
 
 	memset(&val, 0, sizeof val);
-	for (i = 1; i < a->n && ok; i++) {
+	for (i = 1; i < a->n; i++) {
+		if (!ok) break;
 		if (i > 1 && !mbuf_appendc(&val, ' ')) ok = 0;
 		if (ok && !decode_text(&c->regs, &val, a->v[i], strlen(a->v[i]), 0)) ok = 0;
 	}
@@ -3011,8 +3012,9 @@ static int man_render_table(struct man_ctx *c, struct man_macro *body)
 
 	{
 		size_t data_idx = 0;
-		for (; li < body->n && ok; li++) {
+		for (; li < body->n; li++) {
 			size_t start, len;
+			if (!ok) break;
 			man_tbl_trim_span(body->lines[li], &start, &len);
 			if (len == 1 && body->lines[li][start] == '_') {
 				struct man_tbl_row *rw = man_tbl_rows_new(&rows);
@@ -3039,9 +3041,10 @@ static int man_render_table(struct man_ctx *c, struct man_macro *body)
 				if (!rw->cells) { ok = 0; break; }
 				rw->ncells = ncols;
 
-				for (i = 0; i < ncols && ok; i++) {
+				for (i = 0; i < ncols; i++) {
 					struct man_tbl_colspec cs = (i < frow->n) ? frow->v[i] : disp[i];
 
+					if (!ok) break;
 					if (cs.align == MAN_TBL_SPAN || cs.align == MAN_TBL_VSPAN) {
 						rw->cells[i].kind = (cs.align == MAN_TBL_SPAN) ? 1 : 2;
 						continue;
@@ -3126,15 +3129,17 @@ static int man_render_table(struct man_ctx *c, struct man_macro *body)
 
 		ok = man_block_start(c);
 		if (ok && have_box) ok = man_tbl_emit_border(&c->doc, indent, width, ncols, '-', 1);
-		for (ri = 0; ri < rows.n && ok; ri++) {
+		for (ri = 0; ri < rows.n; ri++) {
 			struct man_tbl_row *rw = &rows.v[ri];
+			if (!ok) break;
 			if (rw->full_rule) {
 				ok = man_tbl_emit_border(&c->doc, indent, width, ncols, rw->full_rule == 2 ? '=' : '-', have_box);
 				continue;
 			}
 			ok = mbuf_appendn(&c->doc, indent, ' ');
 			if (ok && have_box) ok = mbuf_appendstr(&c->doc, "| ");
-			for (j = 0; j < ncols && ok; j++) {
+			for (j = 0; j < ncols; j++) {
+				if (!ok) break;
 				ok = man_tbl_emit_cell(&c->doc, &rw->cells[j], disp[j].align, width[j], numleft[j]);
 				if (ok) {
 					if (j + 1 < ncols) ok = have_box ? mbuf_appendstr(&c->doc, " | ") : mbuf_appendn(&c->doc, MAN_TBL_COL_GAP, ' ');
@@ -3581,10 +3586,11 @@ static int man_render_eqn(struct man_ctx *c, struct man_macro *body)
 	size_t li;
 	int ok = 1, started = 0;
 
-	for (li = 0; li < body->n && ok; li++) {
+	for (li = 0; li < body->n; li++) {
 		size_t start, len;
 		char *rendered;
 
+		if (!ok) break;
 		man_tbl_trim_span(body->lines[li], &start, &len); /* generic trim helper, not table-specific despite the name */
 		if (len == 0) continue;
 
@@ -3659,9 +3665,10 @@ static int man_invoke_macro(struct man_ctx *c, struct man_render *r,
 	}
 
 	c->macro_depth++;
-	for (i = 0; i < m->n && ok; i++) {
+	for (i = 0; i < m->n; i++) {
 		struct man_buf expanded;
 		char *lc;
+		if (!ok) break;
 		memset(&expanded, 0, sizeof expanded);
 		ok = man_macro_subst_args(m->lines[i], macroname, args, &expanded);
 		if (ok) {
@@ -3727,8 +3734,10 @@ static int man_process_line(struct man_ctx *c, struct man_render *r, char *line)
 			c->cond_active = 0;
 			if (result) {
 				size_t i;
-				for (i = 0; i < body.n && ok; i++) {
-					char *lc = strdup(body.lines[i]);
+				for (i = 0; i < body.n; i++) {
+					char *lc;
+					if (!ok) break;
+					lc = strdup(body.lines[i]);
 					if (!lc) { ok = 0; break; }
 					ok = man_process_line(c, r, lc);
 					free(lc);
@@ -3925,7 +3934,8 @@ static int man_process_line(struct man_ctx *c, struct man_render *r, char *line)
 			size_t i;
 			memset(&heading, 0, sizeof heading);
 			if (!man_flush_paragraph(c)) { man_argv_free(&a); return 0; }
-			for (i = 0; i < a.n && ok; i++) {
+			for (i = 0; i < a.n; i++) {
+				if (!ok) break;
 				if (i && !mbuf_appendc(&heading, ' ')) ok = 0;
 				if (ok && !decode_text(&c->regs, &heading, a.v[i], strlen(a.v[i]), 0)) ok = 0;
 			}
@@ -3979,7 +3989,10 @@ static int man_process_line(struct man_ctx *c, struct man_render *r, char *line)
 				c->pending_tag = 0;
 				{
 					size_t i;
-					for (i = 0; i < tagn && ok; i++) ok = man_acc_add_font(c, a.v[i], 0);
+					for (i = 0; i < tagn; i++) {
+						if (!ok) break;
+						ok = man_acc_add_font(c, a.v[i], 0);
+					}
 				}
 				if (ok) ok = man_flush_as_tag(c, (int)w);
 			}
@@ -4090,7 +4103,8 @@ static int man_process_line(struct man_ctx *c, struct man_render *r, char *line)
 				struct man_buf tmp;
 				memset(&tmp, 0, sizeof tmp);
 				ok = mbuf_appendc(&tmp, (char)font);
-				for (i = 0; i < a.n && ok; i++) {
+				for (i = 0; i < a.n; i++) {
+					if (!ok) break;
 					if (i && !mbuf_appendc(&tmp, ' ')) { ok = 0; break; }
 					ok = decode_text(&c->regs, &tmp, a.v[i], strlen(a.v[i]), 0);
 				}
@@ -4103,7 +4117,10 @@ static int man_process_line(struct man_ctx *c, struct man_render *r, char *line)
 				}
 				mbuf_free(&tmp);
 			} else {
-				for (i = 0; i < a.n && ok; i++) ok = man_acc_add_font(c, a.v[i], font);
+				for (i = 0; i < a.n; i++) {
+					if (!ok) break;
+					ok = man_acc_add_font(c, a.v[i], font);
+				}
 				if (ok) ok = man_maybe_consume_tag(c);
 			}
 		} else if (!strcmp(name, "BI") || !strcmp(name, "IB") || !strcmp(name, "BR") ||
@@ -4127,9 +4144,10 @@ static int man_process_line(struct man_ctx *c, struct man_render *r, char *line)
 			int windex = 0;
 			int had_c = 0;
 			if (c->acc.len > 0 && !c->suppress_join) { if (!mbuf_appendc(&c->acc, ' ')) ok = 0; }
-			for (i = 0; i < a.n && ok; i++) {
+			for (i = 0; i < a.n; i++) {
 				const char *s = a.v[i];
 				size_t si = 0, sn = strlen(s);
+				if (!ok) break;
 				while (si < sn && ok) {
 					size_t wstart;
 					while (si < sn && (s[si] == ' ' || s[si] == '\t')) {

@@ -43,6 +43,7 @@ int sem_trywait(sem_t *sem handle(semaphore));
 fallible
 int sem_timedwait(sem_t *sem handle(semaphore), const struct timespec *);
 fallible
+async_signal_safe
 int sem_post(sem_t *sem handle(semaphore));
 int sem_getvalue(sem_t *sem handle(semaphore), int *);
 

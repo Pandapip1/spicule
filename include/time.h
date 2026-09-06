@@ -14,6 +14,7 @@ extern "C" {
 #endif
 
 #include <features.h>
+#include <ownership.h>
 
 #ifdef __cplusplus
 #define NULL 0L
@@ -40,6 +41,7 @@ extern "C" {
 
 
 clock_t clock (void);
+async_signal_safe
 time_t time (time_t *);
 double difftime (time_t, time_t);
 time_t mktime (struct tm *) __attribute__((nonnull(1)));
@@ -104,10 +106,13 @@ struct sigevent;
 int timer_create(clockid_t, struct sigevent *__restrict, timer_t *__restrict)
     __attribute__((nonnull(3)));
 int timer_delete(timer_t);
+async_signal_safe
 int timer_getoverrun(timer_t);
+async_signal_safe
 int timer_gettime(timer_t, struct itimerspec *);
 /* old is genuinely optional: POSIX documents "if ovalue is not NULL" as
  * a real, defined case. */
+async_signal_safe
 int timer_settime(timer_t, int, const struct itimerspec *__restrict, struct itimerspec *__restrict)
     __attribute__((nonnull(3)));
 

@@ -61,9 +61,13 @@ withtok(heap_allocated)
 withtok(writable_span(size))
 void *aligned_alloc(size_t alignment, size_t size);
 
+async_signal_safe
+io_operation
 _Noreturn void abort (void);
 int atexit (void (*) (void));
+io_operation
 _Noreturn void exit (int);
+async_signal_safe
 _Noreturn void _Exit (int);
 int at_quick_exit (void (*) (void));
 _Noreturn void quick_exit (int);

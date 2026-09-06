@@ -93,18 +93,28 @@ struct stat {
 #define UTIME_NOW  0x3fffffff
 #define UTIME_OMIT 0x3ffffffe
 
+async_signal_safe
+io_operation
 int stat(const char *__restrict, struct stat *__restrict);
+async_signal_safe
+io_operation
 int fstat(int, struct stat *) __attribute__((nonnull(2)));
+io_operation
 int lstat(const char *__restrict, struct stat *__restrict);
 int fstatat(int, const char *__restrict, struct stat *__restrict, int);
 fallible
+async_signal_safe
 int chmod(const char *, mode_t);
 fallible
+async_signal_safe
 int fchmod(int, mode_t);
 fallible
 int fchmodat(int, const char *, mode_t, int);
+async_signal_safe
 mode_t umask(mode_t);
 fallible
+async_signal_safe
+io_operation
 int mkdir(const char *, mode_t);
 int mkfifo(const char *, mode_t);
 fallible

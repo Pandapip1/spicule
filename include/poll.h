@@ -17,6 +17,7 @@ extern "C" {
 #endif
 
 #include <features.h>
+#include <ownership.h>
 
 typedef unsigned long nfds_t;
 
@@ -45,6 +46,8 @@ struct pollfd {
 #define POLLWRBAND 0x200
 #endif
 
+async_signal_safe
+io_operation
 int poll (struct pollfd *, nfds_t, int);
 
 #ifdef __cplusplus

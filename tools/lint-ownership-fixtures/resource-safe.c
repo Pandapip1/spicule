@@ -9,10 +9,36 @@ long write(int, const void *, size_t);
 FILE *fopen(const char *, const char *);
 int fclose(FILE *);
 int fflush(FILE *);
+int mkstemp(char *);
+int mkostemp(char *, int);
 
 void descriptor(void)
 {
 	int fd = open("name", 0);
+	if (fd < 0)
+		return;
+	write(fd, "x", 1);
+	close(fd);
+}
+
+/* mkstemp()/mkostemp() return a real fd exactly like open() does (see
+ * src/stdlib/mktemp.c's mkostemps(), which every one of this codebase's
+ * real callers -- src/stdio/misc.c, src/util/crond.c, src/util/
+ * crontab.c, src/util/man.c, src/util/m4.c -- routes through). */
+void descriptor_via_mkstemp(void)
+{
+	char tmpl[] = "nameXXXXXX";
+	int fd = mkstemp(tmpl);
+	if (fd < 0)
+		return;
+	write(fd, "x", 1);
+	close(fd);
+}
+
+void descriptor_via_mkostemp(void)
+{
+	char tmpl[] = "nameXXXXXX";
+	int fd = mkostemp(tmpl, 0);
 	if (fd < 0)
 		return;
 	write(fd, "x", 1);

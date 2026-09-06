@@ -1827,9 +1827,15 @@ stage_signals() {
 		$(llvm-config-18 --ldflags --libs --system-libs) || return 1
 	fixture_log=$builddir/signal-safety-fixtures.log
 	: > "$fixture_log"
+	# This stage's plugin is a plain -fsyntax-only PluginASTAction, not a
+	# clang --analyze checker, so clang never predefines __clang_analyzer__
+	# here (see stage_totality's identical note) -- without
+	# -DNTLIBC_OWNERSHIP_ANALYSIS, include/ownership.h's async_signal_safe
+	# annotation goes dark and asyncSafe() finds nothing on any callee.
 	for fixture in tools/lint-signal-safety-fixtures/*.c; do
 		clang-18 -fsyntax-only -Xclang -load -Xclang "$plugin" \
-			-Xclang -add-plugin -Xclang ntlibc-signal-safety "$fixture" \
+			-Xclang -add-plugin -Xclang ntlibc-signal-safety \
+			-DNTLIBC_OWNERSHIP_ANALYSIS "$fixture" \
 			>> "$fixture_log" 2>&1 || any=1
 	done
 	tools/lint-signal-safety.py --fixtures "$fixture_log" || any=1
@@ -1847,7 +1853,8 @@ stage_signals() {
 			id=$(printf %s "$f" | tr / _)
 			# shellcheck disable=SC2086
 			"$clang" $target -fsyntax-only -Xclang -load -Xclang "$plugin" \
-				-Xclang -add-plugin -Xclang ntlibc-signal-safety "$@" "$f" \
+				-Xclang -add-plugin -Xclang ntlibc-signal-safety \
+				-DNTLIBC_OWNERSHIP_ANALYSIS "$@" "$f" \
 				> "'"$pardir"'/$id.log" 2>&1
 		' _ {} clang-18 "$plugin" "$target" $flags
 		runrc=$?; nlog=$(find "$pardir" -name '*.log' | grep -c . || true)

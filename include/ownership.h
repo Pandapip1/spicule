@@ -133,5 +133,30 @@
  * spelling. */
 #define lock_held \
 	__ownership_attr("qual:lock_held")
+/* Two more bare, function-level markers, both read off the callee's
+ * redecls the same way fallible is. They are related but genuinely
+ * distinct real-world facts -- not two spellings of the same thing -- so
+ * a function can carry either, both, or neither:
+ *   - async_signal_safe: this function is on POSIX's own Async-Signal-Safe
+ *     Functions table, so it may be called from within a signal handler.
+ *     tools/clang/SignalSafetyChecker.cpp's asyncSafe() reads this back
+ *     instead of keeping its own hardcoded copy of that POSIX table.
+ *     Several members of that table (sigemptyset(), getpid(), umask(),
+ *     kill(), sleep(), ...) do no I/O at all, and conversely several real
+ *     I/O calls (mmap(), ioctl(), pread(), ...) are NOT on the table
+ *     (their libc implementations may take an internal lock), so this is
+ *     not implied by, and does not imply, io_operation below.
+ *   - io_operation: this function performs I/O or a syscall, which
+ *     tools/clang/PurityChecker.cpp's isIoCall() treats as a real,
+ *     externally observable side effect that disqualifies
+ *     __attribute__((pure)) eligibility. Reads this back instead of
+ *     keeping its own hardcoded I/O name list.
+ * A function commonly carries both (e.g. read(), write(), open()) since
+ * most async-signal-safe calls are themselves I/O, but neither table is a
+ * subset of the other -- see the two bullets above. */
+#define async_signal_safe \
+	__ownership_attr("async_signal_safe")
+#define io_operation \
+	__ownership_attr("io_operation")
 
 #endif

@@ -6,7 +6,16 @@
  * that already uses the encouraged pattern: an explicit `if (...) break;`
  * in the body instead of folding a second condition into the header. */
 
-#include <stddef.h>
+/* No standard headers: this file is only ever fed to `clang --analyze`
+ * in isolation, with no include path of its own (see tools/lint.sh's
+ * stage_loopcond()) -- exactly like unsafe-for.c/unsafe-while.c beside
+ * it, which need no header at all. A bare `#include <stddef.h>` here
+ * depended on the ambient compiler's own resource-dir headers, which
+ * this project's toolchain does not reliably provide outside the
+ * project's own `-nostdinc` + explicit `-I` build (nothing else in this
+ * tree ever assumes a system header is just there); a local typedef
+ * says exactly as much as this fixture needs without that dependency. */
+typedef unsigned long size_t;
 
 struct node { struct node *next; int value; };
 

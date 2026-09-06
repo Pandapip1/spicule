@@ -3,31 +3,24 @@
  *
  * cat(1p): `cat [-u] [file...]`
  *
- * DESCRIPTION: "The cat utility shall read files in sequence and shall
- * write their contents to the standard output in the same sequence."
- * Byte for byte, with no line-ending translation of any kind -- this is
- * the one utility in this tier where "copy" means exactly that.
+ * DESCRIPTION: reads files in sequence, writes their contents to
+ * standard output in the same sequence, byte for byte, with no
+ * line-ending translation -- this is the one utility in this tier where
+ * "copy" means exactly that.
  *
- * OPERANDS: "If no file operands are specified, the standard input shall
- * be used.  If a file is '-', the cat utility shall read from the
- * standard input at that point in the sequence" -- so "-" is not just a
- * synonym for "no operands", it can appear anywhere in a mixed operand
- * list and is honored positionally.
+ * OPERANDS: no file operands means standard input. "-" reads standard
+ * input at that point in the sequence, so it can appear anywhere in a
+ * mixed operand list rather than only as a synonym for "no operands".
  *
- * OPTIONS: -u ("Write bytes from the input file to the standard output
- * without delay as each is read") is accepted and is a real no-op here:
- * __util_copy_stream() below already writes every block it reads
- * immediately, with no buffering layer above the raw read()/write() pair
- * that -u's "without delay" could turn off -- there is nothing to
- * disable.  Accepted rather than refused (unlike touch's -d or rm's -i)
- * because every observable behavior -u could change is already the
- * behavior this file has regardless of the flag.
+ * OPTIONS: -u ("write bytes without delay as each is read") is accepted
+ * as a real no-op: copy_stream() below already writes every block it
+ * reads immediately, with no buffering layer above raw read()/write()
+ * for -u to disable.
  *
- * EXIT STATUS: "0 All input files were output successfully." ">0 An
- * error occurred." -- diagnose-and-continue across operands, the same
- * shape rm/cp/mv/touch already established: one unreadable operand does
- * not stop the rest from being copied, and the final exit status is
- * still nonzero.
+ * EXIT STATUS: diagnose-and-continue across operands, the same shape
+ * rm/cp/mv/touch already establish: one unreadable operand does not
+ * stop the rest from being copied, and the final exit status is still
+ * nonzero.
  *
  * Spec consulted: https://pubs.opengroup.org/onlinepubs/9699919799/utilities/cat.html
  */

@@ -168,8 +168,8 @@ static void reload_crontab(const char *path)
 			fprintf(stderr, "crond: %s:%ld: environment assignments are not supported, skipped\n", path, lineno);
 			continue;
 		}
-		for (i = 0; i < 5 && ok; i++)
-			if (split_field(&p, fields[i], sizeof fields[i]) < 0) ok = 0;
+		for (i = 0; i < 5; i++)
+			if (split_field(&p, fields[i], sizeof fields[i]) < 0) { ok = 0; break; }
 		if (ok) {
 			while (*p == ' ' || *p == '\t') p++;
 			if (*p == '\n' || *p == 0) ok = 0;

@@ -467,7 +467,7 @@ int __util_grep_main(
 		}
 	}
 
-	for (i = 0; !quiet_hit && i < (nfiles ? nfiles : 1); i++) {
+	for (i = 0; i < (nfiles ? nfiles : 1); i++) {
 		const char *path = nfiles ? files[i] : 0;
 		int is_stdin = (!path || !strcmp(path, "-"));
 		const char *disp = is_stdin ? "(standard input)" : path;
@@ -500,6 +500,8 @@ int __util_grep_main(
 				if (r < 0) had_error = 1;
 			}
 		}
+
+		if (quiet_hit) break;
 	}
 
 	if (quiet_hit) had_match = 1;

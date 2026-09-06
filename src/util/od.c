@@ -343,8 +343,8 @@ static int od_run(struct instream *is, const struct od_opts *o)
 		if (remaining >= 0) remaining -= (long long)got;
 
 		int same = got == ROWBYTES;
-		for (size_t j = 0; same && j < ROWBYTES; j++)
-			if (buf[j] != prev[j]) same = 0;
+		for (size_t j = 0; j < ROWBYTES; j++)
+			if (buf[j] != prev[j]) { same = 0; break; }
 		if (!o->verbose && prev_valid && prev_full && same) {
 			if (!in_run) { printf("*\n"); in_run = 1; }
 		} else {

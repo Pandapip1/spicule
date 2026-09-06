@@ -880,7 +880,7 @@
 
 /* ==== growable byte buffer (src/util/m4.c's strbuf_append() idiom) ===== */
 
-struct man_buf { char *data; size_t len, cap; };
+struct man_buf { char *data withtok(heap_allocated); size_t len, cap; };
 
 static int mbuf_append(struct man_buf *restrict b,
 	const char *restrict data, size_t n)
@@ -986,14 +986,14 @@ static size_t man_skip_delim_arg(const char *s, size_t n, size_t i)
 enum man_reg_kind { MAN_REG_STRING, MAN_REG_NUMBER };
 
 struct man_reg {
-	char *name;             /* malloc'd */
+	char *name withtok(heap_allocated);             /* malloc'd */
 	enum man_reg_kind kind;
-	char *str;               /* MAN_REG_STRING: malloc'd value */
+	char *str withtok(heap_allocated);               /* MAN_REG_STRING: malloc'd value */
 	long num;                /* MAN_REG_NUMBER: current value */
 	long incr;                /* MAN_REG_NUMBER: \n+xx/\n-xx step, from .nr's optional third argument */
 };
 
-struct man_regtab { struct man_reg *v; size_t n, cap; };
+struct man_regtab { struct man_reg *v withtok(heap_allocated); size_t n, cap; };
 
 static void man_regtab_free(struct man_regtab *t)
 {
@@ -1153,12 +1153,12 @@ static size_t man_read_reg_name(const char *s, size_t n, size_t i, char *name, s
  * macro. */
 
 struct man_macro {
-	char *name;   /* malloc'd */
-	char **lines; /* malloc'd array of malloc'd raw body lines */
+	char *name withtok(heap_allocated);   /* malloc'd */
+	char **lines withtok(heap_allocated); /* malloc'd array of malloc'd raw body lines */
 	size_t n, cap;
 };
 
-struct man_mactab { struct man_macro *v; size_t n, cap; };
+struct man_mactab { struct man_macro *v withtok(heap_allocated); size_t n, cap; };
 
 static void man_macro_free_lines(struct man_macro *m)
 {
@@ -1723,7 +1723,7 @@ static int man_line_is_block_close(const char *line)
 
 /* ==== macro-argument tokenizer: whitespace-separated, "quoted strings" == */
 
-struct man_argv { char **v; size_t n, cap; };
+struct man_argv { char **v withtok(heap_allocated); size_t n, cap; };
 
 static void man_argv_free(struct man_argv *a)
 {
@@ -1828,7 +1828,7 @@ struct man_ctx {
 	int extra_indent;       /* active .TP/.IP tag-body indent bump */
 	int pending_tag;        /* next content chunk becomes a .TP tag */
 	int tag_width;
-	char *pending_prefix;   /* deferred short-tag first-line prefix, styled */
+	char *pending_prefix withtok(heap_allocated);   /* deferred short-tag first-line prefix, styled */
 	int just_emitted_tag;   /* suppress the next flush's leading blank line
 	                          * -- set after a .TP/.IP tag (its body is a
 	                          * continuation, not a new block), after .br
@@ -1841,7 +1841,7 @@ struct man_ctx {
 	struct man_mactab macros; /* .de/.am/.ig/.rm/.als macro table -- see "MACROS" */
 	int def_active;          /* collecting a .de/.am/.ig body right now */
 	int def_discard;         /* def_active's body is .ig's: discard, don't store */
-	char *def_end;            /* malloc'd custom end-macro name, or NULL for the default ".." */
+	char *def_end withtok(heap_allocated);            /* malloc'd custom end-macro name, or NULL for the default ".." */
 	struct man_macro *def_target; /* macro def_active is writing lines into (NULL if def_discard) */
 	int macro_depth;         /* current user-macro invocation nesting, bounded by MAN_MAX_MACRO_DEPTH */
 	int suppress_join;       /* \c seen: skip the next join-space between accumulated fragments */
@@ -2657,24 +2657,24 @@ enum man_tbl_align { MAN_TBL_LEFT, MAN_TBL_CENTER, MAN_TBL_RIGHT, MAN_TBL_NUMERI
 
 struct man_tbl_colspec { enum man_tbl_align align; int bold, ital; };
 
-struct man_tbl_fmtrow { struct man_tbl_colspec *v; size_t n, cap; };
+struct man_tbl_fmtrow { struct man_tbl_colspec *v withtok(heap_allocated); size_t n, cap; };
 
-struct man_tbl_fmt { struct man_tbl_fmtrow *v; size_t n, cap; };
+struct man_tbl_fmt { struct man_tbl_fmtrow *v withtok(heap_allocated); size_t n, cap; };
 
 /* kind: 0 = real text (cell.text is the decoded/styled content), 1 =
  * horizontal span (`s`: no field consumed, blank filler), 2 = vertical
  * span (`^`: no field consumed, blank filler), 3 = single-rule field
  * (`_`: fill this cell's own column width with `-`), 4 = double-rule
  * field (`=`: fill with `=`). */
-struct man_tbl_cell { int kind; char *text; };
+struct man_tbl_cell { int kind; char *text withtok(heap_allocated); };
 
 /* full_rule: 0 = an ordinary row of `cells`, 1 = a whole-table `_`
  * single-rule row, 2 = a whole-table `=` double-rule row (neither of
  * which has any cells, and neither of which consumes a format-line
  * slot -- see this file's header comment). */
-struct man_tbl_row { int full_rule; struct man_tbl_cell *cells; size_t ncells; };
+struct man_tbl_row { int full_rule; struct man_tbl_cell *cells withtok(heap_allocated); size_t ncells; };
 
-struct man_tbl_rows { struct man_tbl_row *v; size_t n, cap; };
+struct man_tbl_rows { struct man_tbl_row *v withtok(heap_allocated); size_t n, cap; };
 
 static void man_tbl_fmtrow_free(struct man_tbl_fmtrow *r) { free(r->v); r->v = 0; r->n = r->cap = 0; }
 
@@ -3198,8 +3198,8 @@ static const char *man_eqn_lookup_greek(const char *name)
  * (`sub`/`sup`/`over`/`sqrt`) and Greek-letter-name recognition --
  * matching real eqn, where only a BARE word is ever looked up as a
  * keyword or a named letter. */
-struct man_eqn_tok { char *text; int quoted; };
-struct man_eqn_toks { struct man_eqn_tok *v; size_t n, cap; };
+struct man_eqn_tok { char *text withtok(heap_allocated); int quoted; };
+struct man_eqn_toks { struct man_eqn_tok *v withtok(heap_allocated); size_t n, cap; };
 
 static void man_eqn_toks_free(struct man_eqn_toks *t)
 {
@@ -3270,7 +3270,7 @@ static int man_eqn_tokenize(const char *s, struct man_eqn_toks *out)
  * sub/sup/over operand needs an extra disambiguating delimiter around
  * it, instead of always adding one (`x sub i` should read "x_i", not
  * the noisier "x_{i}"). */
-struct man_eqn_val { char *text; int compound; };
+struct man_eqn_val { char *text withtok(heap_allocated); int compound; };
 
 static void man_eqn_val_free(struct man_eqn_val *v) { free(v->text); v->text = 0; }
 
@@ -4511,6 +4511,7 @@ static void man_free_strv(char **v)
  * it, Tier 4 -- see this file's own header comment, "GZIP-COMPRESSED
  * (.gz) PAGES"). Returns a malloc'd path naming whichever one exists,
  * or NULL if neither does. */
+withtok(heap_allocated)
 static char *man_find_one(char **manpath, const char *section, const char *name)
 {
 	size_t i;
@@ -4530,6 +4531,7 @@ static char *man_find_one(char **manpath, const char *section, const char *name)
 	return 0;
 }
 
+withtok(heap_allocated)
 static char *man_find_page(char **manpath, char **sections, const char *name, char **out_section)
 {
 	size_t i;

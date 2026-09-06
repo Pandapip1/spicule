@@ -132,6 +132,7 @@
 #include <unistd.h>
 #include <limits.h>
 #include "util.h"
+#include "ownership_stubs.h" /* __ownership_string_terminated(): snprintf()'s own contract does not grant null_terminated on its output buffer (unlike strdup()/strcpy()), so every fixed-size buffer this file formats with snprintf() and then hands to a null_terminated-requiring call (fopen(), etc.) needs this axiom restated by hand right after the snprintf() call, the same idiom src/string/strdup.c and src/util/find.c/awk_run.c already use. Likewise for parse_name_line()'s hand-rolled byte-copy-plus-NUL, which -- like strdup()'s own memcpy-plus-no-adjustment -- a raw per-byte loop cannot let the checker see through on its own. */
 
 /* ==== line storage ========================================================
  *
@@ -142,9 +143,17 @@
  * this matters is the very last line written to any output; see
  * write_linebuf_stream() below). */
 
-struct pline { char *text withtok(readable_span(len)); size_t len; int has_nl; };
-struct linebuf { struct pline *v withtok(readable_elements(n)) withtok(writable_elements(cap)); size_t n, cap; };
+struct pline { char *text withtok(readable_span(len)) withtok(heap_allocated); size_t len; int has_nl; };
+struct linebuf { struct pline *v withtok(readable_elements(n)) withtok(writable_elements(cap)) withtok(heap_allocated); size_t n, cap; };
 
+/* text is always the address of a real byte span (getline()'s own buffer,
+ * a `struct pline.text`+offset, or a "" literal) at every call site in
+ * this file -- never null. Note that `text` deliberately does NOT carry
+ * withtok(null_terminated): callers routinely pass an offset into a
+ * `struct pline.text` (e.g. `pl->text + 2`) together with a `len` that is
+ * shorter than what's actually NUL-terminated behind it, so only the
+ * `text[0..len)` byte-copy loop below reads it, never strlen()/strcpy(). */
+static int lb_push(struct linebuf *lb, const char *text, size_t len, int has_nl) __attribute__((nonnull(1, 2)));
 static int lb_push(struct linebuf *lb, const char *text, size_t len, int has_nl)
 {
 	char *restrict copy;
@@ -171,15 +180,27 @@ static int lb_push(struct linebuf *lb, const char *text, size_t len, int has_nl)
 	return 1;
 }
 
-static int lb_push_str(struct linebuf *lb, const char *s) { return lb_push(lb, s, strlen(s), 1); }
+/* s is always a string literal ("#else"/"#endif") or lb_push_fmt()'s own
+ * `buf` (a snprintf()-terminated local array, re-asserted there) at every
+ * call site. */
+static int lb_push_str(struct linebuf *lb, const char *s withtok(null_terminated)) __attribute__((nonnull(1, 2)));
+static int lb_push_str(struct linebuf *lb, const char *s withtok(null_terminated)) { return lb_push(lb, s, strlen(s), 1); }
 
-static int lb_push_fmt(struct linebuf *lb, const char *fmt, const char *arg)
+/* fmt is always a string literal ("#ifndef %s"/"#ifdef %s"); arg is
+ * `define`, provably non-null at both of emit_hunk()'s own call sites
+ * (each is reached only after emit_hunk()'s own `if (!define) { ...;
+ * continue; }` above has already ruled out the null case for this
+ * iteration). */
+static int lb_push_fmt(struct linebuf *lb, const char *fmt withtok(null_terminated), const char *arg) __attribute__((nonnull(1, 2, 3)));
+static int lb_push_fmt(struct linebuf *lb, const char *fmt withtok(null_terminated), const char *arg)
 {
 	char buf[512];
 	snprintf(buf, sizeof buf, fmt, arg);
+	__ownership_string_terminated(buf); /* snprintf() always NUL-terminates a nonzero-size buffer, unlike strdup()/strcpy() this file's other snprintf() users already re-assert the same way */
 	return lb_push_str(lb, buf);
 }
 
+static void free_linebuf(struct linebuf *lb) __attribute__((nonnull(1)));
 static void free_linebuf(struct linebuf *lb)
 {
 	size_t i;
@@ -188,6 +209,7 @@ static void free_linebuf(struct linebuf *lb)
 	lb->v = 0; lb->n = 0; lb->cap = 0;
 }
 
+static int read_all_lines(FILE *f, struct linebuf *lb) __attribute__((nonnull(1, 2)));
 static int read_all_lines(FILE *f, struct linebuf *lb)
 {
 	char *buf = 0;
@@ -204,6 +226,7 @@ static int read_all_lines(FILE *f, struct linebuf *lb)
 	return ferror(f) ? -1 : 0;
 }
 
+static int write_linebuf_stream(FILE *f, const struct linebuf *lb) __attribute__((nonnull(1, 2)));
 static int write_linebuf_stream(FILE *f, const struct linebuf *lb)
 {
 	size_t i;
@@ -219,7 +242,11 @@ static int write_linebuf_stream(FILE *f, const struct linebuf *lb)
 	return 0;
 }
 
-static int write_linebuf(const char *path, const struct linebuf *lb)
+/* path is always either strdup()'s own return, pick_target_name()'s own
+ * return (both withtok(null_terminated)), or a snprintf()-terminated
+ * local array re-asserted at its own call site -- never null. */
+static int write_linebuf(const char *path withtok(null_terminated), const struct linebuf *lb) __attribute__((nonnull(1, 2)));
+static int write_linebuf(const char *path withtok(null_terminated), const struct linebuf *lb)
 {
 	FILE *f = fopen(path, "wb");
 	int rc;
@@ -229,6 +256,7 @@ static int write_linebuf(const char *path, const struct linebuf *lb)
 	return rc;
 }
 
+static void linebuf_remove_range(struct linebuf *lb, size_t lo, size_t hi) __attribute__((nonnull(1)));
 static void linebuf_remove_range(struct linebuf *lb, size_t lo, size_t hi)
 {
 	size_t i;
@@ -238,6 +266,7 @@ static void linebuf_remove_range(struct linebuf *lb, size_t lo, size_t hi)
 	lb->n -= (hi - lo);
 }
 
+static int linebuf_insert_block(struct linebuf *lb, size_t at, const struct linebuf *block) __attribute__((nonnull(1, 3)));
 static int linebuf_insert_block(struct linebuf *lb, size_t at, const struct linebuf *block)
 {
 	size_t need = block->n, i;
@@ -280,10 +309,15 @@ struct hop { enum hop_kind kind; struct pline p; };
 
 struct hunk {
 	long old_start, old_count, new_start, new_count;
-	struct hop *v; size_t n, cap;
+	struct hop *v withtok(heap_allocated); size_t n, cap;
 	int old_no_nl, new_no_nl;
 };
 
+/* text is always the address of a real byte span (a `struct pline.text`
+ * plus offset, or a "" literal for a blank unified-diff context line) at
+ * every call site -- never null. Deliberately not withtok(null_terminated)
+ * for the same reason as lb_push()'s own `text` above. */
+static int hunk_push(struct hunk *h, enum hop_kind kind, const char *text, size_t len, int has_nl) __attribute__((nonnull(1, 3)));
 static int hunk_push(struct hunk *h, enum hop_kind kind, const char *text, size_t len, int has_nl)
 {
 	char *restrict copy;
@@ -311,6 +345,7 @@ static int hunk_push(struct hunk *h, enum hop_kind kind, const char *text, size_
 	return 1;
 }
 
+static void free_hunk(struct hunk *h) __attribute__((nonnull(1)));
 static void free_hunk(struct hunk *h)
 {
 	size_t i;
@@ -319,6 +354,7 @@ static void free_hunk(struct hunk *h)
 	h->v = 0; h->n = 0; h->cap = 0;
 }
 
+static void reverse_hunk(struct hunk *h) __attribute__((nonnull(1)));
 static void reverse_hunk(struct hunk *h)
 {
 	size_t i;
@@ -344,11 +380,20 @@ enum diff_format { FMT_UNKNOWN = 0, FMT_NORMAL, FMT_CONTEXT, FMT_UNIFIED, FMT_ED
 
 struct patchfile {
 	enum diff_format fmt;
-	char *old_name, *new_name;
-	struct hunk *hunks; size_t nhunks, hcap;
-	struct edcmd *eds; size_t neds, ecap;
+	/* Both fields are either still null (memset(&pf, 0, ...) at
+	 * parse_patch_stream()'s own per-section top, for a normal/ed
+	 * section that never calls parse_name_line() at all) or a
+	 * parse_name_line()-established heap string -- see that function's
+	 * own withtok(heap_allocated) withtok(null_terminated) contract on
+	 * its `out` parameter, which is exactly `&pf->old_name`/
+	 * `&pf->new_name` at every one of its call sites. */
+	char *old_name withtok(heap_allocated) withtok(null_terminated);
+	char *new_name withtok(heap_allocated) withtok(null_terminated);
+	struct hunk *hunks withtok(heap_allocated); size_t nhunks, hcap;
+	struct edcmd *eds withtok(heap_allocated); size_t neds, ecap;
 };
 
+static int patchfile_push_hunk(struct patchfile *pf, const struct hunk *h) __attribute__((nonnull(1, 2)));
 static int patchfile_push_hunk(struct patchfile *pf, const struct hunk *h)
 {
 	if (pf->nhunks >= pf->hcap) {
@@ -363,6 +408,7 @@ static int patchfile_push_hunk(struct patchfile *pf, const struct hunk *h)
 	return 1;
 }
 
+static int patchfile_push_ed(struct patchfile *pf, const struct edcmd *e) __attribute__((nonnull(1, 2)));
 static int patchfile_push_ed(struct patchfile *pf, const struct edcmd *e)
 {
 	if (pf->neds >= pf->ecap) {
@@ -381,6 +427,7 @@ static int patchfile_push_ed(struct patchfile *pf, const struct edcmd *e)
  * every one of this function's call sites (the three format-specific
  * section parsers below) immediately returns 0 in that case anyway, so
  * the cleanup belongs here rather than repeated at each call site. */
+static int push_hunk_checked(struct patchfile *pf, struct hunk *h) __attribute__((nonnull(1, 2)));
 static int push_hunk_checked(struct patchfile *pf, struct hunk *h)
 {
 	if (patchfile_push_hunk(pf, h)) return 1;
@@ -388,6 +435,7 @@ static int push_hunk_checked(struct patchfile *pf, struct hunk *h)
 	return 0;
 }
 
+static void free_patchfile(struct patchfile *pf) __attribute__((nonnull(1)));
 static void free_patchfile(struct patchfile *pf)
 {
 	size_t i;
@@ -400,18 +448,29 @@ static void free_patchfile(struct patchfile *pf)
 
 /* ==== small text-matching helpers ========================================= */
 
+/* Every call site below passes either the address of a `struct pline`
+ * already stored in a `struct linebuf` (never null) or a string literal
+ * for the prefix/suffix operand, so every parameter of these small
+ * text-matching helpers is genuinely never null -- see this file's other
+ * static helpers below for the same reasoning repeated per function. */
+static int bytes_equal(const char *a, const char *b, size_t n) __attribute__((nonnull(1, 2)));
 static int bytes_equal(const char *a, const char *b, size_t n)
 {
 	for (size_t i = 0; i < n; i++) if (a[i] != b[i]) return 0;
 	return 1;
 }
 
-static int starts_with(const struct pline *pl, const char *prefix)
+/* `prefix` is a string literal at every call site in this file (never a
+ * runtime-computed pointer), which is exactly what null_terminated's own
+ * string_literal qualifier recognizes without any further proof. */
+static int starts_with(const struct pline *pl, const char *prefix withtok(null_terminated)) __attribute__((nonnull(1, 2)));
+static int starts_with(const struct pline *pl, const char *prefix withtok(null_terminated))
 {
 	size_t plen = strlen(prefix);
 	return pl->len >= plen && bytes_equal(pl->text, prefix, plen);
 }
 
+static int is_all_stars(const struct pline *pl) __attribute__((nonnull(1)));
 static int is_all_stars(const struct pline *pl)
 {
 	size_t k;
@@ -499,6 +558,7 @@ static int is_ed_header_line(const struct pline *pl)
 	return is_ed_header(pl, &a1, &a2, &op);
 }
 
+static int parse_at_header(const struct pline *pl, long *o1, long *oc, long *n1, long *nc) __attribute__((nonnull(1, 2, 3, 4, 5)));
 static int parse_at_header(const struct pline *pl, long *o1, long *oc, long *n1, long *nc)
 {
 	const char *s = pl->text, *end = pl->text + pl->len;
@@ -518,7 +578,11 @@ static int parse_at_header(const struct pline *pl, long *o1, long *oc, long *n1,
 	return 1;
 }
 
-static int parse_ctx_range(const struct pline *pl, const char *pfx, const char *sfx, long *lo, long *hi)
+/* pfx/sfx are always string literals ("*** "/" ****", "--- "/" ----") at
+ * every call site below -- see starts_with()'s own comment on the same
+ * string_literal recognition. */
+static int parse_ctx_range(const struct pline *pl, const char *pfx withtok(null_terminated), const char *sfx withtok(null_terminated), long *lo, long *hi) __attribute__((nonnull(1, 2, 3, 4, 5)));
+static int parse_ctx_range(const struct pline *pl, const char *pfx withtok(null_terminated), const char *sfx withtok(null_terminated), long *lo, long *hi)
 {
 	size_t plen = strlen(pfx), slen = strlen(sfx);
 	const char *s, *end = pl->text + pl->len;
@@ -531,7 +595,23 @@ static int parse_ctx_range(const struct pline *pl, const char *pfx, const char *
 	return (size_t)(s - pl->text) == pl->len - slen;
 }
 
-static int parse_name_line(const struct pline *pl, const char *pfx, char **out)
+/* pfx is always a string literal ("*** "/"--- "/"+++ "). `out`'s own
+ * withtok(heap_allocated) is strdup()'s own return contract (see
+ * include/string.h) -- the byte loop below manually reproduces exactly
+ * what strdup() would do to a slice of `pl->text`. `out` deliberately
+ * does NOT also carry withtok(null_terminated): unlike heap_allocated
+ * (which OwnershipChecker.cpp's bundleFor() specifically excludes via its
+ * own qual:dynamic_storage check, leaving it to AllocationLifetimeChecker's
+ * separate T**-out-parameter recognition), null_terminated has no such
+ * carve-out, so a `T** withtok(null_terminated)` parameter would be
+ * checked as an ordinary call-site PREcondition on the address argument
+ * itself -- never satisfiable for a first-time-establishing out-param.
+ * Every real call site below re-asserts null_terminated by hand on
+ * `pf->old_name`/`pf->new_name` right after this call succeeds instead,
+ * the same "re-assert past a checker limitation" idiom this file's other
+ * __ownership_string_terminated() calls already use. */
+static int parse_name_line(const struct pline *pl, const char *pfx withtok(null_terminated), char **out withtok(heap_allocated)) __attribute__((nonnull(1, 2, 3)));
+static int parse_name_line(const struct pline *pl, const char *pfx withtok(null_terminated), char **out withtok(heap_allocated))
 {
 	size_t plen = strlen(pfx), namelen, i;
 	const char *p;
@@ -548,12 +628,16 @@ static int parse_name_line(const struct pline *pl, const char *pfx, char **out)
 	if (!copy) return 0;
 	for (i = 0; i < namelen; i++) copy[i] = p[i];
 	copy[namelen] = 0;
+	__ownership_string_terminated(copy); /* copy[namelen]=0 just above, by hand -- same idiom as src/string/strdup.c's own memcpy-then-assert */
 	*out = copy;
 	return 1;
 }
 
 /* Whitespace-run-insensitive comparison for -l: "any sequence of <blank>
- * characters ... match any sequence of <blank> characters". */
+ * characters ... match any sequence of <blank> characters". Both operands
+ * are always a `struct pline.text` (side_matches()'s own two call sites),
+ * never null. */
+static int ws_loose_equal(const char *a, const char *b) __attribute__((nonnull(1, 2)));
 static int ws_loose_equal(const char *a, const char *b)
 {
 	for (;;) {
@@ -570,6 +654,11 @@ static int ws_loose_equal(const char *a, const char *b)
 
 /* ==== normal-format hunk parsing ========================================== */
 
+/* Every one of this section's parsers is called only with the address of
+ * a `struct linebuf`/index/`struct hunk`/`struct patchfile` already local
+ * to its own caller (parse_patch_stream()'s own locals, or a by-value
+ * `struct hunk h`/`struct edcmd e` about to be pushed) -- never null. */
+static int parse_normal_hunk(struct linebuf *L, size_t *ip, struct hunk *h) __attribute__((nonnull(1, 2, 3)));
 static int parse_normal_hunk(struct linebuf *L, size_t *ip, struct hunk *h)
 {
 	long o1, o2, n1, n2; char cmd; long k;
@@ -614,6 +703,7 @@ static int parse_normal_hunk(struct linebuf *L, size_t *ip, struct hunk *h)
 	return 1;
 }
 
+static int parse_normal_section(struct linebuf *L, size_t *ip, struct patchfile *pf) __attribute__((nonnull(1, 2, 3)));
 static int parse_normal_section(struct linebuf *L, size_t *ip, struct patchfile *pf)
 {
 	pf->fmt = FMT_NORMAL;
@@ -627,6 +717,7 @@ static int parse_normal_section(struct linebuf *L, size_t *ip, struct patchfile 
 
 /* ==== unified-format hunk parsing ========================================= */
 
+static int parse_unified_hunk(struct linebuf *L, size_t *ip, struct hunk *h) __attribute__((nonnull(1, 2, 3)));
 static int parse_unified_hunk(struct linebuf *L, size_t *ip, struct hunk *h)
 {
 	long o1, oc, n1, nc, oleft, nleft;
@@ -665,11 +756,14 @@ static int parse_unified_hunk(struct linebuf *L, size_t *ip, struct hunk *h)
 	return 1;
 }
 
+static int parse_unified_section(struct linebuf *L, size_t *ip, struct patchfile *pf) __attribute__((nonnull(1, 2, 3)));
 static int parse_unified_section(struct linebuf *L, size_t *ip, struct patchfile *pf)
 {
 	if (!parse_name_line(&L->v[*ip], "--- ", &pf->old_name)) return 0;
+	__ownership_string_terminated(pf->old_name); /* parse_name_line()'s own copy[namelen]=0 contract, re-asserted here since a T** out-param's own postcondition can't carry null_terminated -- see that function's own comment */
 	(*ip)++;
 	if (*ip >= L->n || !parse_name_line(&L->v[*ip], "+++ ", &pf->new_name)) return 0;
+	__ownership_string_terminated(pf->new_name); /* same as pf->old_name just above */
 	(*ip)++;
 	pf->fmt = FMT_UNIFIED;
 	while (*ip < L->n && starts_with(&L->v[*ip], "@@ -")) {
@@ -682,6 +776,7 @@ static int parse_unified_section(struct linebuf *L, size_t *ip, struct patchfile
 
 /* ==== context-format hunk parsing ========================================= */
 
+static int parse_ctx_side_lines(struct linebuf *L, size_t *ip, struct hunk *h, int is_old) __attribute__((nonnull(1, 2, 3)));
 static int parse_ctx_side_lines(struct linebuf *L, size_t *ip, struct hunk *h, int is_old)
 {
 	for (;;) {
@@ -715,6 +810,7 @@ static int parse_ctx_side_lines(struct linebuf *L, size_t *ip, struct hunk *h, i
  * comment for how "!" (changed) lines fold into DEL for the old side
  * and ADD for the new side, which is what makes this two-pointer walk
  * correct without needing a third "changed" op kind at all. */
+static int merge_context_sides(struct hunk *h, const struct hunk *oldb, const struct hunk *newb) __attribute__((nonnull(1, 2, 3)));
 static int merge_context_sides(struct hunk *h, const struct hunk *oldb, const struct hunk *newb)
 {
 	size_t io = 0, inw = 0;
@@ -738,6 +834,7 @@ static int merge_context_sides(struct hunk *h, const struct hunk *oldb, const st
 	return 1;
 }
 
+static int parse_context_hunk(struct linebuf *L, size_t *ip, struct hunk *h) __attribute__((nonnull(1, 2, 3)));
 static int parse_context_hunk(struct linebuf *L, size_t *ip, struct hunk *h)
 {
 	long olo, ohi, nlo, nhi;
@@ -769,11 +866,14 @@ static int parse_context_hunk(struct linebuf *L, size_t *ip, struct hunk *h)
 	return 1;
 }
 
+static int parse_context_section(struct linebuf *L, size_t *ip, struct patchfile *pf) __attribute__((nonnull(1, 2, 3)));
 static int parse_context_section(struct linebuf *L, size_t *ip, struct patchfile *pf)
 {
 	if (!parse_name_line(&L->v[*ip], "*** ", &pf->old_name)) return 0;
+	__ownership_string_terminated(pf->old_name); /* parse_name_line()'s own copy[namelen]=0 contract, re-asserted here -- see that function's own comment */
 	(*ip)++;
 	if (*ip >= L->n || !parse_name_line(&L->v[*ip], "--- ", &pf->new_name)) return 0;
+	__ownership_string_terminated(pf->new_name); /* same as pf->old_name just above */
 	(*ip)++;
 	pf->fmt = FMT_CONTEXT;
 	while (*ip < L->n && is_all_stars(&L->v[*ip])) {
@@ -786,6 +886,7 @@ static int parse_context_section(struct linebuf *L, size_t *ip, struct patchfile
 
 /* ==== ed script parsing ==================================================== */
 
+static int parse_ed_cmd(struct linebuf *L, size_t *ip, struct edcmd *e) __attribute__((nonnull(1, 2, 3)));
 static int parse_ed_cmd(struct linebuf *L, size_t *ip, struct edcmd *e)
 {
 	long a1, a2; char op;
@@ -808,6 +909,7 @@ static int parse_ed_cmd(struct linebuf *L, size_t *ip, struct edcmd *e)
 	return 1;
 }
 
+static int parse_ed_section(struct linebuf *L, size_t *ip, struct patchfile *pf) __attribute__((nonnull(1, 2, 3)));
 static int parse_ed_section(struct linebuf *L, size_t *ip, struct patchfile *pf)
 {
 	pf->fmt = FMT_ED;
@@ -826,6 +928,7 @@ static int parse_ed_section(struct linebuf *L, size_t *ip, struct patchfile *pf)
 
 /* ==== top-level format detection and stream splitting ===================== */
 
+static int section_starts_here(enum diff_format fmt, const struct linebuf *L, size_t ip) __attribute__((nonnull(2)));
 static int section_starts_here(enum diff_format fmt, const struct linebuf *L, size_t ip)
 {
 	const struct pline *pl = &L->v[ip];
@@ -838,6 +941,7 @@ static int section_starts_here(enum diff_format fmt, const struct linebuf *L, si
 	}
 }
 
+static enum diff_format detect_at(const struct linebuf *L, size_t i) __attribute__((nonnull(1)));
 static enum diff_format detect_at(const struct linebuf *L, size_t i)
 {
 	const struct pline *pl = &L->v[i];
@@ -848,7 +952,8 @@ static enum diff_format detect_at(const struct linebuf *L, size_t i)
 	return FMT_UNKNOWN;
 }
 
-static int push_section(struct patchfile **arr, size_t *n, size_t *cap, const struct patchfile *pf)
+static int push_section(struct patchfile **arr withtok(heap_allocated), size_t *n, size_t *cap, const struct patchfile *pf) __attribute__((nonnull(1, 2, 3, 4)));
+static int push_section(struct patchfile **arr withtok(heap_allocated), size_t *n, size_t *cap, const struct patchfile *pf)
 {
 	if (*n >= *cap) {
 		size_t newcap;
@@ -862,6 +967,7 @@ static int push_section(struct patchfile **arr, size_t *n, size_t *cap, const st
 	return 1;
 }
 
+static int parse_patch_stream(struct linebuf *L, enum diff_format forced, struct patchfile **out, size_t *nout) __attribute__((nonnull(1, 3, 4)));
 static int parse_patch_stream(struct linebuf *L, enum diff_format forced, struct patchfile **out, size_t *nout)
 {
 	size_t ip = 0, cap = 0, n = 0;
@@ -905,15 +1011,24 @@ fail:
 /* ==== filename determination (context/unified, no operand given) ========= */
 
 withtok(heap_allocated)
-static char *strip_components(const char *name, long strip)
+withtok(null_terminated)
+static char *strip_components(const char *name withtok(null_terminated), long strip)
 {
 	const char *p = name;
 	long k;
 	if (!name) return 0;
+	/* `p` is a fresh local carrying the exact same value as `name`, but
+	 * OwnershipChecker.cpp's own per-call value tracking keys null_terminated
+	 * off `p`'s own (unannotated) carrier, not off whatever value it was
+	 * copied from -- re-assert it here so the loop's own re-assertion
+	 * below, and the final strdup(p) call, both have a starting fact to
+	 * work from even when strip == 0 and the loop body never runs. */
+	__ownership_string_terminated(p);
 	for (k = 0; k < strip; k++) {
 		const char *slash = strchr(p, '/');
 		if (!slash) break;
 		p = slash + 1;
+		__ownership_string_terminated(p); /* still inside the same NUL-terminated string `name` pointed into -- strchr() only ever returns an interior pointer, so advancing one byte past its own match never runs off the end */
 	}
 	return strdup(p);
 }
@@ -944,8 +1059,25 @@ static int name_is_unsafe(const char *name)
 	return 0;
 }
 
+/* old_name/new_name are always a `struct patchfile`'s own old_name/
+ * new_name fields (parse_context_section()/parse_unified_section()'s own
+ * withtok(null_terminated) contract on those fields), fed straight
+ * through to strip_components() below, which now declares the same
+ * requirement.
+ *
+ * The return is deliberately NOT also declared withtok(null_terminated),
+ * even though it always genuinely is one (strip_components()'s own
+ * return already is): `o`/`n` are plain locals with no withtok(...) of
+ * their own, so OwnershipChecker.cpp's per-call value tracking cannot
+ * carry strip_components()'s declared contract through them to every one
+ * of this function's several return points, particularly the final
+ * `return o;` below when `o` may be null. __util_patch_main below
+ * re-asserts null_terminated by hand on its own `path` right after
+ * calling this, the same way it would if this returned a plain
+ * unannotated `char *` -- which, for every real caller's purposes, it
+ * might as well. */
 withtok(heap_allocated)
-static char *pick_target_name(const char *old_name, const char *new_name, long strip)
+static char *pick_target_name(const char *old_name withtok(null_terminated), const char *new_name withtok(null_terminated), long strip)
 {
 	char *o = strip_components(old_name, strip);
 	char *n = strip_components(new_name, strip);
@@ -960,6 +1092,7 @@ static char *pick_target_name(const char *old_name, const char *new_name, long s
 
 /* ==== hunk matching / application ========================================= */
 
+static int side_matches(const struct hunk *h, int want_old, const struct linebuf *target, size_t pos, int loose) __attribute__((nonnull(1, 3)));
 static int side_matches(const struct hunk *h, int want_old, const struct linebuf *target, size_t pos, int loose)
 {
 	size_t i, t = pos;
@@ -990,6 +1123,7 @@ static int side_matches(const struct hunk *h, int want_old, const struct linebuf
 	return 1;
 }
 
+static long find_match(const struct hunk *h, int want_old, const struct linebuf *target, long expected, size_t lo_bound, int loose) __attribute__((nonnull(1, 3)));
 static long find_match(const struct hunk *h, int want_old, const struct linebuf *target, long expected, size_t lo_bound, int loose)
 {
 	long n = (long)target->n, lo = (long)lo_bound, d;
@@ -1021,6 +1155,7 @@ static long find_match(const struct hunk *h, int want_old, const struct linebuf 
 	return -1;
 }
 
+static int emit_hunk(const struct hunk *h, const char *define, const struct linebuf *target, size_t pos, struct linebuf *outbuf) __attribute__((nonnull(1, 3, 5)));
 static int emit_hunk(const struct hunk *h, const char *define, const struct linebuf *target, size_t pos, struct linebuf *outbuf)
 {
 	size_t i = 0, t = pos;
@@ -1069,7 +1204,8 @@ static int emit_hunk(const struct hunk *h, const char *define, const struct line
 	return 1;
 }
 
-static int push_reject(struct hunk ***rejects, size_t *n, size_t *cap, struct hunk *h)
+static int push_reject(struct hunk ***rejects withtok(heap_allocated), size_t *n, size_t *cap, struct hunk *h) __attribute__((nonnull(1, 2, 3, 4)));
+static int push_reject(struct hunk ***rejects withtok(heap_allocated), size_t *n, size_t *cap, struct hunk *h)
 {
 	if (*n >= *cap) {
 		size_t newcap;
@@ -1095,6 +1231,10 @@ static int push_reject(struct hunk ***rejects, size_t *n, size_t *cap, struct hu
  * (0 <= 0 trivially), and this function's own body never assumes
  * anything more than that -- it only ever grows outbuf via lb_push,
  * never shrinks or otherwise second-guesses its incoming state. */
+static int apply_section(struct patchfile *pf, struct linebuf *target, const char *define, int loose,
+                          int ignore_applied, struct linebuf *outbuf fields_established,
+                          struct hunk ***rejects, size_t *nrejects, size_t *rejcap)
+	__attribute__((nonnull(1, 2, 6, 7, 8, 9)));
 static int apply_section(struct patchfile *pf, struct linebuf *target, const char *define, int loose,
                           int ignore_applied, struct linebuf *outbuf fields_established,
                           struct hunk ***rejects, size_t *nrejects, size_t *rejcap)
@@ -1155,6 +1295,9 @@ static int apply_section(struct patchfile *pf, struct linebuf *target, const cha
  * and this function only ever grows outbuf via lb_push. */
 static int apply_ed_section(struct patchfile *pf, struct linebuf *target,
                             struct linebuf *outbuf fields_established)
+	__attribute__((nonnull(1, 2, 3)));
+static int apply_ed_section(struct patchfile *pf, struct linebuf *target,
+                            struct linebuf *outbuf fields_established)
 {
 	struct linebuf work;
 	size_t i;
@@ -1189,7 +1332,12 @@ static int apply_ed_section(struct patchfile *pf, struct linebuf *target,
 	return 1;
 }
 
-static int write_rejects(const char *rejpath, struct hunk **rejects, size_t n)
+/* rejects is never null at the one real call site below: it's only ever
+ * called from inside `if (nrej) { ... }`, and nrej > 0 is only reachable
+ * once push_reject() has actually grown *rejects to hold at least that
+ * one element. */
+static int write_rejects(const char *rejpath withtok(null_terminated), struct hunk **rejects, size_t n) __attribute__((nonnull(1, 2)));
+static int write_rejects(const char *rejpath withtok(null_terminated), struct hunk **rejects, size_t n)
 {
 	FILE *f;
 	size_t i;
@@ -1337,6 +1485,15 @@ int __util_patch_main(
 			path = strdup(operand);
 			if (!path) { __util_diagf("patch: out of memory\n"); exit_status = 2; break; }
 		} else {
+			/* parse_context_section()/parse_unified_section() already
+			 * re-asserted null_terminated on these same two fields right
+			 * after parse_name_line() established them, but that fact does
+			 * not survive the intervening struct-array growth/copy
+			 * (push_section()'s `(*arr)[(*n)++] = *pf;`) that moved this
+			 * section from a stack-local `struct patchfile pf` into
+			 * `sections[si]` -- re-assert once more right at this use. */
+			if (pf->old_name) __ownership_string_terminated(pf->old_name);
+			if (pf->new_name) __ownership_string_terminated(pf->new_name);
 			path = pick_target_name(pf->old_name, pf->new_name, o.p);
 			if (!path) {
 				__util_diagf("patch: %s: refusing unsafe or missing patch target filename\n",
@@ -1345,6 +1502,13 @@ int __util_patch_main(
 				break;
 			}
 		}
+		/* strdup()'s/pick_target_name()'s own withtok(null_terminated)
+		 * return contract, re-asserted here since `path` (a plain local
+		 * with no withtok(...) of its own) is about to flow through
+		 * several more fopen()/write_linebuf() calls below that each
+		 * require it -- same limitation as pick_target_name()'s own `o`/
+		 * `n` locals. */
+		__ownership_string_terminated(path);
 
 		memset(&target, 0, sizeof target);
 		{
@@ -1386,6 +1550,7 @@ int __util_patch_main(
 				char rejpath[4096];
 				if (o.r) snprintf(rejpath, sizeof rejpath, "%s", o.r);
 				else snprintf(rejpath, sizeof rejpath, "%s.rej", path);
+				__ownership_string_terminated(rejpath); /* snprintf() always NUL-terminates a nonzero-size buffer */
 				if (write_rejects(rejpath, rejects, nrej) != 0) {
 					__util_diagf("patch: %s: cannot write reject file\n", rejpath);
 					exit_status = 2;
@@ -1399,6 +1564,7 @@ int __util_patch_main(
 		if (o.b && have_target && !o.o) {
 			char bpath[4096];
 			snprintf(bpath, sizeof bpath, "%s.orig", path);
+			__ownership_string_terminated(bpath); /* snprintf() always NUL-terminates a nonzero-size buffer */
 			if (write_linebuf(bpath, &target) != 0) {
 				__util_diagf("patch: %s: cannot write backup file\n", bpath);
 				exit_status = 2;

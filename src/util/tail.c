@@ -154,6 +154,10 @@ static int tail_one(int fd, enum tail_mode mode, int from_end, long long number,
 		__util_diagf("tail: %s: %s\n", label, strerror(saved));
 		return -1;
 	}
+	/* read_all() only ever returns a length other than (size_t)-1
+	 * together with a non-NULL *out -- true by construction, but not a
+	 * fact that survives across the call for this checker. */
+	__ownership_pointer_nonnull(buf);
 
 	/* Clamp to len+1 (the largest value that can change the outcome:
 	 * "at least the whole file") before any (size_t) cast below -- a
@@ -361,13 +365,21 @@ int __util_tail_main(
 			enum tail_mode m = (a[1] == 'c') ? TAIL_BYTES : TAIL_LINES;
 			int fe;
 			long long num;
+			char *numstr;
 
 			if (i + 1 >= argc) {
 				__util_diagf("tail: %s: option requires an argument\n", a);
 				return 1;
 			}
-			if (parse_signed_number(argv[++i], &fe, &num) < 0) {
-				__util_diagf("tail: %s: invalid number\n", argv[i]);
+			numstr = argv[++i];
+			/* numstr is one of argv's own elements (i < argc), genuinely
+			 * never NULL by this function's own
+			 * elements_withtok(null_terminated, argc) contract on argv --
+			 * restated here the same way src/util/od.c's own argv-slice
+			 * reads already do. */
+			__ownership_pointer_nonnull(numstr);
+			if (parse_signed_number(numstr, &fe, &num) < 0) {
+				__util_diagf("tail: %s: invalid number\n", numstr);
 				return 1;
 			}
 			mode = m; from_end = fe; number = num; mode_given = 1;
@@ -417,9 +429,18 @@ int __util_tail_main(
 
 		for (; i < argc; i++) {
 			const char *path = argv[i];
-			int is_stdin = !strcmp(path, "-");
+			int is_stdin;
 			int fd;
 			int rc;
+
+			/* path is one of argv's own elements, genuinely
+			 * null-terminated by this function's own
+			 * elements_withtok(null_terminated, argc) contract on argv --
+			 * restated here since that token does not survive the
+			 * argv[i] -> const char * read this checker can trace on its
+			 * own. */
+			__ownership_string_terminated(path);
+			is_stdin = !strcmp(path, "-");
 
 			if (noperands > 1) {
 				printf("%s==> %s <==\n", first_banner ? "" : "\n", path);

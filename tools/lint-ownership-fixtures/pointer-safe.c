@@ -69,14 +69,16 @@ int opaque_borrow(int *pointer)
 	return *pointer;
 }
 
-/* __errno_location() is declared (include/errno.h) to always return a
- * valid pointer to the calling thread's own storage and is never
- * permitted to return NULL -- errno itself is `#define errno
- * (*__errno_location())`, so this exact shape is behind essentially
- * every `errno = ...` and `if (errno)` in the tree. Pinned here so a
- * regression in ValidPointerChecker::isAlwaysNonNull is caught locally
- * instead of silently reappearing as ~440 findings tree-wide. */
-extern int *__errno_location(void);
+/* __errno_location() is declared (include/errno.h) `returns_nonnull`:
+ * it always returns a valid pointer to the calling thread's own storage
+ * and is never permitted to return NULL -- errno itself is `#define
+ * errno (*__errno_location())`, so this exact shape is behind
+ * essentially every `errno = ...` and `if (errno)` in the tree. Pinned
+ * here (mirroring the real header's attribute, since this fixture does
+ * not include it) so a regression in
+ * ValidPointerChecker::isAlwaysNonNull is caught locally instead of
+ * silently reappearing as ~440 findings tree-wide. */
+extern int *__errno_location(void) __attribute__((returns_nonnull));
 
 int errno_is_always_valid(void)
 {
@@ -115,19 +117,21 @@ int bounded_table_push(void (*f)(void))
 	return 0;
 }
 
-/* __teb() and the global __peb it bootstraps (src/internal/libc.h) are
- * NT's own OS-guaranteed-present per-thread/per-process control blocks:
- * every live thread has a TEB (read via a two-instruction segment-
- * register access, not something application code can ever observe as
- * absent), and __peb is set from it, unconditionally, before anything
- * else in the program runs (crt/crt1.c's __libc_start_main), never
- * reassigned or cleared afterward. Pinned here so a regression in
+/* __teb() (src/internal/libc.h, declared `returns_nonnull`) and the
+ * global __peb it bootstraps are NT's own OS-guaranteed-present
+ * per-thread/per-process control blocks: every live thread has a TEB
+ * (read via a two-instruction segment-register access, not something
+ * application code can ever observe as absent), and __peb is set from
+ * it, unconditionally, before anything else in the program runs
+ * (crt/crt1.c's __libc_start_main), never reassigned or cleared
+ * afterward. Pinned here (mirroring the real header's attribute, since
+ * this fixture does not include it) so a regression in
  * ValidPointerChecker::isAlwaysNonNull/isAlwaysNonNullGlobal is caught
  * locally instead of silently reappearing as ~14 findings tree-wide
  * (dlfcn's __peb->ImageBaseAddress, every NT malloc/free/realloc's
  * __peb->ProcessHeap, ...). */
 typedef struct { void *ImageBaseAddress; } *PPEB_FIXTURE;
-extern PPEB_FIXTURE __teb(void);
+extern PPEB_FIXTURE __teb(void) __attribute__((returns_nonnull));
 PPEB_FIXTURE __peb;
 
 /* Each tests its own mechanism in isolation: teb_is_always_valid never
@@ -298,10 +302,10 @@ char **element_width_is_peeled(char **environ, size_t n, char *s)
  * counterpart of `nonnull` on a parameter -- the standard way a
  * function states "this never returns NULL" as part of its own real
  * contract. Trusting it here (OwnershipChecker::isAlwaysNonNull, the
- * same mechanism __errno_location/__teb/localeconv already use by
- * name) means a call result dereferenced with no in-function guard is
- * no longer unconditionally flagged once its own header truthfully
- * states the contract -- src/string/strchr.c's real
+ * same mechanism __errno_location/__teb/localeconv are themselves
+ * declared with above) means a call result dereferenced with no
+ * in-function guard is no longer unconditionally flagged once its own
+ * header truthfully states the contract -- src/string/strchr.c's real
  * `char *r = strchrnul(s, c); return *(unsigned char *)r == ...;` is
  * the motivating case (strchrnul is marked returns_nonnull for
  * exactly this reason). */

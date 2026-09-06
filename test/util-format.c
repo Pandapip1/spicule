@@ -474,6 +474,33 @@ static void test_csplit_repeat_operand_refused(void)
 	check_refused(run(csplit_path, argv), "not implemented");
 }
 
+/* Regression for a cast-before-validate integer overflow: 4294967301
+ * (2^32+5) is a fully valid positive `long` -- no strtol() clamp
+ * involved at all -- but on this project's Linux targets, where `long`
+ * is 64 bits while `int` stays 32, a naive `(int)lineno` truncated it to
+ * 5 before the range check ever ran, silently turning an operand a real
+ * csplit(1p) rejects as out of range into what looked like a legitimate
+ * split at line 5 of a 5-line file. */
+static void test_csplit_huge_line_number_is_rejected(void)
+{
+	char *argv[] = { (char *)"csplit", (char *)"-f", (char *)"scratch/ov_",
+	                  (char *)"scratch/csplit_in3", (char *)"4294967301", 0 };
+	make_file("scratch/csplit_in3", "a\nb\nc\nd\ne\n", 10);
+	check_refused(run(csplit_path, argv), "out of range");
+	CHECK(access("scratch/ov_00", F_OK) != 0);
+}
+
+/* Same cast-before-validate hazard, for `-n`'s digit count: a value too
+ * large to fit an `int` must be refused outright, not silently wrapped
+ * into some small (or negative) count that then slips past the
+ * `ndigits <= 0` check. */
+static void test_csplit_huge_ndigits_is_rejected(void)
+{
+	char *argv[] = { (char *)"csplit", (char *)"-f", (char *)"scratch/on_", (char *)"-n", (char *)"4294967297",
+	                  (char *)"scratch/csplit_in3", (char *)"3", 0 };
+	check_refused(run(csplit_path, argv), "invalid digit count");
+}
+
 static void test_csplit_builtin_agrees(void)
 {
 	char buf[64];
@@ -492,12 +519,13 @@ static void rmtree_scratch(void)
 	unlink("scratch/sl_aa"); unlink("scratch/sl_ab"); unlink("scratch/sl_ac");
 	unlink("scratch/sb_aa"); unlink("scratch/sb_ab"); unlink("scratch/sb_ac");
 	unlink("scratch/sh_aa"); unlink("scratch/sh_ab");
-	unlink("scratch/csplit_in1"); unlink("scratch/csplit_in2");
+	unlink("scratch/csplit_in1"); unlink("scratch/csplit_in2"); unlink("scratch/csplit_in3");
 	unlink("scratch/cl_00"); unlink("scratch/cl_01");
 	unlink("scratch/cr_00"); unlink("scratch/cr_01");
 	unlink("scratch/cn_00"); unlink("scratch/cn_01");
 	unlink("scratch/ck_00"); unlink("scratch/ck_01");
 	unlink("scratch/cx_00");
+	unlink("scratch/ov_00"); unlink("scratch/on_00");
 	unlink("scratch/.keep");
 	rmdir("scratch");
 }
@@ -574,6 +602,8 @@ int main(int argc, char **argv)
 	test_csplit_no_match_is_an_error_and_cleans_up();
 	test_csplit_dash_k_keeps_partial_output();
 	test_csplit_repeat_operand_refused();
+	test_csplit_huge_line_number_is_rejected();
+	test_csplit_huge_ndigits_is_rejected();
 
 	cleanup_artifacts();
 

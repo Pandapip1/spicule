@@ -159,7 +159,7 @@ static int write_all(int fd, const char *buf withtok(readable_span(len)),
  * *outlen, never counted in it -- callers that want a body treat this
  * purely as a byte span). Returns 0/-1; on success *outbuf and *outlen
  * are always valid (an empty stream yields a 0-length, non-NULL buffer). */
-static int slurp_fd(int fd, char **outbuf, size_t *outlen)
+static int slurp_fd(int fd, char **outbuf withtok(heap_allocated), size_t *outlen)
 {
 	size_t cap = 65536, len = 0;
 	char *buf = malloc(cap);
@@ -179,8 +179,26 @@ static int slurp_fd(int fd, char **outbuf, size_t *outlen)
 		n = read(fd, buf + len, cap - len - 1);
 		if (n < 0) { free(buf); return -1; }
 		if (n == 0) break;
+		/* read()'s real contract never returns more than the `cap -
+		 * len - 1` count just requested, but nothing in this checker
+		 * suite states that as a fact about read()'s return value (no
+		 * scan-extent-style summary exists for it, unlike
+		 * strlen()/strcspn()/...), so buf[len] below is otherwise an
+		 * unprovable index into buf's own known `cap`-sized extent.
+		 * The clamp is a real, always-true-in-practice safety net that
+		 * lets the analyzer prove it by simple constraint propagation
+		 * instead, the same idiom as this file's fgets()+strcspn()
+		 * clamps above. */
+		if ((size_t)n > cap - len - 1) n = (ssize_t)(cap - len - 1);
 		len += (size_t)n;
 	}
+	/* Restate the same len < cap invariant once more here: this
+	 * `for (;;)` loop's own back-edge is where the analyzer's
+	 * fixed-point widening drops the precise per-iteration relationship
+	 * between len and cap established above, the same reason
+	 * interactive_loop()'s own `for (;;)` command loop needs cur's
+	 * bound restated on the far side of its back-edge too. */
+	if (len >= cap) len = cap - 1;
 	buf[len] = 0;
 	*outbuf = buf;
 	*outlen = len;
@@ -194,7 +212,16 @@ static int slurp_fd(int fd, char **outbuf, size_t *outlen)
  * either way on this platform's own backends). */
 static int join_path(const char *dir, const char *leaf, char *out, size_t outsz)
 {
-	size_t dl = strlen(dir);
+	size_t dl;
+	/* Every real call site passes pw->pw_dir (src/misc/{linux,nt}/pwd.c's
+	 * own pw_name/pw_dir/pw_shell all point into one NUL-terminated
+	 * packed buffer, the same fact addr_is_current_user() below has to
+	 * restate for pw_name) -- struct passwd is a shared, foreign type
+	 * (include/pwd.h) with no withtok(null_terminated) of its own on
+	 * pw_dir, so the axiom is restated here by hand rather than by
+	 * touching that shared header. */
+	__ownership_string_terminated(dir);
+	dl = strlen(dir);
 	int need_slash = dl > 0 && dir[dl - 1] != '/' && dir[dl - 1] != '\\';
 	int n = snprintf(out, outsz, need_slash ? "%s/%s" : "%s%s", dir, leaf);
 	return (n < 0 || (size_t)n >= outsz) ? -1 : 0;
@@ -219,6 +246,12 @@ static int addr_is_current_user(const struct passwd *pw, const char *addr)
 {
 	const char *at = strchr(addr, '@');
 	size_t namelen = at ? (size_t)(at - addr) : strlen(addr);
+	/* pw->pw_name, like pw->pw_dir above (see join_path()), is a foreign
+	 * struct passwd field with no withtok(null_terminated) of its own --
+	 * src/misc/{linux,nt}/pwd.c's own fill_from_fields() packs it into a
+	 * NUL-terminated buffer, restated here by hand rather than by
+	 * annotating the shared include/pwd.h struct itself. */
+	__ownership_string_terminated(pw->pw_name);
 	return strlen(pw->pw_name) == namelen && strncmp(pw->pw_name, addr, namelen) == 0;
 }
 
@@ -241,10 +274,21 @@ static int has_header_injection(const char *s)
 	return strpbrk(s, "\r\n") != 0;
 }
 
+/* pw is always __util_mailx_main()'s own `me`, already checked non-NULL
+ * (current_user() returning NULL is refused with a diagnostic before any
+ * caller of this function runs) at every real call site. */
+static int system_mailbox_path(const struct passwd *pw, char *out, size_t outsz)
+	__attribute__((nonnull(1)));
 static int system_mailbox_path(const struct passwd *pw, char *out, size_t outsz)
 {
 	const char *mail = getenv("MAIL");
 	if (mail && *mail) {
+		/* getenv()'s own withtok(null_terminated) return contract
+		 * (include/stdlib.h) is not itself carried across the
+		 * assignment into this local by this checker suite's
+		 * generic call-return handling -- restated here by hand,
+		 * same idiom as src/env/getenv.c's own implementation. */
+		__ownership_string_terminated(mail);
 		if (strlen(mail) >= outsz) return -1;
 		strcpy(out, mail);
 		return 0;
@@ -252,10 +296,16 @@ static int system_mailbox_path(const struct passwd *pw, char *out, size_t outsz)
 	return join_path(pw->pw_dir, "mailbox", out, outsz);
 }
 
+/* Same real precondition as system_mailbox_path() above. */
+static int secondary_mailbox_path(const struct passwd *pw, char *out, size_t outsz)
+	__attribute__((nonnull(1)));
 static int secondary_mailbox_path(const struct passwd *pw, char *out, size_t outsz)
 {
 	const char *mbox = getenv("MBOX");
 	if (mbox && *mbox) {
+		/* Same getenv() return-contract restatement as
+		 * system_mailbox_path() above. */
+		__ownership_string_terminated(mbox);
 		if (strlen(mbox) >= outsz) return -1;
 		strcpy(out, mbox);
 		return 0;
@@ -265,6 +315,49 @@ static int secondary_mailbox_path(const struct passwd *pw, char *out, size_t out
 
 /* ==================== Send Mode ==================== */
 
+/* Appends `data`[0,len) verbatim onto `*out`/`*outlen`/`*outcap`, growing the
+ * buffer the same way append_escaped_body() below does, but with no "From "
+ * escaping rule -- used only for deliver_message()'s own header block, whose
+ * leading "From " envelope line is the real mbox boundary marker and must
+ * never itself be escaped (see append_escaped_body()'s own comment).
+ * Keeping deliver_message()'s own message buffer's *entire* lifetime --
+ * first allocation included -- behind this same withtok(heap_allocated)
+ * out-parameter shape (rather than one direct malloc() in deliver_message()
+ * itself, followed by growth through a second function) is what lets
+ * AllocationLifetimeChecker's real "*out = allocation transfers the
+ * obligation out of this frame" rule (tools/lint-allocation-lifetime-
+ * fixtures/safe.c's out_param_transfer()) apply to the whole buffer
+ * consistently -- a direct malloc() in deliver_message() followed by
+ * growth via a *different* function's realloc() left the checker unable to
+ * relate deliver_message()'s own original allocation to the (possibly
+ * reallocated) pointer that function handed back through the same
+ * out-parameter, since nothing in this annotation vocabulary states
+ * "this out-parameter also consumes whatever *out already held". Returns
+ * 0/-1 (malloc failure only). */
+static int append_raw(char **out withtok(heap_allocated), size_t *outlen, size_t *outcap,
+	const char *data, size_t len)
+{
+	size_t total;
+	if (!__util_size_add(*outlen, len, &total)) { errno = ENOMEM; return -1; }
+	if (total > *outcap) {
+		size_t ncap = *outcap ? *outcap : 4096;
+		char *nb;
+		while (ncap < total) {
+			if (!__util_size_mul(ncap, 2, &ncap)) { errno = ENOMEM; return -1; }
+		}
+		nb = realloc(*out, ncap);
+		if (!nb) { errno = ENOMEM; return -1; }
+		*out = nb;
+		*outcap = ncap;
+	}
+	{
+		size_t i;
+		for (i = 0; i < len; i++) (*out)[*outlen + i] = data[i];
+	}
+	*outlen += len;
+	return 0;
+}
+
 /* Appends body onto `out`, escaping any line that begins "From " (mbox
  * FORMAT's own boundary rule -- see this file's own top-of-file
  * comment) by prefixing a single '>'. Ensures the result ends with
@@ -272,7 +365,7 @@ static int secondary_mailbox_path(const struct passwd *pw, char *out, size_t out
  * whenever it is appended, is unambiguously "preceded by an empty
  * line" once ensure_blank_terminated() adds the separating blank line
  * -- see that function). Returns 0/-1 (malloc failure only). */
-static int append_escaped_body(char **out, size_t *outlen, size_t *outcap,
+static int append_escaped_body(char **out withtok(heap_allocated), size_t *outlen, size_t *outcap,
 	const char *restrict body, size_t bodylen)
 {
 	size_t i = 0;
@@ -336,11 +429,23 @@ static int ensure_blank_terminated(int fd, const char *label)
 	}
 	n = read(fd, tail, st.st_size >= 2 ? 2 : 1);
 	if (n < 0) { __util_diagf("mailx: %s: %s\n", label, strerror(errno)); return -1; }
+	/* read() never returns more than the (at most 2) bytes just
+	 * requested, but that fact about its return value isn't visible to
+	 * this checker suite -- restated as a real, always-true clamp the
+	 * same way slurp_fd()'s own read() loop above does, so tail[n - 1]
+	 * below is provably in tail's real 2-byte extent. */
+	if (n > (ssize_t)sizeof tail) n = (ssize_t)sizeof tail;
 
 	if (st.st_size >= 2 && n == 2 && tail[0] == '\n' && tail[1] == '\n') return 0;   /* already blank-terminated */
 	if (n >= 1 && tail[n - 1] == '\n') pad = "\n";                                  /* one newline short */
 	else pad = "\n\n";                                                              /* line not even newline-terminated */
 
+	/* pad is always one of the two string literals just above; the
+	 * checker sees a plain `const char *` that took either branch of a
+	 * conditional assignment, not a syntactic string literal at this use
+	 * site, so the fact is restated by hand rather than left to
+	 * qual:string_literal's own AST-level recognition. */
+	__ownership_string_terminated(pad);
 	return write_all(fd, pad, strlen(pad), label);
 }
 
@@ -375,14 +480,10 @@ static int deliver_message(const char *path, const char *login, const char *to_h
 		return -1;
 	}
 
-	msgcap = (size_t)hn + bodylen + 64;
-	msg = malloc(msgcap);
-	if (!msg) { __util_diagf("mailx: out of memory\n"); return -1; }
-	{
-		size_t i;
-		for (i = 0; i < (size_t)hn; i++) msg[i] = hdrs[i];
+	if (append_raw(&msg, &msglen, &msgcap, hdrs, (size_t)hn) < 0) {
+		__util_diagf("mailx: out of memory\n");
+		return -1;
 	}
-	msglen = (size_t)hn;
 
 	if (append_escaped_body(&msg, &msglen, &msgcap, body, bodylen) < 0) {
 		__util_diagf("mailx: out of memory\n");
@@ -465,8 +566,22 @@ static int do_send(const struct passwd *me, const char *subject, char **rcpts, i
 		if (isatty(0)) {
 			fprintf(stderr, "Subject: ");
 			(void)fflush(stderr);
+			size_t sc;
 			if (!fgets(subjbuf, sizeof subjbuf, stdin)) subjbuf[0] = 0;
-			subjbuf[strcspn(subjbuf, "\n")] = 0;
+			/* fgets() always leaves subjbuf NUL-terminated within
+			 * bounds, so strcspn()'s return here is always
+			 * < sizeof subjbuf -- true, but not something the
+			 * checker's scan-extent tracking can relate to a
+			 * buffer whose own extent (a fixed-size stack array)
+			 * is already concretely known (see
+			 * OwnershipChecker.cpp's trackScanExtent, which only
+			 * ever fills in an extent that ISN'T already real).
+			 * The clamp below is a real, if redundant, safety net
+			 * that lets the analyzer prove the subsequent index
+			 * in-bounds by simple constraint propagation instead. */
+			sc = strcspn(subjbuf, "\n");
+			if (sc >= sizeof subjbuf) sc = sizeof subjbuf - 1;
+			subjbuf[sc] = 0;
 			subject = subjbuf;
 		} else {
 			subject = "";
@@ -504,8 +619,17 @@ struct mbox_msg {
 /* Looks for a "Name:" header (case-insensitively, per RFC 822 field-name
  * rules) anywhere in [from,to) and returns its value's span (leading
  * space after the colon skipped, trailing '\r' if any trimmed). */
-static void find_header(const char *buf, size_t from, size_t to, const char *name,
-	size_t *voff, size_t *vlen)
+/* buf is always parse_mbox()'s own buf parameter (below), itself always
+ * do_receive()'s slurp_fd()-filled buffer -- slurp_fd()'s own header
+ * comment guarantees "*outbuf and *outlen are always valid (an empty
+ * stream yields a 0-length, non-NULL buffer)" -- never NULL. voff/vlen are
+ * always &m->from_off/&m->from_len (etc.) at every real call site below --
+ * also never NULL. */
+static void find_header(const char *buf, size_t from, size_t to,
+	const char *name withtok(null_terminated),
+	size_t *voff, size_t *vlen) __attribute__((nonnull(1, 5, 6)));
+static void find_header(const char *buf, size_t from, size_t to,
+	const char *name withtok(null_terminated), size_t *voff, size_t *vlen)
 {
 	size_t namelen = strlen(name);
 	size_t i = from;
@@ -537,7 +661,13 @@ static void find_header(const char *buf, size_t from, size_t to, const char *nam
  * a diagnostic already printed) if `buf` is non-empty but never
  * contains a single recognizable boundary at all -- refused outright
  * rather than guessed at, per this file's own header comment. */
-static int parse_mbox(const char *buf, size_t len, const char *label, struct mbox_msg **out, size_t *nmsg)
+/* buf is always do_receive()'s own slurp_fd()-filled buffer -- see
+ * find_header()'s own comment above for why that is never NULL. */
+static int parse_mbox(const char *buf, size_t len, const char *label,
+	struct mbox_msg **out withtok(heap_allocated), size_t *nmsg)
+	__attribute__((nonnull(1)));
+static int parse_mbox(const char *buf, size_t len, const char *label,
+	struct mbox_msg **out withtok(heap_allocated), size_t *nmsg)
 {
 	size_t *bounds = 0, nb = 0, cap = 0;
 	size_t i = 0;
@@ -621,6 +751,12 @@ static int parse_mbox(const char *buf, size_t len, const char *label, struct mbo
 	return 0;
 }
 
+/* buf is always do_receive()'s own slurp_fd()-filled buffer (see
+ * find_header()'s comment above), and m is always &msgs[idx-1]/
+ * &msgs[cur-1]/&msgs[i-1] at every real call site (do_receive()/
+ * interactive_loop() below) -- neither is ever NULL. */
+static void print_summary_line(const char *buf, const struct mbox_msg *m, size_t idx, size_t cur)
+	__attribute__((nonnull(1, 2)));
 static void print_summary_line(const char *buf, const struct mbox_msg *m, size_t idx, size_t cur)
 {
 	char sender[64], subj[64];
@@ -642,6 +778,11 @@ static void print_summary_line(const char *buf, const struct mbox_msg *m, size_t
 		idx, sender, subj[0] ? subj : "(no subject)");
 }
 
+/* buf is always do_receive()'s own slurp_fd()-filled buffer (see
+ * find_header()'s comment above), and m is always &msgs[...] at every real
+ * call site below -- neither is ever NULL. */
+static void print_message(const char *buf, const struct mbox_msg *m)
+	__attribute__((nonnull(1, 2)));
 static void print_message(const char *buf, const struct mbox_msg *m)
 {
 	size_t body_start = m->hdr_end;
@@ -663,6 +804,15 @@ static void print_message(const char *buf, const struct mbox_msg *m)
  * originally stored, so the result is a well-formed mbox with no
  * separator bookkeeping needed here (see this file's top-of-file
  * comment). */
+/* buf is always do_receive()'s own slurp_fd()-filled buffer (see
+ * find_header()'s comment above). msgs is always the array parse_mbox()
+ * below filled in, real and non-NULL whenever this is called (both real
+ * callers -- do_receive()'s own quit-on-EOF path and interactive_loop()'s
+ * `q` -- are only ever reached after do_receive() has already checked
+ * n != 0, which parse_mbox() only reports once it has itself allocated a
+ * real, non-NULL array of that many elements). */
+static int rewrite_mailbox(int fd, const char *label, const char *buf, const struct mbox_msg *msgs, size_t n)
+	__attribute__((nonnull(3, 4)));
 static int rewrite_mailbox(int fd, const char *label, const char *buf, const struct mbox_msg *msgs, size_t n)
 {
 	size_t i;
@@ -684,16 +834,34 @@ static int rewrite_mailbox(int fd, const char *label, const char *buf, const str
  * t/type, accept two of each), so this replaces a repeated
  * cmdlen/strncmp comparison per spelling with one readable call per
  * accepted form. */
-static int cmd_is(const char *cmd, int cmdlen, const char *a, const char *b)
+static int cmd_is(const char *cmd, int cmdlen,
+	const char *a withtok(null_terminated), const char *b)
 {
 	if (cmdlen == (int)strlen(a) && !strncmp(cmd, a, (size_t)cmdlen)) return 1;
-	return b && cmdlen == (int)strlen(b) && !strncmp(cmd, b, (size_t)cmdlen);
+	if (!b) return 0;
+	/* Unlike `a` (always a real spelling), `b` is genuinely NULL at one
+	 * real call site (interactive_loop()'s cmd_is(cmd, cmdlen, "x", 0),
+	 * `x` having no second accepted spelling) -- withtok(null_terminated)
+	 * on the parameter itself would require every call site to hold the
+	 * token unconditionally, rejecting that real NULL. Restated here,
+	 * on the branch that has already proven b non-NULL, exactly like
+	 * every other literal second-spelling argument this function is
+	 * otherwise called with. */
+	__ownership_string_terminated(b);
+	return cmdlen == (int)strlen(b) && !strncmp(cmd, b, (size_t)cmdlen);
 }
 
 /* Interactive command loop implementing exactly the minimum mandatory
  * subset this file's header comment names: p/print, d/delete,
  * u/undelete, n/next, h/headers, q/quit, x/exit, plus '=', '#' and '?'.
  * Returns the exit status. */
+/* buf is always do_receive()'s own slurp_fd()-filled buffer (see
+ * find_header()'s comment above). msgs is always do_receive()'s own array,
+ * only ever passed in after do_receive() has checked n != 0 -- see
+ * rewrite_mailbox()'s own comment above for why that makes it real and
+ * non-NULL here too. */
+static int interactive_loop(int fd, const char *label, char *buf, size_t len, struct mbox_msg *msgs, size_t n)
+	__attribute__((nonnull(3, 5)));
 static int interactive_loop(int fd, const char *label, char *buf, size_t len, struct mbox_msg *msgs, size_t n)
 {
 	size_t cur = n ? 1 : 0;
@@ -707,7 +875,17 @@ static int interactive_loop(int fd, const char *label, char *buf, size_t len, st
 			/* EOF at the prompt behaves like `quit`. */
 			return rewrite_mailbox(fd, label, buf, msgs, n) == 0 ? 0 : 1;
 		}
-		line[strcspn(line, "\n")] = 0;
+		{
+			/* Same fgets()+strcspn() shape as do_send()'s subjbuf
+			 * above, and the same reason for the explicit clamp:
+			 * line's fixed 512-byte extent is already concretely
+			 * known, so trackScanExtent() never relates strcspn()'s
+			 * return to it, and the raw index would otherwise be
+			 * reported as an unproven dereference extent. */
+			size_t sc = strcspn(line, "\n");
+			if (sc >= sizeof line) sc = sizeof line - 1;
+			line[sc] = 0;
+		}
 		{
 			char *p = line;
 			char *cmd, *arg;
@@ -720,6 +898,20 @@ static int interactive_loop(int fd, const char *label, char *buf, size_t len, st
 			cmdlen = (int)(p - cmd);
 			while (*p == ' ' || *p == '\t') p++;
 			arg = p;
+			/* cmd and arg are both pointers into `line`'s own
+			 * buffer, up to the same NUL line[sc]=0 placed above --
+			 * true, but each is a distinct pointer VALUE (pointer
+			 * arithmetic off line, not line itself), so the token
+			 * granted onto line's own value above does not
+			 * propagate to these derived values by construction;
+			 * restated on each one actually used with a
+			 * null_terminated-requiring call below (strcmp(arg, ...)
+			 * and cmd_is()'s strlen(a)/strlen(b) comparisons against
+			 * cmd, both by way of the `a`/`b` withtok(null_terminated)
+			 * parameters, but the *matching* required-nonnull cmd
+			 * argument stays a bounded [cmd,cmd+cmdlen) span, never
+			 * itself scanned past cmdlen). */
+			__ownership_string_terminated(arg);
 
 			if (cmdlen == 0) {
 				/* blank line: same as `next` */
@@ -737,7 +929,20 @@ static int interactive_loop(int fd, const char *label, char *buf, size_t len, st
 				continue;
 			}
 
+			/* cur is a real loop invariant in [1, n] whenever n != 0
+			 * (established at loop entry by `cur = n ? 1 : 0` and
+			 * preserved by every reassignment below), but this
+			 * `for (;;)` loop's own back-edge is where the analyzer's
+			 * fixed-point widening drops that precise a bound back to
+			 * cur's bare declared range -- the same real, always-true
+			 * fact the fgets()+strcspn() clamps above restate for a
+			 * different reason. Restated here once, on the one path
+			 * that inherits it (target defaults to cur; the "*"/"$"/
+			 * numeric branches below all set their own already-
+			 * bounded value), rather than at every later msgs[target
+			 * - 1] use. */
 			target = cur;
+			if (n && (target < 1 || target > n)) target = 1;
 			if (*arg) {
 				if (strcmp(arg, "*") == 0) target = (size_t)-1; /* handled per-command below */
 				else if (strcmp(arg, "$") == 0) target = n;
@@ -815,6 +1020,20 @@ static int do_receive(const struct passwd *me, const char *path, int headers_onl
 		(void)close(fd);
 		return 1;
 	}
+	/* slurp_fd()'s own header comment guarantees *outbuf is always valid
+	 * (never NULL, even for a 0-length stream) on a 0 return -- but that
+	 * post-condition on an out-parameter crosses a call boundary this
+	 * checker suite's annotation vocabulary has no way to state (see
+	 * the identical msgs/parse_mbox() gap just below), so it is restated
+	 * here as a real, defensive guard -- this is what makes every
+	 * buf-taking call from here on (parse_mbox(), print_summary_line(),
+	 * interactive_loop()) satisfy their own nonnull(...) contracts. */
+	if (!buf) {
+		__util_diagf("mailx: %s: internal error (no message buffer)\n", path);
+		flock(fd, LOCK_UN);
+		(void)close(fd);
+		return 1;
+	}
 
 	if (parse_mbox(buf, len, path, &msgs, &n) < 0) {
 		free(buf);
@@ -830,6 +1049,23 @@ static int do_receive(const struct passwd *me, const char *path, int headers_onl
 		flock(fd, LOCK_UN);
 		(void)close(fd);
 		return 0;
+	}
+	/* parse_mbox() only ever reports a nonzero *nmsg after successfully
+	 * allocating that many elements into *out (see its own final
+	 * `*out = msgs; *nmsg = nb;`) -- but that conditional relationship
+	 * between its two out-parameters crosses a call boundary this
+	 * checker suite's annotation vocabulary has no way to state, so the
+	 * always-true fact is restated here as a real, defensive guard
+	 * instead (same idiom as this file's other clamp-style fixes) --
+	 * this is what makes every later &msgs[i-1] provably non-NULL,
+	 * including through rewrite_mailbox()/interactive_loop()'s own
+	 * nonnull(...) contracts above. */
+	if (!msgs) {
+		__util_diagf("mailx: %s: internal error (no messages array)\n", path);
+		free(buf);
+		flock(fd, LOCK_UN);
+		(void)close(fd);
+		return 1;
 	}
 
 	if (!no_summary) {

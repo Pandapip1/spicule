@@ -4,105 +4,37 @@
  * ls(1p): list directory contents.  Checked against
  * https://pubs.opengroup.org/onlinepubs/9699919799/utilities/ls.html.
  *
- * ---- SCOPE NARROWING, stated up front -----------------------------------
+ * Not implemented: -h and color (GNU/BSD extensions, not in XCU ls(1p));
+ * -g/-o ([XSI] long-format variants -- -l/-n already cover the mandatory
+ * ground); -H/-L (this file always lstat()s a link itself, like find.c's
+ * default -P). Owner/group names: getpwuid()/getgrgid() (src/misc/pwd.c,
+ * src/misc/grp.c) only resolve this process's own uid/gid, so a file
+ * owned by a different uid/gid prints numerically instead of by name.
+ * -s's block count is ceil(st_size / blocksize), not read from a real
+ * "blocks allocated" counter -- du(1p) (src/util/du.c) is this project's
+ * real disk-usage auditor. -C/-x column width comes from $COLUMNS (or
+ * 80), not a TIOCGWINSZ query -- ls.html leaves this implementation-
+ * defined. -q's '?' substitution (build_display_name()) applies to every
+ * printed name, not just terminal output as ls.html scopes it -- the
+ * safer direction to get wrong.
  *
- *  - -h (human-readable sizes) and any form of color are NOT part of
- *    this page at all (confirmed: neither string appears anywhere in
- *    it) and are correctly absent here -- they are GNU/BSD extensions,
- *    not XCU ls(1p).
- *  - -g and -o are the two options this page itself marks "[XSI]"
- *    (owner-omitted and group-omitted long-format variants); neither is
- *    implemented, matching this project's own "verify mandatory vs.
- *    optional before assuming a familiar flag is required" rule -- -l
- *    and -n (both base, both implemented) already cover the mandatory
- *    long-format ground.
- *  - -H / -L (follow command-line / all symbolic links while
- *    recursing) are not implemented; this file always lists a symbolic
- *    link itself (lstat(), never stat()) the same way find.c's default
- *    -P behavior does, which is exactly the "neither -H nor -L" default
- *    ls.html already specifies.
- *  - Owner/group *names*: getpwuid()/getgrgid() (src/misc/pwd.c,
- *    src/misc/grp.c) only ever resolve *this process's own* uid/gid --
- *    this platform's passwd/group "database" is genuinely a single
- *    synthesized entry, not a stub -- so any file owned by a different
- *    uid/gid (unusual, but real: e.g. a file created under a different
- *    security context or copied from elsewhere) prints its numeric
- *    uid/gid instead of a name, exactly the fallback those two files'
- *    own header comments already document for every other caller.
- *  - -s's block count is computed from st_size via ceiling division
- *    against a 512-byte (or, with -k, 1024-byte) block, not read back
- *    from a real "blocks actually allocated on disk" field -- simpler,
- *    and this project's own struct stat does carry st_blocks (NT's
- *    FILE_STANDARD_INFORMATION AllocationSize -- src/stat/nt/plat_stat.c),
- *    but ls.html only requires "the number of blocks used", not that
- *    they come from any specific counter, and this project's own du(1p)
- *    (src/util/du.c) is the utility that actually audits real disk
- *    usage in depth.
- *  - No TIOCGWINSZ/console-width ioctl query backs the multi-column
- *    layout (-C default-to-terminal, -x): term_width() below reads
- *    $COLUMNS if it parses as a positive integer, else assumes 80.
- *    ls.html leaves the terminal default "implementation-defined"
- *    entirely, so both the choice to go multi-column at all when
- *    stdout is a terminal, and the width used to lay it out, are this
- *    file's own implementation-defined answer, not a narrowing of
- *    something the page mandates.
- *  - -q's "non-printable characters ... written as the <question-mark>
- *    character" is applied unconditionally to every printed name
- *    (build_display_name() below), not only when stdout is a terminal
- *    -- ls.html scopes this to terminal output, but detecting that
- *    correctly interacts with the -C/-x/-m/isatty() logic above in a
- *    way this batch's effort budget did not extend to; applying it
- *    unconditionally is the safer of the two directions to get wrong
- *    (a piped non-printable byte becomes a harmless '?', never the
- *    reverse).
+ * -R does not use this project's ftw()/nftw() (src/ftw/ftw.c, also used
+ * by find.c): its walk() recurses into a subdirectory immediately on
+ * finding one, before reading that directory's remaining siblings, but
+ * ls(1p)'s -R needs one directory's own (sorted) entries printed in full
+ * before any subdirectory's -- a shape nftw()'s one-entry callback can't
+ * drive without buffering a whole subtree first. So list_dir() below
+ * recurses directly on opendir()/readdir()/lstat(), directory by
+ * directory instead of file by file.
  *
- * ---- -R IS NOT BUILT ON ftw()/nftw(), AND HERE IS WHY --------------------
+ * Sort order: byte order by default; -t by mtime (or ctime/atime with
+ * -c/-u, whichever was given last), -S by size, both newest/largest
+ * first with filename as tiebreaker; -r reverses whatever's in effect;
+ * -f forces -a on and sorting off, applied once after option parsing so
+ * it wins regardless of argument order.
  *
- * This project's ftw()/nftw() (src/ftw/ftw.c) is genuinely reused by
- * find.c and would be the obvious first choice here too -- but its
- * traversal order is preorder depth-first *interleaved with siblings*:
- * on discovering that one child of a directory is itself a directory,
- * walk() recurses into that child's entire subtree immediately, before
- * ever returning to read that directory's *remaining* siblings (see
- * src/ftw/ftw.c's own walk(), the `r = walk(ws, lru, child, ...)` call
- * inside its `while ((de = readdir(lv.dp)) ...)` loop). ls(1p)'s own
- * -R contract is a different shape: "the entire contents of the
- * directory shall be written before any of the contents of any
- * subdirectories are written" -- one directory's own entries, sorted
- * and printed together, THEN each of its subdirectories in turn, each
- * with its own pathname header. Driving that from nftw()'s one-entry-
- * at-a-time, already-interleaved callback would mean either buffering
- * an entire subtree's worth of reports before printing anything (which
- * gains nothing over just recursing directly) or emitting -R output in
- * the wrong shape. So this file's recursion (list_dir() below) is its
- * own, built directly on opendir()/readdir()/lstat() -- the same real
- * primitives ftw()'s own walk() is built on, just driven directory-by-
- * directory instead of file-by-file -- which is a considered choice,
- * not an oversight of the "build on existing infrastructure" guidance
- * this batch otherwise follows (fnmatch() is reused nowhere in this
- * file because ls(1p) has no pattern-matching primaries of its own to
- * reuse it for; find.c uses it for -name/-path, xargs.c has no need for
- * a walk at all).
- *
- * ---- SORT ORDER -----------------------------------------------------------
- *
- * Default: byte/strcmp order (this library's only locale is "C",
- * src/misc/locale.c). -t: modification time, most recent first,
- * filename as tiebreaker. -S: size, largest first, filename as
- * tiebreaker. -c/-u pick which of ctime/atime -t sorts (and -l prints)
- * by, instead of mtime -- "mutually exclusive" per the page, so the
- * last one given wins here (simplest faithful reading: neither is
- * refused, whichever was parsed last determines g_ls.time_field). -r
- * reverses whatever comparator is in effect, INCLUDING the default.
- * -f ("interpreted as a directory... in the order they appear")
- * forces -a on and -l/-t/-S/-r off, and skips sorting entirely --
- * exactly the page's own wording, applied once after option parsing so
- * it wins regardless of the order -a/-l/-t/-S/-r were given in.
- *
- * DATE COLUMN: classic Unix ls's "recent vs. old" ambiguity-resolution
- * rule, which POSIX's own STDOUT section for -l spells out: within the
- * last six months, "%b %e %H:%M"; otherwise (including a future
- * timestamp), "%b %e  %Y" -- implemented literally in fmt_time() below.
+ * Date column: POSIX's classic "recent vs. old" rule -- within the last
+ * six months, "%b %e %H:%M"; otherwise "%b %e  %Y" (fmt_time() below).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -215,10 +147,9 @@ static void group_name(gid_t gid, char *out, size_t outlen)
 	else snprintf(out, outlen, "%lu", (unsigned long)gid);
 }
 
-/* -F/-p type indicator: '/' and '*' are the two this page's DESCRIPTION
- * documents (directory, executable regular file); '@'/'|'/'=' for
- * symlink/FIFO/socket are added as unambiguous, low-cost, near-universal
- * historical extensions -- see this file's header comment. */
+/* -F/-p type indicator: '/' and '*' (directory, executable regular file)
+ * are what the page documents; '@'/'|'/'=' for symlink/FIFO/socket are
+ * common historical extensions. */
 static char type_indicator(const struct ls_opts *o, const struct entry *e)
 {
 	if (!e->stat_ok) return 0;
@@ -401,10 +332,9 @@ static char *join_path(const char *dir, const char *name)
 	return p;
 }
 
-/* Reads one directory's own entries (never recursing here -- list_dir()
- * below drives -R's recursion itself, directory by directory). Returns
- * 0 with *outp and *np set on success, -1 (diagnostic already written) on
- * failure to even open the directory. */
+/* Reads one directory's own entries (never recurses -- list_dir() below
+ * drives -R itself). Returns 0 with *outp/*np set on success, -1
+ * (diagnostic already written) on failure to open the directory. */
 static int read_directory(const struct ls_opts *o, const char *dir, struct entry **outp, size_t *np)
 {
 	DIR *dp = opendir(dir);
@@ -571,12 +501,10 @@ int __util_ls_main(
 	}
 
 	{
-		/* Non-directory operands (plain files) are printed first, as their
-		 * own one entry each, exactly like -d would for them; directory
+		/* Plain-file operands print first, as one entry each; directory
 		 * operands are then listed in turn, each with a "name:" header
-		 * when there is more than one operand total (or -R is recursing),
-		 * matching ls.html's own "for a single operand ... omit the ...
-		 * pathname" allowance. */
+		 * when there's more than one operand total (or -R is recursing) --
+		 * a lone directory operand gets no header, per ls.html. */
 		struct entry *plain = NULL;
 		size_t nplain = 0, cap = 0;
 		int fi, multi = nfiles > 1;

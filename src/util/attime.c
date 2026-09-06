@@ -399,6 +399,21 @@ int __attime_parse(char *const *words, int n, time_t now, time_t *out)
 		if (dk == DATE_NONE && t <= now) t = apply_increment(t, 1, P_DAY);
 		else if (dk == DATE_WEEKDAY && t <= now) t = apply_increment(t, 1, P_WEEK);
 		else if (dk == DATE_MONTHDAY && t <= now) t = apply_increment(t, 1, P_YEAR);
+		/* This apply_increment() (unlike every other one in this file)
+		 * feeds its result into a *second* time computation --
+		 * maybe_increment()'s own `base` argument just below -- rather
+		 * than going straight to the final check. Left unchecked, a
+		 * failure here (apply_increment() returning the real
+		 * (time_t)-1 sentinel rather than a valid time) would be
+		 * silently treated as a legitimate base time by any further
+		 * "+N period"/"next period" clause maybe_increment() parses
+		 * from the remaining words, which would arithmetic its way
+		 * into some *other*, bogus-but-valid-looking time_t that no
+		 * longer equals -1 -- sailing straight past the check after
+		 * the maybe_increment() call below undetected. Reject it here
+		 * instead, immediately, the same as every other apply_increment()/
+		 * mktime() result in this function already is. */
+		if (t == (time_t)-1) return -1;
 
 		t = maybe_increment(words, n, &i, t);
 		if (t == (time_t)-1) return -1;

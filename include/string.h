@@ -123,9 +123,14 @@ char *stpncpy(char *__restrict d withtok(writable_span(n)),
 	const char *__restrict, size_t n) __attribute__((nonnull(1, 2)));
 /* No nonnull yet: not independently verified for NULL-safety. */
 size_t strnlen (const char *, size_t) __attribute__((__pure__));
+/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline:
+ * src/string/strdup.c's and src/string/strndup.c's only failure return
+ * (NULL) comes from malloc() (already errno-capable). */
+grants_thread_token(errno_grounds)
 withtok(heap_allocated)
 withtok(null_terminated)
 char *strdup (const char * withtok(null_terminated));
+grants_thread_token(errno_grounds)
 withtok(heap_allocated)
 char *strndup (const char *, size_t);
 withtok(null_terminated)

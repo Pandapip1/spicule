@@ -91,7 +91,12 @@ static int send_all(int fd, const char *buf, size_t len)
 			if (errno == EINTR) continue;
 			return -1;
 		}
-		if (n == 0) return -1;
+		/* write() returning 0 here (distinct from n < 0 above, already
+		 * errno-set by write() itself) is not documented to touch
+		 * errno at all; every caller of send_all() below trusts errno
+		 * unconditionally after a -1 return, so this path needs its
+		 * own explicit reason. */
+		if (n == 0) { errno = EIO; return -1; }
 		off += (size_t)n;
 	}
 	return 0;

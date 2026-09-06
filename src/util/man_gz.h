@@ -15,7 +15,12 @@
  *
  * See src/util/man_gz.c's own header comment for the algorithm itself
  * and every deliberate simplification.
+ *
+ * This internal header, like the public C library headers, must use the
+ * implementation-reserved namespace for its guard so it cannot collide
+ * with user code.
  */
+// NOLINTBEGIN(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 #ifndef _NTLIBC_UTIL_MAN_GZ_H
 #define _NTLIBC_UTIL_MAN_GZ_H
 
@@ -46,3 +51,5 @@ int man_looks_gzipped(const char *data, size_t len);
 int man_gunzip(const char *in, size_t inlen, char **out, size_t *outlen, const char **errmsg);
 
 #endif
+
+// NOLINTEND(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)

@@ -1136,7 +1136,7 @@ static int tls_dtv_ensure_capacity(unsigned int module_id)
  * disassembly above -- not the argument word's address). On return
  * x0 = (accessed address) - tpidr_el0 (the caller's own `add x0, x2,
  * x0` adds tpidr_el0 back). */
-extern void __ntlibc_tlsdesc_resolver(void);
+extern void __ntlibc_tlsdesc_resolver(void); // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- implementation-reserved namespace, same as every other libc-internal symbol
 __asm__(
 "	.text\n"
 "	.align	2\n"
@@ -1690,7 +1690,7 @@ static int add_dep(struct dlobj *obj, struct dlobj *dep)
 	struct dlobj **grown;
 	size_t ndeps;
 	if (!__size_add_checked(obj->ndeps, 1, &ndeps)) return -1;
-	grown = reallocarray(obj->deps, ndeps, sizeof *grown);
+	grown = reallocarray(obj->deps, ndeps, sizeof *grown); // NOLINT(bugprone-sizeof-expression) -- grown is dlobj**, *grown is dlobj*, the array holds pointers
 	if (!grown) return -1;
 	grown[obj->ndeps] = dep;
 	obj->deps = grown;

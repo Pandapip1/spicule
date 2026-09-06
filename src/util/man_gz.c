@@ -190,7 +190,7 @@ static void bit_align(struct bitreader *br) { br->bitcnt = 0; br->bitbuf = 0; }
  * reference copies -- goes through this one function. */
 static int gz_emit(struct bitreader *br, struct gzbuf *out, unsigned char c)
 {
-	if (out->len >= MAN_GZ_MAX_OUTPUT) {
+	if (out->len >= MAN_GZ_MAX_OUTPUT) { // NOLINT(bugprone-implicit-widening-of-multiplication-result) -- MAN_GZ_MAX_OUTPUT is a compile-time constant, 67108864, far inside int range before the widen to size_t
 		br->errmsg = "decompressed data exceeds this implementation's size limit";
 		return 0;
 	}

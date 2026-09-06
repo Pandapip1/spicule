@@ -67,13 +67,19 @@
  * same publish-by-rename idiom as above. crond (src/util/crond.c)
  * notices a new crontab by stat()ing its mtime once per poll tick and
  * reparsing only when it has changed -- no lock needed there either,
- * for the same reason: it only ever sees a complete file. */
+ * for the same reason: it only ever sees a complete file.
+ *
+ * This internal header, like the public C library headers, must use the
+ * implementation-reserved namespace for its guard and its own declarations
+ * so they cannot collide with user code. */
+// NOLINTBEGIN(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 #ifndef _NTLIBC_SPOOL_H
 #define _NTLIBC_SPOOL_H
 
 #include <stdio.h>
 #include <stddef.h>
 #include <time.h>
+#include <ownership.h>
 
 /* Longest path this file ever builds: $HOME + "/.ntlibc/crontabs/crontab.tmp".
  * 4096 comfortably covers any real NT or Linux path without a second,
@@ -107,6 +113,10 @@ int __spool_dir(const char *sub, char *buf, size_t bufsz);
  * __spool_publish_job() to make it visible to atd. Returns NULL with
  * errno set on failure (out of ids after a bounded number of
  * attempts, or a real open() failure). */
+/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline: see
+ * this function's own doc comment above -- "Returns NULL with errno
+ * set on failure". */
+grants_thread_token(errno_grounds)
 withtok(file_stream_open)
 FILE *__spool_new_job(const char *dir, char *id_out, size_t id_out_sz,
 	char *path_out, size_t path_out_sz);
@@ -117,6 +127,10 @@ FILE *__spool_new_job(const char *dir, char *id_out, size_t id_out_sz,
  * failure (in which case the caller should unlink() the .tmp file
  * itself -- this function does not, since a caller may want to
  * inspect it first for diagnostics). */
+/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline: see
+ * this function's own doc comment above -- "-1 with errno set on
+ * failure". */
+grants_thread_token(errno_grounds)
 int __spool_publish_job(const char *path);
 
 /* __spool_job_header(): reads a job file's "#run_at N" and
@@ -148,3 +162,5 @@ int __spool_job_header(const char *path, time_t *run_at, char *queue, size_t que
 const char *__spool_crontab_path(char *buf, size_t bufsz);
 
 #endif
+
+// NOLINTEND(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)

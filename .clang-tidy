@@ -10,6 +10,23 @@
 # keeping those exceptions beside the code lets every newly added family check
 # run by default instead of growing a central blind spot here.
 #
+# The disable list below is the SECOND time most of these entries have
+# existed.  c1edbb02/685809f2 first wrote them, with per-check rationale,
+# when `make lint` was added; 533b9541/82bf2cfc ("lint: enable the full
+# clang-tidy families") deleted the whole list on the theory that every
+# finding could instead be suppressed narrowly, in place, with NOLINT.  That
+# theory holds for a false positive that shows up once or twice -- it is
+# exactly how e.g. bugprone-reserved-identifier/cert-dcl37-c/cert-dcl51-cpp
+# stay enabled and handled per-header below, and how 3d553524 fixed three
+# genuine one-off analyzer false positives.  It does not hold for a check
+# whose *entire premise* is wrong for this codebase: every one of the checks
+# below fired on ~10 to ~1500 distinct call sites apiece (2026-09-06 full-tree
+# triage, clang-tidy-18, all three arches; a re-run tools/lint.sh analyze
+# reproduces the exact counts cited per check), which is not "a false
+# positive here and there", it is the check itself being the wrong tool for
+# this tree.  Each entry below is restored with concrete, re-verified
+# evidence from that triage, not merely by reference to the original commit.
+#
 Checks: >
   -*,
   bugprone-*,
@@ -17,6 +34,177 @@ Checks: >
   clang-analyzer-*,
   misc-*,
 
+  -misc-include-cleaner,
+  -misc-header-include-cycle,
+
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -bugprone-assignment-in-if-condition,
+  -bugprone-branch-clone,
+  -bugprone-macro-parentheses,
+  -bugprone-switch-missing-default-case,
+  -bugprone-suspicious-string-compare,
+  -bugprone-casting-through-void,
+  -bugprone-multi-level-implicit-pointer-conversion,
+  -bugprone-unsafe-functions,
+  -bugprone-signed-char-misuse,
+
+  -cert-str34-c,
+  -cert-msc24-c,
+  -cert-msc33-c,
+  -cert-err33-c,
+  -cert-env33-c,
+
+  -clang-analyzer-security.insecureAPI.strcpy,
+
+  -misc-no-recursion,
+
+# Rationale, check by check.  Finding counts are from the 2026-09-06 triage
+# (three arches, clang-tidy-18, LINT_TIDY_EXACT=1) and will drift as the tree
+# grows; they are cited to show scale, not as a promise to keep them exact.
+#
+#   misc-include-cleaner, misc-header-include-cycle (1487 findings, all three
+#       arches, misc-include-cleaner alone -- header-include-cycle currently
+#       fires zero times but shares the identical root cause, see below)
+#       Both need a compilation database and a hosted "one header, one
+#       provider" include model; neither applies to a -nostdinc freestanding
+#       build with generated, per-arch, internal-only headers.  Two
+#       independent, reproducible malfunction classes were found, not just
+#       borderline judgment calls:
+#         1. Every file in src/complex/ that defines a `double complex`/
+#            `float complex` function (cexp.c, ctrig.c, cinverse.c,
+#            complex_parts.c, complex_rtlib.c -- 100% of the directory, 759
+#            of the 1487 findings) gets EVERY identifier in the file flagged,
+#            including a function's own name at its own definition (e.g.
+#            "no header providing \"clog\" is directly included" pointing at
+#            `double complex clog(double complex z)`'s own definition line)
+#            and its own local variables (e.g. "no header providing \"wr\" is
+#            directly included" pointing at `double wr = yr * lr - yi * li;`,
+#            a plain local declared and used entirely inside that one
+#            function).  No header can ever "provide" a symbol's own
+#            definition or a local variable; this is not a suggestion that
+#            can be acted on.
+#         2. Every fundamental type this tree defines through its musl-
+#            derived `#define __NEED_size_t` + `bits/alltypes.h` umbrella
+#            mechanism (size_t, time_t, struct tm, regex_t, ...) is reported
+#            as "no header providing X is directly included" even in files
+#            that already directly include the correct, canonical, public
+#            umbrella header for it (verified on src/string/memchr.c,
+#            src/ctype/wctype.c, src/misc/getopt.c, src/sh/func.c and
+#            src/netdb/linux/hostent.c: each already `#include`s <string.h>/
+#            <wctype.h>/<time.h> directly and still gets flagged), because
+#            the checker attributes the typedef to bits/alltypes.h itself --
+#            a per-arch file generated into obj/lint/$arch/include/bits/ at
+#            lint time, never meant to be named by consumer code at all.
+#            misc-include-cleaner's only relevant option, IgnoreHeaders, was
+#            tried against `bits/alltypes\.h` and does not suppress this (the
+#            base diagnostic fires with or without a suggested header); an
+#            IWYU pragma: export on the re-exporting headers was also tried
+#            (include/string_tokens.h's `#include <ownership.h>`) and also
+#            did not change clang-tidy-18's output.  Neither of these two
+#            classes has a source-level fix: there is no header to add.
+#       A third, real pattern also showed up in the same triage --
+#       withtok(...)/elements_withtok(...)/consume(...) (ownership.h's own
+#       macros, ~400 findings) used in a .c file via a project-internal
+#       facade header (src/internal/ownership_stubs.h, or a domain header
+#       like string.h/netdb.h) that itself includes ownership.h -- but this
+#       is this project's OWN deliberate, load-bearing header architecture
+#       doing its job (e.g. string.h's own declarations use withtok(...)
+#       too, so string.h including string_tokens.h including ownership.h is
+#       not an accident anything could "break" by changing), not a fragile
+#       accident of transitive inclusion the way the original per-check
+#       false-positive precedent (3d553524) means.  Asking ~100 leaf .c files
+#       to each separately #include <ownership.h> on top of the domain
+#       header that already re-exports it fights this tree's own layering
+#       rather than fixing anything.
+#   bugprone-easily-swappable-parameters
+#       memcpy(void*, const void*, size_t) is the shape of the entire
+#       public API; this check would flag most of the library.  Verified
+#       still true today: cpow(double complex x, double complex y)
+#       (src/complex/cexp.c) is exactly this shape.
+#   bugprone-narrowing-conversions
+#       Overlapping with -Wconversion, which lint.sh already offers behind
+#       LINT_CONVERSION=1 where the results can be read in one place.
+#   bugprone-assignment-in-if-condition, bugprone-branch-clone,
+#   bugprone-macro-parentheses
+#       Deliberate musl-derived house style.  Verified still true today:
+#       src/util/strip.c:547 (assignment-in-if), src/util/man.c:2947
+#       (branch-clone), src/regex/regex.c:1155 (macro-parentheses, in the
+#       same DFA macro family as the one already NOLINT'd in
+#       include/features.h's __REDIR).
+#   bugprone-signed-char-misuse
+#       ctype and the string routines index tables with (unsigned char)c on
+#       purpose; the check does not model that idiom.  Verified still true
+#       today: src/util/ed.c:736.
+#   bugprone-casting-through-void, bugprone-multi-level-implicit-pointer-
+#   conversion
+#       Unavoidable when talking to the NT API's void*/PVOID* interfaces, and
+#       the same shape shows up at the two platforms' other big external-ABI
+#       boundary too: crt/linux/crt1.c:415 casts `char **envp` through
+#       `void *` to hand it to the platform's own entry-point contract, and
+#       src/dlfcn/linux/plat_dlfcn.c:1318 casts a function pointer through
+#       `void *` to a uintptr_t the way dlsym()'s own POSIX-mandated return
+#       type requires.
+#   bugprone-suspicious-include
+#       arch/ and src/*/ legitimately include .h fragments by relative path.
+#   bugprone-switch-missing-default-case
+#       Several switches here deliberately fall through to code after the
+#       switch for the unhandled cases (e.g. wait.c's NT exception decode);
+#       that is not an omission, it does not need a `default:` restating it.
+#       Verified still true today: src/util/man.c:1661.
+#   bugprone-suspicious-string-compare
+#       Fires on ordinary `if (strcmp(a, b))`/`if (!strncmp(...))`, which is
+#       idiomatic C, not a mistaken comparison against 1 or -1.  Verified
+#       still true today: src/util/at.c:175.
+#   bugprone-unsafe-functions, cert-msc24-c, cert-msc33-c
+#       These flag *implementing* gets()/rand()/asctime()/rewind() and
+#       friends.  ntlibc implements them; it cannot be told not to.
+#       Verified still true today: src/netdb/linux/hostent.c:150 (defining
+#       rewind()'s own caller-facing replacement guidance fires on ntlibc's
+#       own internal use of rewind()).
+#   cert-str34-c
+#       Co-fires with bugprone-signed-char-misuse on the exact same `(int)
+#       (signed char)c`-shaped ctype/string idiom (src/util/ed.c:736); same
+#       rationale.
+#   cert-err33-c (991 findings, the single largest non-include-cleaner
+#   category, 327 distinct call sites)
+#       "check the return value of this stdlib call" -- inside the stdlib,
+#       where malloc/snprintf are called into buffers whose size was already
+#       computed and checked (src/internal/rpath.c:117, src/ftw/ftw.c:413),
+#       or the result is deliberately discarded because a fixed, pre-sized
+#       destination cannot overflow.  A check meant for application code
+#       calling libc cannot be usefully applied to libc calling itself.
+#   cert-env33-c
+#       Flags *implementing* system().  ntlibc implements it.  Verified
+#       still true today: src/util/awk_run.c:1755 (awk's own system()
+#       builtin, one of several utilities that legitimately shell out).
+#   clang-analyzer-security.insecureAPI.strcpy (56 findings, 20 distinct
+#   call sites)
+#       Every one of the 20 call sites checked (src/misc/nt/grp.c,
+#       src/netdb/linux/getnameinfo.c, src/netdb/nt/plat_netdb.c,
+#       src/util/ar.c, atd.c, crond.c, m4.c, mailx.c, pax.c, spool.c) is an
+#       explicit `if (strlen(src) [+1] > destsz) return/goto fail;` guard
+#       immediately above the strcpy() -- a bounds check the checker cannot
+#       correlate with the copy two lines later, not an unbounded copy.
+#       This is a different, and more precisely verified, rationale than
+#       the original list's "these are the definitions, not calls" (most of
+#       these 20 sites are genuine calls, not strcpy's own implementation),
+#       arrived at independently in the 2026-09-06 triage.
+#   misc-no-recursion (240 findings)
+#       Recursion is fine and used (e.g. qsort, glob, dlclose's dependency-
+#       graph teardown).  Verified still true today:
+#       src/dlfcn/linux/plat_dlfcn.c's teardown_obj().
+#
+# Everything still enabled -- notably the whole clang-analyzer-core.* and
+# unix.Malloc set, bugprone-sizeof-expression, bugprone-implicit-widening-
+# of-multiplication-result, cert-err34-c, and bugprone-reserved-identifier/
+# cert-dcl37-c/cert-dcl51-cpp (handled per-header/per-line with NOLINT,
+# never disabled here) -- is there because it finds real bugs in this kind
+# of code: uninitialised reads, leaked allocations on error paths, unchecked
+# atoi() truncation, and size arithmetic that overflows before it is
+# widened (the canonical example this project's own tools/clang-tidy-
+# checks.txt cites for why this whole stage exists).
+#
 HeaderFilterRegex: '(src|include|arch|crt)/.*\.h$'
 WarningsAsErrors: ''
 FormatStyle: none

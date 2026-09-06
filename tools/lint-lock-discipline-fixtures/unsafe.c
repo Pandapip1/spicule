@@ -1,11 +1,20 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
+#include "../../include/ownership.h"
+
+/* Real, source-visible tokens mirroring include/pthread.h's own
+ * pthread_mutex_locked/pthread_mutex_unlocked pair -- see safe.c's own
+ * copy of this comment for why this fixture needs its own annotated local
+ * prototypes rather than the bare, unannotated ones it used to declare. */
+tokdef mutex_unlocked;
+tokdef mutex_locked lock_held;
+
 typedef struct mutex mutex_t;
-int pthread_mutex_lock(mutex_t *);
-int pthread_mutex_unlock(mutex_t *);
-int pthread_mutex_destroy(mutex_t *);
-int pthread_cond_wait(void *, mutex_t *);
+int pthread_mutex_lock(mutex_t * handle(mutex) consume(mutex_unlocked) grant(mutex_locked));
+int pthread_mutex_unlock(mutex_t * handle(mutex) consume(mutex_locked) grant(mutex_unlocked));
+int pthread_mutex_destroy(mutex_t * destroy(mutex) consume(mutex_unlocked));
+int pthread_cond_wait(void *, mutex_t * handle(mutex) withtok(mutex_locked));
 
 int unlocked_release(mutex_t *mutex) {
   return pthread_mutex_unlock(mutex); /* lock-discipline-expect */

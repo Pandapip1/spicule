@@ -83,14 +83,33 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <errno.h>
 #include <regex.h>
 #include "util.h"
+
+/* parse_primary()'s '(' case is the only self-recursion this parser
+ * does: it calls back into parse_or(), which walks straight back down
+ * through parse_and()/parse_cmp()/parse_add()/parse_mul()/parse_match()/
+ * parse_primary() -- six further C-stack frames -- for every level of
+ * '(' nesting. Each argv operand this parser walks (struct expr_ctx's
+ * `v`) is only bounded by the OS's exec() argument-list limit (ARG_MAX,
+ * commonly a couple of MB on Linux), not by anything this file checks,
+ * so a caller building argv directly (not through a shell's own command-
+ * length limits) can pass on the order of 10^5-10^6 single-character
+ * "(" operands and blow the C stack -- the same recursion-with-no-depth-
+ * cap bug class already fixed in src/util/m4.c's eval() (ev_primary()/
+ * ev_unary(), M4_EVAL_MAX_DEPTH) and src/util/awk_parse.c's parser.
+ * Bound it the same way: a shared depth counter checked at the one
+ * self-recursion site, failing the expression cleanly instead of
+ * recursing further once the cap is hit. */
+#define EXPR_MAX_DEPTH 2500
 
 struct expr_ctx {
 	char **v;
 	size_t n;
 	size_t i;
 	int err;
+	int depth;
 };
 
 static void xerr(struct expr_ctx *c, const char *msg) __attribute__((nonnull(1, 2)));
@@ -228,8 +247,23 @@ static char *do_arith(struct expr_ctx *c, char *a consume(heap_allocated), const
 		result = dupstr(c, "");
 		goto done;
 	}
+	/* is_num_candidate() only requires "optional '-' then all digits" --
+	 * it has no length limit, so a literal with more digits than `long`
+	 * can hold (e.g. "99999999999999999999") reaches strtol() here.
+	 * strtol() does not fail on that: it silently clamps to LONG_MIN/
+	 * LONG_MAX and sets errno to ERANGE. Without checking errno, a huge
+	 * literal like that would silently become LONG_MAX and every
+	 * arithmetic op below would compute a plausible-looking but wrong
+	 * answer from it instead of reporting the input could not actually
+	 * be represented -- e.g. "expr 99999999999999999999 - 1" would
+	 * silently print LONG_MAX-1. Treat the clamp as the same "overflow"
+	 * error the operator-level checks below report. */
+	errno = 0;
 	x = strtol(a, NULL, 10);
+	if (errno == ERANGE) { xerr(c, "overflow"); result = dupstr(c, ""); goto done; }
+	errno = 0;
 	y = strtol(b, NULL, 10);
+	if (errno == ERANGE) { xerr(c, "overflow"); result = dupstr(c, ""); goto done; }
 	/* x and y are each whatever a caller's argv put there, up to and
 	 * including LONG_MIN/LONG_MAX -- "expr 9223372036854775807 + 1" on a
 	 * 64-bit long reaches this line with exactly that x and y=1. Every
@@ -363,7 +397,13 @@ static char *parse_primary(struct expr_ctx *c)
 	if (!strcmp(tok, "(")) {
 		char *v;
 		c->i++;
+		if (c->depth >= EXPR_MAX_DEPTH) {
+			xerr(c, "expression too deeply nested");
+			return dupstr(c, "");
+		}
+		c->depth++;
 		v = parse_or(c);
+		c->depth--;
 		tok = peek(c);
 		if (!tok || strcmp(tok, ")")) { xerr(c, "syntax error: expected ')'"); return v; } // NOLINT(bugprone-suspicious-string-compare) -- nonzero intentionally detects a missing/mismatched ')'
 		c->i++;
@@ -487,6 +527,7 @@ int __util_expr_main(int argc, char **argv)
 	c.n = (size_t)(argc - 1);
 	c.i = 0;
 	c.err = 0;
+	c.depth = 0;
 
 	result = parse_or(&c);
 	if (!c.err && c.i != c.n) xerr(&c, "syntax error: unexpected argument");

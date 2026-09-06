@@ -32,7 +32,8 @@
 #include <libgen.h>
 #include "util.h"
 
-int __util_basename_main(int argc, char **argv)
+int __util_basename_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	char *base;
 	size_t blen, slen;

@@ -267,7 +267,8 @@ static int write_piece(struct lines *L, int from, int to, const char *prefix, in
 	return 0;
 }
 
-int __util_csplit_main(int argc, char **argv)
+int __util_csplit_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int i = 1;
 	int opt_k = 0, opt_s = 0;

@@ -458,7 +458,8 @@ static int process_file(const char *path, int opt_g, int opt_u, int opt_p, int o
 	return rc;
 }
 
-int __util_nm_main(int argc, char **argv)
+int __util_nm_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int i;
 	int opt_g = 0, opt_u = 0, opt_p = 0, opt_v = 0;

@@ -26,7 +26,8 @@
 #include "util.h"
 #include "atbatch.h"
 
-int __util_batch_main(int argc, char **argv)
+int __util_batch_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	time_t run_at = time(0);
 	char id[64];

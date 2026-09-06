@@ -1221,7 +1221,8 @@ struct patch_opts {
 	long p;
 };
 
-int __util_patch_main(int argc, char **argv)
+int __util_patch_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	struct patch_opts o;
 	int argi = 1;

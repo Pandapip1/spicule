@@ -1078,7 +1078,8 @@ static int set_fmt(struct diff_opts *opts, enum diff_fmt fmt)
 	return 1;
 }
 
-int __util_diff_main(int argc, char **argv)
+int __util_diff_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	struct diff_opts opts;
 	int i;

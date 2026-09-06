@@ -764,7 +764,7 @@ static void bre_branch(struct parser *ps)
 
 /* ---- compile / exec / error / free ------------------------------- */
 
-int regcomp(regex_t *__restrict preg, const char *__restrict pattern, int cflags)
+int regcomp(regex_t *__restrict preg construct(regex_compiled), const char *__restrict pattern, int cflags)
 {
 	struct parser ps;
 	struct rx *rx;
@@ -1056,7 +1056,7 @@ static int run(struct mstate *ms, int pc, const char *sp)
 	return -1;
 }
 
-int regexec(const regex_t *__restrict preg, const char *__restrict string,
+int regexec(const regex_t *__restrict preg handle(regex_compiled), const char *__restrict string,
 	    size_t nmatch, regmatch_t pmatch[__restrict], int eflags)
 {
 	struct rx *rx = preg->__opaque;
@@ -1190,7 +1190,7 @@ size_t regerror(int errcode, const regex_t *__restrict preg,
 	return msg->size;
 }
 
-void regfree(regex_t *preg)
+void regfree(regex_t *preg destroy(regex_compiled))
 {
 	struct rx *rx = preg->__opaque;
 	if (!rx) return;

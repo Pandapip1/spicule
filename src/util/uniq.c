@@ -67,7 +67,8 @@ static int lines_equal(const char *a, size_t alen, const char *b, size_t blen, l
 	return 1;
 }
 
-int __util_uniq_main(int argc, char **argv)
+int __util_uniq_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int opt_c = 0, opt_d = 0, opt_u = 0;
 	long fields = 0, chars = 0;

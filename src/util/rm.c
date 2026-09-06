@@ -179,7 +179,8 @@ static int rm_one(const char *path, int recursive, int force) // NOLINT(bugprone
 	return 0;
 }
 
-int __util_rm_main(int argc, char **argv)
+int __util_rm_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int force = 0, recursive = 0;
 	int i = 1;

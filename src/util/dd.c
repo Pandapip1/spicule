@@ -401,7 +401,8 @@ static int dd_position(int fd, uintmax_t n, uintmax_t unit, int is_input, const 
 	return -1;
 }
 
-int __util_dd_main(int argc, char **argv)
+int __util_dd_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	struct dd_opts o;
 	struct sigaction sa, old_sa;

@@ -606,7 +606,8 @@ static int write_atomic(const char *path, const unsigned char *buf, size_t size,
 	return 0;
 }
 
-int __util_strip_main(int argc, char **argv)
+int __util_strip_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	const char *in_path = NULL;
 	const char *out_path = NULL;

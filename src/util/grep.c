@@ -363,7 +363,8 @@ static int scan_one(const struct grep_opts *o, const struct pat_list *pl,
 
 /* ==== entry point =========================================================== */
 
-int __util_grep_main(int argc, char **argv)
+int __util_grep_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	struct grep_opts o;
 	struct pat_list pl;

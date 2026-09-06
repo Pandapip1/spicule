@@ -896,8 +896,21 @@ while IFS="$(printf '\t')" read -r idx n t; do
 		fi
 	else
 		nolink=$((nolink + 1))
-		echo "$n: $(grep -o 'undefined reference to .*' "$exe.link.err" | sort -u | tr '\n' ' ')" \
-			>> "$OBJ/unlinkable.txt"
+		# grep for the common case (a missing symbol), but do not let a
+		# DIFFERENT linker failure -- duplicate symbol, a missing -l, an
+		# lld crash, "file format not recognized" -- turn into a silent
+		# empty entry here just because it does not say "undefined
+		# reference". An unlinkable.txt full of "$n: " with nothing after
+		# the colon would look identical to this loop's own bug (the grep
+		# matching nothing) and would still leave the real failure
+		# unstated; falling back to the raw stderr keeps this file
+		# informative for whichever kind of link error actually occurred.
+		undef=$(grep -o 'undefined reference to .*' "$exe.link.err" | sort -u | tr '\n' ' ')
+		if [ -n "$undef" ]; then
+			echo "$n: $undef" >> "$OBJ/unlinkable.txt"
+		else
+			echo "$n: $(tr '\n' ' ' < "$exe.link.err")" >> "$OBJ/unlinkable.txt"
+		fi
 	fi
 done < "$lwork"
 
@@ -949,6 +962,21 @@ if [ "$nolink" -gt 0 ]; then
 	echo "$TAG: FAILED -- $nolink test(s) did not link; see $OBJ/unlinkable.txt" >&2
 	echo "$TAG: a test a native build cannot link belongs in not_native() with a reason," >&2
 	echo "$TAG: not silently dropped from the run." >&2
+	# Print the file, not just name it. CI's own log is the only artifact
+	# anyone reliably looks at after a failed run -- the "Upload failing
+	# test output" step in .github/workflows/ci.yml globs
+	# obj/asan/test/*.out (runtime output for tests that ran) and was
+	# never wired up to carry unlinkable.txt (a link-time failure, so
+	# there is no *.out for it at all), and $OBJ itself does not survive
+	# the job. That left a real "every test failed to link" run with
+	# nothing in the log past this point but a filename inside a
+	# workspace nobody downloads -- undiagnosable from the log alone,
+	# which is the one thing every future run of this script actually
+	# produces. Printing it here costs nothing when $nolink is 0 (this
+	# whole block is skipped) and turns "go find the file" into "it is
+	# already in front of you" for the one case where that matters.
+	echo "$TAG: $OBJ/unlinkable.txt:" >&2
+	sed 's/^/'"$TAG"': /' "$OBJ/unlinkable.txt" >&2
 	rc=1
 fi
 if [ "$ran" -eq 0 ]; then

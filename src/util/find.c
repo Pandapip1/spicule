@@ -702,7 +702,8 @@ static void flush_plus(struct node *n)
 	flush_plus(n->b);
 }
 
-int __util_find_main(int argc, char **argv)
+int __util_find_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	const char *paths[128];
 	int npaths = 0, i = 1, pi;

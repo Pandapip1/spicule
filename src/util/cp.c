@@ -356,7 +356,8 @@ static int cp_one(const char *src, const char *dst, int recursive, int force) //
 	return __util_copy_regular_file(src, dst, force);
 }
 
-int __util_cp_main(int argc, char **argv)
+int __util_cp_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int recursive = 0, force = 0;
 	size_t i = 1;

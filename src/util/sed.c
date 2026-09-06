@@ -1455,7 +1455,8 @@ static int run_program(struct sed_state *st, struct program *pr, int opt_n)
 
 /* ==== argv parsing / top-level driver ====================================== */
 
-int __util_sed_main(int argc, char **argv)
+int __util_sed_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int opt_n = 0;
 	int have_e_or_f = 0;

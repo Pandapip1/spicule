@@ -237,7 +237,8 @@ static int wait_bounded(int pid, int *status, struct timespec deadline)
 	}
 }
 
-int __util_timeout_main(int argc, char **argv)
+int __util_timeout_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int i = 1;
 	int sig = SIGTERM;

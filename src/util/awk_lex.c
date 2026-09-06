@@ -244,6 +244,11 @@ static int scan_string(struct awk_lexer *lx, struct awk_token *out)
 	}
 	if (!growbuf(&buf, &cap, n)) { lex_err(lx, "awk: out of memory"); free(buf); return 0; }
 	buf[n] = 0;
+	/* struct awk_token.text withtok(null_terminated) -- true by the
+	 * write immediately above, but a raw per-byte scan_putc() loop is
+	 * exactly the shape a checker cannot see through on its own (same
+	 * idiom src/string/strdup.c's own memcpy-plus-no-adjustment uses). */
+	__ownership_string_terminated(buf);
 	out->type = T_STRING;
 	out->text = buf;
 	return 1;
@@ -283,6 +288,9 @@ static int scan_ere(struct awk_lexer *lx, struct awk_token *out)
 	}
 	if (!growbuf(&buf, &cap, n)) { lex_err(lx, "awk: out of memory"); free(buf); return 0; }
 	buf[n] = 0;
+	/* struct awk_token.text withtok(null_terminated) -- see scan_string()'s
+	 * own identical comment above. */
+	__ownership_string_terminated(buf);
 	out->type = T_ERE;
 	out->text = buf;
 	return 1;

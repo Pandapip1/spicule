@@ -133,15 +133,10 @@ static void fatal(const char *msg)
 }
 
 /* Not also declared withtok(heap_allocated): almost every caller hands
- * the result straight to v_str_init()/assign_value_to_cell(), whose own
- * struct awk_value.str/struct awk_cell.str fields (deliberately) do not
- * carry that family either -- see those fields' own comments for the
- * do_getline()/getdelim() reason -- so declaring it here would just
- * move AllocationLifetimeChecker's "not freed before exit" finding from
- * this file's original 4 allocator wrappers onto dozens of otherwise
- * fine call sites that legitimately transfer ownership into one of
- * those two fields instead of freeing locally. Verified empirically:
- * adding the grant here turned 4 pre-existing findings into 36. */
+ * the result to v_str_init()/assign_value_to_cell(), whose own str
+ * fields deliberately don't carry that family either. Verified
+ * empirically: adding the grant here turned 4 pre-existing findings
+ * into 36. */
 withtok(null_terminated)
 static char *xstrdup(const char *s withtok(null_terminated))
 {
@@ -149,22 +144,14 @@ static char *xstrdup(const char *s withtok(null_terminated))
 	char *r = malloc(n);
 	if (!r) oom();
 	for (size_t i = 0; i < n; i++) r[i] = s[i];
-	/* The copy loop above (i in [0,n), n == strlen(s)+1) copies s's own
-	 * terminating NUL into r[n-1] along with every character before it,
-	 * so r is null-terminated by construction -- just not through a
-	 * shape (a raw byte-copy loop, not memcpy/strcpy) the checker can
-	 * see that in; established by hand exactly the way src/string/
-	 * strdup.c's own, real strdup() already does for the identical
-	 * loop-free-vs-checkable-shape reason. */
+	/* Copies s's terminating NUL too, so r is null-terminated by
+	 * construction -- just not through a shape the checker can see. */
 	__ownership_string_terminated(r);
 	return r;
 }
 
-/* Not declared withtok(heap_allocated) either, for the same empirically-
- * verified reason as xstrdup() above: xrealloc() is the growth step
- * behind several buffers (buf_append()'s, split_into()'s, this file's
- * getline readers') that end up moved into one of those same two
- * not-heap_allocated-tracked fields. */
+/* Not declared withtok(heap_allocated) either, same empirically-verified
+ * reason as xstrdup() above. */
 static void *xrealloc(void *p, size_t n)
 {
 	void *r = realloc(p, n);
@@ -234,13 +221,9 @@ static char *num_to_str_fmt(double n, const char *fmt)
 		is_int = ((double)ll == n);
 		if (is_int) {
 			snprintf(buf, sizeof buf, "%lld", ll);
-			/* include/stdio.h's snprintf is deliberately not annotated
-			 * to grant this (its whole point is legitimate truncation,
-			 * e.g. snprintf(s,0,...)), but C11 7.21.6.5p2 still
-			 * guarantees a NUL-terminated result within any nonzero
-			 * buffer size regardless of truncation -- true by the
-			 * standard, just not something the checker can see through
-			 * an opaque variadic call. */
+			/* snprintf() guarantees NUL-termination within a nonzero
+			 * buffer size (C11 7.21.6.5p2), not visible through this
+			 * opaque variadic call. */
 			__ownership_string_terminated(buf);
 			return xstrdup(buf);
 		}
@@ -254,27 +237,19 @@ static char *num_to_str_fmt(double n, const char *fmt)
 
 struct awk_value {
 	double num;
-	/* NUL-terminated whenever non-NULL, same invariant and same
-	 * deliberate omission of heap_allocated as struct awk_cell.str
-	 * (awk_priv.h) -- do_getline()'s non-$0 update branch below moves a
-	 * getdelim()-sourced buffer straight into this field via
-	 * v_str_init(), and this project's own getdelim() declaration
-	 * grants no dynamic_storage family to bridge with. */
+	/* NUL-terminated whenever non-NULL, same deliberate omission of
+	 * heap_allocated as struct awk_cell.str (awk_priv.h): do_getline()
+	 * moves a getdelim()-sourced buffer straight into this field, and
+	 * getdelim()'s own declaration grants no dynamic_storage family. */
 	char *str withtok(null_terminated);   /* owned iff strcached */
 	unsigned char kind;
 	unsigned char numcached, strcached;
 };
 
 static void v_num_init(struct awk_value *v, double n) { v->num = n; v->str = NULL; v->kind = VK_NUM; v->numcached = 1; v->strcached = 0; }
-/* Takes ownership of s. Every caller in this file passes either a
- * string literal, an xstrdup()/dupn_local() result, another
- * already-cached struct awk_value's/awk_cell's own str field, this
- * file's own buf_append()-built buffers (always manually NUL-terminated,
- * see buf_append()'s own comment), or a getdelim()-sourced record
- * buffer (read_delim_record()/read_paragraph_record(), each of which
- * also manually NUL-terminates) -- established once here, at the one
- * place they all converge, rather than at each of v_str_init()'s own
- * call sites. */
+/* Takes ownership of s, always NUL-terminated (a literal, an xstrdup()/
+ * dupn_local() result, or another already-terminated buffer); asserted
+ * once here rather than at each call site. */
 static void v_str_init(struct awk_value *v, char *s, unsigned char kind)
 {
 	__ownership_string_terminated(s);
@@ -301,11 +276,9 @@ static const char *v_str(struct awk_value *v, const char *fmt)
 		v->strcached = 1;
 	}
 	result = v->str;
-	/* Re-established on a fresh local copy, immediately before the
-	 * return: v->str's own capability (already granted a line up, by
-	 * whichever of xstrdup()/num_to_str_fmt() ran, or on a prior call)
-	 * does not reliably survive the intervening strcached=1 sibling-
-	 * field write across this checker's own path-sensitive tracking. */
+	/* Re-asserted here: v->str's capability doesn't reliably survive the
+	 * intervening strcached=1 sibling-field write, across this
+	 * checker's path-sensitive tracking. */
 	__ownership_string_terminated(result);
 	return result;
 }
@@ -376,13 +349,10 @@ static const char *ofmt_str(struct awk_interp *ip)
 
 /* ==== cells =============================================================== */
 
-/* Not declared withtok(heap_allocated): its result is stored into the
- * generic void* slot of a hash table (awk_htab, awk_priv.h -- shared
- * with awk_lex.c/awk_parse.c/awk.c) or into call_user_func()'s own
- * local frame.cells[] array, neither of which is a typed destination
- * this file can attach a matching contract to without touching that
- * shared, generic container -- same empirically-verified reason as
- * xstrdup()'s own comment above. */
+/* Not declared withtok(heap_allocated): its result is stored into a
+ * generic void* hash-table slot or a local cells[] array, neither a
+ * typed destination this file can attach a contract to -- same
+ * empirically-verified reason as xstrdup()'s own comment above. */
 static struct awk_cell *new_cell(void)
 {
 	struct awk_cell *c = calloc(1, sizeof *c);
@@ -432,12 +402,8 @@ static const char *cell_str(struct awk_interp *ip, struct awk_cell *c)
 		c->strcached = 1;
 	}
 	result = c->str;
-	/* Re-established on a fresh local copy, immediately before the
-	 * return: c->str's own capability (already granted a line up, by
-	 * whichever of xstrdup()/num_to_str_fmt() ran, or on a prior call)
-	 * does not reliably survive the intervening write to strcached, a
-	 * sibling field of the same struct awk_cell, across this checker's
-	 * own path-sensitive tracking. */
+	/* Re-asserted here: same path-sensitivity limitation as v_str()'s
+	 * identical comment above. */
 	__ownership_string_terminated(result);
 	return result;
 }
@@ -515,25 +481,15 @@ static struct awk_cell *array_elem(struct awk_cell *arrcell, const char *key)
 
 /* ==== variable resolution ================================================= */
 
-/* name always traces back to either a string literal (the many
- * lookup_cell(ip, "FS")-style callers below) or an N_VAR/N_ARRIDX/...
- * awk_node's own str field (an identifier the parser only ever fills
- * from a NUL-terminated token, per struct awk_node's own comment in
- * awk_priv.h) -- established once here, at the one function every one
- * of those callers funnels through, rather than requiring
- * struct awk_node's own str field (shared with awk_parse.c/awk_lex.c)
- * to carry the same declared contract just for this file's sake. */
+/* name always traces back to a string literal or a parser-owned
+ * awk_node identifier, both NUL-terminated; asserted once here rather
+ * than on struct awk_node's own shared field. */
 static struct awk_cell *lookup_cell(struct awk_interp *ip, const char *name)
 {
 	__ownership_string_terminated(name);
 	if (ip->frame) {
 		int i;
 		for (i = 0; i < ip->frame->nparams; i++) {
-			/* frame->names[i] is borrowed from the awk_func that owns
-			 * this call's params[] (struct awk_func, also shared with
-			 * awk_parse.c) -- always an identifier token's own owned,
-			 * NUL-terminated text, same provenance as name's own comment
-			 * above. */
 			__ownership_string_terminated(ip->frame->names[i]);
 			if (!strcmp(ip->frame->names[i], name)) return ip->frame->cells[i];
 		}
@@ -900,14 +856,10 @@ static FILE *get_output_stream(struct awk_interp *ip, const char *target withtok
 		st->f = popen(target, "w");
 	} else {
 		st->is_pipe = 0;
-		/* Split into two bare-literal fopen() calls rather than one call
-		 * with a `redir == RD_APPEND ? "a" : "w"` mode argument:
-		 * OwnershipChecker.cpp's own expressionProvidesStringLiteralToken()
-		 * recognizes a StringLiteral (or a variable initialized from one)
-		 * as automatically carrying qual:string_literal's token, but does
-		 * not look through a ConditionalOperator to either of its two
-		 * literal arms -- a real gap in that helper, not a fact about
-		 * this call that is actually in question. */
+		/* Split into two bare-literal fopen() calls rather than one with
+		 * a `redir == RD_APPEND ? "a" : "w"` ternary: the checker's
+		 * string-literal recognition doesn't look through a
+		 * ConditionalOperator to either arm. */
 		if (redir == RD_APPEND) st->f = fopen(target, "a");
 		else st->f = fopen(target, "w");
 	}
@@ -1148,13 +1100,9 @@ static void buf_append(char **buf, size_t *len, size_t *cap, const char *s, size
 			if (!__util_size_mul(newcap, 2, &newcap)) fatal("output too large");
 		}
 		*buf = xrealloc(*buf, newcap);
-		/* realloc() leaves the grown tail's bytes unspecified. Nothing
-		 * below writes past *len+n, so without this, capacity beyond
-		 * whatever the copy loop below actually reaches this call
-		 * would stay indeterminate -- and a later caller that hands
-		 * this same buffer back in as another buf_append() source
-		 * (e.g. do_sub()'s expand_replacement() result) then reads
-		 * that indeterminate tail. */
+		/* realloc() leaves the grown tail's bytes unspecified; a later
+		 * buf_append() call could otherwise read that indeterminate
+		 * tail past *len+n. */
 		memset(*buf + oldcap, 0, newcap - oldcap);
 		*cap = newcap;
 	}
@@ -1274,13 +1222,9 @@ static char *awk_format(struct awk_interp *ip, const char *fmt, struct awk_value
 					skip = 1;
 					break;
 				}
-				/* Freeing dummy here, before sv is used below, used to
-				 * free-then-read it: for an exhausted-argument %s/%c
-				 * conversion, sv is v_str(&dummy, ...)'s return value
-				 * -- a pointer straight into dummy.str -- so freeing
-				 * dummy first left both snprintf() calls below reading
-				 * already-freed memory. dummy is freed once, after its
-				 * string's last use, instead. */
+				/* dummy must be freed AFTER sv's last use below, not
+				 * before: for an exhausted-argument %s/%c conversion,
+				 * sv points straight into dummy.str. */
 				if (!skip) {
 					switch (atype) {
 					case AT_LL: need = snprintf(NULL, 0, subfmt, llv); break;
@@ -1461,13 +1405,7 @@ static void assign_lvalue(struct awk_interp *ip, struct awk_node *lv, struct awk
 	case N_VAR: {
 		struct awk_cell *c = lookup_cell(ip, lv->str);
 		assign_value_to_cell(c, val);
-		/* lv->str is an N_VAR awk_node's own identifier text -- the
-		 * parser only ever fills it from a NUL-terminated token (see
-		 * struct awk_node's own comment in awk_priv.h); established by
-		 * hand here rather than declaring that shared-with-awk_parse.c
-		 * field's own type, same reasoning as lookup_cell()'s own
-		 * comment above. */
-		__ownership_string_terminated(lv->str);
+		__ownership_string_terminated(lv->str); /* same reasoning as lookup_cell()'s own comment above */
 		if (!strcmp(lv->str, "NF")) set_nf(ip, d2long(cell_num(c)));
 		return;
 	}
@@ -1510,10 +1448,7 @@ static struct awk_value eval(struct awk_interp *ip, struct awk_node *n)
 	switch (n->type) {
 	case N_NUM: v_num_init(&v, n->num); return v;
 	case N_STR:
-		/* n->str is an N_STR awk_node's own string-literal text -- the
-		 * parser only ever fills it from a NUL-terminated token, same
-		 * provenance as lookup_cell()'s own comment above. */
-		__ownership_string_terminated(n->str);
+		__ownership_string_terminated(n->str); /* same provenance as lookup_cell()'s own comment above */
 		v_str_init(&v, xstrdup(n->str), VK_STR);
 		return v;
 	case N_REGEX: {
@@ -1972,12 +1907,7 @@ static struct awk_value call_builtin(struct awk_interp *ip, struct awk_node *cal
 	{
 		int i;
 		for (i = 0; i < ip->prog->nfuncs; i++) {
-			/* struct awk_func.name (awk_priv.h, shared with
-			 * awk_parse.c): awk_parse.c's own parse_function_def()
-			 * always sets it from an identifier token's owned,
-			 * NUL-terminated text -- established by hand here rather
-			 * than declaring that shared field's own type. */
-			__ownership_string_terminated(ip->prog->funcs[i].name);
+			__ownership_string_terminated(ip->prog->funcs[i].name); /* parser-owned identifier text, same as name above */
 			if (!strcmp(ip->prog->funcs[i].name, name))
 				return call_user_func(ip, &ip->prog->funcs[i], a, na);
 		}
@@ -2181,13 +2111,7 @@ static enum awk_sig exec_stmt(struct awk_interp *ip, struct awk_node *n, struct 
 		while ((node = awk_hiter_next(&it))) {
 			struct awk_value kv;
 			enum awk_sig s;
-			/* node->key is a struct awk_hnode field (awk_priv.h) that
-			 * awk_htab.c's own insertion path always populates with a
-			 * fresh strcpy()'d, NUL-terminated copy of the lookup key
-			 * (see its own "owned" comment); established by hand here
-			 * rather than declaring that shared-with-awk_htab.c field's
-			 * own type. */
-			__ownership_string_terminated(node->key);
+			__ownership_string_terminated(node->key); /* awk_htab.c always strcpy()'s a NUL-terminated key here */
 			v_str_init(&kv, xstrdup(node->key), looks_numeric(node->key) ? VK_STRNUM : VK_STR);
 			assign_value_to_cell(var, &kv);
 			v_free(&kv);

@@ -27,7 +27,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-#include <time.h>
+#include <unistd.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -332,12 +332,18 @@ static int try_one_server(const struct sockaddr_in *sv, const char *name,
 	int qlen, attempt;
 	unsigned char qbuf[300], rbuf[1500];
 	uint16_t id;
-	static uint16_t g_qid_seeded;
-	static uint16_t g_qid;
 	struct { long tv_sec, tv_usec; } tmo;
 
-	if (!g_qid_seeded) { g_qid = (uint16_t)time(NULL); g_qid_seeded = 1; }
-	id = ++g_qid;
+	/* parse_response()'s `be16(msg) != id` check is the only thing
+	 * standing between a spoofed UDP datagram (an off-path attacker
+	 * cannot see this query, only guess at it) and a forged answer
+	 * being accepted as this query's real response, so id must not be
+	 * guessable. A seeded, monotonically incrementing counter (this
+	 * function's own prior scheme) is exactly the predictable-
+	 * transaction-ID weakness real DNS cache-poisoning attacks exploit:
+	 * observe or guess one id and every subsequent query's id is known.
+	 * getentropy() gives each query a real, unpredictable one instead. */
+	if (getentropy(&id, sizeof id) != 0) { *reason = __DNS_IOERR; return -1; }
 
 	qlen = build_query(qbuf, sizeof qbuf, name, id);
 	if (qlen < 0) { *reason = __DNS_IOERR; return -1; }

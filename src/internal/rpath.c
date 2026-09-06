@@ -110,8 +110,12 @@ static char *image_dir(void)
 	 * which has to stay to still name the root directory. */
 	if (i > 1 && !(i == 3 && progname[1] == ':')) i--;
 	if (i > INT_MAX) return 0;
-	dir = __malloc(i + 1);
-	if (dir) snprintf(dir, i + 1, "%.*s", (int)i, progname);
+	{
+		size_t bytes;
+		if (!__size_add_checked(i, 1, &bytes)) return 0;
+		dir = __malloc(bytes);
+		if (dir) snprintf(dir, bytes, "%.*s", (int)i, progname);
+	}
 	return dir;
 }
 
@@ -133,10 +137,14 @@ static int has_path_component(const char *p)
 withtok(internal_heap_allocated)
 static char *join(const char *dir, const char *tail)
 {
-	size_t dl = strlen(dir), tl = strlen(tail), i;
-	char *p = __malloc(dl + 1 + tl + 1);
+	size_t dl = strlen(dir), tl = strlen(tail), i, bytes;
+	char *p;
+	if (!__size_add_checked(dl, 1, &bytes) ||
+	    !__size_add_checked(bytes, tl, &bytes) ||
+	    !__size_add_checked(bytes, 1, &bytes)) return 0;
+	p = __malloc(bytes);
 	if (!p) return 0;
-	snprintf(p, dl + 1 + tl + 1, "%s\\%s", dir, tail);
+	snprintf(p, bytes, "%s\\%s", dir, tail);
 	for (i = 0; i < dl + 1 + tl; i++)
 		if (p[i] == '/') p[i] = '\\';
 	return p;

@@ -541,7 +541,11 @@ int __plat_process_spawn(const char *path, char *const argv[], char *const envp[
 		/* One malloc rather than three, keeping target/mv/orig's ownership
 		 * to a single alloc/free pair. Sized ntotal, never less than 3, so
 		 * this covers fd 0/1/2 even when extra_n is 0. */
-		fm = malloc((size_t)ntotal * sizeof *fm);
+		{
+			size_t fmbytes;
+			fm = __size_mul_checked((size_t)ntotal, sizeof *fm, &fmbytes) ?
+				malloc(fmbytes) : NULL;
+		}
 		if (!fm) {
 			int e = ENOMEM;
 			raw_syscall(SYS_write, (long)pipefd[1], (long)&e, (long)sizeof e, 0L, 0L, 0L);

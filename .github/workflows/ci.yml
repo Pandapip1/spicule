@@ -614,5 +614,19 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: asan-output
-          path: obj/asan/test/*.out
+          # obj/asan/test/*.out alone used to be the whole list, which
+          # only ever carries RUNTIME output -- nothing for a link-time
+          # failure. tools/asan-build.sh's own log now prints
+          # unlinkable.txt's contents directly (see that script's own
+          # comment on the FAILED branch), but the workspace does not
+          # survive the job either way, so also carry the raw materials
+          # here: unlinkable.txt/skipped.txt for the summary counts this
+          # job's log already quotes, and *.link.err for the full,
+          # unfiltered linker output behind whichever line of
+          # unlinkable.txt matters.
+          path: |
+            obj/asan/test/*.out
+            obj/asan/test/*.link.err
+            obj/asan/unlinkable.txt
+            obj/asan/skipped.txt
           if-no-files-found: warn

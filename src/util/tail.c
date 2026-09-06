@@ -340,7 +340,8 @@ static int parse_signed_number(const char *s, int *from_end, long long *number)
 	return 0;
 }
 
-int __util_tail_main(int argc, char **argv)
+int __util_tail_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int i;
 	enum tail_mode mode = TAIL_LINES;
@@ -407,7 +408,7 @@ int __util_tail_main(int argc, char **argv)
 		int ntargets = 0;
 
 		if (follow) {
-			targets = malloc((size_t)noperands * sizeof *targets);
+			targets = __util_mallocarray((size_t)noperands, sizeof *targets);
 			if (!targets) {
 				__util_diagf("tail: %s\n", strerror(ENOMEM));
 				return 1;

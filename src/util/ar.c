@@ -639,7 +639,8 @@ static int do_append_or_replace(const char *archive, char **files, int nfiles,
 	return status;
 }
 
-int __util_ar_main(int argc, char **argv)
+int __util_ar_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	char op = 0;
 	int cflag = 0, uflag = 0, vflag = 0;

@@ -212,10 +212,10 @@ static int strip_elf(const unsigned char *buf, size_t size,
 
 	if (eh.e_phnum == 0) return 0; /* nothing a real loader maps by phdr -- untouched */
 
-	phdrs = malloc((size_t)eh.e_phnum * sizeof *phdrs);
-	shdrs = malloc((size_t)eh.e_shnum * sizeof *shdrs);
+	phdrs = __util_mallocarray((size_t)eh.e_phnum, sizeof *phdrs);
+	shdrs = __util_mallocarray((size_t)eh.e_shnum, sizeof *shdrs);
 	removed = calloc(eh.e_shnum, 1);
-	map = malloc((size_t)eh.e_shnum * sizeof *map);
+	map = __util_mallocarray((size_t)eh.e_shnum, sizeof *map);
 	new_off = calloc(eh.e_shnum, sizeof *new_off);
 	if (!phdrs || !shdrs || !removed || !map || !new_off) {
 		free(phdrs); free(shdrs); free(removed); free(map); free(new_off);
@@ -606,7 +606,8 @@ static int write_atomic(const char *path, const unsigned char *buf, size_t size,
 	return 0;
 }
 
-int __util_strip_main(int argc, char **argv)
+int __util_strip_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	const char *in_path = NULL;
 	const char *out_path = NULL;

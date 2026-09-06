@@ -88,7 +88,9 @@ int __sh_params_replace(char *const *argv, int n)
 
 	if (n < 0) n = 0;
 	if (n > 0) {
-		nv = (char **)__malloc((size_t)n * sizeof *nv);
+		size_t bytes;
+		if (!__size_mul_checked((size_t)n, sizeof *nv, &bytes)) return -1;
+		nv = (char **)__malloc(bytes);
 		if (!nv) return -1;
 		for (i = 0; i < n; i++) {
 			nv[i] = dup_str(argv[i]);

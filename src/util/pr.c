@@ -281,7 +281,8 @@ static int parse_n_opt(const char *rest, struct pr_opts *o)
 	return 0;
 }
 
-int __util_pr_main(int argc, char **argv)
+int __util_pr_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	struct pr_opts o;
 	int i = 1;

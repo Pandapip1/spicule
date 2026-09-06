@@ -6,6 +6,7 @@
  */
 #include <stdlib.h>
 #include "tablist.h"
+#include "util.h"
 
 int __util_tablist_parse(const char *spec, struct tablist *out)
 {
@@ -33,8 +34,10 @@ int __util_tablist_parse(const char *spec, struct tablist *out)
 		if (n && stops[n - 1] >= v) { free(stops); return -1; }
 
 		if (n == cap) {
-			size_t newcap = cap ? cap * 2 : 8;
-			long *tmp = realloc(stops, newcap * sizeof *stops);
+			size_t newcap;
+			long *tmp;
+			if (!__util_array_capacity(cap, n, 1, 8, sizeof *stops, &newcap)) { free(stops); return -1; }
+			tmp = __util_reallocarray(stops, newcap, sizeof *stops);
 			if (!tmp) { free(stops); return -1; }
 			stops = tmp;
 			cap = newcap;

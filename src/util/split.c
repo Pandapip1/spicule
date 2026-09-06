@@ -194,7 +194,8 @@ static int split_by_bytes(FILE *in, const char *prefix, int suflen, long bcount)
 	return 0;
 }
 
-int __util_split_main(int argc, char **argv)
+int __util_split_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int i = 1;
 	long lcount = -1, bcount = -1;

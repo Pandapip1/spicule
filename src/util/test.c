@@ -379,7 +379,8 @@ static int eval_argc(struct texpr *t)
 /* argv[0] is either "test" or "[" -- __find_program()'s resolved name for
  * the standalone .exe, or the literal source text for the shell built-in
  * (src/sh/builtin.c registers both names against the same bi_test()). */
-int __util_test_main(int argc, char **argv)
+int __util_test_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	struct texpr t;
 	size_t n = (size_t)argc;

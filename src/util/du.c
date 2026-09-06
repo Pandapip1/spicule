@@ -138,7 +138,8 @@ static int du_one(const char *path)
 	return 0;
 }
 
-int __util_du_main(int argc, char **argv)
+int __util_du_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int i = 1;
 

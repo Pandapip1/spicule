@@ -207,7 +207,8 @@ static int do_remove(const char *dir, char **ids, int nids)
 	return status;
 }
 
-int __util_at_main(int argc, char **argv)
+int __util_at_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int i = 1;
 	int opt_l = 0, opt_r = 0;
@@ -216,7 +217,7 @@ int __util_at_main(int argc, char **argv)
 	int nrest = 0;
 	char dir[NTLIBC_SPOOL_PATH_MAX];
 
-	rest = malloc(sizeof(char *) * (size_t)(argc + 1));
+	rest = __util_mallocarray((size_t)argc + 1, sizeof(char *));
 	if (!rest) { __util_diagf("at: out of memory\n"); return 1; }
 
 	for (; i < argc; i++) {

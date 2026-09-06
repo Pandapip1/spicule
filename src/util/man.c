@@ -1744,7 +1744,11 @@ static int man_argv_push(struct man_argv *a, const char *tok, size_t len)
 		if (!g) return 0;
 		a->v = g; a->cap = newcap;
 	}
-	dup = malloc(len + 1);
+	{
+		size_t bytes;
+		if (!__util_size_add(len, 1, &bytes)) return 0;
+		dup = malloc(bytes);
+	}
 	if (!dup) return 0;
 	for (size_t i = 0; i < len; i++) dup[i] = tok[i];
 	dup[len] = 0;
@@ -3216,7 +3220,11 @@ static int man_eqn_toks_push(struct man_eqn_toks *t, const char *s, size_t n, in
 		if (!g) return 0;
 		t->v = g; t->cap = newcap;
 	}
-	dup = malloc(n + 1);
+	{
+		size_t bytes;
+		if (!__util_size_add(n, 1, &bytes)) return 0;
+		dup = malloc(bytes);
+	}
 	if (!dup) return 0;
 	memcpy(dup, s, n);
 	dup[n] = 0;
@@ -3282,7 +3290,11 @@ static int man_eqn_wrap(const struct man_eqn_val *v, char open, char close, char
 	char *s;
 	if (!v->compound) { *out = strdup(v->text ? v->text : ""); return *out != 0; }
 	n = strlen(v->text);
-	s = malloc(n + 3);
+	{
+		size_t bytes;
+		if (!__util_size_add(n, 3, &bytes)) return 0;
+		s = malloc(bytes);
+	}
 	if (!s) return 0;
 	s[0] = open;
 	memcpy(s + 1, v->text, n);
@@ -3581,7 +3593,11 @@ static int man_render_eqn(struct man_ctx *c, struct man_macro *body)
 			struct man_buf decoded;
 			int is_directive;
 
-			decoded_src = malloc(len + 1);
+			{
+				size_t bytes;
+				if (!__util_size_add(len, 1, &bytes)) { ok = 0; break; }
+				decoded_src = malloc(bytes);
+			}
 			if (!decoded_src) { ok = 0; break; }
 			memcpy(decoded_src, body->lines[li] + start, len);
 			decoded_src[len] = 0;
@@ -4223,7 +4239,11 @@ static int man_format(const char *text, size_t len, int width, struct man_buf *o
 	if (!man_ctx_init(&c, width)) return 0;
 	memset(&r, 0, sizeof r);
 
-	copy = malloc(len + 1);
+	{
+		size_t bytes;
+		if (!__util_size_add(len, 1, &bytes)) { man_ctx_free(&c); return 0; }
+		copy = malloc(bytes);
+	}
 	if (!copy) { man_ctx_free(&c); return 0; }
 	for (size_t i = 0; i < len; i++) copy[i] = text[i];
 	copy[len] = 0;
@@ -4388,10 +4408,13 @@ static int man_run_external_pager(const char *pager, const char *styled, size_t 
 	char *resolved;
 	int pid, status;
 
-	tmpl = malloc(dn + sizeof "/ntlibc-manXXXXXX");
-	if (!tmpl) return -1;
-	snprintf(tmpl, dn + sizeof "/ntlibc-manXXXXXX",
-	    "%s/ntlibc-manXXXXXX", dir);
+	{
+		size_t tmplbytes;
+		if (!__util_size_add(dn, sizeof "/ntlibc-manXXXXXX", &tmplbytes)) return -1;
+		tmpl = malloc(tmplbytes);
+		if (!tmpl) return -1;
+		snprintf(tmpl, tmplbytes, "%s/ntlibc-manXXXXXX", dir);
+	}
 	fd = mkstemp(tmpl);
 	if (fd < 0) { free(tmpl); return -1; }
 	f = fdopen(fd, "wb");

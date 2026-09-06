@@ -110,15 +110,17 @@ static char *id_path(int id)
 {
 	char *dir = dir_path();
 	char *path;
-	size_t dirlen;
+	size_t dirlen, tail, total;
 	int n;
 	if (!dir) return NULL;
 	dirlen = strlen(dir);
-	path = malloc(dirlen + 1 + 10 + sizeof ".meta");
+	if (!__size_add_checked(1 + 10, sizeof ".meta", &tail) ||
+	    !__size_add_checked(dirlen, tail, &total)) { free(dir); return NULL; }
+	path = malloc(total);
 	if (!path) { free(dir); return NULL; }
 	memcpy(path, dir, dirlen);
 	free(dir);
-	n = snprintf(path + dirlen, 1 + 10 + sizeof ".meta", "/%d.meta", id);
+	n = snprintf(path + dirlen, tail, "/%d.meta", id);
 	if (n < 0) { free(path); errno = EINVAL; return NULL; }
 	return path;
 }
@@ -234,7 +236,7 @@ static int find_by_key(key_t key, struct sem_meta *m)
 int semget(key_t key, int nsems, int semflg)
 {
 	__plat_handle_t lock;
-	char *dir, *ctrpath;
+	char *dir, *ctrpath = 0;
 	int id, ctrfd;
 	struct sem_meta m;
 
@@ -265,10 +267,11 @@ int semget(key_t key, int nsems, int semflg)
 	dir = dir_path();
 	if (!dir) { __plat_named_mutant_release(lock); return -1; }
 	{
-		size_t dirlen = strlen(dir);
-		ctrpath = malloc(dirlen + sizeof "/next");
-		if (ctrpath) snprintf(ctrpath, dirlen + sizeof "/next",
-		    "%s/next", dir);
+		size_t dirlen = strlen(dir), total;
+		if (__size_add_checked(dirlen, sizeof "/next", &total)) {
+			ctrpath = malloc(total);
+			if (ctrpath) snprintf(ctrpath, total, "%s/next", dir);
+		}
 	}
 	free(dir);
 	if (!ctrpath) { __plat_named_mutant_release(lock); return -1; }

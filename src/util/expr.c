@@ -369,7 +369,9 @@ static char *do_match(struct expr_ctx *c, char *a consume(heap_allocated),
 	if (re.re_nsub >= 1) {
 		if (matched && pm[1].rm_so >= 0) {
 			regoff_t len = pm[1].rm_eo - pm[1].rm_so;
-			result = malloc((size_t)len + 1);
+			size_t bytes;
+			if (!__util_size_add((size_t)len, 1, &bytes)) result = 0;
+			else result = malloc(bytes);
 			if (!result) { xerr(c, "out of memory"); result = dupstr(c, ""); }
 			else {
 				memcpy(result, a + pm[1].rm_so, (size_t)len);
@@ -512,7 +514,8 @@ static char *parse_or(struct expr_ctx *c)
 	return v;
 }
 
-int __util_expr_main(int argc, char **argv)
+int __util_expr_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	struct expr_ctx c;
 	char *result;

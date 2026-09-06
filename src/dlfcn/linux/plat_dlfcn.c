@@ -214,6 +214,7 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <pthread.h>
+#include "libc.h"
 #include "plat_dlfcn.h"
 #include "unsafe_pointer.h"
 
@@ -1072,12 +1073,14 @@ static int tls_dtv_ensure_capacity(unsigned int module_id)
 	void **tp = (void **)__builtin_thread_pointer();
 	void **old_dtv = *(void ***)tp;
 	void **new_dtv;
-	size_t new_capacity = dtv_capacity;
+	size_t new_capacity, new_bytes;
 
 	if ((size_t)module_id < dtv_capacity) return 0;
-	while ((size_t)module_id >= new_capacity) new_capacity *= 2;
+	if (!__array_next_capacity(dtv_capacity, (size_t)module_id, 1,
+	    TLS_DTV_INITIAL_CAPACITY, sizeof(void *), &new_capacity)) return -1;
 
-	new_dtv = malloc(new_capacity * sizeof(void *));
+	new_bytes = new_capacity * sizeof(void *); /* proven <= SIZE_MAX by __array_next_capacity's own element_size bound above */
+	new_dtv = malloc(new_bytes);
 	if (!new_dtv) return -1;
 	memcpy(new_dtv, old_dtv, dtv_capacity * sizeof(void *));
 	memset(new_dtv + dtv_capacity, 0, (new_capacity - dtv_capacity) * sizeof(void *));
@@ -1684,7 +1687,10 @@ static int open_needed(const char *dir, const char *name, char *pathbuf, size_t 
  * underneath it too. */
 static int add_dep(struct dlobj *obj, struct dlobj *dep)
 {
-	struct dlobj **grown = realloc(obj->deps, (obj->ndeps + 1) * sizeof *grown);
+	struct dlobj **grown;
+	size_t ndeps;
+	if (!__size_add_checked(obj->ndeps, 1, &ndeps)) return -1;
+	grown = reallocarray(obj->deps, ndeps, sizeof *grown);
 	if (!grown) return -1;
 	grown[obj->ndeps] = dep;
 	obj->deps = grown;

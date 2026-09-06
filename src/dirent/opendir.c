@@ -23,7 +23,13 @@
 withtok(directory_stream_open)
 static DIR *alloc_dir(int fd)
 {
-	DIR *dp = __malloc(sizeof *dp + __DIRBUF_SIZE);
+	DIR *dp;
+	size_t bytes;
+	if (!__size_add_checked(sizeof *dp, __DIRBUF_SIZE, &bytes)) {
+		errno = ENOMEM;
+		return 0;
+	}
+	dp = __malloc(bytes);
 	if (!dp) { errno = ENOMEM; return 0; }
 	memset(dp, 0, sizeof *dp);
 	dp->buf = (unsigned char *)(dp + 1);

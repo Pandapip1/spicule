@@ -42,12 +42,14 @@ int __child_cap = CHILD_MAX_;
 static int child_grow(void)
 {
 	struct __child *n;
-	int cap = __child_cap * 2;
-	int i;
+	size_t cap2, bytes;
+	int cap, i;
 
 	if (__child_cap >= CHILD_CAP_LIMIT_) return -1;
-	if (cap > CHILD_CAP_LIMIT_) cap = CHILD_CAP_LIMIT_;
-	n = __malloc((size_t)cap * sizeof *n);
+	if (!__size_mul_checked((size_t)__child_cap, 2, &cap2)) return -1;
+	cap = cap2 > CHILD_CAP_LIMIT_ ? CHILD_CAP_LIMIT_ : (int)cap2;
+	if (!__size_mul_checked((size_t)cap, sizeof *n, &bytes)) return -1;
+	n = __malloc(bytes);
 	if (!n) return -1;
 	for (i = 0; i < __child_cap; i++) n[i] = __children[i];
 	for (; i < cap; i++) n[i] = (struct __child){0};

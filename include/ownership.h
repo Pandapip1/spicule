@@ -55,6 +55,53 @@
 	__ownership_attr("qual:sentinel_exclude=" #value)
 #define blocks_dereference \
 	__ownership_attr("qual:blocks_dereference")
+/* Two parametric siblings of sentinel_exclude(value) above, for a PLAIN
+ * scalar (int/long) return value or parameter instead of a tokdef'd opaque
+ * handle. sentinel_exclude names the sentinel a whole nominal token FAMILY
+ * excludes (nl_catd's (nl_catd)-1, iconv_t's (iconv_t)-1, locale_t's
+ * (locale_t)0); integer_sentinel/long_sentinel instead name the sentinel
+ * ONE function's return, or ONE parameter, excludes -- the shape
+ * src/util/timeout.c's parse_duration() needed (a plain `long` return whose
+ * -1 means "unrepresentable duration", proven unchecked before a time_t
+ * cast only by hand, in commit 1c4fc3b2).
+ *
+ * Attach it exactly where fallible above already attaches, immediately
+ * before the declaration it describes:
+ *
+ *   integer_sentinel(-1)
+ *   long parse_duration(const char *text);
+ *
+ * or on one parameter, the same way withtok(...) attaches:
+ *
+ *   int consume(long value integer_sentinel(-1));
+ *
+ * tools/clang/TokenAlgebra.h's scalarSentinel() reads either spelling back
+ * off the Decl it was written on (a FunctionDecl for a return value, a
+ * ParmVarDecl for a parameter) using the exact same literal grammar
+ * sentinel_exclude(value) already parses (a bare NULL, or a base-10 integer
+ * that fits int64_t) -- see sentinelFromQualifier's own comment for why
+ * that parser is shared rather than reimplemented here.
+ * tools/clang/SizeCastChecker.cpp's ntlibc.IntegerSentinel checker requires
+ * every arithmetic (+ - * /), explicit-cast, or array/pointer-index use of
+ * a value carrying one of these to be on a path that has already proven
+ * the value is not that literal -- the same path-sensitive proof
+ * TokenAlgebra.h's splitOnExcludedSentinel already performs for
+ * sentinel_exclude, reused as-is rather than re-derived.
+ *
+ * integer_sentinel and long_sentinel are byte-for-byte the same mechanism
+ * under two names, so a reader can pick the name matching the annotated
+ * value's own declared width the same way readable_span/readable_elements
+ * in include/memory_tokens.h document byte vs. element units even though
+ * both compile to the same extent_at_least/element_extent machinery.
+ * There is deliberately no floating-point sibling yet: the proof goes
+ * through SValBuilder::makeIntVal, which only builds integer and pointer
+ * constants, and IEEE-754 equality has real semantics (NaN, signed zero)
+ * a literal integer comparison does not model -- a double_sentinel would
+ * need its own, separately-reasoned proof, not this one reused as-is. */
+#define integer_sentinel(value) \
+	__ownership_attr("qual:integer_sentinel=" #value)
+#define long_sentinel(value) \
+	__ownership_attr("qual:long_sentinel=" #value)
 /* The two thread-scoped verbs below attach a token operation to a bare
  * function declaration that has no natural parameter or return value to
  * hang a per-value withtok(...)/consume(...)/grant(...)/drop(...)
@@ -158,5 +205,32 @@
 	__ownership_attr("async_signal_safe")
 #define io_operation \
 	__ownership_attr("io_operation")
+/* A parameter-level marker for the strtol()/strtoul()/strtod()/...
+ * "endptr" shape: a T** at some parameter index K whose pointee, WHENEVER
+ * this function returns, the C standard requires to hold a pointer at or
+ * beyond wherever parameter 0's own T* pointed on entry -- never behind
+ * it, even on a completely failed conversion (then *endptr == parameter
+ * 0's own value, unchanged). This is a real, load-bearing contract
+ * (C11 7.22.1.1p5 and its strtoul/strtod/... siblings, all specified in
+ * the same terms), asserted here by hand exactly the way
+ * withtok(null_terminated) already asserts strlen()'s contract in
+ * string.h -- not independently reverified against these functions'
+ * bodies, which this project does not implement and Nature (or the host
+ * libc, if this codebase's own ntlibc doesn't provide it either) does.
+ *
+ * TotalityChecker.cpp's own recursive-descent-parser proof reads this
+ * back (see toleratedPointerReassign()) to recognize the extremely
+ * common `T *end; v = strtol(cursor, &end, base); cursor = end;` idiom
+ * as never moving a tracked parser cursor field BACKWARD -- which is all
+ * that idiom needs to be safe to fold into an already-established
+ * forward-progress proof from a witness elsewhere in the same
+ * recursive-descent step. It is deliberately not itself treated as a
+ * witness (a strict decrease): parameter 0 and *endptr are equal on a
+ * totally failed conversion, so by itself this call proves only "did not
+ * go backward", the same non-strict half of the proof a plain `x = x;`
+ * would contribute. Nothing else in this project's checkers reads this
+ * annotation. */
+#define endptr_advances \
+	__ownership_attr("qual:endptr_advances")
 
 #endif

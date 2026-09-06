@@ -35,14 +35,14 @@ long atol (const char *);
 long long atoll (const char *);
 double atof (const char *);
 
-float strtof (const char *__restrict, char **__restrict);
-double strtod (const char *__restrict, char **__restrict);
-long double strtold (const char *__restrict, char **__restrict);
+float strtof (const char *__restrict, char **__restrict endptr_advances);
+double strtod (const char *__restrict, char **__restrict endptr_advances);
+long double strtold (const char *__restrict, char **__restrict endptr_advances);
 
-long strtol (const char *__restrict, char **__restrict, int);
-unsigned long strtoul (const char *__restrict, char **__restrict, int);
-long long strtoll (const char *__restrict, char **__restrict, int);
-unsigned long long strtoull (const char *__restrict, char **__restrict, int);
+long strtol (const char *__restrict, char **__restrict endptr_advances, int);
+unsigned long strtoul (const char *__restrict, char **__restrict endptr_advances, int);
+long long strtoll (const char *__restrict, char **__restrict endptr_advances, int);
+unsigned long long strtoull (const char *__restrict, char **__restrict endptr_advances, int);
 
 int rand (void);
 void srand (unsigned);

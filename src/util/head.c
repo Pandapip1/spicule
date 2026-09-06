@@ -86,7 +86,8 @@ static int head_one(int fd, long n, const char *label)
 	return 0;
 }
 
-int __util_head_main(int argc, char **argv)
+int __util_head_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int i;
 	long n = 10;

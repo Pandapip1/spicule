@@ -380,12 +380,18 @@ static int spawn_common(pid_t *pid, const char *path,
 	 * (fa_push(), spawn_file_actions.c): fa->__len > 0 implies
 	 * fa->__actions != NULL by construction. */
 	if (fa && fa->__len) {
+		size_t svbytes, extrabytes;
 		cap = fa->__len;
-		sv = malloc((size_t)cap * sizeof *sv);
+		if (!__size_mul_checked((size_t)cap, sizeof *sv, &svbytes) ||
+		    !__size_mul_checked((size_t)cap, sizeof *extra, &extrabytes)) {
+			rc = ENOMEM;
+			goto out;
+		}
+		sv = malloc(svbytes);
 		/* At most one distinct __SPAWN_DUP2 target above 2 per action,
 		 * so `cap` is as much room as build_dup2_targets() below could
 		 * ever need -- see that function's own comment. */
-		extra = malloc((size_t)cap * sizeof *extra);
+		extra = malloc(extrabytes);
 		if (!sv || !extra) { rc = ENOMEM; goto out; }
 		for (i = 0; i < fa->__len; i++) {
 			rc = do_action(&fa->__actions[i], sv, &nsv, cap);

@@ -135,14 +135,17 @@ static char *id_path(int id, const char *suffix)
 	char *dir = dir_path();
 	char *path;
 	int n;
-	size_t dirlen;
+	size_t dirlen, tail, total;
 	if (!dir) return NULL;
 	dirlen = strlen(dir);
-	path = malloc(dirlen + 1 + 10 + strlen(suffix) + 1);
+	if (!__size_add_checked(1 + 10, strlen(suffix), &tail) ||
+	    !__size_add_checked(tail, 1, &tail) ||
+	    !__size_add_checked(dirlen, tail, &total)) { free(dir); return NULL; }
+	path = malloc(total);
 	if (!path) { free(dir); return NULL; }
 	memcpy(path, dir, dirlen);
 	free(dir);
-	n = snprintf(path + dirlen, 1 + 10 + strlen(suffix) + 1, "/%d%s", id, suffix);
+	n = snprintf(path + dirlen, tail, "/%d%s", id, suffix);
 	if (n < 0) { free(path); errno = EINVAL; return NULL; }
 	return path;
 }
@@ -272,7 +275,7 @@ static int find_by_key(key_t key, struct shm_meta *m)
 int shmget(key_t key, size_t size, int shmflg)
 {
 	__plat_handle_t lock;
-	char *dir, *ctrpath, *datapath;
+	char *dir, *ctrpath = 0, *datapath;
 	int id, fd, ctrfd;
 	struct shm_meta m;
 
@@ -305,10 +308,11 @@ int shmget(key_t key, size_t size, int shmflg)
 	dir = dir_path();
 	if (!dir) { __plat_named_mutant_release(lock); return -1; }
 	{
-		size_t dirlen = strlen(dir);
-		ctrpath = malloc(dirlen + sizeof "/next");
-		if (ctrpath) snprintf(ctrpath, dirlen + sizeof "/next",
-		    "%s/next", dir);
+		size_t dirlen = strlen(dir), total;
+		if (__size_add_checked(dirlen, sizeof "/next", &total)) {
+			ctrpath = malloc(total);
+			if (ctrpath) snprintf(ctrpath, total, "%s/next", dir);
+		}
 	}
 	free(dir);
 	if (!ctrpath) { __plat_named_mutant_release(lock); return -1; }

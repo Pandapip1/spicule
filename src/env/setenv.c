@@ -45,13 +45,13 @@ int __putenv(char *s, size_t l, char *owned)
 		if (!is_putenv(*e)) free(*e);
 		*e = s;
 	} else {
-		size_t n = env_count();
-		if (n > (size_t)-1 / sizeof(char *) - 2) {
+		size_t n = env_count(), total;
+		if (!__size_add_checked(n, 2, &total)) {
 			errno = ENOMEM;
 			free(owned);
 			return -1;
 		}
-		char **ne = (char **)realloc((void *)__environ, sizeof(char *) * (n + 2));
+		char **ne = (char **)reallocarray((void *)__environ, total, sizeof(char *));
 		if (!ne) { free(owned); return -1; }
 		ne[n] = s;
 		ne[n+1] = 0;
@@ -63,14 +63,16 @@ int __putenv(char *s, size_t l, char *owned)
 
 int setenv(const char *name, const char *value, int overwrite)
 {
-	size_t l1, l2;
+	size_t l1, l2, total;
 	char *s;
 	if (!name) { errno = EINVAL; return -1; }
 	l1 = strcspn(name, "=");
 	if (!l1 || name[l1]) { errno = EINVAL; return -1; }
 	if (!overwrite && getenv(name)) return 0;
 	l2 = strlen(value);
-	s = malloc(l1 + l2 + 2);
+	if (!__size_add_checked(l1, l2, &total) ||
+	    !__size_add_checked(total, 2, &total)) { errno = ENOMEM; return -1; }
+	s = malloc(total);
 	if (!s) return -1;
 	memcpy(s, name, l1);
 	s[l1] = '=';
@@ -80,10 +82,11 @@ int setenv(const char *name, const char *value, int overwrite)
 
 int putenv(char *s)
 {
-	size_t l = strcspn(s, "=");
+	size_t l = strcspn(s, "="), total;
 	char **np;
 	if (!l || !s[l]) return unsetenv(s);
-	np = (char **)realloc((void *)putenv_strings, sizeof(char *) * (nputenv + 1));
+	if (!__size_add_checked(nputenv, 1, &total)) return -1;
+	np = (char **)reallocarray((void *)putenv_strings, total, sizeof(char *));
 	if (!np) return -1;
 	putenv_strings = np;
 	putenv_strings[nputenv++] = s;

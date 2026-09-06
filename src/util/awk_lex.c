@@ -46,6 +46,7 @@
 #include <ctype.h>
 #include "awk_priv.h"
 #include "ownership_stubs.h"
+#include "util.h"
 
 struct kw { const char *name; enum awk_toktype type; };
 static const struct kw keywords[] = {
@@ -116,7 +117,10 @@ static void skip_filler(struct awk_lexer *lx)
 
 static char *dupn(const char *s, size_t n)
 {
-	char *r = malloc(n + 1);
+	char *r;
+	size_t bytes;
+	if (!__util_size_add(n, 1, &bytes)) return NULL;
+	r = malloc(bytes);
 	if (!r) return NULL;
 	__ownership_readable_span(s, n);
 	memcpy(r, s, n);
@@ -128,11 +132,15 @@ static char *dupn(const char *s, size_t n)
  * on allocation failure (buffer left usable, just not grown). */
 static int growbuf(char **buf, size_t *cap, size_t n)
 {
-	if (n + 1 <= *cap) return 1;
 	{
-		size_t newcap = *cap ? *cap * 2 : 32;
+		size_t need, newcap;
 		char *g;
-		while (newcap < n + 1) newcap *= 2;
+		if (!__util_size_add(n, 1, &need)) return 0;
+		if (need <= *cap) return 1;
+		newcap = *cap ? *cap : 32;
+		while (newcap < need) {
+			if (!__util_size_mul(newcap, 2, &newcap)) return 0;
+		}
 		g = realloc(*buf, newcap);
 		if (!g) return 0;
 		*buf = g;

@@ -47,10 +47,11 @@ int scandir(const char *path, struct dirent ***res,
 		if (filter && !filter(d)) continue;
 
 		if (n == cap) {
-			size_t newcap;
+			size_t newcap, newbytes;
 			if (!__array_next_capacity(cap, n, 1, 16,
 			    sizeof *list, &newcap)) { errno = ENOMEM; goto fail; } // NOLINT(bugprone-sizeof-expression) -- list is dirent**, *list is dirent*, the array holds pointers
-			struct dirent **nl = (struct dirent **)__malloc(newcap * sizeof *nl); // NOLINT(bugprone-sizeof-expression) -- nl is dirent**, *nl is dirent*, the array holds pointers
+			newbytes = newcap * sizeof *list; // NOLINT(bugprone-sizeof-expression) -- already proven <= SIZE_MAX by __array_next_capacity's own element_size bound above
+			struct dirent **nl = (struct dirent **)__malloc(newbytes);
 			if (!nl) goto fail;
 			if (list) memcpy((void *)nl, (const void *)list, n * sizeof *nl); // NOLINT(bugprone-sizeof-expression)
 			__free((void *)list);

@@ -3486,3 +3486,74 @@ unsigned z3_unsupported_sort_is_unproved(unsigned i, double limit)
 	}
 	return i;
 }
+
+/* Soundness regressions for the three general fixes paired with this
+ * file's safe.c eval_cursor chain (precedingStatements()'s
+ * VarDecl-initializer climb, toleratedPointerReassign(), and always
+ * tolerating a recognized forward-or-unchanged write even with no
+ * witness in hand -- see fieldProgressRelation()'s own comment). None
+ * of the three is a witness by itself; each one must still leave a
+ * call genuinely lacking any real advance exactly as unproved as
+ * before. */
+long strtol(const char *, char **
+	__attribute__((annotate("qual:endptr_advances"))), int);
+
+/* The precedingStatements() VarDecl-initializer climb now finds
+ * "int r = eval_declare_and_call_no_advance(ev);"'s enclosing
+ * DeclStmt -- but there is no dominating advance anywhere in this
+ * function for it to find there, so the climb fixing precedingStatements()
+ * must not, by itself, manufacture a witness out of nothing. */
+struct eval_cursor_no_advance {
+	const char *p;
+};
+
+static int eval_declare_and_call_no_advance(struct eval_cursor_no_advance *ev)
+{
+	if (*ev->p == '(') {
+		int r = eval_declare_and_call_no_advance(ev); /* totality-expect */
+		return r;
+	}
+	return 0;
+}
+
+/* Same establishing-call shape as safe.c's eval_primary() digit branch,
+ * but the value committed into mine->p was read from a DIFFERENT
+ * cursor's own field (other->p), not mine->p's own current value --
+ * toleratedPointerReassign() requires the establishing call's first
+ * argument to read exactly Base->Field, precisely so a value with no
+ * relationship to the field actually being reassigned cannot be
+ * laundered as a safe advance just by sitting next to a real
+ * endptr_advances call. */
+struct eval_cursor_pair {
+	const char *p;
+};
+
+static int eval_swapped_endptr(struct eval_cursor_pair *mine,
+	struct eval_cursor_pair *other)
+{
+	char *end;
+	long v = strtol(other->p, &end, 0);
+	mine->p = end;
+	if (v)
+		return eval_swapped_endptr(mine, other); /* totality-expect */
+	return 0;
+}
+
+/* toleratedPointerReassign() is deliberately never itself a witness (the
+ * standard leaves *endptr == the input pointer, unchanged, on a
+ * completely failed conversion) -- a function whose ONLY field write
+ * anywhere is this idiom, with no other dominating advance, must stay
+ * unproved even though nothing here is adversarial either. */
+struct eval_cursor_only_endptr {
+	const char *p;
+};
+
+static int eval_only_endptr(struct eval_cursor_only_endptr *ev)
+{
+	char *end;
+	long v = strtol(ev->p, &end, 0);
+	ev->p = end;
+	if (v)
+		return eval_only_endptr(ev); /* totality-expect */
+	return 0;
+}

@@ -1613,7 +1613,8 @@ static void ed_free(struct ed *ed)
 
 /* ==== entry point ========================================================== */
 
-int __util_ed_main(int argc, char **argv)
+int __util_ed_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	struct ed ed;
 	struct sigaction sa, old_sa, sa_hup, old_sa_hup;

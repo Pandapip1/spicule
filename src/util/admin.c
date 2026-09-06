@@ -142,10 +142,11 @@ static int read_lines(FILE *f, struct line_array *out)
 
 	memset(out, 0, sizeof *out);
 	while ((got = getline(&buf, &bufcap, f)) > 0) {
-		size_t len = (size_t)got;
+		size_t len = (size_t)got, bytes;
 		char *copy;
 		if (buf[len - 1] == '\n') len--;
-		copy = malloc(len + 1);
+		if (!__util_size_add(len, 1, &bytes)) { free(buf); line_array_free(out); return 0; }
+		copy = malloc(bytes);
 		if (!copy) { free(buf); line_array_free(out); return 0; }
 		for (size_t i = 0; i < len; i++) copy[i] = buf[i];
 		copy[len] = 0;
@@ -248,7 +249,8 @@ static int create_one(const char *path, const struct line_array *body,
 	return 0;
 }
 
-int __util_admin_main(int argc, char **argv)
+int __util_admin_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int have_i = 0, have_n = 0, have_t = 0, have_y = 0;
 	const char *iname = 0, *tname = 0, *ycomment = 0;

@@ -574,7 +574,8 @@ static int run_one_pass(const char *format, struct argcur *a)
 	return 0;
 }
 
-int __util_printf_main(int argc, char **argv)
+int __util_printf_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	struct argcur a;
 	const char *format;

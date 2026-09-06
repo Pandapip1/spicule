@@ -575,7 +575,7 @@ static int confirm_exec(char *const argv2[])
 static int do_exec_semi(struct node *n, const char *path) __attribute__((nonnull(1, 2)));
 static int do_exec_semi(struct node *n, const char *path)
 {
-	char **argv2 = malloc((n->exec_argc + 1) * sizeof(char *));
+	char **argv2 = __util_mallocarray((size_t)n->exec_argc + 1, sizeof(char *));
 	size_t i;
 	int rc;
 	if (!argv2) { g_find.exit_status = 1; return 0; }
@@ -688,7 +688,7 @@ static void flush_plus(struct node *n)
 				bytes += strlen(n->acc[j]) + 1;
 				j++;
 			}
-			argv2 = malloc((fixed_argc + (j - i) + 1) * sizeof(char *));
+			argv2 = __util_mallocarray(fixed_argc + (j - i) + 1, sizeof(char *));
 			if (!argv2) { g_find.exit_status = 1; return; }
 			for (k = 0; k < fixed_argc; k++) argv2[k] = (char *)n->exec_argv[k];
 			for (k = 0; k < j - i; k++) argv2[fixed_argc + k] = n->acc[i + k];
@@ -702,7 +702,8 @@ static void flush_plus(struct node *n)
 	flush_plus(n->b);
 }
 
-int __util_find_main(int argc, char **argv)
+int __util_find_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	const char *paths[128];
 	int npaths = 0, i = 1, pi;

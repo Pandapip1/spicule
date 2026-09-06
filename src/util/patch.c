@@ -540,7 +540,11 @@ static int parse_name_line(const struct pline *pl, const char *pfx, char **out)
 	p = pl->text + plen;
 	namelen = pl->len - plen;
 	for (i = 0; i < namelen; i++) if (p[i] == '\t') { namelen = i; break; }
-	copy = malloc(namelen + 1);
+	{
+		size_t bytes;
+		if (!__util_size_add(namelen, 1, &bytes)) return 0;
+		copy = malloc(bytes);
+	}
 	if (!copy) return 0;
 	for (i = 0; i < namelen; i++) copy[i] = p[i];
 	copy[namelen] = 0;
@@ -1217,7 +1221,8 @@ struct patch_opts {
 	long p;
 };
 
-int __util_patch_main(int argc, char **argv)
+int __util_patch_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	struct patch_opts o;
 	int argi = 1;

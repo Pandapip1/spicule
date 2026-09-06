@@ -108,7 +108,8 @@ static double tv_diff(struct timeval a, struct timeval b)
 	return (double)(b.tv_sec - a.tv_sec) + (double)(b.tv_usec - a.tv_usec) / 1e6;
 }
 
-int __util_time_main(int argc, char **argv)
+int __util_time_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int i = 1;
 	char *resolved;

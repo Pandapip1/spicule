@@ -5,7 +5,8 @@
  * ignoring its arguments." */
 #include "util.h"
 
-int __util_true_main(int argc, char **argv)
+int __util_true_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	(void)argc;
 	(void)argv;

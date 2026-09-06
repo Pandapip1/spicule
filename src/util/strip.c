@@ -337,6 +337,7 @@ static int strip_elf(const unsigned char *buf, size_t size,
 		uint64_t pos;
 		uint32_t kept_shnum;
 		Elf64_Ehdr new_eh;
+		int compose_ok = 1;
 
 		if (!ob) {
 			free(phdrs); free(shdrs); free(removed); free(map); free(new_off);
@@ -345,11 +346,28 @@ static int strip_elf(const unsigned char *buf, size_t size,
 		memcpy(ob, buf, (size_t)load_limit);
 		pos = load_limit;
 
-		for (i = 0; i < eh.e_shnum; i++) {
+		for (i = 0; i < eh.e_shnum && compose_ok; i++) {
 			Elf64_Shdr *sh = &shdrs[i];
+			uint64_t aligned;
 			if (sh->sh_offset < load_limit) continue; /* already covered verbatim */
 			if (removed[i]) continue; /* its bytes are simply never copied */
-			pos = align_up(pos, sh->sh_addralign ? sh->sh_addralign : 1);
+			/* sh_addralign is an attacker-controlled field straight out
+			 * of this section's own header; align_up() with no upper
+			 * bound on it can walk `pos` arbitrarily far past this
+			 * `cap`-byte buffer (or, if the addition inside align_up()
+			 * wraps, arbitrarily backward over already-written bytes) --
+			 * either way the memcpy() below would then read/write
+			 * outside what was proven safe. Treat an alignment that
+			 * would do either as exactly the "cannot prove safe" case
+			 * this file's own header banner requires refusing: abort the
+			 * whole strip and fall back to the untouched verbatim copy. */
+			aligned = align_up(pos, sh->sh_addralign ? sh->sh_addralign : 1);
+			if (aligned < pos || aligned > cap ||
+			    (sh->sh_type != SHT_NOBITS && sh->sh_size > cap - aligned)) {
+				compose_ok = 0;
+				break;
+			}
+			pos = aligned;
 			new_off[i] = pos;
 			/* SHT_NOBITS (.bss-like) sections have no file-resident
 			 * data at all -- nothing to copy, just record a position. */
@@ -359,9 +377,25 @@ static int strip_elf(const unsigned char *buf, size_t size,
 			}
 		}
 
-		pos = align_up(pos, 8);
 		kept_shnum = 0;
 		for (i = 0; i < eh.e_shnum; i++) if (!removed[i]) kept_shnum++;
+
+		if (compose_ok) {
+			uint64_t hdrpos = align_up(pos, 8);
+			uint64_t hdr_bytes = (uint64_t)kept_shnum * ELF_SHDR_SIZE;
+			/* Same proof obligation as above, now for the shrunk
+			 * section header table's own placement. */
+			if (hdrpos < pos || hdrpos > cap || hdr_bytes > cap - hdrpos)
+				compose_ok = 0;
+			else
+				pos = hdrpos;
+		}
+
+		if (!compose_ok) {
+			free(ob);
+			free(phdrs); free(shdrs); free(removed); free(map); free(new_off);
+			return 0; /* untrusted sh_addralign made the layout unprovable -- untouched */
+		}
 
 		{
 			uint32_t out_i = 0;

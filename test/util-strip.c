@@ -335,6 +335,175 @@ static void test_strip_dash_o(void)
 	check_stripped_binary_still_runs("scratch/cat_stripped");
 }
 
+/* ==== malicious sh_addralign: heap OOB-write regression =================
+ *
+ * A from-scratch, hand-crafted ELF64 ET_DYN (never produced by any real
+ * toolchain, but a shape strip(1) must still survive -- this is exactly
+ * the untrusted-input class this file's own header banner exists for):
+ * one PT_LOAD phdr covering [0,120), then three sections entirely past
+ * that load_limit -- ".comment" (in the removal set, so the file has
+ * *something* to remove and src/util/strip.c's own "nothing matched"
+ * early-out does not short-circuit past the code this test means to
+ * exercise), ".evil" (an ordinary non-alloc PROGBITS section, kept
+ * because its name is not in the removal set, whose sh_addralign is set
+ * to 2^50 -- see the comment on that field below for why 2^50 and not
+ * some other huge value), and ".shstrtab".
+ *
+ * Before src/util/strip.c bounded align_up()'s result against the
+ * output buffer's own size, compacting ".evil" into the shrunk output
+ * walked the write cursor straight to a wild offset and memcpy()'d 4
+ * bytes there -- an out-of-bounds heap write, reliably a SIGSEGV for an
+ * offset this large since that address is never mapped. Because strip
+ * runs as a real child process here (via __spawn()+waitpid(), see run()
+ * above), that crash surfaces as a nonzero exit status from run()
+ * without needing ASan: this test would have failed outright on the
+ * pre-fix binary. Post-fix, an sh_addralign this file cannot prove safe
+ * to honor makes the whole strip refuse (POSIX never promises removal
+ * happens, only that it is correct when it does) -- so the assertion
+ * below is the strongest available: the output is byte-for-byte the
+ * untouched input.
+ */
+static void put16(unsigned char *p, uint16_t v) { p[0] = (unsigned char)v; p[1] = (unsigned char)(v >> 8); }
+static void put32(unsigned char *p, uint32_t v)
+{
+	p[0] = (unsigned char)v; p[1] = (unsigned char)(v >> 8);
+	p[2] = (unsigned char)(v >> 16); p[3] = (unsigned char)(v >> 24);
+}
+static void put64(unsigned char *p, uint64_t v)
+{
+	int i;
+	for (i = 0; i < 8; i++) p[i] = (unsigned char)(v >> (8 * i));
+}
+
+#define EVIL_ELF_SIZE 410
+
+/* Fills `buf` (must hold EVIL_ELF_SIZE bytes) with the file described
+ * above and returns its size. Every offset/size here is hand-derived
+ * and cross-checked against the layout comment -- see field-by-field
+ * annotations below. */
+static size_t build_evil_align_elf(unsigned char *buf)
+{
+	unsigned char *sh = buf + 154; /* section header table base */
+
+	memset(buf, 0, EVIL_ELF_SIZE);
+
+	/* Ehdr */
+	buf[0] = 0x7f; buf[1] = 'E'; buf[2] = 'L'; buf[3] = 'F';
+	buf[4] = 2; /* ELFCLASS64 */
+	buf[5] = 1; /* ELFDATA2LSB */
+	buf[6] = 1; /* EI_VERSION */
+	put16(buf + 16, 3);   /* e_type = ET_DYN */
+	put16(buf + 18, 0xb7);/* e_machine: irrelevant to strip.c, arbitrary */
+	put32(buf + 20, 1);   /* e_version */
+	put64(buf + 32, 64);  /* e_phoff */
+	put64(buf + 40, 154); /* e_shoff */
+	put16(buf + 52, 64);  /* e_ehsize */
+	put16(buf + 54, 56);  /* e_phentsize */
+	put16(buf + 56, 1);   /* e_phnum */
+	put16(buf + 58, 64);  /* e_shentsize */
+	put16(buf + 60, 4);   /* e_shnum */
+	put16(buf + 62, 3);   /* e_shstrndx (the ".shstrtab" section, idx 3) */
+
+	/* Phdr[0]: PT_LOAD covering [0,120) -- load_limit becomes 120 */
+	put32(buf + 64 + 0, 1);    /* p_type = PT_LOAD */
+	put32(buf + 64 + 4, 5);    /* p_flags = R+X */
+	put64(buf + 64 + 32, 120); /* p_filesz */
+	put64(buf + 64 + 40, 120); /* p_memsz */
+	put64(buf + 64 + 48, 0x1000); /* p_align */
+
+	/* Tail-region payload bytes, both past load_limit */
+	memcpy(buf + 120, "COMM", 4); /* .comment's 4 bytes */
+	memcpy(buf + 124, "EVIL", 4); /* .evil's 4 bytes */
+
+	/* shstrtab content: file offset 128, logical size 26 */
+	buf[128] = 0;
+	memcpy(buf + 129, ".comment", 9);   /* logical offset 1, incl NUL */
+	memcpy(buf + 138, ".evil", 6);      /* logical offset 10, incl NUL */
+	memcpy(buf + 144, ".shstrtab", 10); /* logical offset 16, incl NUL */
+
+	/* Section header [0]: SHT_NULL, all zero (already memset) */
+
+	/* Section header [1]: ".comment" -- non-alloc, name in the removal
+	 * set, offset (120) at load_limit: a legitimate removal candidate,
+	 * so the file has something to strip and the "nothing matched"
+	 * short-circuit does not bypass the compose loop below. */
+	put32(sh + 64 + 0, 1);    /* sh_name -> ".comment" */
+	put32(sh + 64 + 4, 1);    /* sh_type = SHT_PROGBITS */
+	put64(sh + 64 + 24, 120); /* sh_offset */
+	put64(sh + 64 + 32, 4);   /* sh_size */
+	put64(sh + 64 + 48, 1);   /* sh_addralign */
+
+	/* Section header [2]: ".evil" -- the attack. An ordinary non-alloc
+	 * PROGBITS section (kept: its name is not in the removal set) with
+	 * a huge sh_addralign, straight out of the section header, no
+	 * different from any other attacker-controlled field here. */
+	put32(sh + 128 + 0, 10);   /* sh_name -> ".evil" */
+	put32(sh + 128 + 4, 1);    /* sh_type = SHT_PROGBITS */
+	put64(sh + 128 + 24, 124); /* sh_offset */
+	put64(sh + 128 + 32, 4);   /* sh_size */
+	/* 2^50, not something like 2^62: on AArch64 Linux, userspace pointers
+	 * carry an ignored top BYTE (bits 63:56, "Top-Byte Ignore") that the
+	 * MMU strips before translation, so an offset confined to that byte
+	 * (e.g. 2^62) silently folds back into the original allocation
+	 * instead of faulting -- confirmed empirically while building this
+	 * regression test: 2^62 produced no crash pre-fix on an aarch64
+	 * host (the CPU quietly reused the tagged-away address), while 2^50
+	 * -- outside the ignored byte, well past any 48-bit user VA range --
+	 * reliably SIGSEGV'd the unfixed code on the same host. 2^50 is
+	 * exactly as reachable an sh_addralign value as 2^62 (both are just
+	 * an ordinary section header field an attacker fully controls); it
+	 * is simply the one that can't be shrugged off as an architecture
+	 * quirk on this project's own aarch64 build target. */
+	put64(sh + 128 + 48, (uint64_t)1 << 50); /* sh_addralign: the attack */
+
+	/* Section header [3]: ".shstrtab" */
+	put32(sh + 192 + 0, 16);   /* sh_name -> ".shstrtab" */
+	put32(sh + 192 + 4, 3);    /* sh_type = SHT_STRTAB */
+	put64(sh + 192 + 24, 128); /* sh_offset */
+	put64(sh + 192 + 32, 26);  /* sh_size */
+	put64(sh + 192 + 48, 1);   /* sh_addralign */
+
+	return EVIL_ELF_SIZE;
+}
+
+static void test_strip_survives_malicious_sh_addralign(void)
+{
+	unsigned char orig[EVIL_ELF_SIZE];
+	unsigned char got[EVIL_ELF_SIZE + 1];
+	size_t n;
+	FILE *f;
+
+	build_evil_align_elf(orig);
+
+	f = fopen("scratch/evil_align.bin", "wb");
+	CHECK(f != 0);
+	if (!f) return;
+	CHECK(fwrite(orig, 1, EVIL_ELF_SIZE, f) == EVIL_ELF_SIZE);
+	fclose(f);
+
+	{
+		char *argv[] = { (char *)"strip", (char *)"scratch/evil_align.bin", 0 };
+		/* The real assertion: strip must not crash (a wild OOB memcpy()
+		 * driven by the untrusted sh_addralign would SIGSEGV the child
+		 * process spawned by run(), which surfaces here as a nonzero
+		 * exit status). */
+		CHECK(run(strip_path, argv) == 0);
+	}
+
+	/* It also must not silently corrupt the file: unable to prove the
+	 * layout safe, it must leave the input byte-for-byte unchanged. */
+	CHECK(file_size("scratch/evil_align.bin") == EVIL_ELF_SIZE);
+	f = fopen("scratch/evil_align.bin", "rb");
+	CHECK(f != 0);
+	if (f) {
+		n = fread(got, 1, sizeof got, f);
+		fclose(f);
+		CHECK(n == EVIL_ELF_SIZE && memcmp(got, orig, EVIL_ELF_SIZE) == 0);
+	}
+
+	unlink("scratch/evil_align.bin");
+}
+
 /* ==== usage errors ========================================================= */
 
 static void test_strip_usage_errors(void)
@@ -371,6 +540,7 @@ static void rmtree_scratch(void)
 	unlink("scratch/cat_copy"); unlink("scratch/cat_copy2");
 	unlink("scratch/cat_orig"); unlink("scratch/cat_stripped");
 	unlink("scratch/strip_input.txt"); unlink("scratch/not_an_object.txt");
+	unlink("scratch/evil_align.bin");
 	unlink("scratch/.keep");
 	rmdir("scratch");
 }
@@ -413,6 +583,7 @@ int main(int argc, char **argv)
 	test_strip_still_runs();
 	test_strip_builtin_agreement();
 	test_strip_dash_o();
+	test_strip_survives_malicious_sh_addralign();
 	test_strip_usage_errors();
 	test_strip_missing_file();
 	test_strip_non_object();

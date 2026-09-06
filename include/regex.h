@@ -76,7 +76,7 @@ int regcomp(regex_t *__restrict construct(regex_compiled), const char *__restric
     __attribute__((nonnull(1, 2)));
 /* pmatch is deliberately not marked nonnull: it is defensively checked,
  * matching POSIX's "nmatch == 0" convention for "no match offsets wanted". */
-int regexec(const regex_t *__restrict handle(regex_compiled), const char *__restrict, size_t, regmatch_t *__restrict, int)
+int regexec(const regex_t *__restrict handle(regex_compiled), const char *__restrict withtok(null_terminated), size_t, regmatch_t *__restrict, int)
     __attribute__((nonnull(1, 2)));
 /* preg is unused here -- POSIX permits an implementation to ignore it --
  * and is deliberately left unannotated: regerror's standard calling

@@ -77,6 +77,11 @@ static int gbuf_push(struct gbuf *b, char c)
 		b->d = nd;
 		b->cap = nc;
 	}
+	/* b->cap > 0 at this point (just grown above, or already grown by a
+	 * prior call and never reset), hence b->d != NULL -- the same
+	 * cross-call growable-array invariant as this project's other
+	 * growable arrays (e.g. src/util/find.c's g_find.pruned). */
+	__ownership_pointer_nonnull(b->d);
 	b->d[b->n++] = c;
 	return 0;
 }
@@ -144,6 +149,13 @@ static int copy_squoted(const char **pp, struct gbuf *b) __attribute__((nonnull(
 static int copy_squoted(const char **pp, struct gbuf *b)
 {
 	const char *p = *pp;
+	/* Every real call site passes the address of a live cursor already
+	 * positioned within an in-progress scan of a NUL-terminated buffer
+	 * (scan_word()'s own p, or copy_balanced()'s own p below) -- *pp is
+	 * genuinely never NULL, but that fact does not survive the T**
+	 * parameter's own pointee, which __attribute__((nonnull(1))) above
+	 * does not cover (it only proves pp itself nonnull, not *pp). */
+	__ownership_pointer_nonnull(p);
 	if (gbuf_push(b, *p)) return -1;
 	p++;
 	while (*p && *p != '\'') { if (gbuf_push(b, *p)) return -1; p++; }
@@ -158,6 +170,8 @@ static int copy_dquoted(const char **pp, struct gbuf *b) __attribute__((nonnull(
 static int copy_dquoted(const char **pp, struct gbuf *b)
 {
 	const char *p = *pp;
+	/* see copy_squoted()'s own comment on *pp's pointee. */
+	__ownership_pointer_nonnull(p);
 	if (gbuf_push(b, *p)) return -1;
 	p++;
 	while (*p && *p != '"') {
@@ -181,10 +195,20 @@ static int copy_balanced(const char **pp, struct gbuf *b, char open, char close)
 {
 	const char *p = *pp;
 	int depth = 1;
+	/* see copy_squoted()'s own comment on *pp's pointee. */
+	__ownership_pointer_nonnull(p);
 	if (gbuf_push(b, *p)) return -1;
 	p++;
 	while (depth > 0) {
-		char c = *p;
+		char c;
+		/* p only ever walks forward through the same live,
+		 * NUL-terminated buffer *pp originally pointed into (see this
+		 * function's own comment above), genuinely never NULL at any
+		 * point in this loop -- restated each iteration since neither
+		 * the loop's own back-edge nor the copy_squoted()/copy_dquoted()
+		 * calls below (which take p's address) let that fact survive. */
+		__ownership_pointer_nonnull(p);
+		c = *p;
 		if (!c) return -1;
 		if (c == '\\' && p[1]) { if (gbuf_push(b, c) || gbuf_push(b, p[1])) return -1; p += 2; continue; }
 		if (c == '\'') { if (copy_squoted(&p, b)) return -1; continue; }
@@ -204,6 +228,8 @@ static int copy_backquoted(const char **pp, struct gbuf *b) __attribute__((nonnu
 static int copy_backquoted(const char **pp, struct gbuf *b)
 {
 	const char *p = *pp;
+	/* see copy_squoted()'s own comment on *pp's pointee. */
+	__ownership_pointer_nonnull(p);
 	if (gbuf_push(b, *p)) return -1;
 	p++;
 	while (*p && *p != '`') {
@@ -347,7 +373,16 @@ static int drain_heredocs(struct lexer *lx)
 	lx->pending_head = lx->pending_tail = 0;
 	while (h) {
 		struct pending_hd *next = h->next;
-		char *lit = strip_delim(h->redir->word, &h->redir->heredoc_quoted);
+		char *lit;
+		/* h->redir is set exactly once, in parse_redir() right after a
+		 * checked malloc() (the only path that ever enqueues a
+		 * pending_hd node at all), and h->redir->word is set right
+		 * after that, from a checked xstrdup() -- both genuinely never
+		 * NULL for any node reachable from lx->pending_head, but that
+		 * fact does not survive the struct field chain this
+		 * per-function analysis cannot see through. */
+		__ownership_pointer_nonnull(h->redir);
+		lit = strip_delim(h->redir->word, &h->redir->heredoc_quoted);
 		size_t litlen;
 		struct gbuf body = {0, 0, 0};
 		if (!lit) { lex_errf(lx, "out of memory"); __free(h); h = next; continue; }
@@ -361,7 +396,16 @@ static int drain_heredocs(struct lexer *lx)
 			const char *eol = line;
 			const char *cmp;
 			size_t linelen, cmplen;
-			while (*eol && *eol != '\n') eol++;
+			/* eol starts at lx->p (see next_raw_token()'s own comment on
+			 * lx->p being genuinely never NULL) and only ever walks
+			 * forward within that same buffer -- restated at loop entry
+			 * since the loop's own back-edge does not carry the fact
+			 * forward. */
+			__ownership_pointer_nonnull(eol);
+			while (*eol && *eol != '\n') {
+				eol++;
+				__ownership_pointer_nonnull(eol);
+			}
 			linelen = (size_t)(eol - line);
 			cmp = line; cmplen = linelen;
 			if (h->dash) while (cmplen && *cmp == '\t') { cmp++; cmplen--; }
@@ -422,7 +466,13 @@ static char *scan_word(struct lexer *lx)
 	enum { Q_NONE, Q_SINGLE, Q_DOUBLE } q = Q_NONE;
 	const char *p = lx->p;
 	for (;;) {
-		char c = *p;
+		char c;
+		/* p only ever walks forward through lx->p's own live,
+		 * NUL-terminated buffer (see next_raw_token()'s own comment on
+		 * lx->p) -- genuinely never NULL at any point in this loop,
+		 * a fact that does not survive the loop's own back-edge. */
+		__ownership_pointer_nonnull(p);
+		c = *p;
 		if (q == Q_NONE) {
 			if (c == 0 || c == '\n' || c == ' ' || c == '\t' || strchr("|&;()<>{}", c)) break;
 			if (c == '\\' && p[1] == '\n') { p += 2; continue; }
@@ -489,6 +539,16 @@ static struct token next_raw_token(struct lexer *lx) __attribute__((nonnull(1)))
 static struct token next_raw_token(struct lexer *lx)
 {
 	for (;;) {
+		/* lx->p is set exactly once, in __sh_parse(), from that
+		 * function's own script-text parameter (never NULL in any real
+		 * caller -- script.c/execute.c only ever pass a real, already-
+		 * read script buffer), and every later assignment
+		 * (lx->p++/lx->p = eol + 1/lx->p = p in this file) only ever
+		 * advances it within that same NUL-terminated buffer, so it is
+		 * genuinely never NULL for this lexer's whole lifetime -- a fact
+		 * that does not survive a struct field read this per-function
+		 * analysis cannot see through. */
+		__ownership_pointer_nonnull(lx->p);
 		char c = lx->p[0];
 		if (c == ' ' || c == '\t') { lx->p++; continue; }
 		if (c == '\\' && lx->p[1] == '\n') { lx->p += 2; continue; }
@@ -542,6 +602,11 @@ static struct token next_raw_token(struct lexer *lx)
 			len = strlen(w);
 			alldig = len > 0;
 			for (i = 0; i < len; i++) if (!isdigit((unsigned char)w[i])) { alldig = 0; break; }
+			/* see this function's own comment above on lx->p -- restated
+			 * again here since the scan_word(lx) call just above takes
+			 * lx itself by pointer, which does not let that earlier fact
+			 * survive. */
+			__ownership_pointer_nonnull(lx->p);
 			if (alldig && (*lx->p == '<' || *lx->p == '>')) {
 				/* 2.10.1 puts no length limit on an IO_NUMBER, but the value
 				 * has to fit a redirection's `fd`, an int. Accumulating it
@@ -1051,8 +1116,18 @@ static struct sh_command *parse_funcdef(struct parser *p, struct sh_command *cmd
 	 * descent parser's shape, not in any one function's local
 	 * reasoning. */
 	if (unsafe_assume_shared_provenance(end < start)) end = start;
+	/* p->cur.start is set exactly once per token, in advance() from
+	 * lx->tokstart (see next_raw_token()'s own comment on lx->p),
+	 * genuinely never NULL for any token this parser ever produces --
+	 * so both start and end (each just a local copy of p->cur.start at
+	 * a different point) are never NULL either, but that fact does not
+	 * survive this loop's own back-edge. */
+	__ownership_pointer_nonnull(end);
 	while (unsafe_assume_shared_provenance(end > start) &&
-	      isspace((unsigned char)end[-1])) end--;
+	      isspace((unsigned char)end[-1])) {
+		end--;
+		__ownership_pointer_nonnull(end);
+	}
 
 	cmd->u.funcdef.name = fname;
 	cmd->u.funcdef.func_text =

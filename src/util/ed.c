@@ -121,6 +121,7 @@
 #include <regex.h>
 #include <unistd.h>
 #include "util.h"
+#include "ownership_stubs.h" /* __ownership_pointer_nonnull(): struct ed's own char **lines field (and struct linesrc's char **list) are genuinely non-NULL by construction whenever their own size field is nonzero, but that fact does not survive a struct field read this checker's per-function analysis cannot see through -- see each read site's own comment below. */
 
 /* ==== signal-safety plumbing (see the header comment above) ============= */
 
@@ -371,6 +372,14 @@ static void buf_remove_range_nofree(struct ed *ed, long from, long to) __attribu
 static void buf_remove_range_nofree(struct ed *ed, long from, long to)
 {
 	size_t at0 = (size_t)(from - 1), count = (size_t)(to - from + 1);
+	/* ed->lines is only ever non-NULL exactly when ed->nlines > 0 (every
+	 * assignment site sets them together -- buf_reserve()'s realloc,
+	 * do_undo()'s/save_undo_snapshot()'s swap, and cmd_e/cmd_r's own
+	 * read_lines_from_file() result), and this loop's own bound
+	 * (i + count < ed->nlines) cannot hold unless ed->nlines > 0 -- a
+	 * fact that does not survive a struct field read this per-function
+	 * analysis cannot see through. */
+	__ownership_pointer_nonnull(ed->lines);
 	for (size_t i = at0; i + count < ed->nlines; i++)
 		ed->lines[i] = ed->lines[i + count];
 	ed->nlines -= count;
@@ -381,6 +390,10 @@ static void buf_delete_range(struct ed *ed, long from, long to) __attribute__((n
 static void buf_delete_range(struct ed *ed, long from, long to)
 {
 	long i;
+	/* from <= to <= ed->nlines (caller-validated 1-based range), so this
+	 * loop only runs when ed->nlines > 0 -- see
+	 * buf_remove_range_nofree()'s own comment above. */
+	__ownership_pointer_nonnull(ed->lines);
 	for (i = from; i <= to; i++) free(ed->lines[i - 1]);
 	buf_remove_range_nofree(ed, from, to);
 }
@@ -405,6 +418,9 @@ static int save_undo_snapshot(struct ed *ed)
 	if (ed->nlines) {
 		copy = __util_mallocarray(ed->nlines, sizeof *copy);
 		if (!copy) { ed->u_valid = 0; return 0; }
+		/* ed->nlines > 0 here implies ed->lines != NULL -- see
+		 * buf_remove_range_nofree()'s own comment. */
+		__ownership_pointer_nonnull(ed->lines);
 		for (i = 0; i < ed->nlines; i++) {
 			copy[i] = strdup(ed->lines[i]);
 			if (!copy[i]) { while (i-- > 0) free(copy[i]); free(copy); ed->u_valid = 0; return 0; }
@@ -431,6 +447,9 @@ static int do_undo(struct ed *ed)
 	if (ed->nlines) {
 		tmp = __util_mallocarray(ed->nlines, sizeof *tmp);
 		if (!tmp) return -2;
+		/* ed->nlines > 0 here implies ed->lines != NULL -- see
+		 * buf_remove_range_nofree()'s own comment. */
+		__ownership_pointer_nonnull(ed->lines);
 		for (i = 0; i < ed->nlines; i++) {
 			tmp[i] = strdup(ed->lines[i]);
 			if (!tmp[i]) { while (i-- > 0) free(tmp[i]); free(tmp); return -2; }
@@ -491,6 +510,11 @@ static char *linesrc_next(struct linesrc *ls)
 {
 	if (ls->f) return read_line_stdin(ls->f);
 	if (ls->i >= ls->n) return 0;
+	/* struct linesrc's own field comment: list is non-NULL whenever f is
+	 * NULL -- genuinely true by construction, but that fact does not
+	 * survive a struct field read this per-function analysis cannot see
+	 * through. */
+	__ownership_pointer_nonnull(ls->list);
 	return strdup(ls->list[ls->i++]);
 }
 
@@ -557,6 +581,10 @@ static void print_l_format(FILE *out, const char *text)
 static void ed_print_range(struct ed *ed, long from, long to, int fmt)
 {
 	long i;
+	/* Callers only ever pass a valid 1 <= from <= to <= ed->nlines range,
+	 * so this loop only runs when ed->nlines > 0 -- see
+	 * buf_remove_range_nofree()'s own comment. */
+	__ownership_pointer_nonnull(ed->lines);
 	for (i = from; i <= to; i++) {
 		const char *text = ed->lines[i - 1];
 		if (fmt == 'l') print_l_format(stdout, text);
@@ -575,6 +603,9 @@ static int search_forward(struct ed *ed, const char *pat, long from, long *out)
 	long i, n = ed->nlines;
 	if (!n) return ed_fail(ed, "no match: buffer is empty");
 	if (regcomp(&re, pat, REG_NOSUB) != 0) return ed_fail(ed, "invalid regular expression");
+	/* n > 0 (checked above) implies ed->lines != NULL -- see
+	 * buf_remove_range_nofree()'s own comment. */
+	__ownership_pointer_nonnull(ed->lines);
 	for (i = 1; i <= n; i++) {
 		long ln = from + i;
 		while (ln > n) ln -= n;
@@ -592,6 +623,9 @@ static int search_backward(struct ed *ed, const char *pat, long from, long *out)
 	long i, n = ed->nlines;
 	if (!n) return ed_fail(ed, "no match: buffer is empty");
 	if (regcomp(&re, pat, REG_NOSUB) != 0) return ed_fail(ed, "invalid regular expression");
+	/* n > 0 (checked above) implies ed->lines != NULL -- see
+	 * buf_remove_range_nofree()'s own comment. */
+	__ownership_pointer_nonnull(ed->lines);
 	for (i = 1; i <= n; i++) {
 		long ln = from - i;
 		while (ln < 1) ln += n;
@@ -1334,6 +1368,10 @@ static int ed_exec_one(struct ed *ed, const char *cmdline, struct linesrc *texts
 			size_t count = (size_t)(to - from + 1);
 			char **tmp = __util_mallocarray(count, sizeof *tmp);
 			if (!tmp) return ed_fail(ed, "out of memory");
+			/* from >= 1 and to <= ed_nlines(ed) (checked above), so
+			 * count >= 1 here implies ed->nlines > 0 -- see
+			 * buf_remove_range_nofree()'s own comment. */
+			__ownership_pointer_nonnull(ed->lines);
 			if (is_move) {
 				for (size_t i = 0; i < count; i++)
 					tmp[i] = ed->lines[from - 1 + i];
@@ -1492,6 +1530,12 @@ static int ed_exec_one(struct ed *ed, const char *cmdline, struct linesrc *texts
 		if (regcomp(&re, pat, REG_NOSUB) != 0) { free(pat); return ed_fail(ed, "invalid regular expression"); }
 		free(pat);
 
+		/* This loop only runs when from <= to, and the checks above
+		 * (the whole-empty-buffer case aside, which forces from > to)
+		 * only reach here with to <= ed_nlines(ed), so ed->nlines > 0
+		 * whenever the loop body executes -- see
+		 * buf_remove_range_nofree()'s own comment. */
+		__ownership_pointer_nonnull(ed->lines);
 		for (ln = from; ln <= to; ln++) {
 			int m = (regexec(&re, ed->lines[ln - 1], 0, 0, 0) == 0);
 			if (invert) m = !m;

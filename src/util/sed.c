@@ -235,6 +235,13 @@ static FILE *wfile_get(struct wfile_table *t, const char *name withtok(null_term
 {
 	size_t i;
 	FILE *f;
+	/* t->entries is only ever non-NULL exactly when t->cap > 0 (the
+	 * growth block below always sets them together, with a floor of 8,
+	 * and t->cap starts at 0), and t->n <= t->cap always -- so t->n > i
+	 * here implies t->entries != NULL, a whole-program invariant this
+	 * per-function analysis cannot see across the earlier call that grew
+	 * it. */
+	__ownership_pointer_nonnull(t->entries);
 	for (i = 0; i < t->n; i++) {
 		__ownership_string_terminated(t->entries[i].name);
 		if (!strcmp(t->entries[i].name, name)) return t->entries[i].f;
@@ -249,6 +256,10 @@ static FILE *wfile_get(struct wfile_table *t, const char *name withtok(null_term
 		t->entries = g;
 		t->cap = newcap;
 	}
+	/* t->cap > 0 at this point (just grown above, or already grown by a
+	 * prior call and never reset), hence t->entries != NULL -- see this
+	 * function's own comment above. */
+	__ownership_pointer_nonnull(t->entries);
 
 	{
 		/* is_special decides the fclose() below, not `f != stdout &&
@@ -290,6 +301,9 @@ static int wfile_table_close(struct wfile_table *t) __attribute__((nonnull(1)))
 {
 	size_t i;
 	int had_error = 0;
+	/* t->n > i here implies t->entries != NULL -- see wfile_get()'s own
+	 * comment above. */
+	__ownership_pointer_nonnull(t->entries);
 	for (i = 0; i < t->n; i++) {
 		if (t->entries[i].f != stdout && t->entries[i].f != stderr &&
 		    fclose(t->entries[i].f) != 0) {
@@ -334,6 +348,12 @@ static int queue_append(struct append_queue *q, enum append_kind kind, const cha
 		q->entries = g;
 		q->cap = newcap;
 	}
+	/* q->cap > 0 at this point (just grown above, or already grown by a
+	 * prior call and never reset), hence q->entries != NULL -- the same
+	 * cross-call growable-array invariant as wfile_get()'s own
+	 * t->entries, this per-function analysis cannot see across the
+	 * earlier call that grew it. */
+	__ownership_pointer_nonnull(q->entries);
 	q->entries[q->n].kind = kind;
 	q->entries[q->n].text_or_file = s;
 	q->n++;
@@ -343,6 +363,9 @@ static int queue_append(struct append_queue *q, enum append_kind kind, const cha
 static void flush_appends(struct append_queue *q) __attribute__((nonnull(1)))
 {
 	size_t i;
+	/* q->n > i here implies q->entries != NULL -- see queue_append()'s
+	 * own comment above. */
+	__ownership_pointer_nonnull(q->entries);
 	for (i = 0; i < q->n; i++) {
 		__ownership_string_terminated(q->entries[i].text_or_file);
 		if (q->entries[i].kind == APPEND_TEXT) {
@@ -769,6 +792,11 @@ static struct sed_cmd *prog_push(struct program *pr) __attribute__((nonnull(1)))
 		pr->cmds = g;
 		pr->cap = newcap;
 	}
+	/* pr->cap > 0 at this point (just grown above, or already grown by a
+	 * prior call and never reset), hence pr->cmds != NULL -- the same
+	 * cross-call growable-array invariant as wfile_get()'s own
+	 * t->entries. */
+	__ownership_pointer_nonnull(pr->cmds);
 	memset(&pr->cmds[pr->n], 0, sizeof pr->cmds[pr->n]);
 	return &pr->cmds[pr->n++];
 }
@@ -1051,6 +1079,9 @@ static int resolve_program(struct parser *ps, struct program *pr) __attribute__(
 	size_t i;
 
 	stack = 0;
+	/* pr->n > i here implies pr->cmds != NULL -- see prog_push()'s own
+	 * comment above. */
+	__ownership_pointer_nonnull(pr->cmds);
 	for (i = 0; i < pr->n; i++) {
 		if (pr->cmds[i].kind == CMD_BLOCK_START) {
 			if (sp >= cap) {
@@ -1103,11 +1134,17 @@ static void free_addr(struct sed_addr *a) __attribute__((nonnull(1)))
 static void free_program(struct program *pr) __attribute__((nonnull(1)))
 {
 	size_t i, j;
+	/* pr->n > i here implies pr->cmds != NULL -- see prog_push()'s own
+	 * comment above. */
+	__ownership_pointer_nonnull(pr->cmds);
 	for (i = 0; i < pr->n; i++) {
 		struct sed_cmd *cmd = &pr->cmds[i];
 		free_addr(&cmd->a1);
 		free_addr(&cmd->a2);
 		if (cmd->have_re) regfree(&cmd->re);
+		/* cmd->nrepl > j here implies cmd->repl != NULL -- see
+		 * expand_replacement()'s own comment. */
+		__ownership_pointer_nonnull(cmd->repl);
 		for (j = 0; j < cmd->nrepl; j++)
 			if (cmd->repl[j].kind == REPL_LITERAL) free(cmd->repl[j].lit);
 		free(cmd->repl);
@@ -1176,6 +1213,11 @@ static int read_all_input(FILE *f, struct input_set *in)
 static void free_input(struct input_set *in) __attribute__((nonnull(1)))
 {
 	size_t i;
+	/* in->n > i here implies in->lines != NULL -- the same cross-call
+	 * growable-array invariant as wfile_get()'s own t->entries, this
+	 * per-function analysis cannot see across input_push()'s own earlier
+	 * growth. */
+	__ownership_pointer_nonnull(in->lines);
 	for (i = 0; i < in->n; i++) free(in->lines[i].text);
 	free(in->lines);
 	in->lines = 0; in->n = 0; in->cap = 0;
@@ -1242,6 +1284,12 @@ static void expand_replacement(struct sed_cmd *cmd, const char *text, size_t pos
 	__attribute__((nonnull(1, 2, 4, 5)))
 {
 	size_t i;
+	/* cmd->nrepl > i here implies cmd->repl != NULL: parse_replacement()
+	 * only ever grows its own local `segs` (assigned to *out, i.e. this
+	 * cmd->repl, exactly once at the end) together with *nout, with the
+	 * same 0-capacity-forces-first-growth pattern as wfile_get()'s own
+	 * t->entries. */
+	__ownership_pointer_nonnull(cmd->repl);
 	for (i = 0; i < cmd->nrepl; i++) {
 		struct repl_seg *s = &cmd->repl[i];
 		if (s->kind == REPL_LITERAL) {
@@ -1326,6 +1374,11 @@ static int do_subst(struct sed_state *st, struct sed_cmd *cmd) __attribute__((no
 static void do_list(const struct buf *ps) __attribute__((nonnull(1)))
 {
 	size_t i, col = 0;
+	/* ps->len > i here implies ps->data != NULL: buf_reserve()'s own
+	 * 0-capacity-forces-first-growth pattern (see buf_append()'s own
+	 * comment) means ps->cap > 0 whenever anything has ever been
+	 * appended, and ps->len <= ps->cap always. */
+	__ownership_pointer_nonnull(ps->data);
 	for (i = 0; i < ps->len; i++) {
 		unsigned char ch = (unsigned char)ps->data[i];
 		char out[8];
@@ -1371,6 +1424,12 @@ static int run_program(struct sed_state *st, struct program *pr, int opt_n)
 		if (st->cursor >= st->nlines) break;
 
 		{
+			/* st->nlines > st->cursor here implies st->lines != NULL:
+			 * st->lines/st->nlines are copied once, at startup, from
+			 * struct input_set's own in.lines/in.n -- see input_push()'s
+			 * own cross-call growable-array invariant (the same shape
+			 * as wfile_get()'s t->entries). */
+			__ownership_pointer_nonnull(st->lines);
 			struct input_line *ln = &st->lines[st->cursor++];
 			buf_assign(&st->pattern, ln->text, ln->len);
 			st->line_number++;
@@ -1385,6 +1444,9 @@ static int run_program(struct sed_state *st, struct program *pr, int opt_n)
 				int restart = 0;
 				long pc = 0;
 
+				/* pc < (long)pr->n here implies pr->n > 0, hence
+				 * pr->cmds != NULL -- see prog_push()'s own comment. */
+				__ownership_pointer_nonnull(pr->cmds);
 				while (pc < (long)pr->n) {
 					struct sed_cmd *cmd = &pr->cmds[(size_t)pc];
 					int sel;
@@ -1460,6 +1522,9 @@ static int run_program(struct sed_state *st, struct program *pr, int opt_n)
 							overall_quit = 1;
 							pc = (long)pr->n;
 						} else {
+							/* see run_program()'s own comment above on
+							 * st->lines/st->nlines. */
+							__ownership_pointer_nonnull(st->lines);
 							struct input_line *ln = &st->lines[st->cursor++];
 							buf_assign(&st->pattern, ln->text, ln->len);
 							st->line_number++;
@@ -1473,6 +1538,9 @@ static int run_program(struct sed_state *st, struct program *pr, int opt_n)
 							overall_quit = 1;
 							pc = (long)pr->n;
 						} else {
+							/* see run_program()'s own comment above on
+							 * st->lines/st->nlines. */
+							__ownership_pointer_nonnull(st->lines);
 							struct input_line *ln = &st->lines[st->cursor++];
 							buf_append_char(&st->pattern, '\n');
 							buf_append(&st->pattern, ln->text, ln->len);

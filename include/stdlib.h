@@ -47,12 +47,18 @@ unsigned long long strtoull (const char *__restrict, char **__restrict, int);
 int rand (void);
 void srand (unsigned);
 
+/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline:
+ * src/malloc/malloc.c sets errno = ENOMEM on every failure return of
+ * malloc/calloc/realloc/reallocarray alike, unconditionally. */
+grants_thread_token(errno_grounds)
 withtok(heap_allocated)
 withtok(writable_span(size))
 void *malloc (size_t size);
+grants_thread_token(errno_grounds)
 withtok(heap_allocated)
 withtok(writable_span(count * size))
 void *calloc (size_t count, size_t size);
+grants_thread_token(errno_grounds)
 withtok(heap_allocated)
 withtok(writable_span(size))
 void *realloc (void * consume_if_nonnull_return(heap_allocated), size_t size);
@@ -78,6 +84,12 @@ _Noreturn void quick_exit (int);
 withtok(null_terminated)
 char *getenv (const char * withtok(null_terminated)) __attribute__((nonnull(1)));
 
+/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline:
+ * src/stdlib/system.c's system() sets errno on its only two failure
+ * (-1) returns -- via __find_program()'s own errno (already
+ * errno-capable) when no shell is found, or by saving/restoring errno
+ * around waitpid()'s own failure. */
+grants_thread_token(errno_grounds)
 int system (const char *);
 
 void *bsearch (const void *, const void *, size_t, size_t, int (*)(const void *, const void *));
@@ -126,7 +138,13 @@ size_t __ctype_get_mb_cur_max(void);
 int posix_memalign (void **, size_t, size_t);
 int setenv (const char *, const char *, int);
 int unsetenv (const char *);
+/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline:
+ * src/stdlib/mktemp.c's mkstemp()/mkostemp() (both mkostemps()
+ * wrappers) set errno on every failure return, via fill()'s own
+ * explicit EINVAL or open()'s (already errno-capable). */
+grants_thread_token(errno_grounds)
 int mkstemp (char *);
+grants_thread_token(errno_grounds)
 int mkostemp (char *, int);
 char *mkdtemp (char *);
 int getsubopt (char **, char *const *, char **) __attribute__((nonnull(1, 2, 3)));
@@ -173,7 +191,9 @@ void lcong48 (unsigned short [7]);
 /* mkstemps()/mkostemps() are deliberately left unmarked: neither
  * dereferences tmpl directly, only forwarding it onward. */
 char *mktemp (char *) __attribute__((nonnull(1)));
+grants_thread_token(errno_grounds)
 int mkstemps (char *, int);
+grants_thread_token(errno_grounds)
 int mkostemps (char *, int, int);
 withtok(heap_allocated)
 void *valloc (size_t);
@@ -186,6 +206,7 @@ int getloadavg(double *, int);
 int clearenv(void);
 #define WCOREDUMP(s) ((s) & 0x80)
 #define WIFCONTINUED(s) ((s) == 0xffff)
+grants_thread_token(errno_grounds)
 withtok(heap_allocated)
 withtok(writable_span(count * size))
 void *reallocarray (void * consume_if_nonnull_return(heap_allocated),

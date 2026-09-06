@@ -192,7 +192,7 @@
           # sync with that file by hand, same as `tcc` above -- there is
           # no automated link between a GitHub Actions env var and a Nix
           # derivation.
-          wineFork = pkgs.wineWow64Packages.minimal.overrideAttrs (_: {
+          wineFork = pkgs.wineWow64Packages.minimal.overrideAttrs (old: {
             version = "52fef96f6";
             src = pkgs.fetchFromGitHub {
               owner = "Pandapip1";
@@ -201,6 +201,24 @@
               hash = "sha256-0WApht2wtfugN0lby3wbZPcqov1BTodGQMCDIlJ+D2E=";
             };
             patches = [ ];
+
+            # `wineWow64Packages.minimal`'s own configureFlags picks
+            # --enable-archs by *build host* arch (pkgs/applications/
+            # emulators/wine/packages.nix): "x86_64,i386" on an x86_64
+            # host, but "aarch64,x86_64,i386" on aarch64 -- three guest
+            # archs, not two, purely because this derivation happens to
+            # be evaluated on an aarch64 dev machine. setup-wine/
+            # action.yml's CI build passes --enable-archs=i386,x86_64
+            # unconditionally (its runner is always x86_64), so an
+            # unforced aarch64-host build of this override silently
+            # diverges from what CI validates the fork against, and
+            # runs test PE binaries against wine guest DLLs CI never
+            # built. Filtering out whichever --enable-archs=... `minimal`
+            # picked and appending the CI one keeps every other flag
+            # (e.g. --without-x) `minimal` already computed intact.
+            configureFlags =
+              (pkgs.lib.filter (f: !(pkgs.lib.hasPrefix "--enable-archs=" f)) old.configureFlags)
+              ++ [ "--enable-archs=i386,x86_64" ];
           });
 
           # tools/lint.sh's Z3-backed stages (sizearith, totality, arithub,

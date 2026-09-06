@@ -22,15 +22,16 @@
 #include <string.h>
 #include "libc.h"
 #include "sh.h"
+#include "ownership_stubs.h"
 
 struct hdq {
 	const struct sh_redir *r;
-	struct hdq *next;
+	struct hdq *next withtok(internal_heap_allocated);
 };
 
 struct pctx {
 	FILE *f;
-	struct hdq *head, *tail;
+	struct hdq *head withtok(internal_heap_allocated), *tail;
 	int failed;
 };
 
@@ -168,6 +169,13 @@ static void print_words(struct pctx *c, const struct sh_word *w, int leading_spa
 	for (; w; w = w->next) {
 		if (leading_space) emit_char(c, ' ');
 		leading_space = 1;
+		/* w->text is always the raw source text of a scanned WORD (see
+		 * sh.h's struct sh_word comment) -- scan_word() null-terminates
+		 * it before any sh_word is ever built, but that fact does not
+		 * survive the struct field the checker cannot trace back to
+		 * scan_word()'s own separately analyzed body, the same reason
+		 * parse.c restates it on p->cur.text. */
+		__ownership_string_terminated(w->text);
 		if (!strcmp(w->text, "!")) emit_string(c, "'!'");
 		else emit_string(c, w->text);
 	}

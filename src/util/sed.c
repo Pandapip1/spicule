@@ -125,14 +125,9 @@
 #include <errno.h>
 #include <regex.h>
 #include "util.h"
-#include "ownership_stubs.h" /* __ownership_string_terminated(): a handful of null-terminated
-                              * strings here (a w-file/r-file/label/branch-target name, or a
-                              * "-"-or-real-pathname argv operand) are stored into a struct
-                              * field or a heap-allocated slice array before their null_terminated
-                              * capability is next used (strcmp()/fopen()/strdup()); reading them
-                              * back out of that storage does not, by itself, carry the capability
-                              * forward, so each such read restates it right where it is needed --
-                              * the same idiom src/util/find.c and src/string/strdup.c already use. */
+#include "ownership_stubs.h" /* __ownership_string_terminated(): a struct-field or array-slot
+                              * string read doesn't carry the null_terminated capability
+                              * forward, so it's restated at each strcmp()/fopen() use site. */
 
 #define SED_MAX_SUBGROUPS 32
 #define SED_FOLD_WIDTH 70
@@ -181,29 +176,18 @@ struct sed_cmd {
 	/* s/// */
 	regex_t re;
 	int have_re, reuse_last;
-	/* Deliberately NOT withtok(heap_allocated): expand_replacement()'s own
-	 * cmd->repl[i] indexing gained a *new*, still-unresolved "not proven
-	 * nonnull" finding the one time this was tried (annotating the array
-	 * pointer field made the checker treat it as significant enough to
-	 * demand its own nonnull proof, without also supplying the
-	 * element-extent contract that would let a positive nrepl vacuously
-	 * prove it) -- parse_replacement()'s own struct repl_seg **out
-	 * parameter below is what actually proves parse_replacement()'s own
-	 * segs array escapes cleanly instead. */
+	/* Deliberately NOT withtok(heap_allocated): annotating this field
+	 * triggered a new "not proven nonnull" finding on cmd->repl[i]
+	 * indexing; parse_replacement()'s own out-parameter proves the
+	 * array escapes cleanly instead. */
 	struct repl_seg *repl;
 	size_t nrepl;
 	int flag_g;
 	long occurrence;   /* 1-based, default 1 */
 	int flag_p;
-	/* wfile/text/filename/label are all also null-terminated (established
-	 * by dup_rest_of_line()/dup_label()'s own hand-rolled NUL write, or by
-	 * struct buf's own buf_append()), but that capability is a flow fact,
-	 * not a static one -- restated with __ownership_string_terminated()
-	 * at each site that actually needs it (strcmp()/fopen()), the same
-	 * idiom src/util/find.c's own withtok(heap_allocated)-only fields
-	 * (acc, pruned) already use, rather than declared here where it would
-	 * require every assignment from a same-TU, potentially inlined
-	 * producer to also match it exactly. */
+	/* wfile/text/filename/label are also null-terminated but not declared
+	 * so; restated with __ownership_string_terminated() at each use site
+	 * instead. */
 	char *wfile withtok(heap_allocated);
 
 	/* y/// */
@@ -229,46 +213,29 @@ struct sed_cmd {
  * truncate `out` a thousand times. ========================================= */
 
 struct wfile_entry {
-	/* Also null-terminated (strdup()'d below); restated with
-	 * __ownership_string_terminated() at each strcmp()/fopen() site
-	 * instead of declared here -- see struct sed_cmd's own wfile/text/
-	 * filename/label fields for why. */
-	char *name withtok(heap_allocated);
+	char *name withtok(heap_allocated); /* also null-terminated; restated at use sites */
 	FILE *f withtok(file_stream_open);
 };
 
-/* entries[i]/entries[t->n]'s own base-pointer nonnull proof (for i/t->n
- * bounded by t->n/t->cap) is left open below, the identical, already-
- * accepted limitation this file's own struct parser comment and
- * src/util/find.c's g_find.pruned/n->acc indexing already document --
- * heap_allocated says who frees this array, not that it is non-null
- * whenever its own count field is positive. */
+/* entries[i]'s own base-pointer nonnull proof is left open: heap_allocated
+ * says who frees this array, not that it's non-null whenever its count
+ * field is positive (same accepted limitation throughout this file). */
 struct wfile_table {
 	struct wfile_entry *entries withtok(heap_allocated);
 	size_t n, cap;
 };
 
-/* Deliberately NOT withtok(file_stream_open): unlike a plain producer,
- * this cache sometimes returns a FILE* it already owns from a previous
- * call (t->entries[i].f, read back below) rather than a fresh
- * acquisition -- annotating it produced a real false leak at every
- * caller that merely uses the cached result without itself closing it
- * (e.g. wfile_write_line()), since the checker cannot distinguish "just
- * minted" from "borrowed back from our own cache" on a producer's
- * return value. wfile_table_close() below is what actually proves this
- * cache leaks nothing. */
+/* Deliberately NOT withtok(file_stream_open): this cache can return a
+ * FILE* it already owns from a previous call rather than a fresh
+ * acquisition, which the checker can't distinguish from a new leak at
+ * callers like wfile_write_line() that don't close it themselves.
+ * wfile_table_close() below is what proves the cache leaks nothing. */
 static FILE *wfile_get(struct wfile_table *t, const char *name withtok(null_terminated))
 	__attribute__((nonnull(1, 2)))
 {
 	size_t i;
 	FILE *f;
 	for (i = 0; i < t->n; i++) {
-		/* t->entries[i].name was strdup()'d in this very function (see
-		 * below) on a previous call; the struct field's own storage does
-		 * not carry its null_terminated capability forward the way the
-		 * strdup() return value did at the moment it was written, so
-		 * restate it here -- the same idiom src/util/find.c's own
-		 * struct-field string reads (g_find.pruned[i], n->acc[j]) use. */
 		__ownership_string_terminated(t->entries[i].name);
 		if (!strcmp(t->entries[i].name, name)) return t->entries[i].f;
 	}
@@ -285,17 +252,10 @@ static FILE *wfile_get(struct wfile_table *t, const char *name withtok(null_term
 
 	{
 		/* is_special decides the fclose() below, not `f != stdout &&
-		 * f != stderr`: two unrelated opaque pointers (a real fopen()
-		 * result and either extern stream) can never be proven unequal
-		 * by the analyzer, so comparing f against them directly would
-		 * leave that fclose() looking conditional on a path it cannot
-		 * rule out, and the still-live fopen() allocation gets reported
-		 * as leaked on the strdup()-failure path below.  The fopen()
-		 * call and its own `if (!f) return 0` failure check are kept in
-		 * their own branch, never merged with the two special-stream
-		 * branches (which cannot fail), so the tracked allocation from a
-		 * real fopen() is never joined with an untracked stdout/stderr
-		 * value before the check that would otherwise obscure it. */
+		 * f != stderr`: the checker can't prove two opaque pointers
+		 * unequal, so comparing f directly would make the fopen()
+		 * allocation look conditionally leaked on the strdup()-failure
+		 * path below. */
 		int is_special;
 		if (!strcmp(name, "/dev/stdout")) { f = stdout; is_special = 1; }
 		else if (!strcmp(name, "/dev/stderr")) { f = stderr; is_special = 1; }
@@ -350,13 +310,8 @@ enum append_kind { APPEND_TEXT, APPEND_RFILE };
 
 struct append_entry {
 	enum append_kind kind;
-	/* not owned: points into the owning sed_cmd's own text/filename field,
-	 * so never heap_allocated here (freeing it here would double-free the
-	 * sed_cmd that actually owns it). Also null-terminated the same way
-	 * that field is, but restated with __ownership_string_terminated() at
-	 * flush_appends()'s own fputs()/fopen() site instead of declared here
-	 * -- see struct sed_cmd's own wfile/text/filename/label fields for
-	 * why a same-TU producer's capability is restated, not declared. */
+	/* Not owned: points into the owning sed_cmd's own text/filename field
+	 * (freeing it here would double-free that sed_cmd). */
 	const char *text_or_file;
 };
 
@@ -389,12 +344,6 @@ static void flush_appends(struct append_queue *q) __attribute__((nonnull(1)))
 {
 	size_t i;
 	for (i = 0; i < q->n; i++) {
-		/* text_or_file is a struct-field read of a string established
-		 * null-terminated elsewhere (dup_rest_of_line()'s own
-		 * withtok(null_terminated) return, or a buf's always-NUL-
-		 * terminated data); the field's own storage does not carry that
-		 * capability forward automatically, so restate it here -- same
-		 * idiom as wfile_get()'s t->entries[i].name above. */
 		__ownership_string_terminated(q->entries[i].text_or_file);
 		if (q->entries[i].kind == APPEND_TEXT) {
 			fputs(q->entries[i].text_or_file, stdout);
@@ -442,18 +391,10 @@ static int buf_reserve(struct buf *b, size_t extra) __attribute__((nonnull(1)))
 	return 0;
 }
 
-/* b->data[b->len + i]'s own nonnull proof, and b->len += n's paired-
- * length/extent proof, both depend on buf_reserve() just above having
- * already grown b->cap to fit -- a fact established in buf_reserve()'s
- * own separate control flow rather than anything visible here.  Tried
- * and did not resolve it: restating writable_span(b->data + b->len, n)
- * by hand right here (the same idiom src/sh/parse.c's xstrndup() and
- * src/misc/uio.c's readv()/writev() use for an analogous freshly-sized
- * buffer) left both findings unchanged, and a fields_established
- * parameter on buf_append()/buf_reserve() (see include/ownership.h's own
- * doc comment for the mechanism) only pushed the same unprovable
- * precondition onto every caller of buf_append() instead -- five new
- * findings for one fixed. Left open. */
+/* b->data[b->len + i]'s nonnull/extent proof depends on buf_reserve()
+ * above having already grown b->cap, which isn't visible to the checker
+ * here. Tried restating writable_span() by hand and a fields_established
+ * parameter; both traded this finding for several new ones. Left open. */
 static int buf_append(struct buf *b, const char *s, size_t n) __attribute__((nonnull(1, 2)))
 {
 	if (buf_reserve(b, n) < 0) return -1;
@@ -485,14 +426,9 @@ static int script_buf_append(struct buf *b, const char *s, int need_leading_newl
 
 static int script_buf_append_file(struct buf *b, const char *path, int need_leading_newline)
 {
-	/* Track "did we actually open a real file" with its own flag rather
-	 * than comparing f against stdin by pointer identity below: two
-	 * unrelated opaque pointer values (an fopen() result and the extern
-	 * stdin) can never be proven unequal by the analyzer, so a bare
-	 * `f != stdin` guard leaves the fclose() call looking conditional on
-	 * a path it cannot rule out, and the still-live fopen() allocation
-	 * gets reported as leaked at both returns below. A plain int decided
-	 * once, before f is ever assigned, has no such ambiguity. */
+	/* use_stdin, not `f != stdin`, decides the fclose() below -- the
+	 * checker can't prove opaque pointers unequal, so a direct comparison
+	 * would make the fopen() allocation look conditionally leaked. */
 	int use_stdin = !strcmp(path, "-");
 	FILE *f;
 	char chunk[4096];
@@ -509,17 +445,10 @@ static int script_buf_append_file(struct buf *b, const char *path, int need_lead
 
 /* ==== parser =============================================================== */
 
-/* `ps->p`'s own dereference (every *ps->p / ps->p[n] read throughout this
- * parser) is not proven nonnull by the ownership analyzer even once `ps`
- * itself is: a nonnull attribute on a struct-pointer PARAMETER only
- * proves that parameter's own value is non-null, not what a field of the
- * pointee holds, and `p` here carries no span/element-extent contract of
- * its own to hang a zero-vacuous nonnull proof off of the way a byte
- * count would. This is the identical, already-accepted limitation
- * src/util/find.c's own struct find_ctx.v/g_find.pruned/n->acc indexing
- * (c->v[c->i], g_find.pruned[i], n->acc[j], ...) is left with in that
- * file's own closed ownership pass -- not a regression introduced here,
- * and not attempted further for the same reason it was not there. */
+/* Every *ps->p / ps->p[n] read below is not proven nonnull even once
+ * `ps` is: a nonnull attribute on a struct-pointer parameter proves the
+ * pointer itself, not what its `p` field holds. Same accepted limitation
+ * as src/util/find.c's struct-field indexing. */
 struct parser {
 	const char *p;
 	const char *prog;   /* argv[0], for diagnostics */
@@ -760,23 +689,13 @@ static int parse_text_arg(struct parser *ps, struct buf *out) __attribute__((non
 	return 0;
 }
 
-/* Rest-of-line filename for r/w (and s///w), and for a label.  Both
- * dup_rest_of_line() and dup_label() below hand-build their own
- * NUL-terminated copy exactly the way src/string/strdup.c's own malloc()-
- * then-terminate does, so they restate the fact the same way right before
- * returning it -- but unlike strdup() (an opaque, separately compiled
- * library call), these are static functions the analyzer can inline
- * directly into their own callers, where a returned value combining
- * withtok(heap_allocated) with withtok(null_terminated) was seen as
- * already spent by the time it reached its destination struct field's
- * own matching bundle a statement later. Declaring only the
- * withtok(heap_allocated) return contract these actually need (to
- * satisfy AllocationLifetimeChecker's "every dynamic allocation needs a
- * declared family" rule) avoids that false "already moved" -- the
- * null-terminated half is still real, just restated with
- * __ownership_string_terminated() at each call site that actually reuses
- * it in a strcmp()/fopen(), the same as struct sed_cmd's own wfile/text/
- * filename/label fields do. */
+/* Rest-of-line filename for r/w (and s///w), and for a label.
+ * dup_rest_of_line()/dup_label() only declare withtok(heap_allocated),
+ * not also null_terminated: since these are static and get inlined into
+ * callers, a combined return contract was seen as already spent by the
+ * time it reached the destination struct field a statement later.
+ * Null-termination is restated with __ownership_string_terminated() at
+ * each use site instead. */
 withtok(heap_allocated)
 static char *dup_rest_of_line(struct parser *ps) __attribute__((nonnull(1)))
 {
@@ -829,20 +748,16 @@ static char *dup_label(struct parser *ps) __attribute__((nonnull(1)))
 	return out;
 }
 
-/* cmds[i]'s own base-pointer nonnull proof (prog_push()'s own
- * pr->cmds[pr->n], resolve_program()'s pr->cmds[i], free_program()'s
- * pr->cmds[i]/cmd->a1): left open, same accepted class as struct
- * wfile_table's own entries field above. */
+/* cmds[i]'s base-pointer nonnull proof: left open, same accepted class as
+ * struct wfile_table's own entries field above. */
 struct program {
 	struct sed_cmd *cmds withtok(heap_allocated);
 	size_t n, cap;
 };
 
-/* Returns a pointer INTO pr->cmds -- a borrowed slot inside the program's
- * own array, freed only in bulk by free_program()'s own free(pr->cmds), the
- * same "composite owner collects children" shape pr->cmds' own
- * withtok(heap_allocated) field above documents -- never a fresh,
- * separately-owned allocation the caller must release itself. */
+/* Returns a pointer INTO pr->cmds -- a borrowed slot, freed only in bulk
+ * by free_program()'s free(pr->cmds), never a separate allocation the
+ * caller must release itself. */
 static struct sed_cmd *prog_push(struct program *pr) __attribute__((nonnull(1)))
 {
 	if (pr->n >= pr->cap) {
@@ -1163,12 +1078,6 @@ static int resolve_program(struct parser *ps, struct program *pr) __attribute__(
 		if (cmd->kind != CMD_BRANCH && cmd->kind != CMD_TEST) continue;
 		if (!cmd->label || !cmd->label[0]) { cmd->target = (long)pr->n; continue; }
 
-		/* Both cmd->label and every pr->cmds[j].label below are struct-
-		 * field reads of a string dup_label() established null-terminated
-		 * at its own withtok(null_terminated) return; the field's own
-		 * storage does not carry that capability forward on its own, so
-		 * restate it here -- same idiom as wfile_get()'s
-		 * t->entries[i].name above. */
 		__ownership_string_terminated(cmd->label);
 		found = 0;
 		for (j = 0; j < pr->n; j++) {
@@ -1217,9 +1126,8 @@ static void free_program(struct program *pr) __attribute__((nonnull(1)))
 
 struct input_line { char *text withtok(heap_allocated); size_t len; };
 
-/* lines[i]'s own base-pointer nonnull proof (free_input()'s in->lines[i],
- * run_program()'s st->lines[st->cursor++]): left open, same accepted
- * class as struct wfile_table's own entries field above. */
+/* lines[i]'s base-pointer nonnull proof: left open, same accepted class
+ * as struct wfile_table's own entries field above. */
 struct input_set {
 	struct input_line *lines withtok(heap_allocated);
 	size_t n, cap;
@@ -1499,12 +1407,6 @@ static int run_program(struct sed_state *st, struct program *pr, int opt_n)
 							t_flag = 1;
 							if (cmd->flag_p) { fwrite(st->pattern.data, 1, st->pattern.len, stdout); fputc('\n', stdout); }
 							if (cmd->wfile) {
-								/* cmd->wfile was established null-terminated by
-								 * dup_rest_of_line()'s own withtok(null_terminated)
-								 * return; the struct field's storage does not carry
-								 * that capability forward on its own, so restate it
-								 * here -- same idiom as wfile_get()'s own
-								 * t->entries[i].name above. */
 								__ownership_string_terminated(cmd->wfile);
 								wfile_write_line(&st->wtab, cmd->wfile, st->pattern.data, st->pattern.len);
 							}
@@ -1602,9 +1504,6 @@ static int run_program(struct sed_state *st, struct program *pr, int opt_n)
 					}
 					case CMD_READ: queue_append(&st->aq, APPEND_RFILE, cmd->filename); pc++; break;
 					case CMD_WRITE:
-						/* cmd->filename was established null-terminated by
-						 * dup_rest_of_line()'s own withtok(null_terminated)
-						 * return; restate it here, same as cmd->wfile above. */
 						__ownership_string_terminated(cmd->filename);
 						wfile_write_line(&st->wtab, cmd->filename, st->pattern.data, st->pattern.len);
 						pc++;
@@ -1731,13 +1630,9 @@ int __util_sed_main(
 	}
 
 	/* "if the first two characters in the script are #n, the default
-	 * output shall be suppressed" -- equivalent to -n.  script.len >= 2
-	 * already proves (by construction: buf_reserve() only ever grows
-	 * script.data, never shrinks or frees it mid-assembly) that at least
-	 * one successful buf_append() happened and script.data is non-NULL,
-	 * but that fact lives in buf_reserve()'s own control flow, not in
-	 * anything the analyzer can see from script.len alone -- so an
-	 * explicit script.data check earns the same proof directly. */
+	 * output shall be suppressed" -- equivalent to -n. The explicit
+	 * script.data check is needed because script.len >= 2 implying
+	 * non-NULL data isn't visible to the checker from here. */
 	if (script.data && script.len >= 2 && script.data[0] == '#' && script.data[1] == 'n' &&
 	    (script.len == 2 || script.data[2] == '\n')) opt_n = 1;
 
@@ -1762,17 +1657,9 @@ int __util_sed_main(
 	} else {
 		size_t fi;
 		for (fi = 0; fi < nfiles; fi++) {
-			/* files[fi] is an argv element sliced into a heap-allocated
-			 * array (via __util_reallocarray() above); that array's own
-			 * storage does not carry argv's own elements_withtok(null_terminated,
-			 * argc) contract forward automatically, so restate it here --
-			 * the same idiom src/util/find.c's own argv-derived string
-			 * reads use. use_stdin, not `f != stdin` below, is what
-			 * actually decides whether f gets fclose()'d: two unrelated
-			 * opaque pointers (a real fopen() result and the extern stdin)
-			 * can never be proven unequal by the analyzer, so comparing f
-			 * against stdin directly would leave that fclose() looking
-			 * conditional on a path it cannot rule out. */
+			/* use_stdin, not `f != stdin` below, decides the fclose() --
+			 * same opaque-pointer-comparison limitation as
+			 * script_buf_append_file()'s use_stdin above. */
 			__ownership_string_terminated(files[fi]);
 			int use_stdin = !strcmp(files[fi], "-");
 			FILE *f = use_stdin ? stdin : fopen(files[fi], "rb");

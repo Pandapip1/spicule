@@ -71,8 +71,38 @@ extern FILE *const stderr;
 #define stdout (stdout)
 #define stderr (stderr)
 
+/* Mirrors include/dirent.h's directory_stream_open exactly: DIR* and FILE*
+ * are both an opaque, individually-heap-allocated handle that must be
+ * released exactly once, so both ride AllocationLifetimeChecker's existing
+ * leak-at-exit and double-release proof through this one declarative
+ * contract, with no per-type checker code of its own. */
+tokdef file_stream_open
+	dynamic_storage
+	implemented_by(internal_heap_allocated);
+
+/* popen()/pclose() get their own family, implemented_by file_stream_open,
+ * rather than sharing file_stream_open directly: every dynamic_storage
+ * family in this codebase has exactly one declared terminal freer (see
+ * e.g. internal_heap_allocated -> __free, platform_heap_allocated ->
+ * __plat_dealloc), and fclose() is already file_stream_open's one -- a
+ * second, independently declared consume(file_stream_open) on pclose()
+ * would make tools/lint-allocation-lifetime.py's contract validator
+ * unable to tell which of the two is the real freer. pclose()'s own body
+ * still discharges its argument by calling fclose() on it (see
+ * src/stdio/misc.c), one morphism hop down, exactly like any other
+ * two-family producer/freer chain (e.g. widget_allocated ->
+ * heap_allocated in tools/lint-allocation-lifetime-fixtures/safe.c). */
+tokdef piped_stream_open
+	dynamic_storage
+	implemented_by(file_stream_open);
+
+withtok(file_stream_open)
 FILE *fopen(const char *__restrict withtok(null_terminated),
             const char *__restrict withtok(null_terminated));
+/* freopen() reuses its own third argument's stream rather than acquiring a
+ * fresh one (POSIX: "the original stream will be closed" and the same FILE
+ * object is returned on success), so it is neither a file_stream_open
+ * producer nor consumer -- the stream's identity does not change hands. */
 FILE *freopen(const char *__restrict, const char *__restrict, FILE *__restrict) __attribute__((nonnull(3)));
 /* Every stdio function below that takes a FILE * dereferences it
  * unconditionally, matching POSIX's "undefined on a stream that does
@@ -80,7 +110,7 @@ FILE *freopen(const char *__restrict, const char *__restrict, FILE *__restrict) 
  * fflush(NULL) is documented to flush every open stream, so its f is
  * left unmarked. */
 fallible
-int fclose(FILE *) __attribute__((nonnull(1)));
+int fclose(FILE * consume(file_stream_open)) __attribute__((nonnull(1)));
 
 fallible
 int remove(const char *);
@@ -157,6 +187,7 @@ int setvbuf(FILE *__restrict, char *__restrict, int, size_t) __attribute__((nonn
 void setbuf(FILE *__restrict, char *__restrict);
 
 char *tmpnam(char *);
+withtok(file_stream_open)
 FILE *tmpfile(void);
 
 #if defined(_POSIX_SOURCE) || defined(_POSIX_C_SOURCE) \
@@ -165,9 +196,11 @@ FILE *tmpfile(void);
 /* buf is genuinely optional: a null buf gets size bytes allocated. */
 FILE *fmemopen(void *__restrict, size_t, const char *__restrict) __attribute__((nonnull(3)));
 FILE *open_memstream(char **, size_t *);
+withtok(file_stream_open)
 FILE *fdopen(int, const char *);
+withtok(piped_stream_open)
 FILE *popen(const char *, const char *) __attribute__((nonnull(2)));
-int pclose(FILE *) __attribute__((nonnull(1)));
+int pclose(FILE * consume(piped_stream_open)) __attribute__((nonnull(1)));
 int fileno(FILE *) __attribute__((nonnull(1)));
 int fseeko(FILE *, off_t, int) __attribute__((nonnull(1)));
 off_t ftello(FILE *) __attribute__((nonnull(1)));

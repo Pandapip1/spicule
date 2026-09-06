@@ -250,6 +250,23 @@ static const char *const m4_builtin_names[BI_COUNT] = {
  * legitimate, humanly-written m4 script's own macro-call nesting. */
 #define M4_MAX_DEPTH 5000
 
+/* eval()'s own recursive-descent parser (ev_primary()'s '(' handling
+ * and ev_unary()'s unary-operator self-recursion, further below) is a
+ * SEPARATE source of unbounded C-stack recursion from the
+ * dispatch_macro()/collect_args()/scan() cycle M4_MAX_DEPTH guards --
+ * it recurses once per '(' or per leading '+'/'-'/'~'/'!' character
+ * inside a single eval() argument string, with no macro call and no
+ * dispatch_macro() re-entry involved at all, so M4_MAX_DEPTH's check
+ * never sees it. A single eval() call whose first argument is a few
+ * hundred thousand nested parens (`eval(` + `(`*N + `1` + `)`*N + `)`)
+ * crashed with a real stack overflow before this cap existed -- verified
+ * with N=200000 against a real m4_state before this fix landed. Each
+ * ev_*() frame here is small (no wbuf[256]-sized locals, unlike the
+ * dispatch chain), so this can afford to be generous while still being
+ * a hard, finite bound; legitimate eval() expressions nest nowhere near
+ * this deep. */
+#define M4_EVAL_MAX_DEPTH 2500
+
 /* ==== growable byte buffer ================================================== */
 
 struct m4_strbuf { char *data; size_t len, cap; };
@@ -594,9 +611,28 @@ static int parse_builtin_sentinel(const char *s, int *id)
  * grammar -- see this file's header comment for the width/overflow
  * choices. */
 
-struct m4_eval { const char *p; int err; int live; };
+struct m4_eval { const char *p; int err; int live; int depth; };
 
 static void ev_fail(struct m4_eval *e) { if (e->live && !e->err) e->err = 1; }
+
+/* Shared by ev_primary()'s '(' case and ev_unary()'s unary-operator
+ * self-recursion below -- both are real C-stack recursion through this
+ * one struct's `depth` counter, so a mix of the two (e.g.
+ * `eval(-(-(-(...))))`) is bounded by their COMBINED depth, matching
+ * how much C stack is actually in use. On hitting the cap this fails
+ * the expression and returns 0 WITHOUT recursing further, so the
+ * caller's own stack frames unwind normally instead of the cap being
+ * just a diagnostic bolted onto an unbounded call. */
+static int ev_depth_ok(struct m4_eval *e)
+{
+	if (++e->depth > M4_EVAL_MAX_DEPTH) {
+		ev_fail(e);
+		e->depth--;
+		return 0;
+	}
+	return 1;
+}
+
 static void ev_ws(struct m4_eval *e) { while (*e->p == ' ' || *e->p == '\t' || *e->p == '\n') e->p++; }
 
 static int32_t ev_wrap(uint32_t u)
@@ -616,7 +652,9 @@ static int32_t ev_primary(struct m4_eval *e)
 	ev_ws(e);
 	if (*e->p == '(') {
 		e->p++;
+		if (!ev_depth_ok(e)) return 0;
 		v = ev_lor(e);
+		e->depth--;
 		ev_ws(e);
 		if (*e->p == ')') e->p++;
 		else ev_fail(e);
@@ -636,10 +674,20 @@ static int32_t ev_primary(struct m4_eval *e)
 static int32_t ev_unary(struct m4_eval *e)
 {
 	ev_ws(e);
-	if (*e->p == '+') { e->p++; return ev_unary(e); }
-	if (*e->p == '-') { e->p++; return ev_negate(ev_unary(e)); }
-	if (*e->p == '~') { e->p++; return ~ev_unary(e); }
-	if (*e->p == '!') { e->p++; return !ev_unary(e); }
+	if (*e->p == '+' || *e->p == '-' || *e->p == '~' || *e->p == '!') {
+		char op = *e->p;
+		int32_t r;
+		e->p++;
+		if (!ev_depth_ok(e)) return 0;
+		r = ev_unary(e);
+		e->depth--;
+		switch (op) {
+		case '+': return r;
+		case '-': return ev_negate(r);
+		case '~': return ~r;
+		default: return !r;
+		}
+	}
 	return ev_primary(e);
 }
 
@@ -1163,7 +1211,7 @@ static char *bi_eval(struct m4_state *st, char **args, int nargs)
 	long radix = 10, width = 0;
 	int32_t v;
 
-	e.p = expr; e.err = 0; e.live = 1;
+	e.p = expr; e.err = 0; e.live = 1; e.depth = 0;
 	v = ev_lor(&e);
 	if (!e.err) { ev_ws(&e); if (*e.p) e.err = 1; }
 	if (radix_s[0] && !parse_long_strict(radix_s, &radix)) e.err = 1;

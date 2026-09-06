@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <strings.h>
+#include <limits.h>
+#include <errno.h>
 #include "attime.h"
 
 enum period { P_MINUTE, P_HOUR, P_DAY, P_WEEK, P_MONTH, P_YEAR };
@@ -61,6 +63,23 @@ static time_t apply_increment(time_t base, long n, enum period p)
 	return (time_t)-1;
 }
 
+/* The exact per-unit second count apply_increment() itself multiplies
+ * `n` by for the four non-calendar periods; 0 for P_MONTH/P_YEAR,
+ * which have no fixed seconds-per-unit at all (calendar arithmetic
+ * instead). Shared with maybe_increment() below so the overflow bound
+ * it checks is always the identical multiplier apply_increment() is
+ * about to use, not a guess. */
+static long period_seconds(enum period p)
+{
+	switch (p) {
+	case P_MINUTE: return 60;
+	case P_HOUR:   return 3600;
+	case P_DAY:    return 86400;
+	case P_WEEK:   return 7 * 86400;
+	default:       return 0;
+	}
+}
+
 /* Consumes an `increment` production at *ip if present ('+' number
  * period, or "next" period); a no-op (returns the base time
  * unchanged) if *ip does not start with one -- increment is always
@@ -86,10 +105,30 @@ static time_t maybe_increment(char *const *words, int n, int *ip, time_t base)
 			numword = words[i + 1];
 			consumed_num_word = 2;
 		}
+		errno = 0;
 		v = strtol(numword, &end, 10);
-		if (end == numword || *end) return base;
+		if (end == numword || *end || errno == ERANGE) return base;
 		if (i + consumed_num_word >= n || parse_period(words[i + consumed_num_word], &p) < 0)
 			return base;
+		/* strtol() succeeding (no ERANGE) only means v fits in a
+		 * `long`, not that apply_increment()'s own n*mult multiply
+		 * does too -- "at now +99999999999999999999 days" otherwise
+		 * overflows that multiply and silently schedules the job
+		 * *yesterday* instead of being rejected (this project also
+		 * builds with a 32-bit `long` on NT/tcc, where the margin is
+		 * far smaller still). Bounding v against the exact multiplier
+		 * apply_increment() is about to use catches it here, before
+		 * the overflow happens, the same as a malformed increment is
+		 * already rejected: silently, leaving the words unconsumed so
+		 * the caller's own "extra operands"/"invalid time" check
+		 * reports it. P_MONTH/P_YEAR have no seconds multiplier, but
+		 * still narrow to `int` below, so bound against that instead. */
+		{
+			long mult = period_seconds(p);
+			if (mult ? (v > LONG_MAX / mult || v < LONG_MIN / mult)
+			         : (v > INT_MAX / 2 || v < INT_MIN / 2))
+				return base;
+		}
 		*ip = i + consumed_num_word + 1;
 		return apply_increment(base, v, p);
 	}

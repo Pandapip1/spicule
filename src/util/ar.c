@@ -112,10 +112,6 @@ static void put_field(char *field, size_t width, const char *fmt, long value)
 	char tmp[32];
 	size_t len;
 	snprintf(tmp, sizeof tmp, fmt, value);
-	/* snprintf() with a nonzero size (sizeof tmp here) always
-	 * NUL-terminates its output buffer (C11 7.21.6.5p2), true by
-	 * construction and not otherwise visible to the checker across
-	 * this call. */
 	__ownership_string_terminated(tmp);
 	len = strlen(tmp);
 	if (len > width) len = width; /* callers keep values in range */
@@ -129,12 +125,9 @@ static int write_header(FILE *out, const struct ar_member *m)
 {
 	char hdr[AR_HDR_LEN];
 	size_t nl;
-	/* m->name is always populated either by build_member()'s strcpy()
-	 * from a basename already checked to fit within AR_NAME_MAX, or by
-	 * parse_header()'s explicit m->name[AR_NAME_MAX] = 0 -- always
-	 * NUL-terminated by construction (see each function's own
-	 * restatement of this same fact); restated here since this function
-	 * only ever sees the struct through a plain pointer. */
+	/* m->name is always NUL-terminated: build_member()'s strcpy() from a
+	 * basename already checked to fit, or parse_header()'s explicit
+	 * m->name[AR_NAME_MAX] = 0. */
 	__ownership_string_terminated(m->name);
 	nl = strlen(m->name);
 
@@ -155,39 +148,20 @@ static int write_header(FILE *out, const struct ar_member *m)
 
 /* Parses one already-read 60-byte header. Returns 0 on a structurally
  * valid header (name may still be empty for a foreign long-name/symtab
- * member -- see below), or -1 if the trailing "`\n" magic is wrong, the
- * name field embeds a path separator, or the size field over/underflows
- * `long` -- all three meaning the archive is corrupt, desynchronized,
- * or hostile, and every one of them means "stop", not "guess".
+ * member -- see below), or -1 if the magic is wrong, the name embeds a
+ * path separator, or the size field over/underflows `long`.
  *
- * The name check matters on its own: this format's name field is a
- * bare 15-byte-max filename by convention (see this file's top-of-file
- * comment), and every member this writer itself produces is built from
- * basename_of() so it can never contain '/' or '\\' -- but a foreign or
- * deliberately crafted archive can put anything it likes in that field,
- * and x_visit() below passes m->name straight to fopen() for -x. Absent
- * this check, a member named e.g. "../../evil" or "/etc/passwd" (both
- * well within the 15-byte limit) would make `ar x` write outside the
- * extraction directory or over an arbitrary absolute path -- a classic
- * archive-extraction path-traversal ("Zip Slip"). Rejecting it here
- * protects every operation (-t/-p/-x/-d/-r all route through this
- * function), not just -x, which is deliberate: a name field that could
- * only ever have been put there by something other than this writer is
- * a corrupt/hostile header regardless of which operation reads it.
+ * The name check blocks a "Zip Slip"-style path traversal: a crafted
+ * name like "../../evil" fits the 15-byte field and would otherwise
+ * reach fopen() unchecked in x_visit().
  *
- * The size check matters because this format's size field is a 10-byte
- * decimal ASCII string, so a crafted header can claim up to
- * 9999999999 -- past LONG_MAX on an LLP64 target (this project's own
- * x86_64 Windows target has a 32-bit `long`; see include/limits.h and
- * src/internal/nt.h). strtol() clamps rather than wraps, but the
- * caller's `m.size + (m.size & 1)` even-padding arithmetic in
- * ar_foreach()/read_all_headers() can then itself overflow a 32-bit
- * signed long (undefined behavior) when size lands on LONG_MAX. A
- * leading '-' in the field is accepted by strtol() too, producing a
- * negative size that would otherwise skip zero bytes instead of the
- * member's actual data, desynchronizing the walk from the next real
- * header. Rejecting both here, before any arithmetic runs, is cheaper
- * and safer than trying to make that arithmetic overflow-safe. */
+ * The size check matters because the field is a 10-byte decimal string
+ * that can claim up to 9999999999, past LONG_MAX on this project's
+ * 32-bit-`long` Windows target; strtol() clamps rather than wraps, but
+ * the caller's `m.size + (m.size & 1)` padding arithmetic can then
+ * itself overflow. A leading '-' would also desync the walk by
+ * "skipping" a negative amount. Rejecting both here is simpler than
+ * making that arithmetic overflow-safe. */
 static int parse_header(const char raw[AR_HDR_LEN], struct ar_member *m)
 {
 	char field[17];
@@ -201,11 +175,6 @@ static int parse_header(const char raw[AR_HDR_LEN], struct ar_member *m)
 	if (i >= 0 && field[i] == '/') field[i] = 0;
 	strncpy(m->name, field, AR_NAME_MAX);
 	m->name[AR_NAME_MAX] = 0;
-	/* The explicit assignment just above always leaves a NUL at
-	 * m->name[AR_NAME_MAX], regardless of whether strncpy() itself had
-	 * to pad with NULs or filled the whole field -- so m->name is
-	 * unconditionally NUL-terminated from this point on, even though
-	 * strncpy()'s own contract alone would not guarantee it. */
 	__ownership_string_terminated(m->name);
 	if (strchr(m->name, '/') || strchr(m->name, '\\')) return -1;
 
@@ -214,10 +183,8 @@ static int parse_header(const char raw[AR_HDR_LEN], struct ar_member *m)
 	memcpy(field, raw + 48, 10); field[10] = 0;
 	errno = 0;
 	m->size = strtol(field, NULL, 10);
-	/* Reject LONG_MAX itself too, not just values strtol() had to clamp
-	 * to reach it (errno == ERANGE): LONG_MAX is always odd, so the
-	 * caller's `m.size + (m.size & 1)` even-padding would overflow a
-	 * signed long even for this in-range value. */
+	/* Reject LONG_MAX itself too: it's odd, so the caller's even-padding
+	 * `+ (m.size & 1)` would overflow even for this in-range value. */
 	if (m->size < 0 || errno == ERANGE || m->size >= LONG_MAX) return -1;
 	return 0;
 }
@@ -270,10 +237,8 @@ static int ar_foreach(const char *path, ar_visit_fn visit, void *ctx)
 		}
 		data_off = ftell(ar);
 		if (m.name[0] == 0) {
-			/* A foreign special member (GNU "/" symtab, "//"
-			 * long-name table, ...) -- see this file's header on
-			 * why long names aren't read. Skip its data and move
-			 * on rather than failing the whole archive. */
+			/* Foreign special member (GNU "/" symtab, "//" long-name
+			 * table, ...); skip rather than fail the whole archive. */
 			(void)0;
 		} else {
 			rc = visit(ar, &m, data_off, ctx);
@@ -296,13 +261,7 @@ static int ar_foreach(const char *path, ar_visit_fn visit, void *ctx)
 static const char *basename_of(const char *path)
 {
 	const char *slash;
-	/* path is always one of this file's own argv-derived operand
-	 * strings -- build_member()'s filepath (itself always one of
-	 * do_append_or_replace()'s files[] elements) or name_wanted()'s own
-	 * files[i], both ultimately __util_ar_main()'s own
-	 * elements_withtok(null_terminated, argc) argv slice -- restated
-	 * here since that fact does not survive the plain `const char *`
-	 * parameter crossing into this function. */
+	/* path is always an argv-derived operand string. */
 	__ownership_string_terminated(path);
 	slash = strrchr(path, '/');
 	const char *bslash = strrchr(path, '\\');
@@ -310,22 +269,12 @@ static const char *basename_of(const char *path)
 	return slash ? slash + 1 : path;
 }
 
-/* name is always the address of a struct ar_member's own name[] field
- * (t_visit()/p_visit()/x_visit() pass m->name, do_delete() passes
- * arr[i].m.name), never NULL; files is never NULL -- see do_delete()'s
- * identical comment for why. Both are required so strcmp()'s own
- * __attribute__((nonnull(1, 2))) is satisfied for the strcmp(...,  name)
- * call below. */
+/* name is always a struct ar_member's own name[] field, never NULL. */
 static int name_wanted(const char *name, char **files, int nfiles)
 	__attribute__((nonnull(1, 2)));
 static int name_wanted(const char *name, char **files, int nfiles)
 {
 	int i;
-	/* name is always the .name field of a struct ar_member this file
-	 * itself populated -- t_visit()/p_visit()/x_visit() pass m->name,
-	 * do_delete() passes arr[i].m.name -- both always NUL-terminated by
-	 * construction; see write_header()'s identical restatement of the
-	 * same fact for the reason it must be restated here too. */
 	__ownership_string_terminated(name);
 	if (nfiles == 0) return 1;
 	for (i = 0; i < nfiles; i++)
@@ -337,14 +286,9 @@ static int name_wanted(const char *name, char **files, int nfiles)
 
 struct t_ctx { char **files; int nfiles; int verbose; int any; };
 
-/* m and ctxp are never NULL along any real path: ar_foreach() (this
- * function's only caller, always reached through the ar_visit_fn function
- * pointer) always passes `&m`, the address of its own local struct
- * ar_member, and every real call site of ar_foreach() in this file passes
- * `&ctx`, the address of a local struct -- neither can ever be NULL. The
- * indirect call through ar_visit_fn means this checker analyzes this
- * function as its own entry point rather than inlining it, so the fact
- * has to be asserted here rather than derived from a caller. */
+/* m and ctxp are never NULL (ar_foreach() always passes &m and &ctx),
+ * but reached only through the ar_visit_fn function pointer, so the
+ * checker can't derive that by inlining -- must be asserted here. */
 static int t_visit(FILE *ar, const struct ar_member *m, long data_off, void *ctxp)
 	__attribute__((nonnull(2, 4)));
 static int t_visit(FILE *ar, const struct ar_member *m, long data_off, void *ctxp)
@@ -388,9 +332,6 @@ static int p_visit(FILE *ar, const struct ar_member *m, long data_off, void *ctx
 		size_t want = remain < (long)sizeof buf ? (size_t)remain : sizeof buf;
 		size_t got = fread(buf, 1, want, ar);
 		if (got == 0) break;
-		/* fread() never returns more than the `want` it was asked
-		 * for, and want <= sizeof buf above -- same restatement as
-		 * copy_bytes()'s identical idiom for the same fact. */
 		__ownership_readable_span(buf, got);
 		if (fwrite(buf, 1, got, stdout) != got) {
 			__util_diagf("ar: error writing to standard output: %s\n", strerror(errno));
@@ -419,10 +360,6 @@ static int x_visit(FILE *ar, const struct ar_member *m, long data_off, void *ctx
 	if (!name_wanted(m->name, ctx->files, ctx->nfiles)) return 0;
 	if (fseek(ar, data_off, SEEK_SET) != 0) { ctx->failed = 1; return 0; }
 
-	/* m->name is always populated by parse_header() (the only producer
-	 * ar_foreach() ever passes through to this visitor), which always
-	 * NUL-terminates it -- see parse_header()'s own restatement of the
-	 * same fact. */
 	__ownership_string_terminated(m->name);
 	out = fopen(m->name, "wb");
 	if (!out) {
@@ -435,9 +372,6 @@ static int x_visit(FILE *ar, const struct ar_member *m, long data_off, void *ctx
 		size_t want = remain < (long)sizeof buf ? (size_t)remain : sizeof buf;
 		size_t got = fread(buf, 1, want, ar);
 		if (got == 0) break;
-		/* fread() never returns more than the `want` it was asked
-		 * for, and want <= sizeof buf above -- same restatement as
-		 * copy_bytes()'s identical idiom for the same fact. */
 		__ownership_readable_span(buf, got);
 		if (fwrite(buf, 1, got, out) != got) {
 			__util_diagf("ar: error writing '%s': %s\n", m->name, strerror(errno));
@@ -540,11 +474,6 @@ static int emit_member(FILE *out, const struct ar_member *m, FILE *src_ar, long 
 	if (write_header(out, m) < 0) return -1;
 	if (path) {
 		FILE *in;
-		/* path, whenever non-NULL, is always one of
-		 * do_append_or_replace()'s own files[] elements (an
-		 * argv-derived member name) -- restated here since that fact
-		 * does not survive the plain `const char *` parameter
-		 * crossing into this function. */
 		__ownership_string_terminated(path);
 		in = fopen(path, "rb");
 		if (!in) return -1;
@@ -561,11 +490,6 @@ static int build_member(const char *filepath, struct ar_member *m)
 {
 	struct stat st;
 	const char *bn = basename_of(filepath);
-	/* filepath is always one of do_append_or_replace()'s own files[]
-	 * elements (an argv-derived member name), and basename_of() only
-	 * ever returns a suffix of that same string -- so bn is
-	 * null-terminated by the same argv-wide guarantee, restated here
-	 * since it crosses this function's own boundary. */
 	__ownership_string_terminated(bn);
 	if (strlen(bn) > AR_NAME_MAX) {
 		__util_diagf("ar: %s: member name longer than %d bytes -- not supported "
@@ -609,9 +533,6 @@ static int do_delete(const char *archive, char **files, int nfiles, int verbose)
 	if (!src) { free(arr); __util_diagf("ar: %s: %s\n", archive, strerror(errno)); return 1; }
 
 	snprintf(tmppath, sizeof tmppath, "%s.artmp", archive);
-	/* snprintf() with a nonzero size (sizeof tmppath here) always
-	 * NUL-terminates its output buffer -- same restatement as
-	 * put_field()'s identical idiom. */
 	__ownership_string_terminated(tmppath);
 	tmp = fopen(tmppath, "wb");
 	if (!tmp) {
@@ -677,9 +598,6 @@ static int do_append_or_replace(const char *archive, char **files, int nfiles,
 	if (!consumed) { free(arr); __util_diagf("ar: %s\n", strerror(ENOMEM)); return 1; }
 
 	snprintf(tmppath, sizeof tmppath, "%s.artmp", archive);
-	/* snprintf() with a nonzero size (sizeof tmppath here) always
-	 * NUL-terminates its output buffer -- same restatement as
-	 * put_field()'s identical idiom. */
 	__ownership_string_terminated(tmppath);
 	tmp = fopen(tmppath, "wb");
 	if (!tmp) {
@@ -700,14 +618,6 @@ static int do_append_or_replace(const char *archive, char **files, int nfiles,
 			if (!quick) {
 				for (fi = 0; fi < nfiles; fi++) {
 					const char *bn = basename_of(files[fi]);
-					/* bn: files[fi] is one of __util_ar_main()'s own
-					 * argv-derived elements, and basename_of() only
-					 * ever returns a suffix of it. arr[i].m.name: was
-					 * populated by read_all_headers() via
-					 * parse_header(), which always terminates it --
-					 * see parse_header()'s own restatement of the
-					 * same fact. Both are restated here since neither
-					 * fact survives into this loop on its own. */
 					__ownership_string_terminated(bn);
 					__ownership_string_terminated(arr[i].m.name);
 					if (strcmp(bn, arr[i].m.name) != 0) continue;

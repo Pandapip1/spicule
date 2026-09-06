@@ -348,22 +348,83 @@ inline TokenImplementation tokenImplementation(clang::ASTContext &Context,
   return {TokenImplementationStatus::Valid, External, Internal};
 }
 
-inline std::optional<int64_t> excludedSentinel(const TokenSort *Token) {
-  if (!Token)
+/* The literal grammar shared by every sentinel-carrying qualifier: either
+ * the spelling NULL (for a pointer-typed carrier, e.g. sentinel_exclude on
+ * iconv_t/nl_catd/locale_t), or a plain base-10 integer that fits in a
+ * signed 64-bit value. Anything else -- a stray identifier, a hex literal,
+ * a value wider than int64_t -- is rejected rather than guessed at. */
+inline std::optional<int64_t> parseSentinelLiteral(llvm::StringRef Text) {
+  if (Text == "NULL")
+    return 0;
+  int64_t Value = 0;
+  if (!Text.getAsInteger(10, Value))
+    return Value;
+  return std::nullopt;
+}
+
+/* Scan Declaration's own annotate() attributes for one whose text starts
+ * with Prefix, and parse whatever follows as a sentinel literal. Shared by
+ * every sentinel-carrying qualifier regardless of what kind of Decl it
+ * attaches to: excludedSentinel below reads a TypedefNameDecl (a tokdef's
+ * nominal sort), while integerSentinel/longSentinel read a plain
+ * FunctionDecl (a scalar return) or ParmVarDecl (a scalar parameter) --
+ * clang::Decl::specific_attrs<AnnotateAttr>() works identically on either,
+ * so only the prefix string and the Decl kind actually differ between
+ * them. */
+inline std::optional<int64_t> sentinelFromQualifier(const clang::Decl *Declaration,
+                                                     llvm::StringRef Prefix) {
+  if (!Declaration)
     return std::nullopt;
-  constexpr llvm::StringRef Prefix = "qual:sentinel_exclude=";
   for (const clang::AnnotateAttr *Attribute :
-       Token->specific_attrs<clang::AnnotateAttr>()) {
+       Declaration->specific_attrs<clang::AnnotateAttr>()) {
     llvm::StringRef Text = Attribute->getAnnotation();
     if (!Text.consume_front(Prefix))
       continue;
-    if (Text == "NULL")
-      return 0;
-    int64_t Value = 0;
-    if (!Text.getAsInteger(10, Value))
+    if (std::optional<int64_t> Value = parseSentinelLiteral(Text))
       return Value;
   }
   return std::nullopt;
+}
+
+inline std::optional<int64_t> excludedSentinel(const TokenSort *Token) {
+  return sentinelFromQualifier(Token, "qual:sentinel_exclude=");
+}
+
+/* include/ownership.h's integer_sentinel(value)/long_sentinel(value): a
+ * bare qualifier attached directly to a plain scalar's own Decl (a
+ * FunctionDecl for its return value, or a ParmVarDecl for a parameter) --
+ * NOT to a tokdef typedef the way sentinel_exclude is. Each scalar type gets
+ * its own distinctly-spelled qualifier/prefix pair (mirroring how
+ * include/memory_tokens.h gives readable_span and readable_elements two
+ * separate tokdef families rather than one parameterized by unit), so a
+ * reader can match the annotation's name to the variable's own declared
+ * type; the checker that enforces this still recovers the real QualType
+ * (and therefore the real width) straight from Declaration itself, so the
+ * distinction is documentation, not something the proof itself depends on.
+ * Adding a further scalar type's own sentinel qualifier is exactly this
+ * shape: one macro in ownership.h emitting its own "qual:..._sentinel="
+ * prefix, one thin wrapper here, and one entry in scalarSentinel's list
+ * below -- no change to the shared parser or to the enforcing checker.
+ * tools/clang/SizeCastChecker.cpp's ntlibc.IntegerSentinel is the one
+ * checker that reads any of these back, always through scalarSentinel. */
+inline std::optional<int64_t> integerSentinel(const clang::Decl *Declaration) {
+  return sentinelFromQualifier(Declaration, "qual:integer_sentinel=");
+}
+
+inline std::optional<int64_t> longSentinel(const clang::Decl *Declaration) {
+  return sentinelFromQualifier(Declaration, "qual:long_sentinel=");
+}
+
+/* The single entry point ntlibc.IntegerSentinel actually calls: every
+ * scalar-sentinel spelling recognized anywhere, tried in turn. A Decl only
+ * ever carries one such qualifier in practice (a return value or parameter
+ * has exactly one real declared scalar type to name), but nothing here
+ * assumes that -- the first match wins, same as excludedSentinel's own
+ * loop over possibly-multiple annotate() attributes above. */
+inline std::optional<int64_t> scalarSentinel(const clang::Decl *Declaration) {
+  if (std::optional<int64_t> Value = integerSentinel(Declaration))
+    return Value;
+  return longSentinel(Declaration);
 }
 
 /* The two halves of testing whether a symbolic Value is Token's declared

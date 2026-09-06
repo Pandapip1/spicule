@@ -19,6 +19,7 @@
 #include "clang/StaticAnalyzer/Frontend/CheckerRegistry.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/SmallString.h"
+#include "TokenAlgebra.h"
 #ifdef NTLIBC_ARITHMETIC_Z3
 #include "ExactCScalarSMT.h"
 #include "z3++.h"
@@ -34,6 +35,18 @@
 using namespace clang;
 using namespace ento;
 
+// A scalar value returned by an integer_sentinel(V)/long_sentinel(V)-marked
+// function, or bound to a matching parameter at function entry, is tracked
+// by the SPECIFIC Decl (FunctionDecl or ParmVarDecl) that carried the
+// qualifier -- not by the already-parsed int64_t literal -- so
+// ntlibc.IntegerSentinel re-derives the literal through
+// ntlibc::algebra::scalarSentinel() at every use site instead of caching a
+// second, possibly-diverging copy of it. This mirrors AllocationOrigin's
+// own SymbolRef -> const Stmt* shape immediately below: a plain pointer
+// value is a POD FoldingSet key with no template-instantiation risk plain
+// int64_t/uint64_t map values would carry into a header this many checker
+// translation units already include.
+REGISTER_MAP_WITH_PROGRAMSTATE(IntegerSentinelOrigin, SymbolRef, const Decl *)
 REGISTER_MAP_WITH_PROGRAMSTATE(ArithmeticContractField,
                                const StackFrameContext *, const MemRegion *)
 REGISTER_MAP_WITH_PROGRAMSTATE(ArithmeticContractOutput,
@@ -3131,6 +3144,236 @@ public:
   }
 };
 
+/* Enforces include/ownership.h's integer_sentinel(value)/long_sentinel(value):
+ * a PLAIN scalar function return or parameter that names one excluded
+ * literal, the parametric sibling of sentinel_exclude(value) for values that
+ * are not a tokdef'd opaque handle. src/util/timeout.c's parse_duration()
+ * (fixed by hand in commit 1c4fc3b2, before this checker existed) is exactly
+ * the shape this closes: a `long` return whose -1 means "unrepresentable
+ * duration", cast to time_t on a path that never ruled -1 out first.
+ *
+ * The proof obligation here -- "is it possible for this exact value to equal
+ * one fixed literal" -- is a single-symbol equality query, not the
+ * cross-symbol relational bound ntlibc.SizeCast's own CastZ3Proof exists for
+ * (see CastZ3Engine's comment above for why THAT problem needs Z3: two
+ * independently-bounded symbols compared to each other, which plain interval
+ * arithmetic cannot combine). A fixed-literal equality is exactly what the
+ * engine's ordinary RangeConstraintManager already decides exactly, with no
+ * completeness gap -- so this checker calls TokenAlgebra.h's
+ * splitOnExcludedSentinel() directly, the same real path-sensitive proof
+ * OwnershipChecker.cpp's refineExcludedSentinel() already relies on for
+ * sentinel_exclude(value)'s tokdef case, rather than adding a second,
+ * disconnected proof engine. It still lives in this translation unit
+ * alongside ntlibc.SizeCast/ntlibc.ArrayIndex, sharing their diagnostic
+ * shape and BugReporter conventions, so a NTLIBC_ARITHMETIC_Z3 escalation
+ * can be added here later without disturbing callers if a real relational
+ * guard shape (e.g. "checked against another, independently-bounded
+ * variable" rather than a literal) is ever found to need one. */
+class IntegerSentinelChecker
+    : public Checker<check::PostCall, check::BeginFunction,
+                     check::PreStmt<BinaryOperator>,
+                     check::PreStmt<ArraySubscriptExpr>,
+                     check::PreStmt<ExplicitCastExpr>> {
+  mutable std::unique_ptr<BugType> BT;
+
+  static std::optional<int64_t> declSentinel(const Decl *Declaration) {
+    return Declaration ? ntlibc::algebra::scalarSentinel(Declaration)
+                       : std::nullopt;
+  }
+
+  // Every redeclaration gets its own ParmVarDecl/FunctionDecl objects; the
+  // qualifier commonly sits on a header prototype the .c file's own
+  // definition does not restate (see tokenContracts() in
+  // MemoryContractChecker.cpp for the identical redecls() walk memory
+  // contracts already need for the same reason).
+  static const Decl *returnSentinelDecl(const FunctionDecl *Function) {
+    if (!Function)
+      return nullptr;
+    for (const FunctionDecl *Redeclaration : Function->redecls())
+      if (declSentinel(Redeclaration))
+        return Redeclaration;
+    return nullptr;
+  }
+
+  static const Decl *parameterSentinelDecl(const FunctionDecl *Function,
+                                           unsigned Index) {
+    if (!Function)
+      return nullptr;
+    for (const FunctionDecl *Redeclaration : Function->redecls()) {
+      if (Index >= Redeclaration->getNumParams())
+        continue;
+      const ParmVarDecl *Parameter = Redeclaration->getParamDecl(Index);
+      if (declSentinel(Parameter))
+        return Parameter;
+    }
+    return nullptr;
+  }
+
+  // Walks through SymbolCast wrappers (an intervening implicit or explicit
+  // conversion -- e.g. assigning a sentinel-marked `long` return into an
+  // `int` local) to find the tracked base symbol underneath, the same
+  // unwrapping CastZ3Proof::translate() above already does for the same
+  // reason.
+  static std::pair<SymbolRef, const Decl *>
+  trackedOrigin(SVal Value, ProgramStateRef State) {
+    SymbolRef Symbol = Value.getAsSymbol(true);
+    for (unsigned Depth = 0; Symbol && Depth < 12; ++Depth) {
+      if (const Decl *const *Found = State->get<IntegerSentinelOrigin>(Symbol))
+        return {Symbol, *Found};
+      const auto *Cast = dyn_cast<SymbolCast>(Symbol);
+      if (!Cast)
+        break;
+      Symbol = Cast->getOperand();
+    }
+    return {nullptr, nullptr};
+  }
+
+  static std::string sourceText(const Expr *Expr, CheckerContext &C) {
+    const SourceManager &SM = C.getSourceManager();
+    SourceLocation Begin = SM.getSpellingLoc(Expr->getBeginLoc());
+    SourceLocation End = SM.getSpellingLoc(Expr->getEndLoc());
+    StringRef Raw = Lexer::getSourceText(
+        CharSourceRange::getTokenRange(Begin, End), SM, C.getLangOpts());
+    std::string Result;
+    bool Space = false;
+    for (char Character : Raw) {
+      if (std::isspace(static_cast<unsigned char>(Character))) {
+        Space = !Result.empty();
+      } else {
+        if (Space)
+          Result += ' ';
+        Result += Character;
+        Space = false;
+      }
+    }
+    if (Result.empty())
+      Result = Expr->getStmtClassName();
+    return Result;
+  }
+
+  static std::string sourceOrigin(const Expr *Expr, CheckerContext &C) {
+    const SourceManager &SM = C.getSourceManager();
+    return SM.getFilename(SM.getExpansionLoc(Expr->getBeginLoc())).str();
+  }
+
+  void checkUse(const Expr *UseExpr, CheckerContext &C,
+               StringRef UseKind) const {
+    if (!UseExpr)
+      return;
+    ProgramStateRef State = C.getState();
+    SVal Value = C.getSVal(UseExpr);
+    auto [Symbol, Origin] = trackedOrigin(Value, State);
+    if (!Symbol || !Origin)
+      return;
+    std::optional<int64_t> Sentinel = declSentinel(Origin);
+    if (!Sentinel)
+      return;
+    std::optional<DefinedOrUnknownSVal> Defined =
+        Value.getAs<DefinedOrUnknownSVal>();
+    if (!Defined)
+      return;
+    QualType Type = Value.getType(C.getASTContext());
+    if (Type.isNull() || !Type->isIntegralOrEnumerationType())
+      return;
+    ntlibc::algebra::SentinelSplit Split = ntlibc::algebra::splitOnExcludedSentinel(
+        State, *Defined, Type, *Sentinel, C.getSValBuilder());
+    if (!Split.Sentinel)
+      return; // infeasible for Value to equal Sentinel: proven excluded.
+
+    ExplodedNode *Node = C.generateNonFatalErrorNode(Split.Sentinel);
+    if (!Node)
+      return;
+    if (!BT)
+      BT = std::make_unique<BugType>(this, "Unproven integer sentinel",
+                                     categories::LogicError);
+    const Decl *Current = C.getLocationContext()->getDecl();
+    std::string Context = Current ? Current->getDeclKindName() : "unknown";
+    if (const auto *Named = dyn_cast_or_null<NamedDecl>(Current))
+      Context = Named->getQualifiedNameAsString();
+    std::string OriginName = "<expression>";
+    if (const auto *Parameter = dyn_cast<ParmVarDecl>(Origin)) {
+      OriginName = "parameter '" + Parameter->getNameAsString() + "'";
+      if (const auto *Function =
+              dyn_cast_or_null<FunctionDecl>(Parameter->getDeclContext()))
+        OriginName += " of '" + Function->getQualifiedNameAsString() + "'";
+    } else if (const auto *Named = dyn_cast<NamedDecl>(Origin)) {
+      OriginName = "'" + Named->getQualifiedNameAsString() + "'";
+    }
+    std::string Message =
+        "value from " + OriginName + " carries excluded sentinel " +
+        std::to_string(*Sentinel) + " not proven ruled out before " +
+        UseKind.str() + "; origin '" + sourceOrigin(UseExpr, C) +
+        "'; context '" + Context + "'; use '" + sourceText(UseExpr, C) + "'";
+    auto Report = std::make_unique<PathSensitiveBugReport>(*BT, Message, Node);
+    Report->addRange(UseExpr->getSourceRange());
+    C.emitReport(std::move(Report));
+  }
+
+public:
+  void checkPostCall(const CallEvent &Call, CheckerContext &C) const {
+    const auto *Callee = dyn_cast_or_null<FunctionDecl>(Call.getDecl());
+    if (!Callee || !Callee->getReturnType()->isIntegralOrEnumerationType())
+      return;
+    const Decl *Origin = returnSentinelDecl(Callee);
+    if (!Origin)
+      return;
+    SymbolRef Symbol = Call.getReturnValue().getAsSymbol(true);
+    if (!Symbol)
+      return;
+    ProgramStateRef State = C.getState();
+    C.addTransition(State->set<IntegerSentinelOrigin>(Symbol, Origin));
+  }
+
+  void checkBeginFunction(CheckerContext &C) const {
+    const auto *Function =
+        dyn_cast_or_null<FunctionDecl>(C.getLocationContext()->getDecl());
+    if (!Function)
+      return;
+    ProgramStateRef State = C.getState();
+    const LocationContext *LCtx = C.getLocationContext();
+    bool Changed = false;
+    for (unsigned Index = 0; Index < Function->getNumParams(); ++Index) {
+      const ParmVarDecl *Parameter = Function->getParamDecl(Index);
+      if (!Parameter->getType()->isIntegralOrEnumerationType())
+        continue;
+      const Decl *Origin = parameterSentinelDecl(Function, Index);
+      if (!Origin)
+        continue;
+      SVal ParamValue = State->getSVal(State->getLValue(Parameter, LCtx));
+      SymbolRef Symbol = ParamValue.getAsSymbol(true);
+      if (!Symbol)
+        continue;
+      State = State->set<IntegerSentinelOrigin>(Symbol, Origin);
+      Changed = true;
+    }
+    if (Changed)
+      C.addTransition(State);
+  }
+
+  void checkPreStmt(const BinaryOperator *Operation, CheckerContext &C) const {
+    switch (Operation->getOpcode()) {
+    case BO_Add:
+    case BO_Sub:
+    case BO_Mul:
+    case BO_Div:
+      break;
+    default:
+      return;
+    }
+    checkUse(Operation->getLHS(), C, "arithmetic");
+    checkUse(Operation->getRHS(), C, "arithmetic");
+  }
+
+  void checkPreStmt(const ArraySubscriptExpr *Subscript,
+                    CheckerContext &C) const {
+    checkUse(Subscript->getIdx(), C, "an array index");
+  }
+
+  void checkPreStmt(const ExplicitCastExpr *Cast, CheckerContext &C) const {
+    checkUse(Cast->getSubExpr(), C, "a cast");
+  }
+};
+
 } // namespace
 
 extern "C" const char clang_analyzerAPIVersionString[] =
@@ -3155,4 +3398,9 @@ extern "C" void clang_registerCheckers(CheckerRegistry &Registry) {
   Registry.addChecker<ArithmeticContractChecker>(
       "ntlibc.ArithmeticContract",
       "Enforces arithmetic parameter and successful-call contracts", "");
+  Registry.addChecker<IntegerSentinelChecker>(
+      "ntlibc.IntegerSentinel",
+      "Proves integer_sentinel/long_sentinel values are ruled out before "
+      "arithmetic, cast, or index use",
+      "");
 }

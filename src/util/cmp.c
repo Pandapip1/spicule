@@ -74,6 +74,12 @@ struct cmp_file {
 	int is_stdin;
 };
 
+/* AllocationLifetimeChecker: a known checker-vocabulary gap, not a real
+ * leak. It has no axiom that a withtok(file_stream_open)-returning fopen()
+ * result is provably disjoint from the global stdin singleton, so it
+ * reports the fopen() branch below as "not freed before function exit"
+ * along a merged path where it (impossibly) aliases stdin -- every real
+ * caller closes it via cmp_close() below, on every return path. */
 static int cmp_open(struct cmp_file *cf, const char *path)
 {
 	if (strcmp(path, "-") == 0) {

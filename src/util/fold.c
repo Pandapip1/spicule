@@ -6,48 +6,38 @@
  * bytes, with -b).
  *
  * DESCRIPTION's column-position rules, each implemented literally:
- *   - <tab> "shall advance the column position pointer to the next tab
- *     stop... at each column position n such that n modulo 8 equals 1"
- *     -- fixed at 8, unlike src/util/expand.c's configurable -t, because
- *     fold(1p) has no -t of its own to configure it with.
- *   - <backspace> "decremented by one, ... never become negative" (this
- *     file's `col` is a 0-based count of columns already used, unlike
+ *   - <tab> advances to the next column n where n modulo 8 equals 1 --
+ *     fixed at 8, unlike src/util/expand.c's configurable -t, because
+ *     fold(1p) has no -t of its own.
+ *   - <backspace> decrements by one, never below zero (this file's
+ *     `col` is a 0-based count of columns already used, unlike
  *     src/util/expand.c's 1-based "next column"; see fold_stream()).
- *   - <carriage-return> "set to zero".
+ *   - <carriage-return> resets to zero.
  *
- * -b: "Count width in bytes rather than column positions" -- every byte
+ * -b counts width in bytes rather than column positions: every byte
  * counts as exactly one, including tab/backspace/CR, which lose their
- * special column-tracking meaning entirely in this mode (the standard
- * ties all three rules above to "column position" tracking, not to
- * byte counting).
+ * special column-tracking meaning entirely in this mode.
  *
  * Column (non -b) mode decodes real UTF-8 via this build's mbrtowc()
- * (src/stdlib/mbrtowc.c) rather than treating each byte as its own
- * column -- see src/util/cut.c's header for why that distinction is
- * backed by something real here rather than invented; char_len() below
- * is that same ten-line decode-length helper, duplicated rather than
- * shared for the same reason cut.c's copy of it gives (see that file).
- * A decoded multi-byte character still counts as exactly one column,
- * which is a real simplification for a character whose *display* width
- * is more than one cell (many CJK characters); getting genuine East
- * Asian width data into this build is out of scope here, and "count as
- * one column" is the same simplification a locale-free wc/fold always
- * makes.
+ * rather than treating each byte as its own column -- see
+ * src/util/cut.c's header for why; char_len() below is that same
+ * decode-length helper, duplicated rather than shared for the same
+ * reason cut.c's copy does. A decoded multi-byte character still
+ * counts as exactly one column even when its *display* width is wider
+ * (many CJK characters) -- the same simplification a locale-free
+ * wc/fold always makes; real East Asian width data is out of scope.
  *
- * -s: "If a segment of a line contains a <blank> within the first width
- * column positions (or bytes), break the line after the last such
- * <blank> ... If there is no <blank> meeting the requirements, the -s
- * option shall have no effect for that output segment" -- implemented
- * by remembering the byte offset just past the most recent <blank> seen
- * in the segment being built, and rewinding to it (then re-scanning
- * forward, so tab stops inside the remainder are recomputed correctly
- * rather than assumed unaffected by the shift) when the segment would
- * otherwise overflow.
+ * -s breaks a line after the last <blank> within the first `width`
+ * columns (or bytes), if any -- implemented by remembering the byte
+ * offset just past the most recent <blank> in the segment being built,
+ * and rewinding to it (re-scanning forward, so tab stops in the
+ * remainder are recomputed rather than assumed unaffected by the
+ * shift) when the segment would otherwise overflow.
  *
- * A single unit (byte, or decoded character) that is wider than `width`
- * by itself is still emitted, alone, on its own output line, rather
- * than looping forever trying to make it fit -- fold(1p) does not
- * define this case, and refusing to make progress is worse than the one
+ * A single unit (byte, or decoded character) wider than `width` by
+ * itself is still emitted alone on its own output line, rather than
+ * looping forever trying to make it fit -- fold(1p) doesn't define
+ * this case, and making no progress is worse than the one
  * inevitably-too-wide line this produces.
  *
  * EXIT STATUS: "0 All input files were processed successfully. >0 An

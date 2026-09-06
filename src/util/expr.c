@@ -149,13 +149,16 @@ static const char *peek(struct expr_ctx *c)
 {
 	const char *tok;
 	if (c->i >= c->n) return NULL;
+	/* c->v is set exactly once, in __util_expr_main() right from its own
+	 * (elements_withtok(null_terminated, argc)) argv+1 slice, and never
+	 * reassigned -- genuinely never NULL for this expr_ctx's whole
+	 * lifetime, but that fact does not survive a struct field read this
+	 * per-function analysis cannot see through. */
+	__ownership_pointer_nonnull(c->v);
 	tok = c->v[c->i];
 	__ownership_string_terminated(tok);
 	return tok;
 }
-/* Left open: the checker still flags this c->v[c->i] access itself as "not
- * proven nonnull" -- no existing annotation establishes plain-pointer
- * nonnull-ness for a struct field's own array (same gap test.c hit). */
 
 /* Allocation failure here does NOT call exit(): __util_expr_main() runs
  * in-process as a shell builtin with no fork (src/sh/builtin.c's

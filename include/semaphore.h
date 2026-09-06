@@ -27,14 +27,22 @@ typedef struct {
 #define SEM_FAILED ((sem_t *)-1)
 #define SEM_VALUE_MAX 2147483647
 
+fallible
 int sem_init(sem_t *sem construct(semaphore), int, unsigned int);
+fallible
 int sem_destroy(sem_t *sem destroy(semaphore));
 sem_t *sem_open(const char *, int, ...);
+fallible
 int sem_close(sem_t *);
+fallible
 int sem_unlink(const char *);
+fallible
 int sem_wait(sem_t *sem handle(semaphore));
+fallible
 int sem_trywait(sem_t *sem handle(semaphore));
+fallible
 int sem_timedwait(sem_t *sem handle(semaphore), const struct timespec *);
+fallible
 int sem_post(sem_t *sem handle(semaphore));
 int sem_getvalue(sem_t *sem handle(semaphore), int *);
 

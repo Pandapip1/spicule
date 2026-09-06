@@ -42,10 +42,12 @@ extern "C" {
 
 #include <bits/alltypes.h>
 
+fallible
 int pipe(int [2]);
 /* fds required: pipe2() writes both descriptors back through it
  * unconditionally on success. pipe() is not marked: it only forwards
  * fds into pipe2() without dereferencing it itself. */
+fallible
 int pipe2(int [2], int) __attribute__((nonnull(1)));
 /* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline: close()
  * is one of the two POSIX-named "cleanup after a diagnosed failure" calls
@@ -53,37 +55,60 @@ int pipe2(int [2], int) __attribute__((nonnull(1)));
  * through this annotation rather than through that checker's own hardcoded
  * name list -- see its hasThreadTokenAnnotation(). */
 grants_thread_token(errno_grounds)
+fallible
 int close(int);
+fallible
 int posix_close(int, int);
 int dup(int);
+fallible
 int dup2(int, int);
+fallible
 int dup3(int, int, int);
 off_t lseek(int, off_t, int);
+fallible
 int fsync(int);
+fallible
 int fdatasync(int);
 
+fallible
 ssize_t read(int, void *buffer withtok(writable_span(count)), size_t count);
+fallible
 ssize_t write(int, const void *buffer withtok(readable_span(count)), size_t count);
+fallible
 ssize_t pread(int, void *buffer withtok(writable_span(count)), size_t count,
               off_t);
+fallible
 ssize_t pwrite(int, const void *buffer withtok(readable_span(count)),
                size_t count, off_t);
 
+fallible
 int chown(const char *, uid_t, gid_t);
+fallible
 int fchown(int, uid_t, gid_t);
+fallible
 int lchown(const char *, uid_t, gid_t);
+fallible
 int fchownat(int, const char *, uid_t, gid_t, int);
 
+fallible
 int link(const char *, const char *);
+fallible
 int linkat(int, const char *, int, const char *, int);
+fallible
 int symlink(const char *, const char *);
+fallible
 int symlinkat(const char *, int, const char *);
 ssize_t readlink(const char *__restrict, char *__restrict, size_t);
 ssize_t readlinkat(int, const char *__restrict, char *__restrict, size_t);
+fallible
 int unlink(const char *);
+fallible
 int unlinkat(int, const char *, int);
+fallible
 int rmdir(const char *);
+fallible
 int truncate(const char *, off_t);
+fallible
 int ftruncate(int, off_t);
 
 #define F_OK 0

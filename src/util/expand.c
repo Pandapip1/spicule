@@ -6,21 +6,18 @@
  * tablist.c/.h, shared with src/util/unexpand.c's own -t).  Default tab
  * stops are every 8th column when -t is not given.
  *
- * DESCRIPTION: "Any <backspace> characters shall be copied to the
- * output and cause the column position count for tab stop calculations
- * to be decremented; the column position count shall not be decremented
- * below zero." -- implemented with `col` as the 1-based column the next
- * character will occupy (so "count" in the standard's own 0-based sense
- * is col - 1, and "not below zero" is exactly "col not below one").
+ * Backspace is copied through and decrements the column count for tab
+ * calculations, floored at one; `col` here is the 1-based column the
+ * next character will occupy, so the standard's 0-based "not below
+ * zero" is "col not below one".
  *
- * Processed byte-at-a-time (fgetc/fputc) rather than line-buffered:
- * there is no bound on a real input line's length worth imposing here,
- * and the column counter already resets on '\n' with nothing else to
- * remember across it.
+ * Processed byte-at-a-time (fgetc/fputc) rather than line-buffered: no
+ * line-length bound is needed, and `col` already resets on '\n' with
+ * nothing else to remember across it.
  *
- * A missing/unreadable file operand is diagnosed and that operand
- * counted as a failure; the remaining operands still run, same
- * multi-operand convention as src/util/cut.c and src/util/rm.c.
+ * A missing/unreadable file operand is diagnosed and counted as a
+ * failure; remaining operands still run (same convention as
+ * src/util/cut.c and src/util/rm.c).
  *
  * EXIT STATUS: "0 Successful completion. >0 An error occurred."
  */

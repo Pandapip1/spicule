@@ -6,6 +6,8 @@
  * licenses the compiler to eliminate, reorder, or coalesce calls the
  * program actually depends on. */
 
+#include "../../include/ownership.h"
+
 /* 1. errno. */
 int *__errno_location(void);
 int bad_errno(int x) __attribute__((pure));
@@ -27,6 +29,7 @@ int bad_pointer_write(int *out, int x)
 }
 
 /* 3. I/O. */
+io_operation
 long read(int fd, void *buf, unsigned long n);
 int bad_io(int fd) __attribute__((pure));
 int bad_io(int fd)

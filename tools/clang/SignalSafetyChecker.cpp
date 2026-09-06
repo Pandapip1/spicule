@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "clang/AST/ASTConsumer.h"
+#include "clang/AST/Attr.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Frontend/CompilerInstance.h"
@@ -76,111 +77,19 @@ class HandlerSafetyVisitor : public RecursiveASTVisitor<HandlerSafetyVisitor> {
     return Result.empty() ? Statement->getStmtClassName() : Result;
   }
 
-  static bool asyncSafe(StringRef Name) {
-    static constexpr llvm::StringLiteral Names[] = {"_Exit",
-                                                    "_exit",
-                                                    "abort",
-                                                    "accept",
-                                                    "access",
-                                                    "alarm",
-                                                    "bind",
-                                                    "chdir",
-                                                    "chmod",
-                                                    "chown",
-                                                    "close",
-                                                    "connect",
-                                                    "dup",
-                                                    "dup2",
-                                                    "execle",
-                                                    "execve",
-                                                    "fchmod",
-                                                    "fchown",
-                                                    "fcntl",
-                                                    "fork",
-                                                    "fstat",
-                                                    "fsync",
-                                                    "ftruncate",
-                                                    "getegid",
-                                                    "geteuid",
-                                                    "getgid",
-                                                    "getgroups",
-                                                    "getpeername",
-                                                    "getpgrp",
-                                                    "getpid",
-                                                    "getppid",
-                                                    "getsockname",
-                                                    "getsockopt",
-                                                    "getuid",
-                                                    "kill",
-                                                    "link",
-                                                    "listen",
-                                                    "lseek",
-                                                    "mkdir",
-                                                    "open",
-                                                    "pause",
-                                                    "pipe",
-                                                    "poll",
-                                                    "posix_trace_event",
-                                                    "pselect",
-                                                    "raise",
-                                                    "read",
-                                                    "readlink",
-                                                    "recv",
-                                                    "recvfrom",
-                                                    "recvmsg",
-                                                    "rename",
-                                                    "rmdir",
-                                                    "select",
-                                                    "sem_post",
-                                                    "send",
-                                                    "sendmsg",
-                                                    "sendto",
-                                                    "setgid",
-                                                    "setpgid",
-                                                    "setsid",
-                                                    "setsockopt",
-                                                    "setuid",
-                                                    "shutdown",
-                                                    "sigaction",
-                                                    "sigaddset",
-                                                    "sigdelset",
-                                                    "sigemptyset",
-                                                    "sigfillset",
-                                                    "sigismember",
-                                                    "signal",
-                                                    "sigpause",
-                                                    "sigpending",
-                                                    "sigprocmask",
-                                                    "sigqueue",
-                                                    "sigsuspend",
-                                                    "sleep",
-                                                    "socket",
-                                                    "socketpair",
-                                                    "stat",
-                                                    "symlink",
-                                                    "tcdrain",
-                                                    "tcflow",
-                                                    "tcflush",
-                                                    "tcgetattr",
-                                                    "tcgetpgrp",
-                                                    "tcsendbreak",
-                                                    "tcsetattr",
-                                                    "tcsetpgrp",
-                                                    "time",
-                                                    "timer_getoverrun",
-                                                    "timer_gettime",
-                                                    "timer_settime",
-                                                    "times",
-                                                    "umask",
-                                                    "uname",
-                                                    "unlink",
-                                                    "utime",
-                                                    "wait",
-                                                    "waitpid",
-                                                    "write"};
-    for (StringRef Candidate : Names)
-      if (Name == Candidate)
-        return true;
+  /* include/ownership.h's async_signal_safe: a bare, function-level
+   * annotate() marker, so any redeclaration may carry it (mirrors
+   * FallibleResultChecker.cpp's isFallible()). Replaces the hardcoded
+   * copy of POSIX's Async-Signal-Safe Functions table this checker used
+   * to carry itself. */
+  static bool asyncSafe(const FunctionDecl *Function) {
+    if (!Function)
+      return false;
+    for (const FunctionDecl *Redecl : Function->redecls())
+      for (const AnnotateAttr *Attribute :
+          Redecl->specific_attrs<AnnotateAttr>())
+        if (Attribute->getAnnotation() == "async_signal_safe")
+          return true;
     return false;
   }
 
@@ -215,7 +124,7 @@ public:
 
   bool VisitCallExpr(CallExpr *Call) {
     const FunctionDecl *Callee = Call->getDirectCallee();
-    if (!Callee || !asyncSafe(Callee->getName()))
+    if (!asyncSafe(Callee))
       Diagnostics.Report(Call->getExprLoc(), UnsafeCallDiagnostic)
           << Handler->getQualifiedNameAsString() << text(Call);
     return true;

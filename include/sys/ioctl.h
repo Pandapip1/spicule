@@ -23,6 +23,7 @@ extern "C" {
 #endif
 
 #include <features.h>
+#include <ownership.h>
 
 /* TIOCGWINSZ: terminal window size (src/ioctl/ioctl.c, backed by
  * kernel32's GetConsoleScreenBufferInfo() -- NTLIBC_USE_KERNEL32 only,
@@ -44,6 +45,7 @@ struct winsize {
  * O_NONBLOCK does and does not change in this library today. */
 #define FIONBIO 0x5421
 
+io_operation
 int ioctl(int, unsigned long, ...);
 
 #ifdef __cplusplus

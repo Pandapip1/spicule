@@ -130,24 +130,49 @@ struct linger {
  * src/socket/listen.c clamps to it. */
 #define SOMAXCONN 128
 
+async_signal_safe
+io_operation
 int socket(int, int, int);
+async_signal_safe
 int socketpair(int, int, int, int [2]);
+async_signal_safe
+io_operation
 int bind(int, const struct sockaddr *, socklen_t);
+async_signal_safe
+io_operation
 int listen(int, int);
+async_signal_safe
+io_operation
 int accept(int, struct sockaddr *__restrict, socklen_t *__restrict);
+async_signal_safe
+io_operation
 int connect(int, const struct sockaddr *, socklen_t);
+async_signal_safe
 int getsockname(int, struct sockaddr *__restrict, socklen_t *__restrict);
+async_signal_safe
 int getpeername(int, struct sockaddr *__restrict, socklen_t *__restrict);
+async_signal_safe
+io_operation
 ssize_t send(int, const void *buf withtok(readable_span(len)), size_t len,
              int flags);
+async_signal_safe
+io_operation
 ssize_t recv(int, void *buf withtok(writable_span(len)), size_t len, int flags);
+async_signal_safe
+io_operation
 ssize_t sendto(int, const void *buf withtok(readable_span(len)), size_t len,
                int flags, const struct sockaddr *, socklen_t);
+async_signal_safe
+io_operation
 ssize_t recvfrom(int, void *buf withtok(writable_span(len)), size_t len,
                  int flags, struct sockaddr *__restrict,
                  socklen_t *__restrict);
+async_signal_safe
+io_operation
 int shutdown(int, int);
+async_signal_safe
 int setsockopt(int, int, int, const void *, socklen_t);
+async_signal_safe
 int getsockopt(int, int, int, void *__restrict, socklen_t *__restrict);
 
 #ifdef __cplusplus

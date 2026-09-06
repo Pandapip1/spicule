@@ -18,6 +18,7 @@ extern "C" {
 #endif
 
 #include <features.h>
+#include <ownership.h>
 
 #define __NEED_clock_t
 #include <bits/alltypes.h>
@@ -29,6 +30,7 @@ struct tms {
 	clock_t tms_cstime;
 };
 
+async_signal_safe
 clock_t times(struct tms *);
 
 #ifdef __cplusplus

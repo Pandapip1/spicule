@@ -19,6 +19,7 @@ extern "C" {
 #endif
 
 #include <features.h>
+#include <ownership.h>
 
 #define __NEED_size_t
 #define __NEED_ssize_t
@@ -29,7 +30,9 @@ struct iovec {
 	size_t iov_len;
 };
 
+io_operation
 ssize_t readv(int, const struct iovec *, int);
+io_operation
 ssize_t writev(int, const struct iovec *, int);
 
 #ifdef __cplusplus

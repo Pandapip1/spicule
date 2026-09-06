@@ -20,6 +20,7 @@ extern "C" {
 #endif
 
 #include <features.h>
+#include <ownership.h>
 
 #define __NEED_pid_t
 #include <bits/alltypes.h>
@@ -180,15 +181,21 @@ struct termios {
 #define B19200    19200
 #define B38400    38400
 
+async_signal_safe
 int tcgetattr(int, struct termios *) __attribute__((nonnull(2)));
+async_signal_safe
 int tcsetattr(int, int, const struct termios *) __attribute__((nonnull(3)));
 speed_t cfgetispeed(const struct termios *) __attribute__((nonnull(1)));
 speed_t cfgetospeed(const struct termios *) __attribute__((nonnull(1)));
 int cfsetispeed(struct termios *, speed_t) __attribute__((nonnull(1)));
 int cfsetospeed(struct termios *, speed_t) __attribute__((nonnull(1)));
+async_signal_safe
 int tcflush(int, int);
+async_signal_safe
 int tcdrain(int);
+async_signal_safe
 int tcflow(int, int);
+async_signal_safe
 int tcsendbreak(int, int);
 pid_t tcgetsid(int);
 

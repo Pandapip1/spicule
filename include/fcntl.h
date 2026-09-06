@@ -10,6 +10,7 @@
 #define	_FCNTL_H
 
 #include <features.h>
+#include <ownership.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -116,9 +117,15 @@ struct flock {
 	pid_t l_pid;
 };
 
+io_operation
 int creat(const char *, mode_t);
+async_signal_safe
+io_operation
 int fcntl(int, int, ...);
+async_signal_safe
+io_operation
 int open(const char *, int, ...);
+io_operation
 int openat(int, const char *, int, ...);
 
 #define POSIX_FADV_NORMAL     0

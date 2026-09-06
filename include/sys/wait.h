@@ -13,6 +13,7 @@ extern "C" {
 #endif
 
 #include <features.h>
+#include <ownership.h>
 
 #define __NEED_pid_t
 #define __NEED_id_t
@@ -25,7 +26,10 @@ typedef enum {
 	P_PIDFD = 3
 } idtype_t;
 
+async_signal_safe
 pid_t wait (int *);
+async_signal_safe
+io_operation
 pid_t waitpid (pid_t, int *, int );
 
 /* Guarded by the same feature-test set <signal.h> guards siginfo_t with:
@@ -41,6 +45,7 @@ int waitid (idtype_t, id_t, siginfo_t *, int);
 #if defined(_XOPEN_SOURCE) || defined(_GNU_SOURCE) || defined(_BSD_SOURCE)
 #include <sys/resource.h>
 pid_t wait3 (int *, int, struct rusage *);
+io_operation
 pid_t wait4 (pid_t, int *, int, struct rusage *);
 #endif
 

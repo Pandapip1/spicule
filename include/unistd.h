@@ -43,6 +43,7 @@ extern "C" {
 #include <bits/alltypes.h>
 
 fallible
+async_signal_safe
 int pipe(int [2]);
 /* fds required: pipe2() writes both descriptors back through it
  * unconditionally on success. pipe() is not marked: it only forwards
@@ -56,34 +57,51 @@ int pipe2(int [2], int) __attribute__((nonnull(1)));
  * name list -- see its hasThreadTokenAnnotation(). */
 grants_thread_token(errno_grounds)
 fallible
+async_signal_safe
+io_operation
 int close(int);
 fallible
 int posix_close(int, int);
+async_signal_safe
 int dup(int);
 fallible
+async_signal_safe
 int dup2(int, int);
 fallible
 int dup3(int, int, int);
+async_signal_safe
+io_operation
 off_t lseek(int, off_t, int);
 fallible
+async_signal_safe
+io_operation
 int fsync(int);
 fallible
+io_operation
 int fdatasync(int);
 
 fallible
+async_signal_safe
+io_operation
 ssize_t read(int, void *buffer withtok(writable_span(count)), size_t count);
 fallible
+async_signal_safe
+io_operation
 ssize_t write(int, const void *buffer withtok(readable_span(count)), size_t count);
 fallible
+io_operation
 ssize_t pread(int, void *buffer withtok(writable_span(count)), size_t count,
               off_t);
 fallible
+io_operation
 ssize_t pwrite(int, const void *buffer withtok(readable_span(count)),
                size_t count, off_t);
 
 fallible
+async_signal_safe
 int chown(const char *, uid_t, gid_t);
 fallible
+async_signal_safe
 int fchown(int, uid_t, gid_t);
 fallible
 int lchown(const char *, uid_t, gid_t);
@@ -91,24 +109,32 @@ fallible
 int fchownat(int, const char *, uid_t, gid_t, int);
 
 fallible
+async_signal_safe
 int link(const char *, const char *);
 fallible
 int linkat(int, const char *, int, const char *, int);
 fallible
+async_signal_safe
 int symlink(const char *, const char *);
 fallible
 int symlinkat(const char *, int, const char *);
+async_signal_safe
 ssize_t readlink(const char *__restrict, char *__restrict, size_t);
 ssize_t readlinkat(int, const char *__restrict, char *__restrict, size_t);
 fallible
+async_signal_safe
+io_operation
 int unlink(const char *);
 fallible
 int unlinkat(int, const char *, int);
 fallible
+async_signal_safe
+io_operation
 int rmdir(const char *);
 fallible
 int truncate(const char *, off_t);
 fallible
+async_signal_safe
 int ftruncate(int, off_t);
 
 #define F_OK 0
@@ -116,52 +142,80 @@ int ftruncate(int, off_t);
 #define W_OK 2
 #define X_OK 1
 
+async_signal_safe
 int access(const char *, int);
 int faccessat(int, const char *, int, int);
 
+async_signal_safe
+io_operation
 int chdir(const char *);
 int fchdir(int);
 withtok(heap_allocated)
+io_operation
 char *getcwd(char * withtok(heap_allocated), size_t);
 
+async_signal_safe
 unsigned alarm(unsigned);
+async_signal_safe
 unsigned sleep(unsigned);
+async_signal_safe
 int pause(void);
 
+async_signal_safe
+io_operation
 pid_t fork(void);
 pid_t _Fork(void);
+async_signal_safe
+io_operation
 int execve(const char *, char *const [], char *const []);
 int execv(const char *, char *const []);
+async_signal_safe
 int execle(const char *, const char *, ...);
 int execl(const char *, const char *, ...);
 int execvp(const char *, char *const []);
 int execlp(const char *, const char *, ...);
 int fexecve(int, char *const [], char *const []);
+async_signal_safe
+io_operation
 _Noreturn void _exit(int);
 
+async_signal_safe
 pid_t getpid(void);
+async_signal_safe
 pid_t getppid(void);
+async_signal_safe
 pid_t getpgrp(void);
 pid_t getpgid(pid_t);
+async_signal_safe
 int setpgid(pid_t, pid_t);
+async_signal_safe
 pid_t setsid(void);
 pid_t getsid(pid_t);
 char *ttyname(int);
 int ttyname_r(int, char *, size_t);
 int isatty(int);
+async_signal_safe
 pid_t tcgetpgrp(int);
+async_signal_safe
 int tcsetpgrp(int, pid_t);
 
+async_signal_safe
 uid_t getuid(void);
+async_signal_safe
 uid_t geteuid(void);
+async_signal_safe
 gid_t getgid(void);
+async_signal_safe
 gid_t getegid(void);
 /* the gid_t[] is deliberately NOT required: gidsetsize 0 asks for the
  * count alone, and POSIX-conforming callers pass a null pointer for
  * that form. */
+async_signal_safe
 int getgroups(int, gid_t []);
+async_signal_safe
 int setuid(uid_t);
 int seteuid(uid_t);
+async_signal_safe
 int setgid(gid_t);
 int setegid(gid_t);
 
@@ -221,10 +275,13 @@ unsigned ualarm(unsigned, unsigned);  /* undefined-ok: its second
 #define L_SET 0
 #define L_INCR 1
 #define L_XTND 2
+io_operation
 int brk(void *);  /* undefined-ok: allocator is NT's private heap
 	(RtlAllocateHeap), not a growable brk-style arena. Real on Linux
 	(brk(2)), independent of this library's own mmap-based malloc(). */
+io_operation
 void *sbrk(intptr_t);  /* undefined-ok: see brk */
+io_operation
 pid_t vfork(void);
 int vhangup(void);  /* undefined-ok: session/tty concept this library
 	does not model */

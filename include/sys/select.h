@@ -13,6 +13,7 @@ extern "C" {
 #endif
 
 #include <features.h>
+#include <ownership.h>
 
 #define __NEED_size_t
 #define __NEED_time_t
@@ -39,7 +40,10 @@ typedef struct {
 /* select()/pselect(): implemented in src/select/select.c, which has the
  * full design writeup. poll() (<poll.h>) shares that file's readiness-
  * probe and wait primitives. */
+async_signal_safe
+io_operation
 int select (int, fd_set *__restrict, fd_set *__restrict, fd_set *__restrict, struct timeval *__restrict);
+async_signal_safe
 int pselect (int, fd_set *__restrict, fd_set *__restrict, fd_set *__restrict, const struct timespec *__restrict, const sigset_t *__restrict);
 
 #ifdef __cplusplus

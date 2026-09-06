@@ -1,10 +1,14 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
+#include "../../include/ownership.h"
+
+requires_thread_token(errno_grounds)
 int *__errno_location(void);
 #define errno (*__errno_location())
 
 int __set_errno_status(int st);
+grants_thread_token(errno_grounds)
 int close(int fd);
 int harmless(void);
 
@@ -97,6 +101,27 @@ int diagnosed_read_pointer_null_check(const char *path) {
 	if (!f) {
 		if (errno == 9)
 			return -1;
+	}
+	return 0;
+}
+
+/* A redundant double-check of the same already-diagnosed call: diagnosing
+ * close(fd)'s failure twice in a row must not itself be a violation. This
+ * is the fixture the shared thread-scoped errno_grounds fact was checked
+ * against before landing it: a Consume-based encoding of "has this call
+ * been diagnosed" would report the *second* comparison here (consuming an
+ * already-absent fact), which today's checker never does -- it only ever
+ * reports at the read site, never at the diagnosing comparison itself.
+ * errno_grounds sidesteps this entirely: it is granted Duplicable (an
+ * idempotent "some origin exists" fact, never consumed), and the
+ * Diagnosed-vs-LastCapable identity comparison this function actually
+ * needs stays on CallSlot's own Stmt* identity, unchanged. */
+int redundant_double_check(int fd) {
+	if (close(fd) < 0) {
+		if (errno == 9)
+			return -1;
+		if (errno == 9)
+			return -2;
 	}
 	return 0;
 }

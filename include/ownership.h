@@ -55,6 +55,27 @@
 	__ownership_attr("qual:sentinel_exclude=" #value)
 #define blocks_dereference \
 	__ownership_attr("qual:blocks_dereference")
+/* The two thread-scoped verbs below attach a token operation to a bare
+ * function declaration that has no natural parameter or return value to
+ * hang a per-value withtok(...)/consume(...)/grant(...)/drop(...)
+ * annotation on (e.g. close(), __errno_location()): the fact they track is
+ * "one thing per analyzed path/function", not tied to any specific value.
+ * There is no concurrency modeling anywhere in this checker suite --
+ * "thread-scoped" names the granularity (once per analysis, like a
+ * thread-local), not an actual thread.
+ *
+ * There is no consumes_thread_token/requires_thread_token_absent pair
+ * alongside these: the one real design that motivated them (errno_pending,
+ * tracking whether the single most-recently-diagnosed capable call is
+ * still the most recent one at all) turned out to need per-call identity a
+ * family-only key structurally cannot carry -- see
+ * tools/clang/ErrnoDisciplineChecker.cpp's own design note on
+ * CarrierCapabilityKind/ThreadCapabilityMap for the adversarial case that
+ * sank it. Add that pair once a real, sound consumer needs it. */
+#define grants_thread_token(token_name) \
+	__ownership_attr("grants_thread_token:" #token_name)
+#define requires_thread_token(token_name) \
+	__ownership_attr("requires_thread_token:" #token_name)
 #define withtok(token_name) \
 	__ownership_attr("withtok:" #token_name)
 #define elements_withtok(token_name, extent_name) \

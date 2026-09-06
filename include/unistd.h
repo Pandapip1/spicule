@@ -47,6 +47,12 @@ int pipe(int [2]);
  * unconditionally on success. pipe() is not marked: it only forwards
  * fds into pipe2() without dereferencing it itself. */
 int pipe2(int [2], int) __attribute__((nonnull(1)));
+/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline: close()
+ * is one of the two POSIX-named "cleanup after a diagnosed failure" calls
+ * that checker's CERT ERR30-C pattern actually looks for, and is recognised
+ * through this annotation rather than through that checker's own hardcoded
+ * name list -- see its hasThreadTokenAnnotation(). */
+grants_thread_token(errno_grounds)
 int close(int);
 int posix_close(int, int);
 int dup(int);

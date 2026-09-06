@@ -1429,10 +1429,13 @@ int vasprintf(char **s, const char *fmt, __isoc_va_list ap)
 	va_copy(ap2, ap);
 	n = vxprintf_mem(0, 0, fmt, ap2);
 	va_end(ap2);
-	if (n < 0) { *s = 0; return -1; }
-	*s = malloc((size_t)n + 1);
-	if (!*s) return -1;
-	return vxprintf_mem(*s, (size_t)n + 1, fmt, ap);
+	{
+		size_t bytes;
+		if (n < 0 || !__size_add_checked((size_t)n, 1, &bytes)) { *s = 0; return -1; }
+		*s = malloc(bytes);
+		if (!*s) return -1;
+		return vxprintf_mem(*s, bytes, fmt, ap);
+	}
 }
 int asprintf(char **s, const char *fmt, ...)
 {

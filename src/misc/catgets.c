@@ -90,6 +90,7 @@
 #include <unistd.h>
 #include <limits.h>
 #include <stdint.h>
+#include "libc.h"
 #include "ownership_stubs.h"
 
 #define CAT_MAGIC 0xff88ff89u
@@ -190,11 +191,12 @@ static nl_catd read_catalog(const char *path)
 
 	for (;;) {
 		if (len == cap) {
-			if (cap > (size_t)-1 / 2) { saved = ENOMEM; goto fail; }
-			nbuf = realloc(buf, cap * 2);
+			size_t newcap;
+			if (!__size_mul_checked(cap, 2, &newcap)) { saved = ENOMEM; goto fail; }
+			nbuf = realloc(buf, newcap);
 			if (!nbuf) { saved = ENOMEM; goto fail; }
 			buf = nbuf;
-			cap *= 2;
+			cap = newcap;
 		}
 		__ownership_writable_span(buf + len, cap - len);
 		n = read(fd, buf + len, cap - len);

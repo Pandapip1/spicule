@@ -53,12 +53,14 @@ char *realpath(const char *__restrict path,
 	if (vfs != __VFS_NONE) {
 		static const char *const names[] = { 0, "/", "/dev", "/dev/console", "/dev/null", "/dev/tty" };
 		const char *name = names[vfs];
+		size_t bytes;
 		len = strlen(name);
+		if (!__size_add_checked(len, 1, &bytes)) return 0;
 		if (!resolved) {
-			resolved = malloc(len + 1);
+			resolved = malloc(bytes);
 			if (!resolved) return 0;
 		}
-		(void)snprintf(resolved, len + 1, "%s", name);
+		(void)snprintf(resolved, bytes, "%s", name);
 		return resolved;
 	}
 	fd = open(path, O_RDONLY);
@@ -76,9 +78,11 @@ char *realpath(const char *__restrict path,
 	len = strlen(p);
 	if (len > 3 && p[len-1] == '/') p[--len] = 0;
 	if (!resolved) {
-		resolved = malloc(len + 1);
+		size_t bytes;
+		if (!__size_add_checked(len, 1, &bytes)) { __free(p); return 0; }
+		resolved = malloc(bytes);
 		if (!resolved) { __free(p); return 0; }
-		memcpy(resolved, p, len + 1);
+		memcpy(resolved, p, bytes);
 		__free(p);
 		return resolved;
 	}

@@ -34,7 +34,10 @@ int pthread_atfork(void (*prepare)(void), void (*parent)(void), // NOLINT(bugpro
 			__plat_fast_unlock();
 			return ENOMEM;
 		}
-		new_handlers = realloc(handlers, capacity * sizeof *handlers);
+		{
+			size_t bytes = capacity * sizeof *handlers; /* proven <= SIZE_MAX by __array_next_capacity's own element_size bound above */
+			new_handlers = realloc(handlers, bytes);
+		}
 		if (!new_handlers) {
 			__plat_fast_unlock();
 			return ENOMEM;

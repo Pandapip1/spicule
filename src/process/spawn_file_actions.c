@@ -38,15 +38,22 @@ static struct __spawn_action *fa_push(posix_spawn_file_actions_t *fa)
 	int e = errno;
 	struct __spawn_action *n;
 	if (fa->__len == fa->__cap) {
-		int cap = fa->__cap ? fa->__cap * 2 : 8;
+		size_t newcap, bytes;
 		/* The list is bounded only by the caller; keep the doubling
-		 * away from signed overflow rather than trusting it not to
-		 * get there. */
-		if (cap <= fa->__cap || cap > INT_MAX / (int)sizeof *n) { errno = e; return 0; }
-		n = realloc(fa->__actions, (size_t)cap * sizeof *n);
+		 * away from overflow rather than trusting it not to get
+		 * there -- including the extra "must still fit in the int
+		 * __cap field" bound __array_next_capacity itself has no way
+		 * to know about. */
+		if (!__array_next_capacity((size_t)fa->__cap, (size_t)fa->__len, 1, 8,
+		    sizeof *n, &newcap) || newcap > (size_t)INT_MAX) {
+			errno = e;
+			return 0;
+		}
+		bytes = newcap * sizeof *n; /* proven <= SIZE_MAX by __array_next_capacity's own element_size bound above */
+		n = realloc(fa->__actions, bytes);
 		if (!n) { errno = e; return 0; }
 		fa->__actions = n;
-		fa->__cap = cap;
+		fa->__cap = (int)newcap;
 	}
 	/* fa->__actions is non-NULL here either way: either the growth branch
 	 * above just set it, or fa->__len != fa->__cap already meant

@@ -73,8 +73,10 @@
 // NOLINTBEGIN(misc-include-cleaner)
 #include <regex.h>
 #include <ctype.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
+#include "libc.h"
 
 /* ---- bytecode ---------------------------------------------------- */
 
@@ -212,13 +214,16 @@ static int emit(struct parser *ps, int op, int c, int set, int x, int y) // NOLI
 	 * MAX_PROG. */
 	if (rx->nprog >= MAX_PROG) { ps->err = REG_ESPACE; return -1; }
 	if (rx->nprog == rx->capprog) {
-		int ncap = rx->capprog ? rx->capprog * 2 : 32;
+		size_t newcap, bytes;
 		struct inst *n;
-		if (ncap > MAX_PROG) ncap = MAX_PROG;
-		n = realloc(rx->prog, (size_t)ncap * sizeof *n);
+		if (!__array_next_capacity((size_t)rx->capprog, (size_t)rx->nprog, 1, 32,
+		    sizeof *n, &newcap)) { ps->err = REG_ESPACE; return -1; }
+		if (newcap > MAX_PROG) newcap = MAX_PROG;
+		bytes = newcap * sizeof *n; /* proven <= SIZE_MAX by __array_next_capacity's own element_size bound above */
+		n = realloc(rx->prog, bytes);
 		if (!n) { ps->err = REG_ESPACE; return -1; }
 		rx->prog = n;
-		rx->capprog = ncap;
+		rx->capprog = (int)newcap;
 	}
 	rx->prog[rx->nprog].op = (unsigned char)op;
 	rx->prog[rx->nprog].c = c;
@@ -234,11 +239,18 @@ static int newset(struct parser *ps)
 	struct rx *rx = ps->rx;
 	if (ps->err) return -1;
 	if (rx->nsets == rx->capsets) {
-		int ncap = rx->capsets ? rx->capsets * 2 : 8;
-		struct bracket *n = realloc(rx->sets, (size_t)ncap * sizeof *n);
+		size_t newcap, bytes;
+		struct bracket *n;
+		if (!__array_next_capacity((size_t)rx->capsets, (size_t)rx->nsets, 1, 8,
+		    sizeof *n, &newcap) || newcap > (size_t)INT_MAX) {
+			ps->err = REG_ESPACE;
+			return -1;
+		}
+		bytes = newcap * sizeof *n; /* proven <= SIZE_MAX by __array_next_capacity's own element_size bound above */
+		n = realloc(rx->sets, bytes);
 		if (!n) { ps->err = REG_ESPACE; return -1; }
 		rx->sets = n;
-		rx->capsets = ncap;
+		rx->capsets = (int)newcap;
 	}
 	memset(&rx->sets[rx->nsets], 0, sizeof rx->sets[rx->nsets]);
 	return rx->nsets++;
@@ -447,7 +459,10 @@ static void apply_repeat(struct parser *ps, int start, int had_atom) // NOLINT(b
 		if (!is_star && !is_plus && !is_quest && !is_brace) return;
 		if (!had_atom) { ps->err = REG_BADRPT; return; }
 
-		saved = malloc((size_t)(len > 0 ? len : 1) * sizeof *saved);
+		{
+			size_t savedbytes = (size_t)(len > 0 ? len : 1) * sizeof *saved; /* len <= MAX_PROG, proven well within SIZE_MAX */
+			saved = malloc(savedbytes);
+		}
 		if (!saved) { ps->err = REG_ESPACE; return; }
 		for (int i = 0; i < len; i++) saved[i] = ps->rx->prog[start + i];
 		ps->rx->nprog = start;	/* rewind: rebuild the atom inside the repeat wrapper */
@@ -646,7 +661,9 @@ static void ere_alt(struct parser *ps)
 	if (ps->err) return;
 	if (*ps->p == '|') {
 		int len1 = ps->rx->nprog - start, split, jmp;
-		struct inst *restrict saved = malloc((size_t)(len1 > 0 ? len1 : 1) * sizeof *saved);
+		struct inst *restrict saved;
+		size_t savedbytes = (size_t)(len1 > 0 ? len1 : 1) * sizeof *saved; /* len1 <= MAX_PROG, proven well within SIZE_MAX */
+		saved = malloc(savedbytes);
 		if (!saved) { ps->err = REG_ESPACE; return; }
 		for (int i = 0; i < len1; i++) saved[i] = ps->rx->prog[start + i];
 		ps->rx->nprog = start;
@@ -852,15 +869,18 @@ struct mstate {
 static int bt_grow(struct mstate *ms) __attribute__((nonnull(1)));
 static int bt_grow(struct mstate *ms)
 {
-	int cap = ms->capbt ? ms->capbt * 2 : 64;
+	size_t newcap, bytes;
 	struct bt *p;
 
 	if (ms->capbt >= MAX_BACKTRACK) return 0;
-	if (cap > MAX_BACKTRACK) cap = MAX_BACKTRACK;
-	p = realloc(ms->bt, (size_t)cap * sizeof *p);
+	if (!__array_next_capacity((size_t)ms->capbt, (size_t)ms->capbt, 1, 64,
+	    sizeof *p, &newcap)) return 0;
+	if (newcap > MAX_BACKTRACK) newcap = MAX_BACKTRACK;
+	bytes = newcap * sizeof *p; /* proven <= SIZE_MAX by __array_next_capacity's own element_size bound above */
+	p = realloc(ms->bt, bytes);
 	if (!p) return 0;
 	ms->bt = p;
-	ms->capbt = cap;
+	ms->capbt = (int)newcap;
 	return 1;
 }
 
@@ -1044,16 +1064,28 @@ int regexec(const regex_t *__restrict preg, const char *__restrict string,
 	regoff_t *slot;
 	regoff_t *best;
 	regoff_t *progress;
-	int nslot = rx->ncap * 2;
+	int nslot;
 	size_t len = strlen(string);
-	size_t start;
+	size_t start, nslot_sz, slotbytes, progressbytes, bestbytes;
 	int matched = 0;
 
-	slot = malloc((size_t)nslot * sizeof *slot);
+	/* rx->ncap is bounded well under MAX_PROG/2 by the same ceiling
+	 * checked at every group-open site during compilation (see the
+	 * "g >= MAX_PROG / 2" checks above), so this doubling and the three
+	 * byte counts below all stay far short of SIZE_MAX -- checked
+	 * anyway, for the same belt-and-suspenders reason as elsewhere. */
+	if (!__size_mul_checked((size_t)rx->ncap, 2, &nslot_sz) ||
+	    !__size_mul_checked(nslot_sz, sizeof *slot, &slotbytes) ||
+	    !__size_mul_checked((size_t)rx->nprog, sizeof *progress, &progressbytes) ||
+	    !__size_mul_checked(nslot_sz, sizeof *best, &bestbytes))
+		return REG_ESPACE;
+	nslot = (int)nslot_sz;
+
+	slot = malloc(slotbytes);
 	if (!slot) return REG_ESPACE;
-	progress = malloc((size_t)rx->nprog * sizeof *progress);
+	progress = malloc(progressbytes);
 	if (!progress) { free(slot); return REG_ESPACE; }
-	best = malloc((size_t)nslot * sizeof *best);
+	best = malloc(bestbytes);
 	if (!best) { free(progress); free(slot); return REG_ESPACE; }
 
 	ms.begin = string;

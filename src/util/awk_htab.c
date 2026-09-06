@@ -91,7 +91,11 @@ void **awk_htab_getp(struct awk_htab *t, const char *key)
 	}
 	n = malloc(sizeof *n);
 	if (!n) return NULL;
-	n->key = malloc(strlen(key) + 1);
+	{
+		size_t keybytes;
+		if (!__util_size_add(strlen(key), 1, &keybytes)) { free(n); return NULL; }
+		n->key = malloc(keybytes);
+	}
 	if (!n->key) { free(n); return NULL; }
 	strcpy(n->key, key); // NOLINT(clang-analyzer-security.insecureAPI.strcpy) -- n->key was just sized to strlen(key)+1 immediately above
 	n->val = NULL;

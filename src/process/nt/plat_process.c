@@ -233,7 +233,8 @@ static int append_arg(WCHAR **buf, size_t *len, size_t *cap, const WCHAR *arg)
 		return -1;
 	}
 	if (nc != *cap) {
-		WCHAR *nb = realloc(*buf, nc * sizeof(WCHAR));
+		size_t ncbytes = nc * sizeof(WCHAR); /* proven <= SIZE_MAX by __array_next_capacity's own element_size bound above */
+		WCHAR *nb = realloc(*buf, ncbytes);
 		if (!nb) { errno = ENOMEM; return -1; }
 		*buf = nb; *cap = nc;
 	}
@@ -288,7 +289,8 @@ static int append_prog(WCHAR **buf, size_t *len, size_t *cap, const WCHAR *arg)
 		return -1;
 	}
 	if (nc != *cap) {
-		WCHAR *nb = realloc(*buf, nc * sizeof(WCHAR));
+		size_t ncbytes = nc * sizeof(WCHAR); /* proven <= SIZE_MAX by __array_next_capacity's own element_size bound above */
+		WCHAR *nb = realloc(*buf, ncbytes);
 		if (!nb) { errno = ENOMEM; return -1; }
 		*buf = nb; *cap = nc;
 	}
@@ -341,8 +343,8 @@ static WCHAR *build_cmdline(char *const argv[])
 withtok(heap_allocated)
 static WCHAR *build_env_block(char *const envp[])
 {
-	size_t cap = 256, len = 0;
-	WCHAR *blk = malloc(cap * sizeof(WCHAR));
+	size_t cap = 256, len = 0, capbytes = cap * sizeof(WCHAR);
+	WCHAR *blk = malloc(capbytes);
 	int i;
 	if (!blk) return 0;
 	for (i = 0; envp && envp[i]; i++) {
@@ -360,7 +362,8 @@ static WCHAR *build_env_block(char *const envp[])
 		}
 		if (nc != cap) {
 			WCHAR *nb;
-			nb = realloc(blk, nc * sizeof(WCHAR));
+			size_t ncbytes = nc * sizeof(WCHAR); /* proven <= SIZE_MAX by __array_next_capacity's own element_size bound above */
+			nb = realloc(blk, ncbytes);
 			if (!nb) { __free(w); free(blk); return 0; }
 			blk = nb;
 			cap = nc;

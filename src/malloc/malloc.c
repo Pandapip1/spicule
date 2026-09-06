@@ -62,8 +62,10 @@ withtok(heap_allocated)
 withtok(writable_span(count * size))
 void *reallocarray(void *p consume_if_nonnull_return(heap_allocated), size_t count, size_t size)
 {
+	size_t bytes;
 	if (size && count > (size_t)-1 / size) { errno = ENOMEM; return 0; }
-	return realloc(p, count * size); // NOLINT(clang-analyzer-optin.portability.UnixAPI) -- realloc(p, 0) is a deliberate, defined passthrough here
+	bytes = count * size; /* proven <= SIZE_MAX by the guard just above */
+	return realloc(p, bytes); // NOLINT(clang-analyzer-optin.portability.UnixAPI) -- realloc(p, 0) is a deliberate, defined passthrough here
 }
 
 /* Blocks with alignment above the heap's own are carved out of a larger
@@ -87,7 +89,10 @@ int posix_memalign(void **res, size_t align, size_t len)
 	if (len > (size_t)-1 - align) return ENOMEM;
 	r = malloc(sizeof *r);
 	if (!r) return ENOMEM;
-	base = malloc(len + align);
+	{
+		size_t bytes = len + align; /* proven <= SIZE_MAX by the guard just above */
+		base = malloc(bytes);
+	}
 	if (!base) { free(r); return ENOMEM; }
 	p = (void *)(((uintptr_t)base + align - 1) & ~(uintptr_t)(align - 1));
 	r->user = p; r->base = base; r->next = aligned_list; aligned_list = r;

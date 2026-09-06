@@ -87,11 +87,14 @@ FILE *tmpfile(void)
 	FILE *f;
 	size_t n = strlen(dir);
 
-	if (n > (size_t)-1 - sizeof "/ntlibcXXXXXX") { errno = ENOMEM; return 0; }
-	tmpl = malloc(n + sizeof "/ntlibcXXXXXX");
-	if (!tmpl) return 0;
-	snprintf(tmpl, n + sizeof "/ntlibcXXXXXX",
-	    "%s/ntlibcXXXXXX", dir);
+	{
+		size_t tmplbytes;
+		if (n > (size_t)-1 - sizeof "/ntlibcXXXXXX") { errno = ENOMEM; return 0; }
+		tmplbytes = n + sizeof "/ntlibcXXXXXX";
+		tmpl = malloc(tmplbytes);
+		if (!tmpl) return 0;
+		snprintf(tmpl, tmplbytes, "%s/ntlibcXXXXXX", dir);
+	}
 	fd = mkstemp(tmpl);
 	if (fd < 0) { free(tmpl); return 0; }
 	/* POSIX semantics: unlinked at once, gone the moment it is closed. */
@@ -144,12 +147,15 @@ withtok(heap_allocated)
 char *tempnam(const char *dir, const char *pfx) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
 	const char *d = dir ? dir : tmpdir();
-	size_t n = strlen(d), pn = pfx ? strlen(pfx) : 0;
-	char *tmpl = malloc(n + 1 + pn + sizeof "XXXXXX");
+	size_t n = strlen(d), pn = pfx ? strlen(pfx) : 0, tmplbytes;
+	char *tmpl;
 	int fd;
+	if (!__size_add_checked(n, 1, &tmplbytes) ||
+	    !__size_add_checked(tmplbytes, pn, &tmplbytes) ||
+	    !__size_add_checked(tmplbytes, sizeof "XXXXXX", &tmplbytes)) return 0;
+	tmpl = malloc(tmplbytes);
 	if (!tmpl) return 0;
-	snprintf(tmpl, n + 1 + pn + sizeof "XXXXXX", "%s/%sXXXXXX",
-	    d, pfx ? pfx : "");
+	snprintf(tmpl, tmplbytes, "%s/%sXXXXXX", d, pfx ? pfx : "");
 	fd = mkstemp(tmpl);
 	if (fd < 0) { free(tmpl); return 0; }
 	if (close(fd) < 0 || unlink(tmpl) < 0) {

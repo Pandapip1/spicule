@@ -61,9 +61,14 @@ static int gbuf_push(struct gbuf *b, char c)
 {
 	if (b->n == b->cap) {
 		char *old = b->d;
-		size_t nc = b->cap ? b->cap * 2 : 32;
-		char *nd = __malloc(nc);
-		size_t i;
+		size_t nc, i;
+		char *nd;
+		if (b->cap) {
+			if (!__size_mul_checked(b->cap, 2, &nc)) return -1;
+		} else {
+			nc = 32;
+		}
+		nd = __malloc(nc);
 		if (!nd) return -1;
 		if (old) {
 			for (i = 0; i < b->n; i++) nd[i] = old[i];
@@ -87,7 +92,8 @@ static int gbuf_push_n(struct gbuf *b, const char *s, size_t n)
 
 static char *xstrndup(const char *s, size_t n)
 {
-	char *p = __malloc(n + 1);
+	size_t bytes;
+	char *p = __size_add_checked(n, 1, &bytes) ? __malloc(bytes) : 0;
 	if (p) {
 		__ownership_writable_span(p, n);
 		__ownership_readable_span(s, n);
@@ -1157,8 +1163,12 @@ static int parse_pipeline(struct parser *p, struct sh_pipeline *out)
 		struct sh_command *cmd = parse_command(p);
 		if (!cmd) goto fail;
 		if (n == cap) {
-			size_t nc = cap ? cap * 2 : 4;
-			struct sh_command *na = __malloc(nc * sizeof *na);
+			size_t nc = 4, bytes;
+			struct sh_command *na = 0;
+			if (!cap || __size_mul_checked(cap, 2, &nc)) {
+				na = __size_mul_checked(nc, sizeof *na, &bytes) ?
+					__malloc(bytes) : 0;
+			}
 			if (!na) {
 				perr(p, "out of memory");
 				__sh_free_command_contents(cmd);

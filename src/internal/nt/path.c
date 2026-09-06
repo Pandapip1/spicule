@@ -401,8 +401,13 @@ static int nt_path_over_max_path(const WCHAR *dos, size_t n, int *trailing,
 			 * drive root) is dropped so the join never doubles it --
 			 * normalize_rel() would swallow a doubled one anyway, but
 			 * the arithmetic below is easier to check without it. */
+			size_t wchars, joined_bytes;
 			while (curn > 2 && cur[curn-1] == '\\') curn--;
-			joined = __malloc((curn - 2 + 1 + n + 1) * sizeof(WCHAR));
+			if (!__size_add_checked(curn - 2, 1, &wchars) ||
+			    !__size_add_checked(wchars, n, &wchars) ||
+			    !__size_add_checked(wchars, 1, &wchars) ||
+			    !__size_mul_checked(wchars, sizeof(WCHAR), &joined_bytes)) return -1;
+			joined = __malloc(joined_bytes);
 			if (!joined) return -1;
 			{
 				size_t i;
@@ -422,7 +427,12 @@ static int nt_path_over_max_path(const WCHAR *dos, size_t n, int *trailing,
 	/* "\??\" + "X:" + "\" + the normalised body, which normalize_rel()
 	 * writes without a leading separator.  It only ever shortens, so the
 	 * allocation below is an upper bound. */
-	w = __malloc((4 + 3 + bodyn + 1) * sizeof(WCHAR));
+	{
+		size_t wchars, wbytes;
+		if (!__size_add_checked(bodyn, 4 + 3 + 1, &wchars) ||
+		    !__size_mul_checked(wchars, sizeof(WCHAR), &wbytes)) { __free(joined); return -1; }
+		w = __malloc(wbytes);
+	}
 	if (!w) { __free(joined); return -1; }
 	w[0] = '\\'; w[1] = '?'; w[2] = '?'; w[3] = '\\';
 	w[4] = letter; w[5] = ':'; w[6] = '\\';
@@ -513,14 +523,21 @@ static int ntpath_at_impl(int dirfd, const char *path, struct __ntpath *out,
 			 * relative name would throw away what the *at() family
 			 * exists for: pinning the directory even if renamed. */
 			char *dir, *joined;
-			size_t dl, pl;
+			size_t dl, pl, joined_bytes;
 			int rc;
 			__free(w);
 			dir = __handle_path(f->h);
 			if (!dir) return -1;
 			dl = strlen(dir);
 			pl = strlen(path);
-			joined = __malloc(dl + 1 + pl + 1);
+			if (!__size_add_checked(dl, 1, &joined_bytes) ||
+			    !__size_add_checked(joined_bytes, pl, &joined_bytes) ||
+			    !__size_add_checked(joined_bytes, 1, &joined_bytes)) {
+				__free(dir);
+				errno = ENOMEM;
+				return -1;
+			}
+			joined = __malloc(joined_bytes);
 			if (!joined) { __free(dir); errno = ENOMEM; return -1; }
 			{
 				size_t i;

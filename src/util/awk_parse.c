@@ -57,7 +57,7 @@ static struct awk_node *mknode(enum awk_ntype type)
 
 static void addlist(struct awk_node ***list, int *n, struct awk_node *item)
 {
-	struct awk_node **g = realloc(*list, (size_t)(*n + 1) * sizeof **list);
+	struct awk_node **g = __util_reallocarray(*list, (size_t)*n + 1, sizeof **list);
 	if (!g) oom();
 	*list = g;
 	(*list)[*n] = item;
@@ -958,7 +958,7 @@ static void parse_function_def(struct awk_parser *p)
 		for (;;) {
 			if (!at(p, T_NAME)) { perr(p, "awk: expected parameter name"); break; }
 			{
-				char **g = realloc(params, (size_t)(nparams + 1) * sizeof *params);
+				char **g = __util_reallocarray(params, (size_t)nparams + 1, sizeof *params);
 				if (!g) oom();
 				params = g;
 				params[nparams++] = p->tok.text; p->tok.text = NULL;
@@ -974,7 +974,7 @@ static void parse_function_def(struct awk_parser *p)
 	f.body = parse_block(p);
 
 	{
-		struct awk_func *g = realloc(p->prog->funcs, (size_t)(p->prog->nfuncs + 1) * sizeof *g);
+		struct awk_func *g = __util_reallocarray(p->prog->funcs, (size_t)p->prog->nfuncs + 1, sizeof *g);
 		if (!g) oom();
 		p->prog->funcs = g;
 		p->prog->funcs[p->prog->nfuncs++] = f;
@@ -1013,7 +1013,7 @@ static void parse_rule(struct awk_parser *p)
 	}
 
 	{
-		struct awk_rule *g = realloc(p->prog->rules, (size_t)(p->prog->nrules + 1) * sizeof *g);
+		struct awk_rule *g = __util_reallocarray(p->prog->rules, (size_t)p->prog->nrules + 1, sizeof *g);
 		if (!g) oom();
 		p->prog->rules = g;
 		p->prog->rules[p->prog->nrules++] = r;

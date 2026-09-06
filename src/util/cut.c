@@ -106,8 +106,10 @@ static int parse_list(const char *spec, struct range **out withtok(heap_allocate
 		if (*p && *p != ',' && *p != ' ' && *p != '\t') { free(arr); return -1; }
 
 		if (n == cap) {
-			size_t newcap = cap ? cap * 2 : 8;
-			struct range *tmp = realloc(arr, newcap * sizeof *arr);
+			size_t newcap;
+			struct range *tmp;
+			if (!__util_array_capacity(cap, n, 1, 8, sizeof *arr, &newcap)) { free(arr); return -1; }
+			tmp = __util_reallocarray(arr, newcap, sizeof *arr);
 			if (!tmp) { free(arr); return -1; }
 			arr = tmp;
 			cap = newcap;

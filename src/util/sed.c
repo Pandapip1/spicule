@@ -530,7 +530,11 @@ static int parse_replacement(struct parser *ps, char delim, struct repl_seg **ou
 				segs = g; cap = newcap; \
 			} \
 			segs[n].kind = REPL_LITERAL; \
-			segs[n].lit = malloc(lit.len + 1); \
+			{ \
+				size_t _litbytes; \
+				if (!__util_size_add(lit.len, 1, &_litbytes)) goto fail; \
+				segs[n].lit = malloc(_litbytes); \
+			} \
 			if (!segs[n].lit) goto fail; \
 			for (size_t _j = 0; _j < lit.len; _j++) \
 				segs[n].lit[_j] = lit.data[_j]; \
@@ -645,7 +649,11 @@ static char *dup_rest_of_line(struct parser *ps)
 	n = strcspn(ps->p, "\n");
 	ps->p += n;
 	while (n && (start[n - 1] == ' ' || start[n - 1] == '\t')) n--;
-	out = malloc(n + 1);
+	{
+		size_t bytes;
+		if (!__util_size_add(n, 1, &bytes)) return 0;
+		out = malloc(bytes);
+	}
 	if (!out) return 0;
 	for (size_t i = 0; i < n; i++) out[i] = start[i];
 	out[n] = 0;
@@ -668,7 +676,11 @@ static char *dup_label(struct parser *ps)
 	 * accepting '}' does nothing for b/t/: unless this scan does too. */
 	n = strcspn(ps->p, "\n;} \t");
 	ps->p += n;
-	out = malloc(n + 1);
+	{
+		size_t bytes;
+		if (!__util_size_add(n, 1, &bytes)) return 0;
+		out = malloc(bytes);
+	}
 	if (!out) return 0;
 	for (size_t i = 0; i < n; i++) out[i] = start[i];
 	out[n] = 0;
@@ -1058,7 +1070,11 @@ static int input_push(struct input_set *in, const char *text, size_t len)
 		if (!g) return -1;
 		in->lines = g; in->cap = newcap;
 	}
-	copy = malloc(len + 1);
+	{
+		size_t bytes;
+		if (!__util_size_add(len, 1, &bytes)) return -1;
+		copy = malloc(bytes);
+	}
 	if (!copy) return -1;
 	for (size_t i = 0; i < len; i++) copy[i] = text[i];
 	copy[len] = 0;

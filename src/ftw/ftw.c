@@ -120,7 +120,7 @@ static const char *resolve(struct walkstate *ws, const char *path, char **tmp)
 	const char *cwd = ws->cwd0;
 	int absolute = path[0] == '/' || path[0] == '\\' ||
 		(((path[0] | 0x20) >= 'a' && (path[0] | 0x20) <= 'z') && path[1] == ':');
-	size_t l0, l1;
+	size_t l0, l1, total;
 	char *restrict full;
 
 	*tmp = NULL;
@@ -128,9 +128,12 @@ static const char *resolve(struct walkstate *ws, const char *path, char **tmp)
 
 	l0 = strlen(cwd);
 	l1 = strlen(path);
-	full = malloc(l0 + 1 + l1 + 1);
+	if (!__size_add_checked(l0, 1, &total) ||
+	    !__size_add_checked(total, l1, &total) ||
+	    !__size_add_checked(total, 1, &total)) { errno = ENOMEM; return NULL; }
+	full = malloc(total);
 	if (!full) { errno = ENOMEM; return NULL; }
-	snprintf(full, l0 + 1 + l1 + 1, "%s/%s", cwd, path);
+	snprintf(full, total, "%s/%s", cwd, path);
 	*tmp = full;
 	return full;
 }

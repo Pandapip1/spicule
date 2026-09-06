@@ -51,8 +51,11 @@ int __sh_readonly_mark(const char *name)
 	memcpy(dup, name, len);
 
 	if (count == cap) {
-		size_t ncap = cap ? cap * 2 : 8;
-		char **nv = (char **)__malloc(ncap * sizeof *nv);
+		size_t ncap = 8, bytes;
+		char **nv = 0;
+		if ((!cap || __size_mul_checked(cap, 2, &ncap)) &&
+		    __size_mul_checked(ncap, sizeof *nv, &bytes))
+			nv = (char **)__malloc(bytes);
 		if (!nv) { __free(dup); return -1; }
 		memcpy((void *)nv, (const void *)names, count * sizeof *nv);
 		__free((void *)names);

@@ -407,7 +407,7 @@ int __util_tail_main(int argc, char **argv)
 		int ntargets = 0;
 
 		if (follow) {
-			targets = malloc((size_t)noperands * sizeof *targets);
+			targets = __util_mallocarray((size_t)noperands, sizeof *targets);
 			if (!targets) {
 				__util_diagf("tail: %s\n", strerror(ENOMEM));
 				return 1;

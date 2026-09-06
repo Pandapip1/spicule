@@ -109,11 +109,13 @@ static int shell_fallback(const char *path, char *const argv[], char *const envp
 {
 	int enoexec = errno;
 	char **av;
-	size_t n = 0, i;
+	size_t n = 0, i, navs, bytes;
 	int argc;
 
 	while (argv[n]) n++;
-	av = (char **)malloc((n + 3) * sizeof *av);
+	if (!__size_add_checked(n, 3, &navs) ||
+	    !__size_mul_checked(navs, sizeof *av, &bytes)) { errno = enoexec; return -1; }
+	av = (char **)malloc(bytes);
 	if (!av) { errno = enoexec; return -1; }
 	/* arg0, file, arg1, ..., (char *)0 -- the clause's own shape. arg0 is
 	 * the caller's, not the shell's path: it's only what the shell
@@ -179,18 +181,22 @@ int execvp(const char *file, char *const argv[])
 withtok(heap_allocated)
 static char **build_argv(const char *arg0, va_list ap, char ***envout)
 {
-	size_t cap = 8, n = 0;
-	char **v = (char **)malloc(cap * sizeof(char *));
+	size_t cap = 8, n = 0, bytes;
+	char **v;
+	if (!__size_mul_checked(cap, sizeof(char *), &bytes)) return 0;
+	v = (char **)malloc(bytes);
 	if (!v) return 0;
 	v[n++] = (char *)arg0;
 	while (v[n-1]) {
 		if (n >= cap - 1) {
 			size_t nc;
 			char **nv;
+			size_t growbytes;
 			if (!__array_next_capacity(cap, n, 2, 8, sizeof *v, &nc)) {
 				free((void *)v); errno = ENOMEM; return 0;
 			}
-			nv = (char **)realloc((void *)v, nc * sizeof *v);
+			growbytes = nc * sizeof *v; /* proven <= SIZE_MAX by __array_next_capacity's own element_size bound above */
+			nv = (char **)realloc((void *)v, growbytes);
 			if (!nv) { free((void *)v); return 0; }
 			v = nv;
 			cap = nc;

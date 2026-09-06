@@ -158,3 +158,45 @@ void use_out_param_transfer(void)
 	out_param_transfer(&object);
 	free(object);
 }
+
+withtok(heap_allocated)
+void *pack_items(void)
+{
+	return malloc(8);
+}
+
+/* Same shape as src/wordexp/wordexp.c's real wordexp_t.we_wordv/pv_pack()
+ * pairing: a struct field reached through an out-parameter pointer is
+ * filled by an intermediate withtok-declared producer, not by a direct
+ * malloc() call in this same frame -- proven not to leak on this function's
+ * own single path (see unsafe.c's fill_word_vector_leaks_on_error_path()
+ * for the same shape's leak on an error path that never reaches the
+ * assignment). */
+void fill_word_vector(struct word_vector *out)
+{
+	out->items = pack_items();
+}
+
+void use_word_vector(void)
+{
+	struct word_vector wv;
+	fill_word_vector(&wv);
+	free(wv.items);
+}
+
+/* The real, verified boundary of that same shape: nothing in this checker
+ * can turn a caller's own missing release into a finding. checkPostCall
+ * only ever mints a freshly tracked fact from a callee's own pointer-typed
+ * return value (returnsOwnership) or an argument echoed back unchanged
+ * (returnedArgument) -- never from an out-parameter's field populated as a
+ * side effect of a call whose own return type is not the tracked family.
+ * fill_word_vector() returns void, so this forgotten free(wv.items)
+ * produces no diagnostic at all: this is the same reason
+ * include/wordexp.h's wordexp()/wordfree() pairing cannot be proven at
+ * src/sh/execute.c's real call sites, not a gap in this fixture. */
+void missing_release_is_not_caught(void)
+{
+	struct word_vector wv;
+	fill_word_vector(&wv);
+	(void)wv;
+}

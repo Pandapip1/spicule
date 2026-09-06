@@ -14,6 +14,7 @@ extern "C" {
 #endif
 
 #include <features.h>
+#include <ownership.h>
 #include <memory_tokens.h>
 
 #define __NEED_size_t
@@ -52,18 +53,41 @@ typedef struct {
 #define REG_ESPACE	12
 #define REG_BADRPT	13
 
-int regcomp(regex_t *__restrict, const char *__restrict, int)
+/* regex_t's compiled form (__opaque) is a real resource, but regcomp/
+ * regexec/regfree do not fit dirent.h's DIR* (opendir()/closedir()) shape:
+ * regcomp returns a status code and populates a caller-owned (often
+ * stack-resident) regex_t through an out-parameter, rather than
+ * returning the resource itself. AllocationLifetimeChecker's cross-
+ * translation-unit tracking keys entirely off a call's own return value
+ * being the tracked pointer (checkPostCall reads Call.getReturnValue()),
+ * so no dynamic_storage/withtok/consume tokdef -- whatever family it
+ * names -- can reach a regcomp() caller compiled in another TU: there is
+ * no return-value hook to attach to, and this was confirmed empirically
+ * (a __opaque withtok(...) field annotation added no diagnostic for a
+ * cross-TU caller that never calls regfree()). construct/destroy/handle
+ * below are this codebase's own vocabulary for exactly this call shape
+ * -- see sem_init/sem_destroy/sem_wait and pthread_mutex_init/destroy/
+ * lock in semaphore.h/pthread.h -- and give real, sound coverage: proven
+ * initialize-before-use, no double-regcomp without an intervening
+ * regfree, and no use or double-free after regfree. What they do not
+ * give, and what nothing in this dialect can for this shape, is a
+ * "regfree was called before every function exit" proof. */
+int regcomp(regex_t *__restrict construct(regex_compiled), const char *__restrict, int)
     __attribute__((nonnull(1, 2)));
 /* pmatch is deliberately not marked nonnull: it is defensively checked,
  * matching POSIX's "nmatch == 0" convention for "no match offsets wanted". */
-int regexec(const regex_t *__restrict, const char *__restrict, size_t, regmatch_t *__restrict, int)
+int regexec(const regex_t *__restrict handle(regex_compiled), const char *__restrict, size_t, regmatch_t *__restrict, int)
     __attribute__((nonnull(1, 2)));
-/* preg is unused here -- POSIX permits an implementation to ignore it.
+/* preg is unused here -- POSIX permits an implementation to ignore it --
+ * and is deliberately left unannotated: regerror's standard calling
+ * convention is `regcomp(&re, ...); if (rc) regerror(rc, &re, ...);`,
+ * passing a regex_t whose regcomp() call just FAILED, which
+ * handle(regex_compiled) would wrongly demand be proven live/compiled.
  * errbuf is only dereferenced when errbuf_size != 0. */
 size_t regerror(int errcode, const regex_t *__restrict preg,
 	char *__restrict errbuf withtok(writable_span(errbuf_size)),
 	size_t errbuf_size);
-void regfree(regex_t *) __attribute__((nonnull(1)));
+void regfree(regex_t * destroy(regex_compiled)) __attribute__((nonnull(1)));
 
 #ifdef __cplusplus
 }

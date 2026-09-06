@@ -16,6 +16,7 @@
 #include "plat_thread.h"
 #include "plat_fd.h"
 #include "pe.h"
+#include "unsafe_pointer.h"
 
 /* Shared by every \BaseNamedObjects-rooted object this file creates or
  * opens. `openif` clears OBJ_INHERIT and sets OBJ_OPENIF, for the one
@@ -314,10 +315,17 @@ void __plat_thread_tls_fixup(void)
 	status = NtAllocateVirtualMemory(NtCurrentProcess(), &block, 0,
 		&block_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 	if (!NT_SUCCESS(status)) return;
-	if (raw_size) memcpy(block, (const void *)raw_start, raw_size);
+	/* raw_start/index_addr are not integer-derived: pe.h's own comment on
+	 * IMAGE_TLS_DIRECTORY explains that this directory's fields are
+	 * already-relocated absolute VAs the linker bakes in like any other
+	 * global, kept correct across a non-preferred load by an ordinary
+	 * base relocation -- reading them back out of the already-relocated,
+	 * already-mapped image at __peb->ImageBaseAddress is exactly as valid
+	 * as dereferencing any other relocated global pointer in this image. */
+	if (raw_size) memcpy(block, unsafe_assume_valid_pointer((const void *)raw_start), raw_size);
 	memset((unsigned char *)block + raw_size, 0, dir->SizeOfZeroFill);
 
-	index = *(ULONG *)index_addr;
+	index = *unsafe_assume_valid_pointer((ULONG *)index_addr);
 	teb = __teb();
 	slots = (PVOID *)teb->ThreadLocalStoragePointer;
 	if (!slots) {

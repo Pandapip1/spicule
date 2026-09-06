@@ -52,6 +52,7 @@ struct dirent {
 /* dp is undefined unless it designates an open directory stream, per
  * POSIX; nonnull makes that contract compiler-checkable. */
 __attribute__((nonnull(1)))
+fallible
 int            closedir(DIR * consume(directory_stream_open));
 withtok(directory_stream_open)
 DIR           *fdopendir(int);

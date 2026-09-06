@@ -23,93 +23,19 @@ namespace {
 class FallibleResultChecker : public Checker<check::PreStmt<CallExpr>> {
   mutable std::unique_ptr<BugType> BT;
 
+  /* include/ownership.h's fallible: a bare, function-level annotate()
+   * marker, so any redeclaration may carry it (mirrors
+   * ErrnoDisciplineChecker.cpp's hasThreadTokenAnnotation()). Replaces the
+   * hardcoded Names[] list this checker used to carry itself. */
   static bool isFallible(const CallExpr *Call) {
     const FunctionDecl *Function = Call->getDirectCallee();
     if (!Function || !Function->getIdentifier())
       return false;
-    static constexpr llvm::StringLiteral Names[] = {"close",
-                                                    "posix_close",
-                                                    "closedir",
-                                                    "fclose",
-                                                    "fflush",
-                                                    "fseek",
-                                                    "fsetpos",
-                                                    "remove",
-                                                    "rename",
-                                                    "renameat",
-                                                    "unlink",
-                                                    "unlinkat",
-                                                    "rmdir",
-                                                    "link",
-                                                    "linkat",
-                                                    "symlink",
-                                                    "symlinkat",
-                                                    "truncate",
-                                                    "ftruncate",
-                                                    "fsync",
-                                                    "fdatasync",
-                                                    "pipe",
-                                                    "pipe2",
-                                                    "dup2",
-                                                    "dup3",
-                                                    "read",
-                                                    "write",
-                                                    "pread",
-                                                    "pwrite",
-                                                    "chmod",
-                                                    "fchmod",
-                                                    "fchmodat",
-                                                    "chown",
-                                                    "fchown",
-                                                    "lchown",
-                                                    "fchownat",
-                                                    "mkdir",
-                                                    "mkdirat",
-                                                    "munmap",
-                                                    "mprotect",
-                                                    "msync",
-                                                    "sem_init",
-                                                    "sem_destroy",
-                                                    "sem_close",
-                                                    "sem_unlink",
-                                                    "sem_wait",
-                                                    "sem_trywait",
-                                                    "sem_timedwait",
-                                                    "sem_post",
-                                                    "pthread_join",
-                                                    "pthread_detach",
-                                                    "pthread_cancel",
-                                                    "pthread_mutex_init",
-                                                    "pthread_mutex_destroy",
-                                                    "pthread_mutex_lock",
-                                                    "pthread_mutex_trylock",
-                                                    "pthread_mutex_timedlock",
-                                                    "pthread_mutex_unlock",
-                                                    "pthread_rwlock_init",
-                                                    "pthread_rwlock_destroy",
-                                                    "pthread_rwlock_rdlock",
-                                                    "pthread_rwlock_wrlock",
-                                                    "pthread_rwlock_tryrdlock",
-                                                    "pthread_rwlock_trywrlock",
-                                                    "pthread_rwlock_unlock",
-                                                    "pthread_cond_init",
-                                                    "pthread_cond_destroy",
-                                                    "pthread_cond_wait",
-                                                    "pthread_cond_timedwait",
-                                                    "pthread_cond_signal",
-                                                    "pthread_cond_broadcast",
-                                                    "pthread_barrier_init",
-                                                    "pthread_barrier_destroy",
-                                                    "pthread_barrier_wait",
-                                                    "pthread_spin_init",
-                                                    "pthread_spin_destroy",
-                                                    "pthread_spin_lock",
-                                                    "pthread_spin_trylock",
-                                                    "pthread_spin_unlock"};
-    StringRef Name = Function->getName();
-    for (StringRef Candidate : Names)
-      if (Name == Candidate)
-        return true;
+    for (const FunctionDecl *Redecl : Function->redecls())
+      for (const AnnotateAttr *Attribute :
+          Redecl->specific_attrs<AnnotateAttr>())
+        if (Attribute->getAnnotation() == "fallible")
+          return true;
     return false;
   }
 

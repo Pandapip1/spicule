@@ -1,11 +1,17 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
+#include "../../include/ownership.h"
+
 typedef struct FILE FILE;
 
+fallible
 int close(int);
+fallible
 int unlink(const char *);
+fallible
 long write(int, const void *, unsigned long);
+fallible
 int fflush(FILE *);
 
 void discarded_close(int fd) {

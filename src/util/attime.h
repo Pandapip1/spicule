@@ -83,7 +83,12 @@
  * computed; src/util/atbatch.c's own submission logic checks the
  * result against "now" once, in one place, rather than scattering
  * that judgment call across every grammar branch here.
+ *
+ * This internal header, like the public C library headers, must use the
+ * implementation-reserved namespace for its guard and its own declarations
+ * so they cannot collide with user code.
  */
+// NOLINTBEGIN(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 #ifndef _NTLIBC_UTIL_ATTIME_H
 #define _NTLIBC_UTIL_ATTIME_H
 
@@ -105,3 +110,5 @@
 int __attime_parse(char *const *words, int n, time_t now, time_t *out);
 
 #endif
+
+// NOLINTEND(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)

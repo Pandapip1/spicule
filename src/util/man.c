@@ -4162,7 +4162,7 @@ static int man_process_line(struct man_ctx *c, struct man_render *r, char *line)
 		} else if (!strcmp(name, "als")) {
 			ok = man_do_als(c, &a);
 		} else {
-			struct man_macro *m = man_mac_find(&c->macros, name);
+			struct man_macro *m = man_mac_find(&c->macros, name); // NOLINT(misc-confusable-identifiers) -- flags "m" against the *string literal* "rn" used in an earlier strcmp() in this same function, not against any other identifier in scope
 			/* Checked only here, after every built-in request name
 			 * above -- a page can never shadow a built-in by defining
 			 * a same-named macro. Anything still unmatched (.sp, .ce,
@@ -4554,7 +4554,7 @@ static int man_read_file(const char *path, char **out, size_t *outlen)
 	if (!f) return 0;
 	memset(&b, 0, sizeof b);
 	while ((r = fread(chunk, 1, sizeof chunk, f)) > 0) {
-		if (b.len + r > MAN_MAX_PAGE_SIZE) {
+		if (b.len + r > MAN_MAX_PAGE_SIZE) { // NOLINT(bugprone-implicit-widening-of-multiplication-result) -- MAN_MAX_PAGE_SIZE is a compile-time constant, 16777216, far inside int range before the widen to size_t
 			__util_diagf("man: %s: page too large, truncating at %d bytes\n", path, MAN_MAX_PAGE_SIZE);
 			break;
 		}

@@ -332,7 +332,7 @@ int __plat_socket_shutdown(__plat_handle_t h, int how)
  * second source the way this file's other ioctls have, so it's unused.
  * 8192 is not measured, just a plausible POSIX-legal stand-in so a caller
  * like LTP's setup_aio() gets an answer instead of ENOPROTOOPT. */
-#define __NT_SOCKBUF_STANDIN 8192
+#define __NT_SOCKBUF_STANDIN 8192 // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- implementation-reserved namespace, same as every other libc-internal symbol
 
 int __plat_socket_getsndbuf(__plat_handle_t h)
 {

@@ -1,3 +1,9 @@
+/* This internal header, like the public C library headers, must use the
+ * implementation-reserved namespace for its guard and its leaf-axiom
+ * declarations so they cannot collide with user code.
+ */
+// NOLINTBEGIN(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
+
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later */
 #ifndef _NTLIBC_OWNERSHIP_STUBS_H
@@ -72,3 +78,5 @@ void __ownership_disjoint_span(
 
 #endif
 #endif
+
+// NOLINTEND(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)

@@ -27,7 +27,12 @@
  * two callers, not copied, is what earns it a declaration anywhere
  * rather than being duplicated in both -- the same bar src/internal/
  * util.h's own cp/mv/rm section states for its three.
+ *
+ * This internal header, like the public C library headers, must use the
+ * implementation-reserved namespace for its guard and its own declarations
+ * so they cannot collide with user code.
  */
+// NOLINTBEGIN(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 #ifndef _NTLIBC_UTIL_TABLIST_H
 #define _NTLIBC_UTIL_TABLIST_H
 
@@ -65,3 +70,5 @@ void __util_tablist_free(struct tablist *tl) __attribute__((nonnull(1)));
 long __util_tablist_next_stop(const struct tablist *tl, long col) __attribute__((nonnull(1)));
 
 #endif
+
+// NOLINTEND(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)

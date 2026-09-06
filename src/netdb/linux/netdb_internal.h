@@ -6,7 +6,12 @@
  * hostent.c's gethostbyname()). Not installed, not reachable from
  * outside src/netdb/linux/ -- see include/netdb.h for the actual
  * public contract these are built to serve.
+ *
+ * This internal header, like the public C library headers, must use the
+ * implementation-reserved namespace for its guard and its own declarations
+ * so they cannot collide with user code.
  */
+// NOLINTBEGIN(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 #ifndef _NTLIBC_NETDB_INTERNAL_H
 #define _NTLIBC_NETDB_INTERNAL_H
 
@@ -108,3 +113,5 @@ int __hosts_resolve(const char *name, struct in_addr *addrs, int maxaddrs,
     __attribute__((nonnull(1, 6)));
 
 #endif
+
+// NOLINTEND(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)

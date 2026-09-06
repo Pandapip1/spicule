@@ -55,7 +55,12 @@
  * syntax and doing nothing with it would be exactly the kind of
  * silent misrepresentation this project's house style refuses.
  * src/util/crontab.c's own header documents the same point for -e/-l.
+ *
+ * This internal header, like the public C library headers, must use the
+ * implementation-reserved namespace for its guard and its own declarations
+ * so they cannot collide with user code.
  */
+// NOLINTBEGIN(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 #ifndef _NTLIBC_UTIL_CRONTIME_H
 #define _NTLIBC_UTIL_CRONTIME_H
 
@@ -105,3 +110,5 @@ int __crontime_parse(const char *min, const char *hour, const char *dom,
 int __crontime_matches(const struct crontime *e, const struct tm *t);
 
 #endif
+
+// NOLINTEND(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)

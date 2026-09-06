@@ -345,6 +345,59 @@ static void test_dash_b_backs_up_original(void)
 	CHECK(file_equals("scratch/orig.orig", ORIG_CONTENT));
 }
 
+/* ==== security regressions ================================================= */
+
+/* A pure-insertion hunk (empty old side) whose header names a line far
+ * beyond the target file's actual length used to make side_matches()
+ * report a trivial "match" at that huge, unbounded position -- with
+ * nothing on the old side to compare, its per-item loop never ran, so it
+ * never reached the bounds check on `pos`. apply_section() then copied
+ * target->v[] up to that position, reading heap memory far past the
+ * small backing array (crash, or adjacent heap bytes leaking into the
+ * patched output) -- see the pos>target->n check now at the top of
+ * side_matches() in src/util/patch.c. This exercises that exact shape
+ * (insert-only hunk, absurd old_start, small target) and checks patch
+ * still exits cleanly with a fully deterministic result: the fix clamps
+ * the search to the file's own bounds, so the insertion lands at EOF
+ * instead of reading past it. */
+static const char OOB_INSERT_DIFF[] =
+	"--- orig\t2026-01-01\n"
+	"+++ orig\t2026-01-01\n"
+	"@@ -9999,0 +1,1 @@\n"
+	"+INJECTED\n";
+
+static void test_oob_insert_line_is_bounded(void)
+{
+	char *argv[] = { (char *)"patch", (char *)"-i", (char *)"scratch/oob.diff", (char *)"scratch/orig", 0 };
+	make_file("scratch/orig", ORIG_CONTENT);
+	make_file("scratch/oob.diff", OOB_INSERT_DIFF);
+	check_applied(argv, "scratch/orig", ORIG_CONTENT "INJECTED\n");
+}
+
+/* A patch header's "+++"/"---" filename is patch content, not something
+ * the invoking user typed. Without pick_target_name()'s name_is_unsafe()
+ * check, a header naming a path outside the current directory (here,
+ * one level up via "..") would have patch happily read and overwrite it
+ * -- with no file operand to override the header's own choice of name,
+ * exactly the case a crafted/untrusted patch can arrange. Confirm patch
+ * now refuses instead of touching anything outside scratch/, and that
+ * the traversal target is never created. */
+static const char TRAVERSAL_DIFF[] =
+	"--- ../patch-traversal-canary\t2026-01-01\n"
+	"+++ ../patch-traversal-canary\t2026-01-01\n"
+	"@@ -0,0 +1,1 @@\n"
+	"+pwned\n";
+
+static void test_header_path_traversal_refused(void)
+{
+	char *argv[] = { (char *)"patch", (char *)"-i", (char *)"scratch/trav.diff", 0 };
+	unlink("patch-traversal-canary");
+	make_file("scratch/trav.diff", TRAVERSAL_DIFF);
+	CHECK(run(patch_path, argv) == 2);
+	CHECK(access("patch-traversal-canary", F_OK) != 0);
+	unlink("patch-traversal-canary");
+}
+
 /* ==== the shell built-in agrees with the standalone executable =========== */
 
 static void test_builtin_matches_standalone(void)
@@ -362,6 +415,7 @@ static void rmtree_scratch(void)
 	unlink("scratch/u.diff"); unlink("scratch/c.diff"); unlink("scratch/n.diff");
 	unlink("scratch/e.diff"); unlink("scratch/r.diff"); unlink("scratch/p.diff");
 	unlink("scratch/pfile"); unlink("scratch/out.txt");
+	unlink("scratch/oob.diff"); unlink("scratch/trav.diff");
 	unlink("scratch/.keep");
 	rmdir("scratch");
 }
@@ -409,6 +463,8 @@ int main(int argc, char **argv)
 	test_already_applied_dash_N_is_silent();
 	test_dash_o_leaves_target_untouched();
 	test_dash_b_backs_up_original();
+	test_oob_insert_line_is_bounded();
+	test_header_path_traversal_refused();
 	test_builtin_matches_standalone();
 
 	cleanup_artifacts();

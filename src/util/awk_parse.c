@@ -147,9 +147,72 @@ static void skip_terminators(struct awk_parser *p)
 	while (at(p, T_NEWLINE) || at(p, T_SEMI)) advance(p);
 }
 
+/* ==== recursion depth guard =============================================
+ *
+ * This parser has no depth limit on the awk program text itself: a
+ * source file is fully attacker-controlled input (a script handed to
+ * awk(1p)), and every one of parse_stmt()/parse_primary()/parse_pow()/
+ * parse_ternary()/parse_assign() is mutually or directly self-recursive
+ * with no base case other than running out of matching tokens. A
+ * pathological-but-trivially-constructed program -- a run of N `(`
+ * characters, N unary `-`/`!` operators, N `$` indirections, an N-deep
+ * `a?a:a?a:...` ternary chain, an N-deep `a=a=...=1` assignment chain,
+ * or N nested `{` blocks -- recurses this parser's own C stack N levels
+ * deep with no other bound, which is a real stack-overflow crash (not a
+ * clean parse error) for a large enough N. Every one of those five
+ * shapes is a genuine, unbounded, attacker-reachable recursion vector:
+ * XCU awk(1p) sets no nesting limit, but this implementation has to,
+ * the same way any recursive-descent parser accepting untrusted text
+ * does.
+ *
+ * AWK_PARSE_MAX_DEPTH is deliberately conservative (not tuned to any
+ * one platform's default stack size): each of the five guarded
+ * productions above is only ONE of several stack frames a single
+ * nesting level actually costs (e.g. one `(` costs a frame in every
+ * function between parse_primary() and parse_primary() again --
+ * parse_paren_group(), parse_expr(), parse_assign(), parse_ternary(),
+ * parse_or(), parse_and(), parse_in(), parse_match(), parse_rel(),
+ * parse_concat(), parse_additive(), parse_mul(), parse_unary(),
+ * parse_pow() -- most of which are NOT separately guarded because they
+ * are not themselves recursive; guarding the five that ARE keeps this
+ * count proportional to real stack depth without needing to instrument
+ * every production). 200 levels is far beyond any awk program a person
+ * would write or a code generator would sanely emit, while staying
+ * comfortably inside even a constrained (e.g. 1 MiB) C stack at this
+ * project's typical per-frame cost.
+ *
+ * p->depth is one shared counter, not five separate ones: these five
+ * productions can recurse into EACH OTHER (an lvalue's own `(` opens a
+ * fresh parse_ternary/parse_assign chain, etc.), so what actually needs
+ * bounding is their combined live nesting, not any one production's
+ * count in isolation. */
+#define AWK_PARSE_MAX_DEPTH 200
+
+/* Call at the top of a guarded production, before it does any of its
+ * own (potentially self-recursive) parsing. Returns 1 and bumps
+ * p->depth on success; on exceeding the limit, sets a parse error and
+ * returns 0 -- callers must not recurse further in that case, just
+ * return a harmless placeholder node so the C stack unwinds instead of
+ * growing past the point that already tripped this guard. Paired with
+ * parse_depth_leave(), called unconditionally on every return path
+ * (including the guard's own reject case, which counts itself back out
+ * before returning, so a caller that checks the return value need not). */
+static int parse_depth_enter(struct awk_parser *p)
+{
+	if (++p->depth > AWK_PARSE_MAX_DEPTH) {
+		p->depth--;
+		perr(p, "awk: expression or statement nested too deeply");
+		return 0;
+	}
+	return 1;
+}
+
+static void parse_depth_leave(struct awk_parser *p) { p->depth--; }
+
 /* ==== expression grammar ================================================= */
 
 static struct awk_node *parse_expr(struct awk_parser *p);
+static struct awk_node *parse_assign(struct awk_parser *p);
 static struct awk_node *parse_ternary(struct awk_parser *p);
 static struct awk_node *parse_unary(struct awk_parser *p);
 static struct awk_node *parse_concat(struct awk_parser *p);
@@ -225,7 +288,7 @@ static struct awk_node *parse_getline(struct awk_parser *p, struct awk_node *cmd
  * accept concatenation (`"dir/" name`) but not relational/`in`/&&/||
  * -- i.e. the same "concat and tighter" tier used for print's own
  * redirection target. */
-static struct awk_node *parse_primary(struct awk_parser *p)
+static struct awk_node *parse_primary_impl(struct awk_parser *p)
 {
 	struct awk_node *n;
 
@@ -365,6 +428,19 @@ postfix:
 	return n;
 }
 
+/* Guarded per this file's own "recursion depth guard" section above:
+ * parse_primary_impl() is the one production every unbounded expression-
+ * nesting shape (parens, prefix +/-/!/++/--, `$` chains, function-call/
+ * subscript argument lists) recurses back through. */
+static struct awk_node *parse_primary(struct awk_parser *p)
+{
+	struct awk_node *n;
+	if (!parse_depth_enter(p)) return mknode(N_NUM);
+	n = parse_primary_impl(p);
+	parse_depth_leave(p);
+	return n;
+}
+
 /* After parse_primary() has already produced `n` (used by getline's
  * optional lvalue target, which parses one primary and must reject a
  * non-lvalue result rather than re-deriving it). */
@@ -374,7 +450,7 @@ static struct awk_node *parse_lvalue_from_primary(struct awk_parser *p, struct a
 	return n;
 }
 
-static struct awk_node *parse_pow(struct awk_parser *p)
+static struct awk_node *parse_pow_impl(struct awk_parser *p)
 {
 	struct awk_node *l = parse_primary(p);
 	if (at(p, T_CARET)) {
@@ -387,6 +463,18 @@ static struct awk_node *parse_pow(struct awk_parser *p)
 		}
 	}
 	return l;
+}
+
+/* Guarded: `^`'s own right-associativity makes parse_pow() indirectly
+ * self-recursive (via parse_unary()) for a chain like `2^2^2^...` --
+ * see this file's "recursion depth guard" section above. */
+static struct awk_node *parse_pow(struct awk_parser *p)
+{
+	struct awk_node *n;
+	if (!parse_depth_enter(p)) return mknode(N_NUM);
+	n = parse_pow_impl(p);
+	parse_depth_leave(p);
+	return n;
 }
 
 static struct awk_node *parse_unary(struct awk_parser *p)
@@ -554,7 +642,7 @@ static struct awk_node *parse_or(struct awk_parser *p)
 	return l;
 }
 
-static struct awk_node *parse_ternary(struct awk_parser *p)
+static struct awk_node *parse_ternary_impl(struct awk_parser *p)
 {
 	struct awk_node *c = parse_or(p);
 	if (at(p, T_QUESTION)) {
@@ -573,12 +661,25 @@ static struct awk_node *parse_ternary(struct awk_parser *p)
 	return c;
 }
 
+/* Guarded: `?:`'s right-associativity makes this self-recursive (twice
+ * over, for the true- and false-branches) for a chain like
+ * `a?a?a?...:b:b:b` -- see this file's "recursion depth guard" section
+ * above. */
+static struct awk_node *parse_ternary(struct awk_parser *p)
+{
+	struct awk_node *n;
+	if (!parse_depth_enter(p)) return mknode(N_NUM);
+	n = parse_ternary_impl(p);
+	parse_depth_leave(p);
+	return n;
+}
+
 /* enum awk_toktype, not int: p->tok.type below is compared against these
  * entries directly, and the terminating 0 is T_EOF (never a real assign
  * operator), so the array's own element type should be the enum it holds. */
 static const enum awk_toktype assign_ops[] = { T_ASSIGN, T_ADD_ASSIGN, T_SUB_ASSIGN, T_MUL_ASSIGN, T_DIV_ASSIGN, T_MOD_ASSIGN, T_POW_ASSIGN, T_EOF };
 
-static struct awk_node *parse_assign(struct awk_parser *p)
+static struct awk_node *parse_assign_impl(struct awk_parser *p)
 {
 	struct awk_node *l = parse_ternary(p);
 	int i, op = 0;
@@ -595,6 +696,18 @@ static struct awk_node *parse_assign(struct awk_parser *p)
 		return n;
 	}
 	return l;
+}
+
+/* Guarded: assignment's own right-associativity makes this self-
+ * recursive for a chain like `a=a=a=...=1` -- see this file's
+ * "recursion depth guard" section above. */
+static struct awk_node *parse_assign(struct awk_parser *p)
+{
+	struct awk_node *n;
+	if (!parse_depth_enter(p)) return mknode(N_NUM);
+	n = parse_assign_impl(p);
+	parse_depth_leave(p);
+	return n;
 }
 
 static struct awk_node *parse_expr(struct awk_parser *p)
@@ -675,7 +788,7 @@ static struct awk_node *parse_simple_or_null(struct awk_parser *p)
 	return parse_stmt(p);
 }
 
-static struct awk_node *parse_stmt(struct awk_parser *p)
+static struct awk_node *parse_stmt_impl(struct awk_parser *p)
 {
 	if (p->err) return mknode(N_BLOCK);
 
@@ -794,6 +907,20 @@ static struct awk_node *parse_stmt(struct awk_parser *p)
 		return n;
 	}
 	}
+}
+
+/* Guarded: statement nesting (if/while/for/do bodies, and -- the one
+ * shape with no expression of its own to already be guarded via
+ * parse_primary() -- a run of N bare `{` blocks, `{{{...}}}`) recurses
+ * through parse_stmt() <-> parse_block() with no other bound. See this
+ * file's "recursion depth guard" section above. */
+static struct awk_node *parse_stmt(struct awk_parser *p)
+{
+	struct awk_node *n;
+	if (!parse_depth_enter(p)) return mknode(N_BLOCK);
+	n = parse_stmt_impl(p);
+	parse_depth_leave(p);
+	return n;
 }
 
 static struct awk_node *parse_block(struct awk_parser *p)

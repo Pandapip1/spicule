@@ -337,6 +337,36 @@ static void test_dd_bad_operand_is_refused(void)
 	CHECK(run(dd_path, argv) != 0);
 }
 
+/* Regression test for a real integer-overflow bug: parse_dd_num()'s 'k'
+ * suffix multiply used to be a bare `v *= 1024` with no overflow check, so
+ * a bs= value just past 2^54 silently wrapped mod 2^64 down to a small,
+ * unrelated block size (18014398509481985k wrapped to exactly 1024)
+ * instead of being rejected -- see src/util/dd.c's dd_mul_overflows(). */
+static void test_dd_bs_suffix_overflow_is_refused(void)
+{
+	char *argv[] = { (char *)"dd", (char *)"if=scratch/dd-src7", (char *)"of=scratch/dd-dst7",
+	                 (char *)"bs=18014398509481985k", 0 };
+	make_file("scratch/dd-src7", "AAAA", 4);
+	CHECK(run(dd_path, argv) != 0);
+	CHECK(err_contains("invalid block size"));
+	unlink("scratch/dd-src7"); unlink("scratch/dd-dst7");
+}
+
+/* Regression test for a real integer-overflow bug: dd_position() used to
+ * compute `n * unit` (skip-count times block size) with no overflow check,
+ * so skip=2^55 with the default ibs=512 (2^9) wrapped mod 2^64 down to
+ * exactly 0 -- silently skipping nothing at all instead of either seeking
+ * past the requested (enormous) offset or failing loudly. */
+static void test_dd_skip_overflow_is_refused(void)
+{
+	char *argv[] = { (char *)"dd", (char *)"if=scratch/dd-src8", (char *)"of=scratch/dd-dst8",
+	                 (char *)"skip=36028797018963968", 0 };
+	make_file("scratch/dd-src8", "AAAABBBBCCCCDDDD", 16);
+	CHECK(run(dd_path, argv) != 0);
+	CHECK(err_contains("overflows"));
+	unlink("scratch/dd-src8"); unlink("scratch/dd-dst8");
+}
+
 /* ==== df(1p) ============================================================= */
 
 static void test_df_reports_on_an_operand(void)
@@ -591,6 +621,8 @@ int main(int argc, char **argv)
 	test_dd_conv_notrunc_preserves_tail();
 	test_dd_unrecognized_conv_is_refused();
 	test_dd_bad_operand_is_refused();
+	test_dd_bs_suffix_overflow_is_refused();
+	test_dd_skip_overflow_is_refused();
 
 	test_df_reports_on_an_operand();
 	test_df_dash_k();

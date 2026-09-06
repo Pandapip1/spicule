@@ -129,6 +129,21 @@ static void dd_sigint_handler(int sig)
 	dd_interrupted = 1;
 }
 
+/* Overflow-checked multiplication for the uintmax_t arithmetic dd(1p)'s own
+ * block-size/skip/seek/count grammar does throughout this file: a bare
+ * `a * b` here would silently wrap mod 2^64 on overflow, landing on some
+ * arbitrary *nonzero* value that sails straight past a caller's simple
+ * `== 0` validation -- the classic "multiply that overflows before the
+ * bounds check runs" bug class this function exists to close off, once,
+ * for every call site below (parse_dd_num()'s own b/k/w suffix and 'x'
+ * multiplier, and dd_position()'s skip/seek-count * block-size). */
+static int dd_mul_overflows(uintmax_t a, uintmax_t b, uintmax_t *out)
+{
+	if (b != 0 && a > UINTMAX_MAX / b) return -1;
+	*out = a * b;
+	return 0;
+}
+
 /* dd(1p)'s block-size expression grammar -- see this file's header. */
 // NOLINTNEXTLINE(misc-no-recursion) -- suffix-expression parsing consumes input on every recursive step
 static int parse_dd_num(const char *s, uintmax_t *out)
@@ -137,18 +152,24 @@ static int parse_dd_num(const char *s, uintmax_t *out)
 	uintmax_t v;
 
 	if (!*s) return -1;
+	errno = 0;
 	v = strtoumax(s, &end, 10);
 	if (end == s) return -1;
+	/* strtoumax() itself clamps a literal too big for uintmax_t to
+	 * UINTMAX_MAX and sets errno to ERANGE (src/stdlib/strtol.c) rather
+	 * than failing outright -- without this check that clamped value
+	 * would silently stand in for whatever the caller actually typed. */
+	if (v == UINTMAX_MAX && errno == ERANGE) return -1;
 	s = end;
 
-	if (*s == 'b') { v *= 512; s++; }
-	else if (*s == 'k') { v *= 1024; s++; }
-	else if (*s == 'w') { v *= sizeof(int); s++; }
+	if (*s == 'b') { if (dd_mul_overflows(v, 512, &v) < 0) return -1; s++; }
+	else if (*s == 'k') { if (dd_mul_overflows(v, 1024, &v) < 0) return -1; s++; }
+	else if (*s == 'w') { if (dd_mul_overflows(v, sizeof(int), &v) < 0) return -1; s++; }
 
 	if (*s == 'x') {
 		uintmax_t rhs;
 		if (parse_dd_num(s + 1, &rhs) < 0) return -1;
-		v *= rhs;
+		if (dd_mul_overflows(v, rhs, &v) < 0) return -1;
 		*out = v;
 		return 0;
 	}
@@ -342,8 +363,22 @@ out:
  * on failure. */
 static int dd_position(int fd, uintmax_t n, uintmax_t unit, int is_input, const char *what) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
-	uintmax_t bytes = n * unit;
+	uintmax_t bytes;
 
+	/* n and unit (skip=/seek= and ibs=/obs=) are each validated on their
+	 * own by the caller's parse_dd_num(), but their product never is --
+	 * a bare `n * unit` here can wrap mod 2^64 and land on a small (even
+	 * zero) byte offset for a skip/seek the user asked to be enormous,
+	 * silently copying data that was supposed to be skipped past instead
+	 * of failing loudly.  off_t is a signed 64-bit type on this tree
+	 * (include/alltypes.h.gen), so the product must also fit INTMAX_MAX
+	 * before the `(off_t)bytes` cast below, or that cast itself produces
+	 * an implementation-defined (in practice negative) offset. */
+	if (dd_mul_overflows(n, unit, &bytes) < 0 || bytes > (uintmax_t)INTMAX_MAX) {
+		__util_diagf("dd: %s: %" PRIuMAX " * %" PRIuMAX " overflows\n",
+			is_input ? "skip" : "seek", n, unit);
+		return -1;
+	}
 	if (bytes == 0) return 0;
 	if (lseek(fd, (off_t)bytes, SEEK_SET) >= 0) return 0;
 	if (is_input) {

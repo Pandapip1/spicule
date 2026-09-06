@@ -73,11 +73,26 @@
  * ---- A safety addition beyond POSIX's literal text ------------------------
  *
  * On extract, a member pathname is refused (diagnostic, member skipped,
- * nonzero exit, other members continue) if it is absolute or contains a
- * ".." component. POSIX does not require this, but silently honoring
- * either would let a hostile or corrupt archive write outside the
- * extraction directory -- the same class of refusal cp.c's symlink-in-
- * tree guard and rm.c's own guards already make.
+ * nonzero exit, other members continue) if it is absolute (either '/' or
+ * '\\'-rooted, or drive-letter-rooted, e.g. "C:\\...") or contains a ".."
+ * component (again on either separator). POSIX does not require this,
+ * but silently honoring any of those would let a hostile or corrupt
+ * archive write outside the extraction directory -- the same class of
+ * refusal cp.c's symlink-in-tree guard and rm.c's own guards already
+ * make. Both separators are checked unconditionally, not just when
+ * building for NT, since a well-formed ustar/cpio name this file's own
+ * writer produces never contains a backslash or drive letter in the
+ * first place; see name_is_safe()'s own comment for why the NT target
+ * specifically is what makes the backslash/drive-letter half of this
+ * matter. A hardlink member's linkname gets the identical check (see
+ * do_list_or_read()): unlike a symlink's target text, it is fed straight
+ * to link() as the source to link *from*, so it is just as much a
+ * traversal vector as the member's own name. A symlink member's target
+ * text is deliberately left unrestricted (a real symlink pointing
+ * anywhere is legitimate archive content), but ensure_parent_dirs()
+ * refuses to walk *through* an already-extracted symlink sitting at an
+ * intermediate path component of a later member, closing the other
+ * direction of that same attack.
  *
  * ---- Hard links ------------------------------------------------------------
  *
@@ -86,11 +101,12 @@
  * copied file is written as an independent full copy, regardless of its
  * real st_nlink. On the read side, an already-hard-link-encoded ustar
  * member (typeflag '1', with a linkname) is honored via link() against
- * its already-extracted linkname. cpio's own hard-link convention (a
- * repeated member sharing an earlier entry's device/inode, with zero
- * bytes of its own data) is not implemented either direction; such a
- * cpio archive round-trips as independent copies instead -- legal, if
- * link-count-losing.
+ * its already-extracted linkname (subject to the same traversal check as
+ * any other member's name -- see immediately above). cpio's own
+ * hard-link convention (a repeated member sharing an earlier entry's
+ * device/inode, with zero bytes of its own data) is not implemented
+ * either direction; such a cpio archive round-trips as independent
+ * copies instead -- legal, if link-count-losing.
  *
  * ---- FIFOs and device special files ----------------------------------------
  *
@@ -705,13 +721,29 @@ static int pax_name_matches(const char *name, char **patterns, int npat, int com
 
 /* ==== safety: reject absolute / ".." member names on extract ============= */
 
+/* An archive member name is untrusted input on every build this project
+ * targets, including the NT/tcc one: src/internal/nt/path.c's own
+ * __ntpath() explicitly resolves EITHER slash and drive-letter roots
+ * ("A program hands in UTF-8 with either kind of slash ... possibly
+ * with a drive letter"), and src/internal/rpath.c's is_absolute() names
+ * both "\\" and "X:" as absolute for exactly that reason. A check that
+ * only recognised '/' and a leading '/' would let a hostile ustar/cpio
+ * member named e.g. "..\\..\\..\\Users\\x\\evil.dll" or "C:\\evil.dll"
+ * sail through unrecognised as either a ".." component or an absolute
+ * path, then reach mkdir()/open() below, which -- on that same NT
+ * build -- *do* honor backslash separators and drive letters. This
+ * checks both spellings unconditionally (not just when building for
+ * NT) since a well-formed ustar/cpio name never legitimately contains a
+ * backslash or a drive-letter prefix in the first place (ustar_split_
+ * name()/write_cpio_header() above only ever emit '/'). */
 static int name_is_safe(const char *name)
 {
 	const char *p;
-	if (name[0] == '/' || name[0] == 0) return 0;
+	if (name[0] == '/' || name[0] == '\\' || name[0] == 0) return 0;
+	if (((name[0] | 0x20) >= 'a' && (name[0] | 0x20) <= 'z') && name[1] == ':') return 0;
 	for (p = name; *p; ) {
 		const char *seg = p;
-		size_t seglen = strcspn(p, "/");
+		size_t seglen = strcspn(p, "/\\");
 		if (seglen == 2 && seg[0] == '.' && seg[1] == '.') return 0;
 		p += seglen;
 		if (*p) p++;
@@ -723,15 +755,32 @@ static int name_is_safe(const char *name)
 
 struct materialize_opts { int keep_existing; int newer_only; int verbose; };
 
+/* Creates every directory component of `path` but the last, refusing
+ * (errno left as ENOTDIR) if any of them already exists as something
+ * other than a real directory. That refusal matters beyond pedantry: a
+ * prior member in the very same extraction (name_is_safe() only bars
+ * ".."/absolute names, not a symlink) can leave a symlink sitting at an
+ * intermediate path component -- e.g. member "trap" (a symlink to
+ * anywhere writable) followed by member "trap/evil" -- and plain
+ * mkdir()'s EEXIST-is-fine tolerance would otherwise let this loop walk
+ * straight through it, so the final open()/mkdir()/etc for "trap/evil"
+ * resolves through the symlink and lands wherever it points: the same
+ * "extract a symlink, then extract through it" attack real tar/pax
+ * implementations have had to close before. lstat(), not stat(), so the
+ * component itself is what's checked, not whatever a symlink there
+ * ultimately resolves to. */
 static int ensure_parent_dirs(const char *path)
 {
 	char buf[PAX_PATH_MAX];
 	char *p;
 	snprintf(buf, sizeof buf, "%s", path);
 	for (p = buf + 1; *p; p++) {
+		struct stat st;
 		if (*p != '/') continue;
 		*p = 0;
 		if (mkdir(buf, 0777) < 0 && errno != EEXIST) return -1;
+		if (lstat(buf, &st) < 0) return -1;
+		if (!S_ISDIR(st.st_mode)) { errno = ENOTDIR; return -1; }
 		*p = '/';
 	}
 	return 0;
@@ -1131,7 +1180,20 @@ static int do_list_or_read(const char *archive, char **patterns, int npat, int c
 			continue;
 		}
 
-		if (!name_is_safe(m.name)) {
+		/* A ustar hardlink member's linkname is, just as much as its own
+		 * name, an untrusted archive-supplied path that materialize()
+		 * below feeds straight to link() as the OLDPATH to link
+		 * *from* -- unlike a symlink's target text (never itself
+		 * dereferenced during extraction; see ensure_parent_dirs()'s
+		 * own comment on where that risk is actually closed), this one
+		 * fires immediately, on this member alone, with no second
+		 * member required. Left unchecked, a hostile archive's
+		 * hardlink member could name any existing file the extracting
+		 * user can already reach (an absolute path, or one escaping
+		 * upward via ".."), aliasing it under the destination tree --
+		 * so it gets the exact same containment check as m.name. */
+		if (!name_is_safe(m.name) ||
+		    (m.type == PAX_HARDLINK && !name_is_safe(m.linkname))) {
 			__util_diagf("pax: %s: refusing to extract an absolute path or a path "
 			                "containing '..' (see src/util/pax.c's header)\n", m.name);
 			reader_skip_data(&r, &m);

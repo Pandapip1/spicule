@@ -392,6 +392,78 @@ static void test_syntax_error_is_diagnosed(void)
 	CHECK(err_contains("awk:"));
 }
 
+/* ==== the parser itself never overflows the C stack ========================
+ *
+ * Regression coverage for an unbounded-recursion bug in awk_parse.c:
+ * parse_stmt()/parse_primary()/parse_pow()/parse_ternary()/parse_assign()
+ * are mutually or directly self-recursive with no base case other than
+ * running out of matching tokens. A source program is fully attacker-
+ * controlled text, so a trivially-constructed one -- a long run of `(`
+ * characters, of unary `!`, or of bare `{` blocks -- used to recurse
+ * this parser's own C stack one level per character, with no other
+ * bound: a real stack-overflow crash (a SIGSEGV; run_awk() would report
+ * 128+11==139, failing the `== 2` checks below), not a clean parse
+ * error, once the nesting was deep enough. AWK_PARSE_MAX_DEPTH
+ * (src/util/awk_parse.c) now refuses anything nested past a fixed bound
+ * via an ordinary parse error instead -- the same clean-rejection shape
+ * every fatal condition in the next section gets. */
+
+/* Builds prefix + n copies of `open` + inner + n copies of `close` +
+ * suffix into a fresh, NUL-terminated, malloc()'d string. */
+static char *build_nested_prog(const char *prefix, char open, char close, int n, const char *inner, const char *suffix)
+{
+	size_t plen = strlen(prefix), slen = strlen(suffix), ilen = strlen(inner);
+	char *prog = malloc(plen + (size_t)n + ilen + (size_t)n + slen + 1);
+	size_t pos = 0, i;
+
+	if (!prog) return NULL;
+	memcpy(prog + pos, prefix, plen); pos += plen;
+	for (i = 0; i < (size_t)n; i++) prog[pos++] = open;
+	memcpy(prog + pos, inner, ilen); pos += ilen;
+	for (i = 0; i < (size_t)n; i++) prog[pos++] = close;
+	memcpy(prog + pos, suffix, slen); pos += slen;
+	prog[pos] = 0;
+	return prog;
+}
+
+static void test_deeply_nested_parens_rejected_cleanly(void)
+{
+	char *prog = build_nested_prog("BEGIN{print ", '(', ')', 1000, "1", "}");
+	CHECK(prog != NULL);
+	if (!prog) return;
+	check_awk_fatal(prog, "nested too deeply");
+	free(prog);
+}
+
+static void test_deeply_nested_unary_rejected_cleanly(void)
+{
+	/* A prefix-unary chain has no closing run to balance, so this is
+	 * built directly rather than via build_nested_prog() above (which
+	 * always emits a closing run of its own). */
+	static const char prefix[] = "BEGIN{print ", suffix[] = "1}";
+	enum { N = 1000 };
+	char *prog = malloc(sizeof prefix - 1 + N + sizeof suffix);
+	size_t pos = 0, i;
+
+	CHECK(prog != NULL);
+	if (!prog) return;
+	memcpy(prog + pos, prefix, sizeof prefix - 1); pos += sizeof prefix - 1;
+	for (i = 0; i < N; i++) prog[pos++] = '!';
+	memcpy(prog + pos, suffix, sizeof suffix); /* includes the NUL */
+
+	check_awk_fatal(prog, "nested too deeply");
+	free(prog);
+}
+
+static void test_deeply_nested_blocks_rejected_cleanly(void)
+{
+	char *prog = build_nested_prog("BEGIN", '{', '}', 1000, "", "");
+	CHECK(prog != NULL);
+	if (!prog) return;
+	check_awk_fatal(prog, "nested too deeply");
+	free(prog);
+}
+
 /* ==== fatal runtime errors: clean rejection, not a crash ==================
  *
  * Regression coverage for "awk: never exit() as a shell builtin; fix OOB
@@ -571,6 +643,10 @@ int main(int argc, char **argv)
 
 	test_missing_program_is_diagnosed();
 	test_syntax_error_is_diagnosed();
+
+	test_deeply_nested_parens_rejected_cleanly();
+	test_deeply_nested_unary_rejected_cleanly();
+	test_deeply_nested_blocks_rejected_cleanly();
 
 	test_huge_field_index_rejected_cleanly();
 	test_huge_nf_assignment_rejected_cleanly();

@@ -69,6 +69,7 @@ int __spool_dir(const char *sub, char *buf, size_t bufsz)
  * hang. */
 #define MAX_ID_ATTEMPTS 100000
 
+withtok(file_stream_open)
 FILE *__spool_new_job(const char *dir, char *id_out, size_t id_out_sz,
 	char *path_out, size_t path_out_sz)
 {

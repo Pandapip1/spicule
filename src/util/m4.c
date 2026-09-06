@@ -265,13 +265,18 @@ static int strbuf_append(struct m4_strbuf *b, const char *data, size_t n)
 		}
 		return 1;
 	}
-	if (b->len + n + 1 > b->cap) {
+	/* b->len + n + 1, computed raw, wraps for an adversarial n and would
+	 * then wrongly compare as "already fits", skipping the realloc
+	 * below -- let __util_array_capacity's own overflow-checked test
+	 * decide instead (src/util/man.c's mbuf_append() fix, same shape). */
+	{
 		size_t newcap;
-		char *g;
 		if (!__util_array_capacity(b->cap, b->len, n + 1, 64, 1, &newcap)) return 0;
-		g = __util_reallocarray(b->data, newcap, 1);
-		if (!g) return 0;
-		b->data = g; b->cap = newcap;
+		if (newcap != b->cap) {
+			char *g = __util_reallocarray(b->data, newcap, 1);
+			if (!g) return 0;
+			b->data = g; b->cap = newcap;
+		}
 	}
 	for (size_t i = 0; i < n; i++) b->data[b->len + i] = data[i];
 	b->len += n;

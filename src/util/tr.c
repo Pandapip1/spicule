@@ -44,7 +44,15 @@
  *     needed to make string2's expansion as long as string1's" -- at
  *     most one such wildcard per string is supported (a second is
  *     refused rather than guessed at); n with a leading zero is octal,
- *     otherwise decimal, exactly as specified.
+ *     otherwise decimal, exactly as specified.  n itself is accepted
+ *     (not refused) however large the input spells it -- but expand_spec()
+ *     never materializes more than one byte past string1's expansion
+ *     length's worth of repeats, since nothing downstream -- xtab's
+ *     construction, -s's squeeze set -- ever looks at a byte of string2's
+ *     expansion past that point or cares how many identical copies of it
+ *     exist; a handful of argv bytes spelling out a huge n is refused the
+ *     unbounded allocation that a literal reading would otherwise hand
+ *     it, with no change to any observable output.
  *
  * If string2's expansion is shorter than string1's (post-complement)
  * one once both are known, "the results are unspecified" per the
@@ -231,8 +239,30 @@ static int expand_spec(const char *spec, const char *diagname, int allow_repeat,
 					wildcard_pos = (long)n;
 					wildcard_byte = xchar;
 				} else {
-					long k;
-					for (k = 0; k < count; k++) PUSH(xchar);
+					/* An explicit [x*N] repeats one identical byte, and
+					 * __util_tr_main() below only ever reads positions
+					 * < pad_hint out of string2's expansion (xtab's
+					 * construction indexes s2exp[] by position < set1n,
+					 * which is exactly pad_hint here) -- with -s's
+					 * squeeze set caring only whether xchar is present
+					 * at all, never how many times or where. So once
+					 * this buffer already reaches one byte past
+					 * pad_hint, further identical copies are
+					 * unobservable to every consumer downstream,
+					 * including a later [y*]/[y*0] wildcard's own fill
+					 * math further down in this function (which only
+					 * checks whether n has already reached pad_hint).
+					 * Capping what actually gets pushed to that point
+					 * is exact, not an approximation -- but it is load-
+					 * bearing: N is decimal/octal text, so a string2 of
+					 * a few dozen bytes can name a repeat count in the
+					 * billions, and pushing that many bytes for real
+					 * would let a short, attacker-controlled argv
+					 * demand an unbounded allocation. */
+					size_t remaining = (pad_hint > n) ? (pad_hint - n) : 0;
+					size_t budget = remaining + 1;
+					long k, limit = ((size_t)count > budget) ? (long)budget : count;
+					for (k = 0; k < limit; k++) PUSH(xchar);
 				}
 				p = close + 1;
 				continue;

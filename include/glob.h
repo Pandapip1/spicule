@@ -66,8 +66,14 @@ typedef struct {
 #define GLOB_NOSPACE	3
 
 /* errfunc is deliberately not required: per POSIX, a null errfunc is
- * simply never called. */
-int glob(const char *__restrict, int, int (*)(const char *, int), glob_t *__restrict)
+ * simply never called. pattern is withtok(null_terminated): POSIX defines
+ * it as a "pointer to a pathname pattern to be expanded", i.e. an
+ * ordinary C string, the same as glob.h's own real implementation
+ * (src/glob/glob.c) already assumes throughout -- strstr(), strlen(), and
+ * every downstream pointer derived from it are all called against it or a
+ * substring of it. */
+int glob(const char *__restrict withtok(null_terminated), int,
+         int (*)(const char *, int), glob_t *__restrict)
     __attribute__((nonnull(1, 4)));
 void globfree(glob_t *);
 

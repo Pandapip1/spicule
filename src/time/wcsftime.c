@@ -116,7 +116,8 @@ size_t wcsftime(wchar_t *__restrict s, size_t n, const wchar_t *__restrict f,
 		 * appended as both halves. */
 		p = out; left = r;
 		memset(&st, 0, sizeof st);
-		while (left || !mbsinit(&st)) {
+		for (;;) {
+			if (!left && mbsinit(&st)) break;
 			wchar_t wc = 0;
 			size_t used, k = mbrtowc(&wc, p, left, &st);
 

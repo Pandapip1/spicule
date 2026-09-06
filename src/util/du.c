@@ -90,6 +90,26 @@ static void print_line(uintmax_t blocks512, const char *path)
 	printf("%ju\t%s\n", to_units(blocks512), path);
 }
 
+/* ftwbuf->level below (and, once that dereference is reached, st->st_blocks
+ * in the FTW_F/FTW_SL/FTW_DP cases) is flagged "pointer dereference is not
+ * proven nonnull" by tools/lint.sh ownership: left open, same accepted
+ * class as src/util/rm.c/cp.c's own nftw() callbacks would be if they
+ * dereferenced either parameter at all (they cast both to (void) instead,
+ * see rm_walk_cb()/cpt_cb()). Unlike those two, this really is true and
+ * provable in principle -- src/ftw/ftw.c's report() always calls this
+ * callback as `ws->fn4(path, st, type, &f)` with a real, non-null `st` and
+ * `&f` (report()'s own stack-local struct FTW) on every call -- but
+ * stating it with __attribute__((nonnull(2, 4))) here was tried and
+ * reverted: it does silence this pair, but it also lets
+ * ntlibc.OwnershipChecker's exploration reach past this function's first
+ * statement into the FTW_DP case below, where it cannot prove
+ * level_sum[lvl]'s lower bound (lvl is never actually negative -- FTW's
+ * `level` is a plain recursion-depth counter src/ftw/ftw.c's walk() only
+ * ever increments from 0 -- but nothing in ownership.h's vocabulary states
+ * a scalar struct field's numeric range the way extent_at_least/
+ * element_extent state a pointer's byte/element extent), a net regression
+ * from 2 findings to 3. Verified with a direct clang --analyze run scoped
+ * to this file before keeping or reverting either change. */
 static int du_cb(const char *path, const struct stat *st, int type, struct FTW *ftwbuf)
 {
 	int lvl = ftwbuf->level;
@@ -149,6 +169,18 @@ int __util_du_main(
 	for (; i < argc; i++) {
 		char *a = argv[i];
 		char *p;
+		/* a[0]: "pointer dereference is not proven nonnull" -- left
+		 * open, same accepted class as the identical argv[i][0] access
+		 * in src/util/rm.c, cp.c, mv.c, df.c, uuencode.c, and
+		 * uudecode.c's own option loops. argv's own
+		 * elements_withtok(null_terminated, argc) above proves every
+		 * element up to argc has a reachable NUL, but include/
+		 * string_tokens.h's null_terminated token is defined purely as
+		 * that reachability fact (see its own comment) -- it carries no
+		 * companion "and the pointer itself is not NULL" qualifier, so
+		 * ntlibc.OwnershipChecker's AggregateElementToken machinery has
+		 * nothing to hand ntlibc.ValidPointer here. No annotation in
+		 * ownership.h currently closes this. */
 		if (a[0] != '-' || a[1] == 0) break;
 		if (!strcmp(a, "--")) { i++; break; }
 		for (p = a + 1; *p; p++) {

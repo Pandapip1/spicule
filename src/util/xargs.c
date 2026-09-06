@@ -3,91 +3,36 @@
  *
  * xargs(1p): read whitespace/quote-delimited arguments from standard
  * input and invoke a utility with them, batched to fit a command-line
- * size limit.  Checked against
+ * size limit. See
  * https://pubs.opengroup.org/onlinepubs/9699919799/utilities/xargs.html.
  *
- * ARGUMENT-DELIMITING GRAMMAR ("Guideline" in the page's EXTENDED
- * DESCRIPTION -- deliberately distinct from shell quoting): "arguments
- * in the standard input are separated by unquoted <blank> characters,
- * unescaped <blank> characters, or <newline> characters." "A string of
- * zero or more non-double-quote characters and non-<newline> characters
- * can be quoted by enclosing them in double-quotes." "A string of ...
- * non-<apostrophe> characters ... can be quoted [in apostrophes]." "Any
- * unquoted character can be escaped by preceding it with a
- * <backslash>." read_tokens() below implements exactly this: bare text,
- * "..." and '...' are three ways to build up one token, and a backslash
- * outside any quote makes the following character literal (including a
- * literal blank or newline inside an otherwise-bare token, or a literal
- * quote character). It does NOT process backslash escapes *inside*
- * quotes -- the page's own grammar describes quoting and backslash-
- * escaping as two independent mechanisms, not shell's nested one, and
- * neither the double-quote nor the single-quote clause above mentions
- * backslash at all.
+ * Tokenizing (read_tokens()): bare text, "..." and '...' each build up
+ * one token; a backslash outside any quote escapes the next character
+ * literally. Backslash is NOT processed *inside* quotes -- the page's
+ * Guideline grammar treats quoting and escaping as independent
+ * mechanisms, unlike shell's nested quoting.
  *
- * COMMAND LINE LENGTH: "the combined argument and environment lists
- * shall not exceed {ARG_MAX}-2048 bytes ... if neither -n nor -s ...
- * the default command line length shall be at least {LINE_MAX}." Both
- * {ARG_MAX} and {LINE_MAX} are real, meaningful sysconf() values on
- * this platform (src/unistd/sysconf.c: _SC_ARG_MAX -> ARG_MAX == 131072,
- * _SC_LINE_MAX -> LINE_MAX == 4096, include/limits.h) -- not stubs --
- * so both are read via sysconf() below rather than hardcoded, honoring
- * the task's own prompt to check whether sysconf() is meaningful here:
- * it is. The byte ceiling this file actually enforces is
- * min(user request via -s, or LINE_MAX if -s absent, sysconf(_SC_ARG_MAX) -
- * 2048 - current environ size), i.e. -s can request less than the
- * ARG_MAX-derived ceiling but never more.
+ * Byte ceiling per invocation: min(-s value, or LINE_MAX if -s absent,
+ * sysconf(_SC_ARG_MAX) - 2048 - current environ size).
  *
- * ---- SCOPE NARROWING, stated up front -----------------------------------
+ * Not implemented, refused with a diagnostic and exit 2: -0/-d (a GNU
+ * extension, not POSIX-mandatory). -E's eofstr matching is disabled by
+ * default and only takes effect when -E is given -- the safer of the
+ * two standard-permitted defaults, so an ordinary "_" token is never
+ * silently swallowed. -I and -L both group the token stream by input
+ * line (read_tokens() already tracks each token's line); -I's
+ * substitution value for one invocation is that line's tokens rejoined
+ * with single spaces rather than a second, separate per-line parse.
  *
- *  - -0 / -d are NOT implemented. Neither appears in this page's
- *    mandatory OPTIONS list -- they are a GNU extension (`-0`/`--null`)
- *    this project's own already-established "verify mandatory vs.
- *    optional before assuming a familiar GNU flag is required" rule
- *    (see e.g. src/util/ls.c's -h note) applies to just as much as any
- *    other. Refused with a diagnostic and exit 2, not silently ignored.
- *  - -E's "logical end-of-file string" is, per the page itself,
- *    "implementation-dependent" when -E is not given ("an underscore,
- *    or eofstr processing may be disabled by default"). This
- *    implementation picks disabled-by-default: no token is ever treated
- *    as an end-of-file marker unless -E was actually given, so an
- *    ordinary input token that happens to read "_" is never silently
- *    swallowed -- the safer of the two choices the page explicitly
- *    permits.
- *  - -I and -L both group the token stream by *line* (read_tokens()
- *    already tracks, per token, how many raw newlines preceded it, so
- *    "which line is this token on" is free); -I's substitution value
- *    for one invocation is every token on that line rejoined with
- *    single spaces, not a second, separate per-line parse. This is a
- *    real simplification against -I's own page text ("The application
- *    shall ensure that arguments ... are quoted using the ... -E
- *    [Guideline] conventions"), which read strictly would have -I
- *    itself relex each line; reusing the one tokenizer's line
- *    bookkeeping instead is simpler and agrees with it for the
- *    overwhelmingly common case (one token per line) that motivates -I
- *    in the first place ("presumably containing a single argument").
- *  - The whole of standard input is read into memory (read_tokens())
- *    before any batch is built or any utility invoked -- the same
- *    "buffer everything, then work" choice src/util/sort.c's
- *    read_all_lines() already makes for a different utility, picked
- *    here for the same reason: it keeps the batching logic below simple
- *    and correct, at the cost of not being a bounded-memory streaming
- *    implementation for an unbounded stdin.
+ * All of standard input is read into memory (read_tokens()) before any
+ * batch is built, trading unbounded-stdin streaming for simpler
+ * batching logic below.
  *
- * -p PROMPT: "the user is asked whether to execute the utility ... enables
- * trace mode (-t)" -- implemented as run_one() always tracing first when
- * either -t or -p is set, then, only for -p, reading a yes/no answer
- * with the same "first non-blank byte of the line is y/Y" convention
- * src/util/find.c's -ok confirm() uses (see that file's header comment
- * on reading stdin directly rather than /dev/tty; the same choice is
- * made here for the same reason).
+ * -p implies trace mode (-t) plus a yes/no prompt read directly from
+ * stdin, same convention as find(1)'s -ok (src/util/find.c).
  *
- * EXIT STATUS (page's EXIT STATUS section): "0 All ... invocations ...
- * returned zero. 1-125 ... could not be assembled, or ... a non-zero
- * exit status, or some other error. 126 ... found but could not be
- * invoked. 127 ... could not be found." note_status() below merges
- * candidate codes with exactly that priority -- 127 > 126 > 1 > 0,
- * which happens to already be their natural numeric order, so the merge
- * is a plain "keep the larger of the two seen so far".
+ * Exit status is the max of all candidate codes seen (note_status()):
+ * 127 > 126 > 1 > 0, already plain numeric order.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -146,11 +91,10 @@ static int emit_token(struct tok **arrp, size_t *np, size_t *capp, struct buf *c
 	return 0;
 }
 
-/* The Guideline grammar's tokenizer -- see this file's header comment.
- * *outp and *np are set to a malloc()'d array of *np tokens (each text
- * malloc()'d too) on success (0); on failure (-1, with a diagnostic
- * already written) *outp and *np are left untouched and everything
- * allocated so far has been freed. */
+/* On success, *outp and *np are a malloc()'d array of *np tokens (each
+ * .text malloc()'d too). On failure (-1, diagnostic already written)
+ * *outp and *np are untouched and everything allocated so far is
+ * freed. */
 static int read_tokens(FILE *in, struct tok **outp, size_t *np) __attribute__((nonnull(1, 2, 3)));
 static int read_tokens(FILE *in, struct tok **outp, size_t *np)
 {
@@ -303,10 +247,7 @@ static int prompt_confirm(void)
 	return first == 'y' || first == 'Y';
 }
 
-/* note_status()'s merge is the page's own EXIT STATUS priority (127 >
- * 126 > "1-125, any nonzero utility exit or assembly failure" > 0),
- * which already matches plain numeric ordering -- see this file's
- * header comment. */
+/* See header comment: priority already matches numeric order. */
 static void note_status(int *xstatus, int candidate) __attribute__((nonnull(1)));
 static void note_status(int *xstatus, int candidate)
 {
@@ -451,11 +392,12 @@ int __util_xargs_main(
 		 * every template argument with that line's tokens rejoined by
 		 * single spaces (see header comment on this simplification). */
 		ti = 0;
-		while (ti < ntok_used && xstatus < 126) {
-			size_t start = ti, line = toks[ti].line, total_len = 1, k;
+		while (ti < ntok_used) {
+			size_t start, line, total_len = 1, k, vpos;
 			char *value;
-			size_t vpos;
 			char **argv2;
+			if (xstatus >= 126) break;
+			start = ti; line = toks[ti].line;
 			while (ti < ntok_used && toks[ti].line == line) {
 				total_len += strlen(toks[ti].text) + 1;
 				ti++;

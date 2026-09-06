@@ -3,30 +3,19 @@
  *
  * split(1p): `split [-l line_count | -b n[k|m]] [-a suffix_length]
  * [file [name]]` -- splits one file into consecutively-named pieces.
+ * Default (no -l or -b): -l 1000. `file` defaults to stdin ('-' means
+ * stdin explicitly); `name` prefix defaults to "x".
  *
- * OPTIONS:
- *  -l line_count  "the number of lines in each resulting file piece"
- *  -b n[k|m]      pieces of n bytes (n*1024 with 'k', n*1,048,576 with
- *                 'm') instead of by line count -- mutually exclusive
- *                 with -l.
- *  -a suffix_length  override the default 2-character suffix width.
+ * OPTIONS: -l line_count (lines per piece); -b n[k|m] (bytes per
+ * piece, n*1024 / n*1048576 with k/m; mutually exclusive with -l);
+ * -a suffix_length (default 2).
  *
- * Default, "[i]f no -l or -b is given ... equivalent to -l 1000".
+ * SUFFIX SCHEME: gen_suffix() is a base-26 odometer ("aa", "ab", ...,
+ * "az", "ba", ...), not a decimal counter. Exhausting the
+ * 26^suffix_length names at a given width is a diagnosed error, not
+ * silent wraparound (which would overwrite the first piece).
  *
- * SUFFIX SCHEME: split(1p)'s own base-26 alphabetic suffix -- "aa",
- * "ab", ..., "az", "ba", ... -- implemented by gen_suffix() below as a
- * plain base-26 odometer over suffix_length letter positions, not a
- * decimal-number suffix.  Running out of the 26^suffix_length names
- * available at a given -a width is a real, diagnosed error ("too many
- * output files"), not silent wraparound back to "aa" (which would
- * silently overwrite the first piece with the (26^n+1)-th).
- *
- * OPERANDS: `file` -- "the pathname of the ordinary file to be split.
- * If no input file is given or file is '-', standard input shall be
- * used."  `name` -- "The prefix ... default shall be the character
- * 'x'."
- *
- * EXIT STATUS: "0 Successful completion." ">0 An error occurred."
+ * EXIT STATUS: 0 success, >0 error.
  */
 #include <stdio.h>
 #include <stdlib.h>

@@ -425,6 +425,48 @@ static void test_m4_eval(void)
 	check_ok_output(run(m4_path, argv, p1), "7\n42\n0\nff\n");
 }
 
+/* Regression for a real stack-overflow bug: eval()'s recursive-descent
+ * expression parser recursed once per '(' (ev_primary) and, separately,
+ * once per leading unary operator (ev_unary), with no depth cap of its
+ * own -- unlike dispatch_macro()'s M4_MAX_DEPTH, which only guards
+ * NESTED MACRO CALLS and never sees this recursion at all. A single
+ * eval() argument with enough nesting reliably crashed the process
+ * (SIGSEGV) before M4_EVAL_MAX_DEPTH was added to src/util/m4.c's
+ * ev_primary()/ev_unary(). This doesn't check the (undefined, since the
+ * expression is malformed) numeric result -- only that m4 now fails the
+ * expression cleanly (a diagnosed, ordinary exit status) instead of
+ * dying to a signal (run() folds a signal death into 128+signum, e.g.
+ * 139 for SIGSEGV, which is unmistakably not the plain `1` a clean
+ * eval() error exits with). */
+static void write_eval_bomb(const char *path, const char *prefix, int n, const char *suffix)
+{
+	FILE *f = fopen(path, "wb");
+	int i;
+	if (!f) { fails++; printf("FAIL: cannot write %s\n", path); return; }
+	fputs("eval(", f);
+	for (i = 0; i < n; i++) fputs(prefix, f);
+	fputc('1', f);
+	for (i = 0; i < n; i++) fputs(suffix, f);
+	fputs(")\n", f);
+	fclose(f);
+}
+
+static void test_m4_eval_deep_parens_does_not_crash(void)
+{
+	char *argv[] = { (char *)"m4", 0 };
+	mkpath(p1, "m4-15.m4");
+	write_eval_bomb(p1, "(", 200000, ")");
+	CHECK(run(m4_path, argv, p1) == 1);
+}
+
+static void test_m4_eval_deep_unary_does_not_crash(void)
+{
+	char *argv[] = { (char *)"m4", 0 };
+	mkpath(p1, "m4-16.m4");
+	write_eval_bomb(p1, "-", 500000, "");
+	CHECK(run(m4_path, argv, p1) == 1);
+}
+
 /* m4wrap(): its text is deferred until true end-of-input, not expanded
  * where the call appears. */
 static void test_m4_wrap(void)
@@ -508,6 +550,8 @@ int main(int argc, char **argv)
 	test_m4_divert();
 	test_m4_string_builtins();
 	test_m4_eval();
+	test_m4_eval_deep_parens_does_not_crash();
+	test_m4_eval_deep_unary_does_not_crash();
 	test_m4_wrap();
 	test_m4_include_error_vs_sinclude();
 	test_m4_builtin_matches_standalone();

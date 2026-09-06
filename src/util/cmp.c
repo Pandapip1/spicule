@@ -139,7 +139,12 @@ int __util_cmp_main(int argc, char **argv)
 
 	for (;;) {
 		size_t n1 = fread(buf1, 1, sizeof buf1, f1.f);
+		/* f1's errno must be captured here, before f2's fread() runs --
+		 * a later call, even a successful one, is not required to
+		 * leave errno alone. */
+		int errno1 = errno;
 		size_t n2 = fread(buf2, 1, sizeof buf2, f2.f);
+		int errno2 = errno;
 		size_t n = n1 < n2 ? n1 : n2;
 		size_t k;
 
@@ -169,8 +174,15 @@ int __util_cmp_main(int argc, char **argv)
 			 * count as "this file is shorter". */
 			int err1 = ferror(f1.f), err2 = ferror(f2.f);
 			if (err1 || err2) {
+				/* Report whichever file ferror() says actually
+				 * failed using THAT file's own errno1/errno2,
+				 * captured right after its own fread() -- not the
+				 * shared errno, which by now reflects only the
+				 * later of the two fread() calls regardless of
+				 * which one (or both) really failed. */
 				__util_diagf("cmp: %s: %s\n",
-					err1 ? files[0] : files[1], strerror(errno));
+					err1 ? files[0] : files[1],
+					strerror(err1 ? errno1 : errno2));
 				cmp_close(&f1); cmp_close(&f2);
 				return 2;
 			}

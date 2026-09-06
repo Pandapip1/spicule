@@ -240,8 +240,22 @@ static void print_row(const struct od_opts *o, const unsigned char *buf, size_t 
 	}
 
 	for (i = 0; i < n; i += (size_t)o->size) {
-		unsigned long long v = load_unit(buf + i, o->size);
+		/* od(1p): "the last object displayed shall be extended to a
+		 * full object by adding zero-valued padding at the end" -- a
+		 * trailing count not a multiple of the unit size must not read
+		 * `buf` past the `n` bytes this row's read actually filled in
+		 * (the rest of `buf` is a stale/uninitialized previous-row
+		 * leftover, not real input). */
+		size_t avail = n - i;
+		unsigned long long v;
 		int width;
+		if (avail >= (size_t)o->size) {
+			v = load_unit(buf + i, o->size);
+		} else {
+			unsigned char tail[8] = { 0 };
+			for (size_t k = 0; k < avail; k++) tail[k] = buf[i + k];
+			v = load_unit(tail, o->size);
+		}
 		switch (o->type) {
 		case 'x': width = o->size * 2; printf(" %*llx", width, v); break;
 		case 'o': width = odigits(o->size); printf(" %*llo", width, v); break;

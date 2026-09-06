@@ -57,10 +57,17 @@ int __fmodeflags(const char *mode)
 	return flags;
 }
 
+withtok(file_stream_open)
 FILE *__file_new(int fd, int flags) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
-	FILE *f = malloc(sizeof *f); // NOLINT(cert-fio38-c,misc-non-copyable-objects) -- the stdio implementation allocates its private FILE representation; it does not copy one
-	if (!f) return 0;
+	/* __malloc(), not malloc(): file_stream_open is implemented_by
+	 * internal_heap_allocated (see stdio_impl.h), matching
+	 * src/dirent/opendir.c's alloc_dir()/__malloc() exactly. __malloc()
+	 * does not set errno itself (src/malloc/crt_alloc.c), unlike malloc(),
+	 * so that is done here instead to preserve fopen()/fdopen()'s existing
+	 * ENOMEM-on-failure contract. */
+	FILE *f = __malloc(sizeof *f); // NOLINT(cert-fio38-c,misc-non-copyable-objects) -- the stdio implementation allocates its private FILE representation; it does not copy one
+	if (!f) { errno = ENOMEM; return 0; }
 	memset(f, 0, sizeof *f); // NOLINT(cert-fio38-c,misc-non-copyable-objects) -- initializes new private FILE storage before it becomes a stream; no live FILE is copied
 	f->fd = fd;
 	f->pid = -1;
@@ -81,11 +88,14 @@ void __file_free(FILE *f)
 	for (pp = &__stdio_files; *pp; pp = &(*pp)->next) {
 		if (*pp == f) { *pp = f->next; break; }
 	}
+	/* buf/mem_buf are separate heap_allocated buffers, not the FILE
+	 * struct itself; releasing f's own file_stream_open token is each
+	 * caller's own following __free(f) call (see stdio_impl.h). */
 	if (f->buf && !f->user_buf) free(f->buf);
 	if (f->is_mem && f->mem_owned && f->mem_buf) free(f->mem_buf);
-	free(f);
 }
 
+withtok(file_stream_open)
 FILE *fopen(const char *__restrict path withtok(null_terminated),
 	const char *__restrict mode withtok(null_terminated)) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
@@ -100,6 +110,7 @@ FILE *fopen(const char *__restrict path withtok(null_terminated),
 	return f;
 }
 
+withtok(file_stream_open)
 FILE *fdopen(int fd, const char *mode)
 {
 	int flags = __fmodeflags(mode);
@@ -107,18 +118,20 @@ FILE *fdopen(int fd, const char *mode)
 	FILE *f;
 	if (flags < 0) return 0;
 	if (!desc) return 0;
-	f = __file_new(fd, flags);
-	if (!f) return 0;
 	if ((flags & O_APPEND) && (flags & O_ACCMODE) != O_RDONLY) {
 		/* fdopen(...,"a") establishes append mode even if the fd was
 		 * opened without O_APPEND; seed the position from the current end
-		 * so ftello() includes buffered output. */
+		 * so ftello() includes buffered output. Done on the raw fd,
+		 * before __file_new() wraps it, rather than via fseek() on the
+		 * freshly made f as before: a brand-new FILE* has no buffered
+		 * state to flush or re-derive position from, so the two are
+		 * equivalent here, and this way a seek failure never has to
+		 * unwind a live file_stream_open. */
 		desc->flags |= O_APPEND;
-		if (fseek(f, 0, SEEK_END) < 0) {
-			__file_free(f);
-			return 0;
-		}
+		if (lseek(fd, 0, SEEK_END) < 0) return 0;
 	}
+	f = __file_new(fd, flags);
+	if (!f) return 0;
 	return f;
 }
 
@@ -139,12 +152,12 @@ FILE *freopen(const char *__restrict path, const char *__restrict mode, FILE *__
 			(void)close(oldfd);
 		}
 		fd = open(path, flags, 0666);
-		if (fd < 0) { __file_free(f); return 0; }
+		if (fd < 0) { __file_free(f); __free(f); return 0; }
 		f->fd = fd;
 	} else {
 		/* Reopening the same file with a new mode: just re-derive flags.
 		 * f->fd already is oldfd, so there is nothing to reassign. */
-		if (oldfd < 0) { __file_free(f); return 0; }
+		if (oldfd < 0) { __file_free(f); __free(f); return 0; }
 	}
 
 	f->readable = f->writable = 0;
@@ -168,19 +181,40 @@ FILE *freopen(const char *__restrict path, const char *__restrict mode, FILE *__
 	return f;
 }
 
-int fclose(FILE *f)
+int fclose(FILE *f consume(file_stream_open))
 {
 	int r = fflush(f);
 	if (!f->is_mem && !f->no_close && f->fd >= 0) {
 		if (close(f->fd) < 0) r = EOF;
 	}
 	if (f->no_close) {
-		/* stdin/stdout/stderr are never freed; just reset them. */
+		/* stdin/stdout/stderr are never freed; just reset them.
+		 *
+		 * This path is a known, accepted ntlibc.AllocationLifetime
+		 * finding ("consume function exits without releasing its
+		 * argument"), not a real leak: f is one of the three static
+		 * FILE objects below, never dynamic storage, so there is
+		 * nothing to free.  AllocationLifetimeChecker has no
+		 * per-function knowledge of which callers pass a static
+		 * instance -- unlike DIR*, which has no such static-instance
+		 * exception -- and the project's own consume-obligation
+		 * design (see tools/lint-ownership-fixtures/... and
+		 * tools/lint-allocation-lifetime-fixtures/bad-contract.c's
+		 * broken_destroy) intentionally requires every consume(...)
+		 * parameter to be discharged through a further matching
+		 * release call on every path, with no header-level escape
+		 * hatch for "this specific value is not really owned". Fixing
+		 * this without a bespoke per-call exemption in checker C++
+		 * (out of scope here) is not possible; consume(file_stream_open)
+		 * is kept on fclose() regardless because leaving it off would
+		 * make AllocationLifetimeChecker treat every real
+		 * fopen()/fclose() pairing across the tree as a leak instead. */
 		f->rpos = f->rend = f->wpos = 0;
 		f->nunget = 0;
 		return r;
 	}
 	__file_free(f);
+	__free(f);
 	return r;
 }
 

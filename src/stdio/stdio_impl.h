@@ -93,9 +93,21 @@ int __fmodeflags(const char *mode) __attribute__((nonnull(1)));
  * e.g. one only ever fwrite()n in chunks bigger than BUFSIZ). */
 void __ensure_buf(FILE *f) __attribute__((nonnull(1)));
 
-/* Allocate a FILE around an already-open fd, link it into the open list. */
+/* Allocate a FILE around an already-open fd, link it into the open list.
+ * withtok(file_stream_open) mirrors src/dirent/opendir.c's alloc_dir(): the
+ * internal allocation (__malloc, internal_heap_allocated) is a declared
+ * one-hop implementation of file_stream_open, so every public producer that
+ * returns __file_new()'s result proves its own withtok(file_stream_open)
+ * contract instead of leaving it merely declared. */
+withtok(file_stream_open)
 FILE *__file_new(int fd, int flags);
-/* Unlink and free a FILE (the fd/memory it wraps is the caller's problem). */
+/* Unlink from the open list and free the buffers a FILE owns (the fd is
+ * the caller's problem). Deliberately NOT consume(file_stream_open):
+ * fclose() is file_stream_open's one declared freer (see include/stdio.h's
+ * own comment on piped_stream_open for why a family has exactly one), so
+ * this internal helper -- shared by fclose() and freopen()'s error paths --
+ * leaves releasing the FILE struct itself to its own caller's direct
+ * __free() call instead of claiming that release itself. */
 void __file_free(FILE *f) __attribute__((nonnull(1)));
 
 /* Flush a pending write buffer to the fd (or memory).  0 or EOF+errno. */

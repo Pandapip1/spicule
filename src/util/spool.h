@@ -107,6 +107,7 @@ int __spool_dir(const char *sub, char *buf, size_t bufsz);
  * __spool_publish_job() to make it visible to atd. Returns NULL with
  * errno set on failure (out of ids after a bounded number of
  * attempts, or a real open() failure). */
+withtok(file_stream_open)
 FILE *__spool_new_job(const char *dir, char *id_out, size_t id_out_sz,
 	char *path_out, size_t path_out_sz);
 

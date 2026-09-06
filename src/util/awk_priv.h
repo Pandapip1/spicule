@@ -294,7 +294,13 @@ enum awk_toktype {
 
 struct awk_token {
 	enum awk_toktype type;
-	char *text;      /* owned: identifier/string/ERE literal text, else NULL */
+	/* owned, NUL-terminated whenever non-NULL: awk_lex.c's own
+	 * scan_string()/scan_ere()/the identifier-scanning branch of
+	 * awk_lex_next() are the only writers, and each either builds via
+	 * growbuf()'s own `buf[n] = 0;` or dupn(), which NUL-terminates the
+	 * same way (see that helper's own body) -- identifier/string/ERE
+	 * literal text, else NULL. */
+	char *text withtok(null_terminated);
 	double num;      /* T_NUMBER */
 	int adj_lparen;  /* T_NAME/T_FUNC_NAME: '(' immediately followed, no space --
 	                  * XCU awk(1p)'s own rule for telling a function call
@@ -416,7 +422,18 @@ struct awk_parser {
 	int has_tok2;
 	int err;
 	char errmsg[256];
-	struct awk_program *prog; /* being built; funcs/rules grown as parsed */
+	/* being built; funcs/rules grown as parsed. Set exactly once, in
+	 * awk_parse_program() right after a checked calloc(), and never
+	 * reassigned or cleared afterward -- so it is genuinely non-null for
+	 * this struct's entire lifetime once construction finishes. No
+	 * withtok(...) qualifier expresses this (that machinery tracks a
+	 * linear ownership/family fact, not a static non-null promise);
+	 * instead, parse_function_def()/parse_rule() each restate the fact
+	 * with ownership_stubs.h's __ownership_pointer_nonnull(p->prog)
+	 * right before dereferencing it, the same leaf-axiom idiom
+	 * __ownership_string_terminated() already uses nearby for a
+	 * different property a struct field read can't otherwise carry. */
+	struct awk_program *prog;
 	int suppress_gt;        /* inside a print/printf argument list, outside
 	                         * any nested parentheses: a bare '>' is output
 	                         * redirection, not the relational operator --

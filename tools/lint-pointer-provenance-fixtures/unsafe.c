@@ -17,7 +17,10 @@ int *integer_pointer(unsigned long address) {
  * buffers: subtracting a strchr() result from a *different* string is
  * still two unrelated objects, not the same "needle in haystack" pair,
  * and must stay flagged. */
-#include <string.h>
+/* strchr(), inlined rather than `#include <string.h>` -- same reason as
+ * safe.c's identical inlined declaration: these fixtures compile with no
+ * include path. */
+char *strchr(const char *, int);
 long different_haystack_difference(const char *s, const char *other) {
   const char *dot = strchr(s, '.');
   return dot ? dot - other : -1; /* pointer-provenance-expect */
@@ -25,7 +28,8 @@ long different_haystack_difference(const char *s, const char *other) {
 
 
 /* A strto* end pointer shares provenance only with that call's own input. */
-#include <stdlib.h>
+/* strtol(), inlined for the same reason strchr() is above. */
+long strtol(const char *, char **, int);
 long conversion_end_from_different_input(const char *s, const char *other) {
   char *end;
   (void)strtol(s, &end, 10);

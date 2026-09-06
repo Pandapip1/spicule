@@ -1,6 +1,13 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later */
-#include <stddef.h>
+
+/* size_t, inlined rather than `#include <stddef.h>`: this fixture compiles
+ * with no include path (matching every other lint stage's fixtures, and
+ * lint-pointer-provenance-fixtures/safe.c's identical inlined-declaration
+ * comment), so it must not depend on a header actually resolving -- see
+ * clang's own resource-dir, which is what `<stddef.h>` would otherwise
+ * come from. */
+typedef __SIZE_TYPE__ size_t;
 
 __SIZE_TYPE__ strlen(
 	const char * __attribute__((annotate("withtok:null_terminated"))));

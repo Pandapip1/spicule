@@ -45,3 +45,15 @@ void destroy_widget(void *object consume(widget_allocated));
 withtok(sentinel_allocated)
 void *sentinel_producer(int fail);
 void sentinel_release(void *object consume(sentinel_allocated));
+
+/* The real include/wordexp.h shape: an out-parameter struct whose field is
+ * filled by an intermediate withtok-declared producer (pv_pack() there,
+ * pack_items() here), not by a direct malloc() call in the same frame as
+ * the field assignment. See safe.c's fill_word_vector()/
+ * missing_release_is_not_caught() and unsafe.c's
+ * fill_word_vector_leaks_on_error_path(). */
+struct word_vector {
+	void *items withtok(heap_allocated);
+};
+withtok(heap_allocated)
+void *pack_items(void);

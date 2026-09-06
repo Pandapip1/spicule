@@ -115,6 +115,19 @@ void out_param_transfer_unannotated(void **out)
 	*out = malloc(8);
 } /* allocation-lifetime-expect: unannotated out-parameter is not a proven destination */
 
+/* Same producer-chain shape as safe.c's fill_word_vector(), but this path
+ * never reaches `out->items = items` -- caught because the leaked
+ * allocation still belongs to THIS frame, exactly as include/wordexp.h's
+ * real wordexp_t.we_wordv/pv_pack() pairing is proven not to leak the array
+ * it produces on any of expand_impl()'s own error paths. */
+void fill_word_vector_leaks_on_error_path(struct word_vector *out, int fail)
+{
+	void *items = pack_items();
+	if (fail)
+		return; /* allocation-lifetime-expect: leaked producer result before reaching the struct field */
+	out->items = items;
+}
+
 void *make_inherited(void)
 {
 	return malloc(8);

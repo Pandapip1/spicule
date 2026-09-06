@@ -1,7 +1,11 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
+#include "../../include/ownership.h"
+
+fallible
 int close(int);
+fallible
 long read(int, void *, unsigned long);
 
 int propagated_close(int fd) { return close(fd); }

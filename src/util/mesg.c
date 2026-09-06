@@ -98,12 +98,18 @@ int __util_mesg_main(
 
 	if (strcmp(argv[1], "y") == 0) {
 		if (t.opaque) return 0; /* already, and always, true -- see banner */
-		if (stat(t.path, &st) != 0) {
+		/* fstat()/fchmod() on `fd` itself, not stat()/chmod() on the
+		 * re-resolved t.path: fd is the exact tty device
+		 * __util_find_terminal() already verified, so the mode bits
+		 * read here and the ones written below are guaranteed to be
+		 * the same object's, never a different device a path lookup
+		 * happened to re-resolve to in between. */
+		if (fstat(fd, &st) != 0) {
 			__util_diagf("mesg: %s: %s\n", t.path, strerror(errno));
 			return 2;
 		}
 		nm = st.st_mode | S_IWGRP;
-		if (chmod(t.path, nm) != 0) {
+		if (fchmod(fd, nm) != 0) {
 			__util_diagf("mesg: %s: %s\n", t.path, strerror(errno));
 			return 2;
 		}
@@ -117,12 +123,12 @@ int __util_mesg_main(
 			"(see src/util/mesg.c's own header comment)\n");
 		return 2;
 	}
-	if (stat(t.path, &st) != 0) {
+	if (fstat(fd, &st) != 0) {
 		__util_diagf("mesg: %s: %s\n", t.path, strerror(errno));
 		return 2;
 	}
 	nm = st.st_mode & ~(mode_t)S_IWGRP;
-	if (chmod(t.path, nm) != 0) {
+	if (fchmod(fd, nm) != 0) {
 		__util_diagf("mesg: %s: %s\n", t.path, strerror(errno));
 		return 2;
 	}

@@ -118,5 +118,11 @@
  * just treats the incoming fields as unconstrained, as it always did. */
 #define fields_established \
 	__ownership_attr("fields_established")
+/* A bare, function-level marker: this function's return value is a real
+ * result, not an advisory one, and must not be silently discarded.
+ * tools/clang/FallibleResultChecker.cpp's ntlibc.FallibleResult reads this
+ * back off the callee instead of keeping its own hardcoded name list. */
+#define fallible \
+	__ownership_attr("fallible")
 
 #endif

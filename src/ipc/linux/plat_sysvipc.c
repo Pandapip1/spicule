@@ -219,8 +219,8 @@ struct k_ipc64_perm {
 	unsigned mode;
 	unsigned short seq;
 	unsigned short __pad2; // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- spelling mirrors the Linux kernel ABI layout
-	unsigned long __unused1;
-	unsigned long __unused2;
+	unsigned long __unused1; // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- spelling mirrors the Linux kernel ABI layout
+	unsigned long __unused2; // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- spelling mirrors the Linux kernel ABI layout
 };
 #define LX_IPC64_PERM_SIZE 48
 #endif
@@ -271,8 +271,8 @@ struct k_shmid64_ds {
 	int shm_cpid;
 	int shm_lpid;
 	unsigned long shm_nattch;
-	unsigned long __unused4;
-	unsigned long __unused5;
+	unsigned long __unused4; // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- spelling mirrors the Linux kernel ABI layout
+	unsigned long __unused5; // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- spelling mirrors the Linux kernel ABI layout
 };
 #define LX_SHMID64_DS_SIZE 112
 #endif
@@ -308,8 +308,8 @@ struct k_msqid64_ds {
 	unsigned long msg_qbytes;
 	int msg_lspid;
 	int msg_lrpid;
-	unsigned long __unused4;
-	unsigned long __unused5;
+	unsigned long __unused4; // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- spelling mirrors the Linux kernel ABI layout
+	unsigned long __unused5; // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- spelling mirrors the Linux kernel ABI layout
 };
 #define LX_MSQID64_DS_SIZE 120
 #endif
@@ -335,8 +335,8 @@ struct k_semid64_ds {
 	long sem_otime;
 	long sem_ctime;
 	unsigned long sem_nsems;
-	unsigned long __unused3;
-	unsigned long __unused4;
+	unsigned long __unused3; // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- spelling mirrors the Linux kernel ABI layout
+	unsigned long __unused4; // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- spelling mirrors the Linux kernel ABI layout
 };
 #define LX_SEMID64_DS_SIZE 88
 #endif

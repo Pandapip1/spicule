@@ -46,10 +46,16 @@ static int parse_period(const char *w, enum period *out)
 static time_t apply_increment(time_t base, long n, enum period p)
 {
 	switch (p) {
-	case P_MINUTE: return base + n * 60;
-	case P_HOUR:   return base + n * 3600;
-	case P_DAY:    return base + n * 86400;
-	case P_WEEK:   return base + n * 7 * 86400;
+	/* n is caller-controlled (at(1p)'s own "+N period" grammar) and long
+	 * is only 32 bits on the win32 targets (LLP64), while time_t is 64;
+	 * without the cast, a large enough n overflows the multiplication in
+	 * 32-bit long before the result is ever widened to time_t -- the
+	 * same class of bug tools/clang-tidy-checks.txt's own header cites
+	 * as the canonical example this analyzer stage exists to catch. */
+	case P_MINUTE: return base + (time_t)n * 60;
+	case P_HOUR:   return base + (time_t)n * 3600;
+	case P_DAY:    return base + (time_t)n * 86400;
+	case P_WEEK:   return base + (time_t)n * 7 * 86400;
 	case P_MONTH:
 	case P_YEAR: {
 		struct tm tmv;
@@ -75,7 +81,7 @@ static long period_seconds(enum period p)
 	case P_MINUTE: return 60;
 	case P_HOUR:   return 3600;
 	case P_DAY:    return 86400;
-	case P_WEEK:   return 7 * 86400;
+	case P_WEEK:   return 7 * 86400; // NOLINT(bugprone-implicit-widening-of-multiplication-result) -- compile-time constant, 604800, far inside int range before the widen to long
 	default:       return 0;
 	}
 }

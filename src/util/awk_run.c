@@ -1787,7 +1787,7 @@ static double v_num_p(struct awk_interp *ip, struct awk_node *n)
 
 static struct awk_value call_user_func(struct awk_interp *ip, struct awk_func *fn, struct awk_node **argnodes, int nargs)
 {
-	struct awk_cell **cells = fn->nparams ? xrealloc(NULL, (size_t)fn->nparams * sizeof *cells) : NULL;
+	struct awk_cell **cells = fn->nparams ? xrealloc(NULL, (size_t)fn->nparams * sizeof *cells) : NULL; // NOLINT(bugprone-sizeof-expression) -- cells is awk_cell**, *cells is awk_cell*, the array holds pointers
 	unsigned char *isalias = fn->nparams ? xrealloc(NULL, (size_t)fn->nparams * sizeof *isalias) : NULL;
 	struct awk_frame frame, *prev_frame = ip->frame;
 	struct awk_value ret;

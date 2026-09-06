@@ -318,6 +318,52 @@ static void test_timeout_invalid_duration(void)
 	CHECK(err_contains("invalid duration"));
 }
 
+/* strtod() (src/stdlib/strtod.c) accepts the C99 "inf"/"infinity"/
+ * "nan" spellings, and silently saturates to HUGE_VAL on plain
+ * numeric overflow (e.g. "1e400") -- both would previously sail
+ * through parse_duration()'s only range check ("v < 0", false for
+ * +inf and for NaN alike) and reach deadline_after()'s "(time_t)secs"
+ * cast, which is undefined behavior for a non-finite double or one
+ * whose integral part doesn't fit time_t (C11 6.3.1.4). All three
+ * must now be rejected as a plain invalid duration (125), the same
+ * as test_timeout_invalid_duration()'s "notanumber" case, rather than
+ * crashing or hanging. */
+static void test_timeout_infinite_duration_rejected(void)
+{
+	char *argv1[] = { (char *)"timeout", (char *)"inf", (char *)"true", 0 };
+	CHECK(run(timeout_path, argv1) == 125);
+	CHECK(err_contains("invalid duration"));
+
+	{
+		char *argv2[] = { (char *)"timeout", (char *)"1e400", (char *)"true", 0 };
+		CHECK(run(timeout_path, argv2) == 125);
+		CHECK(err_contains("invalid duration"));
+	}
+
+	{
+		char *argv3[] = { (char *)"timeout", (char *)"nan", (char *)"true", 0 };
+		CHECK(run(timeout_path, argv3) == 125);
+		CHECK(err_contains("invalid duration"));
+	}
+
+	/* A huge but *finite* value, pushed to infinity only by the 'd'
+	 * unit multiply inside parse_duration() itself -- exercises the
+	 * post-multiply check, not just the pre-multiply strtod() result. */
+	{
+		char *argv4[] = { (char *)"timeout", (char *)"3e304d", (char *)"true", 0 };
+		CHECK(run(timeout_path, argv4) == 125);
+		CHECK(err_contains("invalid duration"));
+	}
+
+	/* Also exercised via -k's duration, which shares parse_duration(). */
+	{
+		char *argv5[] = { (char *)"timeout", (char *)"-k", (char *)"inf",
+			(char *)"2", (char *)"true", 0 };
+		CHECK(run(timeout_path, argv5) == 125);
+		CHECK(err_contains("invalid duration"));
+	}
+}
+
 static void test_timeout_invalid_signal(void)
 {
 	char *argv[] = { (char *)"timeout", (char *)"-s", (char *)"NOTASIGNAL",
@@ -404,6 +450,7 @@ int main(int argc, char **argv)
 	test_timeout_kill_after_escalates();
 	test_timeout_missing_operand();
 	test_timeout_invalid_duration();
+	test_timeout_infinite_duration_rejected();
 	test_timeout_invalid_signal();
 	test_timeout_command_not_found();
 

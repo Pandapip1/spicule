@@ -186,14 +186,17 @@ enum exec_ctx { CTX_TOP = 0, CTX_GLIST = 1, CTX_GVSINGLE = 2 };
 
 struct strbuf { char *data; size_t len, cap; };
 
+static void strbuf_init(struct strbuf *s) __attribute__((nonnull(1)));
 static void strbuf_init(struct strbuf *s) { s->data = 0; s->len = 0; s->cap = 0; }
 
+static void strbuf_free(struct strbuf *s) __attribute__((nonnull(1)));
 static void strbuf_free(struct strbuf *s)
 {
 	free(s->data);
 	s->data = 0; s->len = 0; s->cap = 0;
 }
 
+static int strbuf_reserve(struct strbuf *s, size_t additional) __attribute__((nonnull(1)));
 static int strbuf_reserve(struct strbuf *s, size_t additional)
 {
 	size_t newcap, need;
@@ -208,6 +211,7 @@ static int strbuf_reserve(struct strbuf *s, size_t additional)
 	return 1;
 }
 
+static int strbuf_append(struct strbuf *s, const char *p, size_t n) __attribute__((nonnull(1, 2)));
 static int strbuf_append(struct strbuf *s, const char *p, size_t n)
 {
 	if (!strbuf_reserve(s, n)) return 0;
@@ -218,11 +222,13 @@ static int strbuf_append(struct strbuf *s, const char *p, size_t n)
 }
 
 static int strbuf_putc(struct strbuf *s, char c) { return strbuf_append(s, &c, 1); }
-static int strbuf_puts(struct strbuf *s, const char *p) { return strbuf_append(s, p, strlen(p)); }
+static int strbuf_puts(struct strbuf *s, const char *p withtok(null_terminated)) __attribute__((nonnull(1, 2)));
+static int strbuf_puts(struct strbuf *s, const char *p withtok(null_terminated)) { return strbuf_append(s, p, strlen(p)); }
 
 /* Detaches the buffer's storage to the caller, always returning a real
  * (possibly empty) NUL-terminated string rather than NULL, so callers
  * never need a NULL special case for "nothing was ever appended". */
+static char *strbuf_take(struct strbuf *s) __attribute__((nonnull(1)));
 static char *strbuf_take(struct strbuf *s)
 {
 	char *r = s->data;
@@ -233,7 +239,8 @@ static char *strbuf_take(struct strbuf *s)
 
 /* ==== misc small helpers ================================================= */
 
-static void free_string_array(char **a, size_t n)
+static void free_string_array(char **a consume(heap_allocated), size_t n);
+static void free_string_array(char **a consume(heap_allocated), size_t n)
 {
 	size_t i;
 	if (!a) return;
@@ -241,6 +248,7 @@ static void free_string_array(char **a, size_t n)
 	free(a);
 }
 
+static void skip_blanks(const char **pp) __attribute__((nonnull(1)));
 static void skip_blanks(const char **pp)
 {
 	while (**pp == ' ' || **pp == '\t') (*pp)++;
@@ -294,6 +302,7 @@ static int ed_check_interrupt(struct ed *ed)
 
 /* ==== buffer management =================================================== */
 
+static int buf_reserve(struct ed *ed, size_t additional) __attribute__((nonnull(1)));
 static int buf_reserve(struct ed *ed, size_t additional)
 {
 	size_t newcap;
@@ -306,6 +315,7 @@ static int buf_reserve(struct ed *ed, size_t additional)
 	return 1;
 }
 
+static void marks_shift_insert(struct ed *ed, long after_line, long count) __attribute__((nonnull(1)));
 static void marks_shift_insert(struct ed *ed, long after_line, long count)
 {
 	int m;
@@ -317,6 +327,7 @@ static void marks_shift_insert(struct ed *ed, long after_line, long count)
 	}
 }
 
+static void marks_shift_delete(struct ed *ed, long from, long to) __attribute__((nonnull(1)));
 static void marks_shift_delete(struct ed *ed, long from, long to)
 {
 	int m;
@@ -356,6 +367,7 @@ static int buf_insert_after(struct ed *ed, long after_line, char **newlines, siz
 /* Removes lines [from,to] (1-based, inclusive) from the array WITHOUT
  * freeing their text -- used by `m`, whose moved lines are reinserted
  * elsewhere, not discarded. */
+static void buf_remove_range_nofree(struct ed *ed, long from, long to) __attribute__((nonnull(1)));
 static void buf_remove_range_nofree(struct ed *ed, long from, long to)
 {
 	size_t at0 = (size_t)(from - 1), count = (size_t)(to - from + 1);
@@ -365,6 +377,7 @@ static void buf_remove_range_nofree(struct ed *ed, long from, long to)
 	marks_shift_delete(ed, from, to);
 }
 
+static void buf_delete_range(struct ed *ed, long from, long to) __attribute__((nonnull(1)));
 static void buf_delete_range(struct ed *ed, long from, long to)
 {
 	long i;
@@ -384,6 +397,7 @@ static long cur_after_delete(long want, long nlines)
 
 /* ==== undo (single-level swap; see header comment) ======================= */
 
+static int save_undo_snapshot(struct ed *ed) __attribute__((nonnull(1)));
 static int save_undo_snapshot(struct ed *ed)
 {
 	char **copy = 0;
@@ -405,6 +419,7 @@ static int save_undo_snapshot(struct ed *ed)
 }
 
 /* Returns 0 on success, -1 if there is nothing to undo, -2 on OOM. */
+static int do_undo(struct ed *ed) __attribute__((nonnull(1)));
 static int do_undo(struct ed *ed)
 {
 	char **tmp = 0;
@@ -447,6 +462,7 @@ struct linesrc {
  * defensible choice).  Returns NULL on real EOF/error, or on being
  * interrupted mid-read (ed_interrupted is left set in that case so the
  * caller can tell the two apart). */
+static char *read_line_stdin(FILE *f) __attribute__((nonnull(1)));
 static char *read_line_stdin(FILE *f)
 {
 	char *buf = 0;
@@ -480,7 +496,7 @@ static char *read_line_stdin(FILE *f)
 	if (got > 0 && buf[got - 1] == '\n') buf[got - 1] = 0;
 	return buf;
 }
-
+static char *linesrc_next(struct linesrc *ls) __attribute__((nonnull(1)));
 static char *linesrc_next(struct linesrc *ls)
 {
 	if (ls->f) return read_line_stdin(ls->f);
@@ -495,6 +511,7 @@ static char *linesrc_next(struct linesrc *ls)
  * possibly n==0), -1 on OOM, or ED_INTR if interrupted -- in the
  * ED_INTR case, everything collected so far is discarded, matching
  * "abort whatever's currently happening". */
+static int read_text_lines(struct linesrc *src, char ***out_lines, size_t *out_n) __attribute__((nonnull(1, 2, 3)));
 static int read_text_lines(struct linesrc *src, char ***out_lines, size_t *out_n)
 {
 	char **lines = 0;
@@ -561,6 +578,7 @@ static void ed_print_range(struct ed *ed, long from, long to, int fmt)
 
 /* ==== BRE search with wraparound ========================================== */
 
+static int search_forward(struct ed *ed, const char *pat, long from, long *out) __attribute__((nonnull(1, 2, 4)));
 static int search_forward(struct ed *ed, const char *pat, long from, long *out)
 {
 	regex_t re;
@@ -577,6 +595,7 @@ static int search_forward(struct ed *ed, const char *pat, long from, long *out)
 	return ed_fail(ed, "no match");
 }
 
+static int search_backward(struct ed *ed, const char *pat, long from, long *out) __attribute__((nonnull(1, 2, 4)));
 static int search_backward(struct ed *ed, const char *pat, long from, long *out)
 {
 	regex_t re;
@@ -599,7 +618,10 @@ static int search_backward(struct ed *ed, const char *pat, long from, long *out)
  * expander below each give backslash its own further meaning).
  * Leaves *endp just past the consumed delimiter, or at the NUL if the
  * delimiter was omitted at end of line (both are valid per XCU). */
-static int extract_delimited(const char *p, char delim, char **out, const char **endp)
+static int extract_delimited(const char *p, char delim,
+	char **out, const char **endp) __attribute__((nonnull(1, 3, 4)));
+static int extract_delimited(const char *p, char delim,
+	char **out, const char **endp)
 {
 	struct strbuf sb;
 	strbuf_init(&sb);
@@ -620,6 +642,7 @@ static int extract_delimited(const char *p, char delim, char **out, const char *
 
 /* ==== address parsing ===================================================== */
 
+static int parse_simple_addr(struct ed *ed, const char **pp, long eval_cur, long *out, int *had_base) __attribute__((nonnull(1, 2, 4, 5)));
 static int parse_simple_addr(struct ed *ed, const char **pp, long eval_cur, long *out, int *had_base)
 {
 	const char *p = *pp;
@@ -695,6 +718,7 @@ static int parse_simple_addr(struct ed *ed, const char **pp, long eval_cur, long
 
 struct range { int n; long a1, a2; };
 
+static int parse_range(struct ed *ed, const char **pp, struct range *r) __attribute__((nonnull(1, 2, 3)));
 static int parse_range(struct ed *ed, const char **pp, struct range *r)
 {
 	long eval_cur = ed->cur;
@@ -729,6 +753,7 @@ static int parse_range(struct ed *ed, const char **pp, struct range *r)
 	return 0;
 }
 
+static void resolve_default(const struct range *rg, long def_a, long def_b, long *from, long *to) __attribute__((nonnull(1, 4, 5)));
 static void resolve_default(const struct range *rg, long def_a, long def_b, long *from, long *to)
 {
 	if (rg->n == 0) { *from = def_a; *to = def_b; }
@@ -753,6 +778,7 @@ static int parse_trailing_suffix(struct ed *ed, const char *p, int *fmt)
 
 /* ==== s/// substitution ==================================================== */
 
+static int expand_replacement(struct strbuf *out, const char *repl, const char *base, regmatch_t *pm) __attribute__((nonnull(1, 2, 3, 4)));
 static int expand_replacement(struct strbuf *out, const char *repl, const char *base, regmatch_t *pm)
 {
 	size_t i;
@@ -779,6 +805,7 @@ static int expand_replacement(struct strbuf *out, const char *repl, const char *
 /* Builds and returns the (possibly unchanged) replacement text for one
  * line; *changed reports whether any substitution actually happened.
  * Returns NULL on OOM. */
+static char *substitute_line(regex_t *re, const char *text, const char *repl, long nth, int global, int *changed) __attribute__((nonnull(1, 2, 3, 6)));
 static char *substitute_line(regex_t *re, const char *text, const char *repl, long nth, int global, int *changed)
 {
 	struct strbuf out;
@@ -819,6 +846,7 @@ oom:
 	return 0;
 }
 
+static int cmd_s(struct ed *ed, long from, long to, const char *args) __attribute__((nonnull(1, 4)));
 static int cmd_s(struct ed *ed, long from, long to, const char *args)
 {
 	const char *p = args;
@@ -893,6 +921,7 @@ static int cmd_s(struct ed *ed, long from, long to, const char *args)
 
 /* ==== file I/O helpers (e/E/r/w and their "!command" forms) ============== */
 
+static int read_lines_from_file(FILE *f, char ***out_lines, size_t *out_n, long *out_bytes) __attribute__((nonnull(1, 2, 3, 4)));
 static int read_lines_from_file(FILE *f, char ***out_lines, size_t *out_n, long *out_bytes)
 {
 	char *buf = 0;
@@ -924,6 +953,7 @@ static int read_lines_from_file(FILE *f, char ***out_lines, size_t *out_n, long 
 	return 0;
 }
 
+static long write_lines_to_file(FILE *f, char **lines, long from, long to) __attribute__((nonnull(1, 2)));
 static long write_lines_to_file(FILE *f, char **lines, long from, long to)
 {
 	long bytes = 0, i;
@@ -939,6 +969,7 @@ static long write_lines_to_file(FILE *f, char **lines, long from, long to)
 /* `%` in a shell-command context (both the standalone `!` command and
  * the "!command" form e/r/w accept as their filename argument) expands
  * to the remembered pathname; `\%` is a literal `%`. */
+static char *expand_percent(struct ed *ed, const char *text) __attribute__((nonnull(1, 2)));
 static char *expand_percent(struct ed *ed, const char *text)
 {
 	struct strbuf sb;
@@ -956,6 +987,7 @@ static char *expand_percent(struct ed *ed, const char *text)
 	return strbuf_take(&sb);
 }
 
+static int cmd_edit(struct ed *ed, const char *arg, int force, int is_startup) __attribute__((nonnull(1, 2)));
 static int cmd_edit(struct ed *ed, const char *arg, int force, int is_startup)
 {
 	int is_bang = (arg[0] == '!');
@@ -1031,6 +1063,7 @@ static int cmd_edit(struct ed *ed, const char *arg, int force, int is_startup)
 	return 0;
 }
 
+static int cmd_read(struct ed *ed, long after, const char *arg) __attribute__((nonnull(1, 3)));
 static int cmd_read(struct ed *ed, long after, const char *arg)
 {
 	int is_bang = (arg[0] == '!');
@@ -1094,11 +1127,13 @@ static int cmd_read(struct ed *ed, long after, const char *arg)
  * pointer, a 32-bit process's whole 4GB address space could not hold
  * more than ~800M lines -- under 2^31-1 -- and a 64-bit nlines has the
  * same margin against 2^63-1. */
+static long ed_nlines(const struct ed *ed) __attribute__((nonnull(1)));
 static long ed_nlines(const struct ed *ed)
 {
 	return (long)ed->nlines;
 }
 
+static int cmd_write(struct ed *ed, long from, long to, const char *arg) __attribute__((nonnull(1, 4)));
 static int cmd_write(struct ed *ed, long from, long to, const char *arg)
 {
 	int is_bang = (arg[0] == '!');
@@ -1141,6 +1176,7 @@ static int cmd_write(struct ed *ed, long from, long to, const char *arg)
 	return 0;
 }
 
+static int cmd_bang(struct ed *ed, const char *arg) __attribute__((nonnull(1, 2)));
 static int cmd_bang(struct ed *ed, const char *arg)
 {
 	const char *raw;
@@ -1174,6 +1210,7 @@ static int is_modifying_command(int c)
 
 static const char *help_text_default = "an ed(1p) command could not be carried out as written";
 
+static int ed_exec_one(struct ed *ed, const char *cmdline, struct linesrc *textsrc, enum exec_ctx ctx) __attribute__((nonnull(1, 2, 3)));
 static int ed_exec_one(struct ed *ed, const char *cmdline, struct linesrc *textsrc, enum exec_ctx ctx)
 {
 	const char *p = cmdline;

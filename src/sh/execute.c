@@ -1832,6 +1832,8 @@ static int exec_group_stage_inline(const struct sh_command *cmd, int *status)
  * deferred compound-command stage, wired again once it's its turn) need
  * identical wiring at different times. */
 static int wire_stage_stdio(struct redir_state *rs, int (*pipes)[2], size_t n, size_t i)
+    __attribute__((nonnull(1, 2)));
+static int wire_stage_stdio(struct redir_state *rs, int (*pipes)[2], size_t n, size_t i)
 {
 	if (i > 0) {
 		if (save_fd(rs, 0)) return -1;

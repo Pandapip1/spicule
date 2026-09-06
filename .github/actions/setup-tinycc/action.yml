@@ -27,14 +27,24 @@ runs:
     # build recipe itself all live solely in flake.nix's `tcc` derivation
     # now -- see that file's own comment on `tcc` for why nixpkgs' own
     # `tinycc` package is not a substitute.
+    # --out-link result-tcc, not the default `./result`: jobs that need
+    # both this action and setup-wine (posix-optsrun, ntlibc-suite,
+    # libc-test) run both actions' `nix build` in this same checkout
+    # directory. With both defaulting to `./result`, setup-wine's later
+    # `nix build .#wine-fork` clobbers the symlink this step just made,
+    # so the `$PWD/result/bin` entry already appended to $GITHUB_PATH
+    # silently starts resolving to Wine's bin/ instead of tcc's --
+    # `x86_64-win32-tcc: not found` even though this step visibly
+    # succeeded earlier in the same job. A distinct link name per action
+    # makes the two builds' outputs coexist instead of racing for one path.
     - name: Build tinycc
       shell: bash
-      run: nix build .#tcc
+      run: nix build .#tcc --out-link result-tcc
 
     - name: Verify and expose the cross compilers
       shell: bash
       run: |
-        test -x "result/bin/i386-win32-tcc"
-        test -x "result/bin/x86_64-win32-tcc"
-        test -x "result/bin/arm64-win32-tcc"
-        echo "$PWD/result/bin" >> "$GITHUB_PATH"
+        test -x "result-tcc/bin/i386-win32-tcc"
+        test -x "result-tcc/bin/x86_64-win32-tcc"
+        test -x "result-tcc/bin/arm64-win32-tcc"
+        echo "$PWD/result-tcc/bin" >> "$GITHUB_PATH"

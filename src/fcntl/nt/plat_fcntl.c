@@ -151,11 +151,23 @@ int __plat_lock_probe(__plat_handle_t h, long long off, long long len, int exclu
 	NTSTATUS st;
 
 	*conflicting = 0;
-	/* IoStatusBlock is NULL, not &io: see src/file/nt/plat_flock.c's
-	 * banner -- Wine's NtLockFile hard-fails STATUS_NOT_IMPLEMENTED
-	 * whenever it is given a non-NULL one. NtUnlockFile below is the
-	 * opposite (dereferences it unconditionally), so it keeps &io. */
-	st = NtLockFile(h, 0, 0, 0, 0, &o, &l, 0, 1, exclusive);
+	/* IoStatusBlock: try the real-NT-correct &io first, and retry with
+	 * NULL only if that specific call hard-fails STATUS_NOT_IMPLEMENTED
+	 * -- Wine's NtLockFile (dlls/ntdll/unix/file.c) does exactly that
+	 * whenever given a non-NULL IoStatusBlock ("Unimplemented yet
+	 * parameter"), which is why an earlier version of this function
+	 * passed NULL unconditionally. That traded one platform's bug for
+	 * another's: windows-test's posix-unistd.exe and
+	 * posix-fcntl-lock-crossproc.exe both then failed F_SETLK/F_GETLK
+	 * on real Windows, which requires a real IoStatusBlock on
+	 * NtLockFile. Trying &io first means real Windows takes the
+	 * correct path directly and Wine still falls back to the NULL call
+	 * it always needed. NtUnlockFile below always dereferences its
+	 * IoStatusBlock unconditionally on every platform, so it keeps
+	 * &io either way. */
+	st = NtLockFile(h, 0, 0, 0, &io, &o, &l, 0, 1, exclusive);
+	if (st == STATUS_NOT_IMPLEMENTED)
+		st = NtLockFile(h, 0, 0, 0, 0, &o, &l, 0, 1, exclusive);
 	if (NT_SUCCESS(st)) {
 		st = NtUnlockFile(h, &io, &o, &l, 0);
 		if (!NT_SUCCESS(st)) return __set_errno_status(st);
@@ -171,9 +183,13 @@ int __plat_lock_probe(__plat_handle_t h, long long off, long long len, int exclu
 
 int __plat_lock_set(__plat_handle_t h, long long off, long long len, int exclusive, int wait) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
+	IO_STATUS_BLOCK io;
 	LARGE_INTEGER o = off, l = len;
-	/* IoStatusBlock is NULL, not &io: see __plat_lock_probe() above. */
-	NTSTATUS st = NtLockFile(h, 0, 0, 0, 0, &o, &l, 0, wait ? 0 : 1, exclusive);
+	/* See __plat_lock_probe() above for why &io is tried first, with a
+	 * NULL retry only on Wine's STATUS_NOT_IMPLEMENTED. */
+	NTSTATUS st = NtLockFile(h, 0, 0, 0, &io, &o, &l, 0, wait ? 0 : 1, exclusive);
+	if (st == STATUS_NOT_IMPLEMENTED)
+		st = NtLockFile(h, 0, 0, 0, 0, &o, &l, 0, wait ? 0 : 1, exclusive);
 	if (!NT_SUCCESS(st)) return __set_errno_status(st);
 	return 0;
 }

@@ -118,7 +118,8 @@
 #             every callee itself pure) -- and, symmetrically, disproves the
 #             claim for any function already marked pure that fails it,
 #             which is a real correctness bug rather than a style nit.
-#   loopcond  currently opt-in while its first tree-wide pass is triaged.
+#   loopcond  on by default -- its first tree-wide pass (25 findings across
+#             13 files) was triaged and closed to zero on all three archs.
 #             A Clang 18 AST plugin (tools/clang/LoopConditionChecker.cpp)
 #             walks every for/while/do header and flags a condition that
 #             compounds, via && or ||, a structural bound (a range, a
@@ -2120,7 +2121,7 @@ stage_loopcond() {
 	return $any
 }
 
-requested_stages=${*:-warn analyze cppcheck shell fallible locks lockset reentrancy variadic signals abizeroinit initproof errno purity ownership undefined unreferenced widthmod}
+requested_stages=${*:-warn analyze cppcheck shell fallible locks lockset reentrancy variadic signals abizeroinit initproof errno purity ownership undefined unreferenced widthmod loopcond}
 stages=
 for requested_stage in $requested_stages; do
 	case $requested_stage in

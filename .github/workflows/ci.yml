@@ -499,6 +499,7 @@ jobs:
           - { stage: undefined, via: nix, packages: "" }
           - { stage: unreferenced, via: nix, packages: "" }
           - { stage: widthmod, via: apt, packages: "" }
+          - { stage: loopcond, via: nix, packages: "" }
     name: lint (${{ matrix.stage }})
     steps:
       - uses: actions/checkout@v7

@@ -178,6 +178,14 @@ void *ntlibc_pe_find_export(void *base, const char *name);
  * untouched) if `base` is not a valid PE image. */
 int ntlibc_pe_dll_range(void *base, void **start, void **end);
 
+/* Returns a pointer to the mapped image's own IMAGE_TLS_DIRECTORY (still
+ * inside the image -- not a copy) via *dir, or 0 (leaving *dir untouched)
+ * if `base` is not a valid PE image or has no TLS directory. Used by
+ * src/thread/nt/plat_thread.c to rebuild each new thread's own TLS block
+ * by hand: see that file for why the directory's own Characteristics
+ * field (nominally the required alignment) cannot be trusted here. */
+int ntlibc_pe_tls_directory(void *base, IMAGE_TLS_DIRECTORY **dir);
+
 #endif
 
 // NOLINTEND(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)

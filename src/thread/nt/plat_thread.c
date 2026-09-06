@@ -15,6 +15,7 @@
 #include "libc.h"
 #include "plat_thread.h"
 #include "plat_fd.h"
+#include "pe.h"
 
 /* Shared by every \BaseNamedObjects-rooted object this file creates or
  * opens. `openif` clears OBJ_INHERIT and sets OBJ_OPENIF, for the one
@@ -220,40 +221,143 @@ int __plat_thread_spawn(__plat_thread_entry_t entry, void *arg,
 		0, stack_size, stack_size, 0);
 	if (status == STATUS_NOT_IMPLEMENTED) return -2;
 	if (!NT_SUCCESS(status)) return __set_errno_status(status);
-	/* e5d0b1d1 added a call here to install_thread_tls() -- a hand-built,
-	 * page-aligned per-thread TLS block written directly into the new
-	 * thread's TEB before resuming it, meant to fix tls_local_exec's
-	 * disclosed BUG row (the pinned bootstrap tcc's PE linker never sets
-	 * IMAGE_TLS_DIRECTORY.Characteristics, so the loader's own automatic
-	 * TLS allocation under-aligns any __thread object with a large
-	 * explicit alignment). That call is reverted here (function removed
-	 * outright, not left dead in the tree, to avoid tripping
-	 * -Wunused-function/lint-unreferenced): real CI (which has working
-	 * Wine; this sandbox does not) bisects a new, broad SIGSEGV
-	 * regression across all 16 pthread/TLS libc-test cases that spawn a
-	 * thread -- pthread_cancel, pthread_cond, pthread_mutex,
-	 * pthread_mutex_pi, pthread_tsd, sem_init, tls_init,
-	 * pthread-robust-detach, pthread_cancel-sem_wait,
-	 * pthread_cond-smasher, pthread_cond_wait-cancel_ignored,
-	 * pthread_exit-cancel, pthread_once-deadlock, pthread_rwlock-ebusy,
-	 * raise-race, pthread_cancel-points -- to exactly that call, cleanly:
-	 * CI run 33798306483 (commit cf4ba4b4: has 735db9c8 and 51df4057,
-	 * NOT e5d0b1d1) passes all 16 with rc=0; CI run 33798534926 (commit
-	 * e32c2aa4: the first commit on main to merge in e5d0b1d1, otherwise
-	 * a strict superset of cf4ba4b4's own history) fails all 16 with
-	 * rc=11 (SIGSEGV). Every crashing test uses pthread_create(),
-	 * consistent with the call firing on every suspended thread spawn.
-	 * The exact memory-safety mechanism was not pinned down further
-	 * (most likely install_thread_tls()'s direct, synchronous TEB/TLS-
-	 * array poking of a just-created thread racing or otherwise
-	 * conflicting with Wine's own thread-startup TLS setup --
-	 * unverifiable in this sandbox, which has no working Wine).
-	 * Reverting is safer than shipping a confirmed, broad SIGSEGV
-	 * regression in exchange for fixing a narrower, already-disclosed
-	 * alignment-only BUG row. See e5d0b1d1 in git history to bring the
-	 * removed code back once someone with real Wine access can debug it
-	 * properly. */
+	/* No TLS-block fixup here (e5d0b1d1 put one in this exact spot; see
+	 * 6291f1b2 for why it was reverted). It now runs from inside the new
+	 * thread itself instead -- __plat_thread_tls_fixup() below, called
+	 * from src/thread/pthread.c's thread_entry() -- for reasons that
+	 * function's own banner explains in full. */
 	return 0;
+}
+
+/* See this file's own plat_thread.h declaration for the contract, and the
+ * paragraphs below for why this exists and runs where it does.
+ *
+ * WHAT this rebuilds and WHY: the pinned bootstrap tcc build's PE linker
+ * (tccpe.c: pe_build_tls()) always writes IMAGE_TLS_DIRECTORY.Characteristics
+ * = 0 -- it never encodes the image's real IMAGE_SCN_ALIGN_* requirement
+ * (see test/libc-test-expected.txt's tls_local_exec row). A loader that
+ * trusts Characteristics for its automatic per-thread TLS allocation's
+ * alignment then hands back an under-aligned block for any `__thread`
+ * object whose declared alignment exceeds whatever default
+ * Characteristics=0 implies (observed: fine up to a point, but a
+ * `__thread` object declared __attribute__((aligned(4096))) ends up short
+ * of 4096-byte alignment). Since Characteristics can't be trusted, this
+ * doesn't even read it -- it defensively page-aligns the replacement block
+ * instead, which trivially satisfies every alignment tcc could plausibly
+ * ask for (the widest natural alignment x86_64/i386/arm64 have is a page).
+ *
+ * WHY the calling thread does this to itself, rather than the thread that
+ * spawned it doing it before resuming it (e5d0b1d1's original approach,
+ * reverted in 6291f1b2 after real Wine CI showed a confirmed, 16-test-wide
+ * SIGSEGV regression): under Wine, NtCreateThreadEx computes the new
+ * thread's TEB synchronously in the CREATOR (dlls/ntdll/unix/thread.c's
+ * virtual_alloc_teb()), but the new thread only registers that TEB with
+ * the wineserver ASYNCHRONOUSLY, via a later init_thread request
+ * (dlls/ntdll/unix/server.c's server_init_thread()) -- until that request
+ * is processed, the server-side thread object's own `teb` field reads back
+ * as 0 (server/thread.c), so NtQueryInformationThread(ThreadBasicInformation)
+ * called from the creator right after NtCreateThreadEx returns can report
+ * STATUS_SUCCESS with a still-zero TebBaseAddress: exactly the race
+ * e5d0b1d1's creator-side TEB fetch hit. A thread reading its OWN TEB
+ * (__teb(), a direct %fs/%gs-relative read -- see src/internal/{i386,
+ * x86_64,aarch64}/teb.c) has no such race: that pointer is valid the
+ * instant the thread starts executing, wineserver registration or not.
+ *
+ * That still leaves a second, independent problem no amount of creator-side
+ * fixing could have solved: Wine's own loader_init() (dlls/ntdll/loader.c)
+ * always runs before a new thread reaches any code of its own -- every new
+ * thread's initial CPU context is engineered to enter LdrInitializeThunk
+ * first, which calls loader_init() and only afterward resumes the context
+ * that jumps to the real start routine (see e.g.
+ * dlls/ntdll/unix/signal_x86_64.c's new-thread context setup, which points
+ * the initial frame at pLdrInitializeThunk, never directly at the
+ * caller-requested entry) -- and loader_init() unconditionally calls
+ * alloc_thread_tls(), which reallocates and overwrites
+ * TEB->ThreadLocalStoragePointer wholesale. A block installed by the
+ * creator before the thread ever resumes is exactly the block that call
+ * clobbers; real Windows' documented THREAD_CREATE_FLAGS_SKIP_THREAD_ATTACH/
+ * SKIP_LOADER_INIT flags could dodge that specific call, but only by also
+ * skipping this thread's DLL_THREAD_ATTACH notification to every other
+ * already-loaded DLL and (for SKIP_LOADER_INIT) this thread's FLS slot
+ * allocation -- a real behavioral change on real Windows too, not a
+ * Wine-only workaround. Running this fixup from the new thread's own
+ * entry point instead needs none of that: it runs strictly AFTER
+ * loader_init() has already completed (guaranteed by the ordering above,
+ * on Wine and on real Windows alike), so it simply overwrites whatever
+ * loader_init() just installed, once, and nothing downstream of it in
+ * this thread's lifetime touches the slot again -- no flag, no skipped
+ * loader work, no race. */
+void __plat_thread_tls_fixup(void)
+{
+	IMAGE_TLS_DIRECTORY *dir;
+	PTEB teb;
+	PVOID *slots;
+	ULONG index;
+	uintptr_t raw_start, raw_end, index_addr;
+	size_t raw_size, total_size;
+	PVOID block = 0;
+	SIZE_T block_size;
+	NTSTATUS status;
+
+	if (!ntlibc_pe_tls_directory(__peb->ImageBaseAddress, &dir)) return;
+	raw_start = (uintptr_t)dir->StartAddressOfRawData;
+	raw_end = (uintptr_t)dir->EndAddressOfRawData;
+	index_addr = (uintptr_t)dir->AddressOfIndex;
+	if (!index_addr || raw_end < raw_start) return;
+	raw_size = (size_t)(raw_end - raw_start);
+	/* __size_add_checked, not raw '+': SizeOfZeroFill is untrusted input
+	 * from the same compiler-emitted directory as Characteristics. */
+	if (!__size_add_checked(raw_size, dir->SizeOfZeroFill, &total_size) ||
+	    !total_size) return;
+
+	block_size = total_size;
+	status = NtAllocateVirtualMemory(NtCurrentProcess(), &block, 0,
+		&block_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+	if (!NT_SUCCESS(status)) return;
+	if (raw_size) memcpy(block, (const void *)raw_start, raw_size);
+	memset((unsigned char *)block + raw_size, 0, dir->SizeOfZeroFill);
+
+	index = *(ULONG *)index_addr;
+	teb = __teb();
+	slots = (PVOID *)teb->ThreadLocalStoragePointer;
+	if (!slots) {
+		/* Not expected in practice -- by the time this runs, the
+		 * platform's own loader has already unconditionally allocated
+		 * this array (Wine's alloc_thread_tls(), or real Windows'
+		 * equivalent). But that allocation is fallible (its own
+		 * out-of-memory case terminates the thread before it ever
+		 * reaches here) and its exact conditions belong to someone
+		 * else's implementation, not a guarantee this file gets to
+		 * assume forever. Building one from scratch, sized to `index`,
+		 * is safe here for the same reason it would have been at thread
+		 * creation: nothing else on this thread has run yet that could
+		 * already depend on a smaller array. */
+		size_t slots_bytes;
+		PVOID array = 0;
+		SIZE_T array_size;
+		SIZE_T free_size = 0;
+		if (!__size_add_checked((size_t)index, 1, &slots_bytes) ||
+		    !__size_mul_checked(slots_bytes, sizeof(PVOID), &slots_bytes)) {
+			NtFreeVirtualMemory(NtCurrentProcess(), &block, &free_size, MEM_RELEASE);
+			return;
+		}
+		array_size = slots_bytes;
+		status = NtAllocateVirtualMemory(NtCurrentProcess(), &array, 0,
+			&array_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+		if (!NT_SUCCESS(status)) {
+			NtFreeVirtualMemory(NtCurrentProcess(), &block, &free_size, MEM_RELEASE);
+			return;
+		}
+		slots = (PVOID *)array;
+		teb->ThreadLocalStoragePointer = array;
+	}
+	/* Deliberately not freeing whatever slots[index] already held: by this
+	 * point it is the platform loader's own RtlAllocateHeap() block, not
+	 * one of ours, and freeing it through the wrong allocator would
+	 * corrupt that heap. It is unused from here on and reclaimed only
+	 * when the process exits -- a bounded, one-time leak per spawned
+	 * thread, not an accumulating one. */
+	slots[index] = block;
 }
 
 /* See plat_thread.h's own __plat_thread_close() banner for why this call

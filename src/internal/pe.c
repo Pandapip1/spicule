@@ -65,6 +65,22 @@ int ntlibc_pe_dll_range(void *base, void **start, void **end)
 	return 1;
 }
 
+int ntlibc_pe_tls_directory(void *base, IMAGE_TLS_DIRECTORY **dir)
+{
+	unsigned char *b = (unsigned char *)base;
+	IMAGE_NT_HEADERS *nt = pe_nt_headers(b);
+	ULONG rva, size;
+
+	if (!nt) return 0;
+	if (nt->OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_TLS)
+		return 0;
+	rva = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress;
+	size = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].Size;
+	if (!rva || size < sizeof(IMAGE_TLS_DIRECTORY)) return 0;
+	*dir = (IMAGE_TLS_DIRECTORY *)(b + rva);
+	return 1;
+}
+
 void *ntlibc_pe_find_export(void *base, const char *name)
 {
 	unsigned char *b = (unsigned char *)base;

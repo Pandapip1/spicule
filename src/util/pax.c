@@ -834,7 +834,18 @@ static int materialize(const struct pax_member *m, const char *destpath,
 	default: {
 		int fd;
 		if (exists) (void)unlink(destpath);
-		fd = open(destpath, O_WRONLY | O_CREAT | O_TRUNC, (mode_t)(m->mode & 07777));
+		/* O_EXCL, not O_TRUNC: the lstat() above is long since stale
+		 * by the time this runs, so if something (a symlink, most
+		 * dangerously, planted in a shared destination directory)
+		 * has appeared at destpath since, O_TRUNC would silently
+		 * follow it into whatever file it names. O_EXCL fails on
+		 * that instead; one unlink-and-retry covers the ordinary,
+		 * non-raced case of this same member being (re-)extracted. */
+		fd = open(destpath, O_WRONLY | O_CREAT | O_EXCL, (mode_t)(m->mode & 07777));
+		if (fd < 0 && errno == EEXIST) {
+			(void)unlink(destpath);
+			fd = open(destpath, O_WRONLY | O_CREAT | O_EXCL, (mode_t)(m->mode & 07777));
+		}
 		if (fd < 0) {
 			__util_diagf("pax: %s: %s\n", destpath, strerror(errno));
 			if (reader) pax_reader_copy_data(reader, m, -1);

@@ -321,7 +321,9 @@ int __util_unexpand_main(
  * files.  nonnull(2) for the same reason as every other utility above:
  * argv is never NULL from a real caller, and a usage-error path taken
  * with argc==1 still needs argv[0] for its own diagnostic. */
-int __util_patch_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_patch_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 
 /* Tier 4 continued: sed(1p) -- its whole script parser, BRE-driven
  * address/substitution engine, and pattern-space/hold-space cycle live
@@ -403,7 +405,9 @@ int __util_xargs_main(int argc, char **argv) __attribute__((nonnull(2)));
  * include/sinclude/mkstemp/syscmd, so a repeated call is not guaranteed
  * to answer the same way twice. */
 int __util_ed_main(int argc, char **argv) __attribute__((nonnull(2)));
-int __util_m4_main(int argc, char **argv) __attribute__((nonnull(2)));
+int __util_m4_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
+	__attribute__((nonnull(2)));
 
 /* Tier 4 continued: diff(1p), cmp(1p) -- real parsers, real
  * algorithms, not just line-oriented text filters.  Neither is

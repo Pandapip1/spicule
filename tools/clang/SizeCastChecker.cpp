@@ -14,6 +14,7 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/ConstraintManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/RangedConstraintManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/DynamicExtent.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/MemRegion.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SValBuilder.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SymbolManager.h"
 #include "clang/StaticAnalyzer/Frontend/CheckerRegistry.h"
@@ -61,6 +62,12 @@ REGISTER_MAP_WITH_PROGRAMSTATE(ArithmeticZ3BranchFact, SymbolRef, bool)
 // checker's Z3 proof power self-sufficient rather than dependent on that
 // other map being populated.
 REGISTER_MAP_WITH_PROGRAMSTATE(CastZ3BranchFact, SymbolRef, bool)
+// A third, ArrayIndexChecker-scoped branch-fact map, deliberately not shared
+// with either map above: see ArrayIndexZ3Proof's own comment (just before
+// class ArrayIndexChecker below) for why ntlibc.ArrayIndex needs this exact
+// same eval::Assume-sourced recording technique CastZ3BranchFact already
+// uses for ntlibc.SizeCast.
+REGISTER_MAP_WITH_PROGRAMSTATE(ArrayIndexZ3BranchFact, SymbolRef, bool)
 #endif
 
 namespace {
@@ -1096,7 +1103,283 @@ public:
 #endif
 };
 
-class ArrayIndexChecker : public Checker<check::PreStmt<ArraySubscriptExpr>> {
+#ifdef NTLIBC_ARITHMETIC_Z3
+// A third Z3 bridge, scoped to ntlibc.ArrayIndex alone for the identical
+// isolation reason CastZ3Engine/CastZ3Proof above document for
+// ntlibc.SizeCast: this extension can only ever change ArrayIndex's own
+// findings, never SizeCast's or arithub's.
+//
+// The obligation this proves is a different shape from either of this
+// file's other two Z3 consumers. include/string.h's withtok(null_terminated)
+// -- the same per-parameter trust boundary TotalityChecker.cpp's
+// nullTerminatedParameter() already reads off strlen/wcslen's own
+// declaration -- guarantees a null-terminated buffer's extent is at least
+// one element (the terminator, if nothing else), so index 0 into one is
+// always in bounds with no further proof needed. Index 1 is NOT: it is in
+// bounds only on paths where a real, dominating branch has already
+// established that byte 0 is not the terminator, e.g. `if (a[0] != '-' ||
+// a[1] == 0) break;` (src/util/m4.c's own option-parsing idiom, repeated
+// across dozens of these utilities) only ever evaluates `a[1]` once `a[0]
+// != '-'` has tested false, i.e. once a[0] == '-' -- a concrete, nonzero
+// byte. An unguarded a[1] on a length-0-or-1 string is a REAL bug and must
+// stay flagged; this bridge exists specifically to tell the two cases
+// apart on real path constraints, not to accept a[1] unconditionally.
+//
+// getConstraintMap(State) was already shown empty for realistic guard
+// shapes in this Clang 18 build -- see CastZ3BranchFact's own comment for
+// how that was confirmed -- which is exactly why CastZ3Proof cannot just
+// rely on it, and exactly why this bridge cannot either: ArrayIndexZ3BranchFact
+// records every comparison assumption from eval::Assume unconditionally, the
+// same technique CastZ3BranchFact already uses, so this checker's own proof
+// power does not depend on that other map being populated.
+class ArrayIndexZ3Engine {
+public:
+  z3::context Context;
+  z3::solver Solver;
+
+  ArrayIndexZ3Engine() : Solver(Context) {
+    z3::params Parameters(Context);
+    Parameters.set("rlimit", 1000000u);
+    Parameters.set("timeout", 2000u);
+    Solver.set(Parameters);
+  }
+};
+
+static ArrayIndexZ3Engine &arrayIndexZ3Engine() {
+  // Static-analyzer callbacks are serial within one translation-unit
+  // process; lint.sh provides process parallelism across translation units
+  // (see arithmeticZ3Engine()'s identical rationale elsewhere in this file).
+  static thread_local ArrayIndexZ3Engine Engine;
+  return Engine;
+}
+
+class ArrayIndexZ3Proof {
+  z3::context &ZCtx;
+  z3::solver &Solver;
+  ASTContext &AST;
+  // The one already-conjured byte symbol this whole proof exists to reason
+  // about (e.g. a[0]'s own SymbolRegionValue) -- see translate()'s
+  // SymbolCast case for why this specific symbol, and only this one, is
+  // ever allowed to cross a widening cast.
+  SymbolRef TrustedLeaf;
+
+  z3::expr bitVector(const llvm::APSInt &Value, unsigned Width) {
+    llvm::APInt Bits = Value;
+    if (Bits.getBitWidth() < Width)
+      Bits = Value.isUnsigned() ? Bits.zext(Width) : Bits.sext(Width);
+    else if (Bits.getBitWidth() > Width)
+      Bits = Bits.trunc(Width);
+    llvm::SmallString<80> Text;
+    Bits.toString(Text, 10, false, false);
+    return ZCtx.bv_val(Text.c_str(), Width);
+  }
+
+  // Deliberately the same restricted shape as CastZ3Proof::translate()
+  // above (same-width SymbolCast passthrough; plain comparisons produce a
+  // {0,1} bit-vector exactly like RangeSet's own Boolean-typed SVal
+  // representation elsewhere in this file): this proof only ever needs to
+  // relate one already-conjured byte symbol to the literal/relational facts
+  // a branch recorded about it, never to model a real arithmetic
+  // operation's own overflow/wrap/narrowing events.
+  std::optional<z3::expr> translate(const SymExpr *Expression,
+                                    unsigned Depth = 0) {
+    if (!Expression || Depth > 24 || Expression->getType().isNull() ||
+        !Expression->getType()->isIntegerType())
+      return std::nullopt;
+    unsigned Width = AST.getIntWidth(Expression->getType());
+    if (const auto *Data = dyn_cast<SymbolData>(Expression)) {
+      std::string Name =
+          "ntlibc_arrayidx_sym_" + std::to_string(Data->getSymbolID());
+      return ZCtx.bv_const(Name.c_str(), Width);
+    }
+    if (const auto *Cast = dyn_cast<SymbolCast>(Expression)) {
+      QualType OperandType = Cast->getOperand()->getType();
+      if (OperandType.isNull() || !OperandType->isIntegerType())
+        return std::nullopt;
+      unsigned OperandWidth = AST.getIntWidth(OperandType);
+      if (OperandWidth == Width)
+        return translate(Cast->getOperand(), Depth + 1);
+      // A genuine WIDENING cast -- concretely, the ordinary C integer
+      // promotion `a[0] != '-'` applies to a[0]'s own char-typed value
+      // before comparing it against int-typed '-' -- is rejected in
+      // general for the identical reason CastZ3Proof/ArithmeticZ3Proof
+      // reject every SymbolCast elsewhere in this file: Clang 18 exposes
+      // no accessor for a SymbolCast's true source type, so
+      // Cast->getOperand()->getType() is not a safe substitute in general
+      // -- a chain of casts can be folded into one SymbolCast node, and
+      // getOperand() can return a type from further back in that chain
+      // than the immediate cast this node claims to be, silently skipping
+      // over an intermediate *narrowing* step this function would then
+      // never see.
+      //
+      // That risk does not apply when the operand IS, by pointer identity,
+      // TrustedLeaf itself: TrustedLeaf is always a freshly conjured
+      // SymbolRegionValue (see nullTerminatedIndexInBounds()'s own
+      // comment) with no cast of any kind ever previously applied to it,
+      // so a SymbolCast directly wrapping it cannot be hiding a folded
+      // chain -- there is nothing upstream of it to fold. This still never
+      // accepts a widening cast over any OTHER symbol, and never accepts a
+      // narrowing one at all.
+      if (Cast->getOperand() != TrustedLeaf || OperandWidth > Width)
+        return std::nullopt;
+      std::optional<z3::expr> Operand =
+          translate(Cast->getOperand(), Depth + 1);
+      if (!Operand || Operand->get_sort().bv_size() != OperandWidth)
+        return std::nullopt;
+      return OperandType->isUnsignedIntegerOrEnumerationType()
+                 ? z3::zext(*Operand, Width - OperandWidth)
+                 : z3::sext(*Operand, Width - OperandWidth);
+    }
+
+    auto Apply = [&](const z3::expr &Left, const z3::expr &Right,
+                     BinaryOperator::Opcode Opcode,
+                     QualType OperandType) -> std::optional<z3::expr> {
+      if (Left.get_sort().bv_size() != Right.get_sort().bv_size())
+        return std::nullopt;
+      switch (Opcode) {
+      case BO_EQ:
+      case BO_NE:
+      case BO_LT:
+      case BO_LE:
+      case BO_GT:
+      case BO_GE: {
+        bool OperandUnsigned =
+            OperandType->isUnsignedIntegerOrEnumerationType();
+        z3::expr Predicate = [&]() -> z3::expr {
+          switch (Opcode) {
+          case BO_EQ:
+            return Left == Right;
+          case BO_NE:
+            return Left != Right;
+          case BO_LT:
+            return OperandUnsigned ? z3::ult(Left, Right) : Left < Right;
+          case BO_LE:
+            return OperandUnsigned ? z3::ule(Left, Right) : Left <= Right;
+          case BO_GT:
+            return OperandUnsigned ? z3::ugt(Left, Right) : Left > Right;
+          default: // BO_GE: the only remaining opcode this case can reach.
+            return OperandUnsigned ? z3::uge(Left, Right) : Left >= Right;
+          }
+        }();
+        return z3::ite(Predicate, ZCtx.bv_val(1, Width), ZCtx.bv_val(0, Width));
+      }
+      default:
+        return std::nullopt;
+      }
+    };
+
+    auto SameWidth = [&](QualType Left, QualType Right) {
+      return !Left.isNull() && !Right.isNull() && Left->isIntegerType() &&
+             Right->isIntegerType() &&
+             AST.getIntWidth(Left) == AST.getIntWidth(Right);
+    };
+    if (const auto *Binary = dyn_cast<SymSymExpr>(Expression)) {
+      QualType LeftType = Binary->getLHS()->getType();
+      QualType RightType = Binary->getRHS()->getType();
+      if (!SameWidth(LeftType, RightType) ||
+          (BinaryOperator::isComparisonOp(Binary->getOpcode()) &&
+           LeftType->isUnsignedIntegerOrEnumerationType() !=
+               RightType->isUnsignedIntegerOrEnumerationType()))
+        return std::nullopt;
+      std::optional<z3::expr> Left = translate(Binary->getLHS(), Depth + 1);
+      std::optional<z3::expr> Right = translate(Binary->getRHS(), Depth + 1);
+      if (!Left || !Right)
+        return std::nullopt;
+      return Apply(*Left, *Right, Binary->getOpcode(), LeftType);
+    }
+    if (const auto *Binary = dyn_cast<SymIntExpr>(Expression)) {
+      QualType LeftType = Binary->getLHS()->getType();
+      if (LeftType.isNull() || !LeftType->isIntegerType() ||
+          Binary->getRHS().getBitWidth() != AST.getIntWidth(LeftType) ||
+          (BinaryOperator::isComparisonOp(Binary->getOpcode()) &&
+           Binary->getRHS().isUnsigned() !=
+               LeftType->isUnsignedIntegerOrEnumerationType()))
+        return std::nullopt;
+      std::optional<z3::expr> Left = translate(Binary->getLHS(), Depth + 1);
+      if (!Left || Left->get_sort().bv_size() != AST.getIntWidth(LeftType))
+        return std::nullopt;
+      z3::expr Right = bitVector(Binary->getRHS(), Left->get_sort().bv_size());
+      return Apply(*Left, Right, Binary->getOpcode(), LeftType);
+    }
+    if (const auto *Binary = dyn_cast<IntSymExpr>(Expression)) {
+      QualType RightType = Binary->getRHS()->getType();
+      if (RightType.isNull() || !RightType->isIntegerType() ||
+          Binary->getLHS().getBitWidth() != AST.getIntWidth(RightType) ||
+          (BinaryOperator::isComparisonOp(Binary->getOpcode()) &&
+           Binary->getLHS().isUnsigned() !=
+               RightType->isUnsignedIntegerOrEnumerationType()))
+        return std::nullopt;
+      std::optional<z3::expr> Right = translate(Binary->getRHS(), Depth + 1);
+      if (!Right || Right->get_sort().bv_size() != AST.getIntWidth(RightType))
+        return std::nullopt;
+      z3::expr Left = bitVector(Binary->getLHS(), Right->get_sort().bv_size());
+      return Apply(Left, *Right, Binary->getOpcode(), RightType);
+    }
+    return std::nullopt;
+  }
+
+public:
+  ArrayIndexZ3Proof(ArrayIndexZ3Engine &Engine, ProgramStateRef State,
+                    ASTContext &AST, SymbolRef TrustedLeaf)
+      : ZCtx(Engine.Context), Solver(Engine.Solver), AST(AST),
+        TrustedLeaf(TrustedLeaf) {
+    Solver.reset();
+    for (const auto &Entry : getConstraintMap(State)) {
+      std::optional<z3::expr> Expression = translate(Entry.first);
+      if (!Expression)
+        continue;
+      const RangeSet &Ranges = Entry.second;
+      if (!Expression->is_bv() || Ranges.isEmpty() ||
+          Expression->get_sort().bv_size() != Ranges.getBitWidth())
+        continue;
+      std::optional<z3::expr> Union;
+      for (const Range &R : Ranges) {
+        z3::expr From = bitVector(R.From(), Ranges.getBitWidth());
+        z3::expr To = bitVector(R.To(), Ranges.getBitWidth());
+        z3::expr Member =
+            R.getConcreteValue()
+                ? *Expression == From
+                : Ranges.isUnsigned()
+                      ? z3::ule(From, *Expression) && z3::ule(*Expression, To)
+                      : From <= *Expression && *Expression <= To;
+        Union = Union ? std::optional<z3::expr>(*Union || Member)
+                      : std::optional<z3::expr>(Member);
+      }
+      if (Union && Union->is_bool())
+        Solver.add(*Union);
+    }
+    for (const auto &Entry : State->get<ArrayIndexZ3BranchFact>()) {
+      std::optional<z3::expr> Comparison = translate(Entry.first);
+      if (!Comparison || !Comparison->is_bv())
+        continue;
+      z3::expr Fact = *Comparison == ZCtx.bv_val(Entry.second ? 1 : 0,
+                                                 Comparison->get_sort().bv_size());
+      if (Fact.is_bool())
+        Solver.add(Fact);
+    }
+  }
+
+  // Proves that Sym can never be zero under every currently-known path
+  // constraint. Only an UNSAT answer for "Sym can be zero" discharges the
+  // obligation, matching every other Z3 consumer in this file: SAT,
+  // timeout, and unknown all preserve the finding.
+  bool provesNonzero(SymbolRef Sym) {
+    std::optional<z3::expr> Translated = translate(Sym);
+    if (!Translated || !Translated->is_bv())
+      return false;
+    Solver.add(*Translated ==
+              ZCtx.bv_val(0, Translated->get_sort().bv_size()));
+    return ntlibc::algebra::provesUnsatisfiable(Solver);
+  }
+};
+#endif
+
+class ArrayIndexChecker
+    : public Checker<check::PreStmt<ArraySubscriptExpr>
+#ifdef NTLIBC_ARITHMETIC_Z3
+                     , eval::Assume
+#endif
+                     > {
   mutable std::unique_ptr<BugType> BT;
 
   // include/ownership.h's elements_withtok(token_name, extent_name) marks a
@@ -1180,6 +1463,234 @@ class ArrayIndexChecker : public Checker<check::PreStmt<ArraySubscriptExpr>> {
     }
     return std::nullopt;
   }
+
+#ifdef NTLIBC_ARITHMETIC_Z3
+  // include/string.h's withtok(null_terminated) -- the identical per-
+  // parameter trust boundary TotalityChecker.cpp's nullTerminatedParameter()
+  // already reads off strlen/wcslen's own declaration for this exact literal
+  // annotation text -- names a *direct* single-pointer contract: `T *p
+  // withtok(null_terminated)` means p itself points at a valid, finite,
+  // NUL-terminated buffer. Walks every redecl the way TotalityChecker's own
+  // helper does, since the attribute commonly lives only on a header
+  // prototype the analyzed definition does not repeat it on.
+  static bool isWithtokNullTerminated(const ParmVarDecl *Param) {
+    const auto *Function = dyn_cast_or_null<FunctionDecl>(
+        Param->getDeclContext());
+    if (!Function)
+      return false;
+    unsigned Index = Param->getFunctionScopeIndex();
+    for (const FunctionDecl *Redeclaration : Function->redecls()) {
+      if (Index >= Redeclaration->getNumParams())
+        continue;
+      for (const AnnotateAttr *Attribute :
+           Redeclaration->getParamDecl(Index)->specific_attrs<AnnotateAttr>())
+        if (Attribute->getAnnotation() == "withtok:null_terminated")
+          return true;
+    }
+    return false;
+  }
+
+  // The argv-shaped case: elementCountParamName() above already reads
+  // elements_withtok(token_name, extent_name) purely for the OUTER array's
+  // own element count (how many char* slots argv has). Every real
+  // declaration of that contract in this tree spells its token name
+  // "null_terminated" (see include/ownership.h's own doc comment on
+  // elements_withtok and every argc/argv-shaped entry in
+  // src/internal/util.h) -- reusing that identical literal, the same way
+  // isWithtokNullTerminated() above reuses withtok(null_terminated)'s, is
+  // what licenses reading it a SECOND time here for a completely different
+  // fact: POSIX guarantees every argv[i] with i in [0, argc) is *itself* a
+  // valid, finite, null-terminated C string (not merely that argv has argc
+  // pointer-sized slots). That guarantee stops exactly at argv[argc] (only
+  // guaranteed NULL by POSIX) -- so the caller below must still separately
+  // reprove the specific index used falls inside [0, argc) before trusting
+  // this fact; this only returns the extent parameter's name for that
+  // reproof, mirroring contractElementCount()'s own field lookup.
+  static std::optional<StringRef>
+  nullTerminatedElementsExtent(const ParmVarDecl *Param) {
+    const auto *Function = dyn_cast_or_null<FunctionDecl>(
+        Param->getDeclContext());
+    if (!Function)
+      return std::nullopt;
+    unsigned Index = Param->getFunctionScopeIndex();
+    for (const FunctionDecl *Redeclaration : Function->redecls()) {
+      if (Index >= Redeclaration->getNumParams())
+        continue;
+      for (const AnnotateAttr *Attribute :
+           Redeclaration->getParamDecl(Index)->specific_attrs<AnnotateAttr>()) {
+        StringRef Text = Attribute->getAnnotation();
+        if (!Text.consume_front("elements_withtok:"))
+          continue;
+        StringRef Token, Extent;
+        std::tie(Token, Extent) = Text.split(':');
+        if (Token != "null_terminated" || Extent.empty())
+          continue;
+        return Extent;
+      }
+    }
+    return std::nullopt;
+  }
+
+  // Traces PointeeRegion -- what a subscript's base pointer actually points
+  // at -- back to whichever real, trusted null-terminated contract (if any)
+  // ultimately backs it, following the SAME region/symbol lineage the
+  // analyzer's own engine already built while evaluating the code (no new
+  // syntactic pattern matching over the source text). A plain pointer copy
+  // (`char *b = a;`) conjures no new symbol, so this works through any
+  // number of local-variable hops for free; each case below only has to
+  // recognize the one, real conjuring step where an unwritten region was
+  // first read.
+  //
+  // RegionStore's read-without-write path conjures a SymbolRegionValue keyed
+  // to the EXACT region that produced it: reading a parameter's own storage
+  // yields SymbolRegionValue(VarRegion(param)) whose pointee is
+  // SymbolicRegion(that symbol) -- the direct case below. Reading
+  // argv[i] (itself unwritten) similarly yields
+  // SymbolRegionValue(ElementRegion(SymbolicRegion(argv's own symbol), i))
+  // -- the argv-shaped case. Either shape's absence (a write occurred, or
+  // the pointer came from somewhere this checker cannot see, e.g. a call
+  // result) is simply not recognized, exactly as unprovable as it already
+  // was; this can only ever add proving power, never remove it.
+  static const MemRegion *nullTerminatedStringRegion(
+      const MemRegion *PointeeRegion, CheckerContext &C) {
+    const auto *Symbolic = dyn_cast_or_null<SymbolicRegion>(PointeeRegion);
+    if (!Symbolic)
+      return nullptr;
+    const auto *Origin = dyn_cast<SymbolRegionValue>(Symbolic->getSymbol());
+    if (!Origin)
+      return nullptr;
+    const MemRegion *Source = Origin->getRegion();
+
+    // Direct case: `T *p withtok(null_terminated)` and p[0]/p[1] read in
+    // the same function p was declared in.
+    if (const auto *Var = dyn_cast<VarRegion>(Source)) {
+      const auto *Param = dyn_cast<ParmVarDecl>(Var->getDecl());
+      if (Param && isWithtokNullTerminated(Param))
+        return PointeeRegion;
+      return nullptr;
+    }
+
+    // argv-shaped case: `char *a = argv[i];` (or any chain of plain
+    // pointer copies from it).
+    const auto *Element = dyn_cast<ElementRegion>(Source);
+    if (!Element)
+      return nullptr;
+    const auto *OuterSymbolic =
+        dyn_cast_or_null<SymbolicRegion>(Element->getSuperRegion());
+    if (!OuterSymbolic)
+      return nullptr;
+    const auto *OuterOrigin =
+        dyn_cast<SymbolRegionValue>(OuterSymbolic->getSymbol());
+    if (!OuterOrigin)
+      return nullptr;
+    const auto *OuterVar = dyn_cast<VarRegion>(OuterOrigin->getRegion());
+    if (!OuterVar)
+      return nullptr;
+    const auto *ArrayParam = dyn_cast<ParmVarDecl>(OuterVar->getDecl());
+    if (!ArrayParam)
+      return nullptr;
+    std::optional<StringRef> ExtentName =
+        nullTerminatedElementsExtent(ArrayParam);
+    if (!ExtentName)
+      return nullptr;
+    const auto *Function =
+        dyn_cast_or_null<FunctionDecl>(ArrayParam->getDeclContext());
+    if (!Function)
+      return nullptr;
+    const ParmVarDecl *CountParameter = nullptr;
+    for (const ParmVarDecl *Candidate : Function->parameters())
+      if (Candidate->getName() == *ExtentName) {
+        CountParameter = Candidate;
+        break;
+      }
+    if (!CountParameter || !CountParameter->getType()->isIntegerType())
+      return nullptr;
+
+    // Independently reprove the SAME bound the argv[i] subscript that
+    // produced this pointer would itself need to satisfy: trusting this
+    // pointer's content on a path where i was never actually shown to be
+    // below argc would trust content of a slot POSIX makes no promise
+    // about (argv[argc] is only guaranteed NULL, not a valid string).
+    ProgramStateRef State = C.getState();
+    const LocationContext *LCtx = C.getLocationContext();
+    SVal CountValue = State->getSVal(State->getLValue(CountParameter, LCtx));
+    std::optional<NonLoc> Count = CountValue.getAs<NonLoc>();
+    if (!Count)
+      return nullptr;
+    ProgramStateRef IndexOutside = State->assumeInBound(
+        Element->getIndex(), *Count, false, CountParameter->getType());
+    if (IndexOutside)
+      return nullptr;
+    return PointeeRegion;
+  }
+
+  // The DynamicExtent- and declared-count-based proofs in checkPreStmt both
+  // gave up; try the one remaining fact this checker can lean on: a
+  // null-terminated buffer's own structural invariant. Deliberately
+  // restricted to the two constant indices that invariant alone can ever
+  // justify -- index 0 needs no guard at all (a null-terminated buffer's
+  // extent is always at least one element), and index 1 needs a real,
+  // path-sensitive Z3 proof that a dominating branch already established
+  // byte 0 is nonzero. An unguarded a[1] on a length-0-or-1 string is a
+  // REAL bug and must stay flagged: this never accepts index 1 without
+  // that proof, and never accepts any index above 1 at all -- this file has
+  // no sound story yet for a[2], a[3], ..., and guessing one here would
+  // risk exactly the suppressed-true-positive outcome this checker exists
+  // to prevent.
+  static bool nullTerminatedIndexInBounds(const ArraySubscriptExpr *Subscript,
+                                          SVal Base, CheckerContext &C) {
+    Expr::EvalResult Result;
+    if (!Subscript->getIdx()->EvaluateAsInt(Result, C.getASTContext()))
+      return false;
+    const llvm::APSInt &Index = Result.Val.getInt();
+    if (Index.isNegative() || Index > 1)
+      return false;
+    const MemRegion *PointeeRegion = Base.getAsRegion();
+    if (!PointeeRegion)
+      return false;
+    const MemRegion *StringRegion =
+        nullTerminatedStringRegion(PointeeRegion, C);
+    if (!StringRegion)
+      return false;
+    if (Index == 0)
+      return true;
+
+    // Index == 1: re-derive byte 0's own lvalue the same way the engine
+    // would for a literal `StringRegion[0]` and read it back. RegionStore's
+    // own reread guarantee (see symbolInterval()'s comment elsewhere in
+    // this file) is what makes "the same byte" well defined at all: absent
+    // an intervening write, this is the IDENTICAL SymbolRegionValue the
+    // original a[0] read produced, carrying forward every constraint a
+    // branch on it already established.
+    ProgramStateRef State = C.getState();
+    ASTContext &Ctx = C.getASTContext();
+    SValBuilder &SVB = C.getSValBuilder();
+    SVal Byte0Loc = State->getLValue(Subscript->getType(),
+                                     SVB.makeZeroArrayIndex(),
+                                     loc::MemRegionVal(StringRegion));
+    std::optional<Loc> Byte0LValue = Byte0Loc.getAs<Loc>();
+    if (!Byte0LValue)
+      return false;
+    SVal Byte0Val = State->getSVal(*Byte0LValue, Subscript->getType());
+    // Once a dominating branch narrows byte 0's own range to a single
+    // concrete value (e.g. `a[0] != '-'`'s false edge, which pins a[0] to
+    // exactly '-'), Clang's own constraint manager already simplifies a
+    // rereard of that region straight to the concrete integer -- nothing
+    // symbolic is left to hand Z3 at all. Deciding nonzero-ness for a
+    // plain constant is exact, not a proof obligation.
+    if (const llvm::APSInt *Concrete = Byte0Val.getAsInteger())
+      return !Concrete->isZero();
+    // Otherwise byte 0 is still a live symbol (e.g. `a[0] == 0`'s false
+    // edge only excludes the single value 0, leaving every other value
+    // possible) -- ask the Z3 bridge whether every fact this path has
+    // already established about that exact symbol jointly excludes zero.
+    SymbolRef Byte0Sym = Byte0Val.getAsSymbol();
+    if (!Byte0Sym)
+      return false;
+    ArrayIndexZ3Proof Proof(arrayIndexZ3Engine(), State, Ctx, Byte0Sym);
+    return Proof.provesNonzero(Byte0Sym);
+  }
+#endif
 
   static std::string sourceText(const Expr *Expr, CheckerContext &C) {
     const SourceManager &SM = C.getSourceManager();
@@ -1269,6 +1780,13 @@ public:
         if (!ContractOutside)
           return;
       }
+#ifdef NTLIBC_ARITHMETIC_Z3
+      // Both DynamicExtent-based proofs above failed; try the
+      // null-terminated-string structural invariant as a third,
+      // independent route before concluding this access is unproven.
+      if (nullTerminatedIndexInBounds(Subscript, Base, C))
+        return;
+#endif
     }
 
     ExplodedNode *Node = C.generateNonFatalErrorNode(Outside);
@@ -1291,6 +1809,26 @@ public:
     Report->addRange(Subscript->getSourceRange());
     C.emitReport(std::move(Report));
   }
+
+#ifdef NTLIBC_ARITHMETIC_Z3
+  // Records a relational fact so ArrayIndexZ3Proof can assert it later --
+  // the identical technique SizeCastChecker::evalAssume above uses for
+  // CastZ3BranchFact, and for the identical reason: getConstraintMap(State)
+  // was already shown empty for realistic guard shapes in this Clang 18
+  // build (see CastZ3BranchFact's own comment), so this checker's own Z3
+  // proof power must not depend on that other map being populated either.
+  // Purely additive to ProgramState: never rejects or narrows anything the
+  // engine's own constraint manager already decided, only remembers a fact
+  // it would otherwise drop.
+  ProgramStateRef evalAssume(ProgramStateRef State, SVal Condition,
+                             bool Assumption) const {
+    SymbolRef Symbol = Condition.getAsSymbol();
+    const auto *Comparison = dyn_cast_or_null<BinarySymExpr>(Symbol);
+    if (!Comparison || !BinaryOperator::isComparisonOp(Comparison->getOpcode()))
+      return State;
+    return State->set<ArrayIndexZ3BranchFact>(Symbol, Assumption);
+  }
+#endif
 };
 
 static std::string arithmeticOrigin(const Expr *Expression, CheckerContext &C);

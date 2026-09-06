@@ -12,6 +12,7 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramStateTrait.h"
 #include "clang/StaticAnalyzer/Frontend/CheckerRegistry.h"
+#include "TokenAlgebra.h"
 
 #include <cctype>
 #include <memory>
@@ -25,16 +26,16 @@ using namespace ento;
  * setting errno (checkPostCall fills this in below). */
 REGISTER_MAP_WITH_PROGRAMSTATE(ErrnoSetterOf, SymbolRef, const Stmt *)
 
-/* Three per-path facts, keyed by a fixed slot number the way
+/* Two per-path facts, keyed by a fixed slot number the way
  * LockDisciplineChecker keys HeldLocks by a MemRegion: the call currently
  * "under diagnosis" (the most recent capable call whose return value was
- * compared for failure), the most recent capable call at all (whether or
- * not it was ever compared), and -- reusing the same map, since a direct
- * `errno = ...` write is its own trusted origin and only needs a
- * non-null marker -- the statement of the most recent such write.  When
- * Diagnosed and LastCapable diverge, an errno read is reading the wrong
- * call's errno; when neither Diagnosed nor LastCapable nor Assigned is
- * set, an errno read has nothing behind it but function-entry state. */
+ * compared for failure), and the most recent capable call at all (whether
+ * or not it was ever compared).  When Diagnosed and LastCapable diverge, an
+ * errno read is reading the wrong call's errno.  (Whether *any* call or
+ * assignment on this path could have set errno at all -- the checker's
+ * other proof obligation -- is a value-independent, once-per-path fact
+ * with no need for either slot's identity; see errno_grounds and
+ * ThreadCapabilityMap below.) */
 REGISTER_MAP_WITH_PROGRAMSTATE(CallSlot, unsigned, const Stmt *)
 
 /* A local this path has seen initialized or assigned directly from an
@@ -45,11 +46,137 @@ REGISTER_MAP_WITH_PROGRAMSTATE(CallSlot, unsigned, const Stmt *)
  * recognise as safe afterward. */
 REGISTER_MAP_WITH_PROGRAMSTATE(SavedErrnoVar, const MemRegion *, bool)
 
+/* Mirrors OwnershipChecker.cpp's own CarrierCapabilityKind/CarrierCapabilityMap
+ * exactly (same four states, same "absent map entry reads as Absent, not
+ * Unknown" convention), keyed by token family alone instead of by a
+ * MemRegion/SymbolRef carrier: this checker is built as its own standalone
+ * plugin (tools/lint.sh's stage_errno compiles only this .cpp, separately
+ * from stage_ownership's OwnershipChecker.cpp), so it cannot literally
+ * share OwnershipChecker.cpp's C++ definitions across that boundary -- the
+ * same reason LockDisciplineChecker.cpp's familyId() re-derives, rather
+ * than imports, OwnedConstructChecker::familyId()'s own logic. A
+ * family-only key is exactly what errno_grounds below needs: whether
+ * *some* call or assignment on this path could have set errno at all is a
+ * fact about the path, not about any one call's return value or the
+ * assignment's own MemRegion. */
+enum class CarrierCapabilityKind : unsigned char {
+  Unknown,
+  Absent,
+  Linear,
+  Duplicable
+};
+REGISTER_MAP_WITH_PROGRAMSTATE(ThreadCapabilityMap, const IdentifierInfo *,
+                               CarrierCapabilityKind)
+
 namespace {
+
+using ntlibc::algebra::applyTokenOperation;
+using ntlibc::algebra::contains;
+using ntlibc::algebra::TokenEvent;
+using ntlibc::algebra::TokenOperation;
+using ntlibc::algebra::TokenState;
+using ntlibc::algebra::TokenTransition;
 
 constexpr unsigned SlotDiagnosed = 0;
 constexpr unsigned SlotLastCapable = 1;
-constexpr unsigned SlotAssigned = 2;
+
+static TokenState threadTokenState(ProgramStateRef State,
+                                   const IdentifierInfo *Family) {
+  const CarrierCapabilityKind *Kind = State->get<ThreadCapabilityMap>(Family);
+  if (!Kind)
+    return TokenState::Absent;
+  switch (*Kind) {
+  case CarrierCapabilityKind::Unknown:
+    return TokenState::Unknown;
+  case CarrierCapabilityKind::Absent:
+    return TokenState::Absent;
+  case CarrierCapabilityKind::Linear:
+    return TokenState::Linear;
+  case CarrierCapabilityKind::Duplicable:
+    return TokenState::Duplicable;
+  }
+  return TokenState::Unknown;
+}
+
+static CarrierCapabilityKind fromTokenState(TokenState State) {
+  switch (State) {
+  case TokenState::Unknown:
+    return CarrierCapabilityKind::Unknown;
+  case TokenState::Absent:
+    return CarrierCapabilityKind::Absent;
+  case TokenState::Linear:
+    return CarrierCapabilityKind::Linear;
+  case TokenState::Duplicable:
+    return CarrierCapabilityKind::Duplicable;
+  }
+  return CarrierCapabilityKind::Unknown;
+}
+
+/* errno_grounds is granted Duplicable -- never consumed, never granted
+ * Linear -- by every capable call and every direct assignment alike: once
+ * *some* origin has been established on this path it stays established,
+ * the same "idempotent, never contradicts a second grant" character
+ * GrantDuplicable already has for a genuinely duplicable value token. The
+ * transition's own Events are unreachable here (Duplicable-on-Duplicable
+ * and Absent-on-first-grant are both the event-free cases) and are
+ * discarded rather than threaded through a caller that has nothing to do
+ * with them. */
+static ProgramStateRef grantThreadDuplicable(ProgramStateRef State,
+                                             const IdentifierInfo *Family) {
+  TokenTransition Transition =
+      applyTokenOperation(threadTokenState(State, Family),
+                          TokenOperation::GrantDuplicable);
+  return State->set<ThreadCapabilityMap>(Family,
+                                         fromTokenState(Transition.After));
+}
+
+/* The TU-wide family this checker's one thread-scoped fact is filed under;
+ * its name is not this checker's own invention -- see include/errno.h's
+ * requires_thread_token(errno_grounds) and include/unistd.h's
+ * grants_thread_token(errno_grounds), the two real annotations
+ * hasThreadTokenAnnotation() below reads it back out of. */
+static const IdentifierInfo *errnoGroundsFamily(ASTContext &Context) {
+  return &Context.Idents.get("errno_grounds");
+}
+
+/* Mirrors OwnershipChecker.cpp's own withtok:/consume:/grant:/drop:
+ * parsing idiom (e.g. its checkPreCall: `Text.consume_front("withtok:") &&
+ * Text == ReturnedFamily`): a function-level annotate() attribute, on any
+ * of Function's redeclarations, whose text is exactly Prefix followed by
+ * FamilyName. */
+static bool hasThreadTokenAnnotation(const FunctionDecl *Function,
+                                     StringRef Prefix, StringRef FamilyName) {
+  if (!Function)
+    return false;
+  for (const FunctionDecl *Redecl : Function->redecls())
+    for (const AnnotateAttr *Attribute :
+        Redecl->specific_attrs<AnnotateAttr>()) {
+      StringRef Text = Attribute->getAnnotation();
+      if (Text.consume_front(Prefix) && Text == FamilyName)
+        return true;
+    }
+  return false;
+}
+
+/* Like hasThreadTokenAnnotation above, but for a caller (the
+ * requires_thread_token(errno_grounds) lookup in
+ * checkPreStmt(UnaryOperator)) that does not yet know the family name and
+ * needs to read it out of the annotation itself, the same way
+ * OwnershipChecker.cpp's own withtok(...) parsing resolves its family
+ * name from the annotation text rather than from a checker-side constant. */
+static const IdentifierInfo *threadTokenFamilyFromAnnotation(
+    const FunctionDecl *Function, StringRef Prefix) {
+  if (!Function)
+    return nullptr;
+  for (const FunctionDecl *Redecl : Function->redecls())
+    for (const AnnotateAttr *Attribute :
+        Redecl->specific_attrs<AnnotateAttr>()) {
+      StringRef Text = Attribute->getAnnotation();
+      if (Text.consume_front(Prefix) && !Text.empty())
+        return &Function->getASTContext().Idents.get(Text);
+    }
+  return nullptr;
+}
 
 class ErrnoDisciplineChecker
     : public Checker<check::PostCall, check::PreStmt<BinaryOperator>,
@@ -61,11 +188,18 @@ class ErrnoDisciplineChecker
    * glibc convention) via `grep -rn "errno = " src/` and each callee's
    * own doc comment in src/internal/libc.h.  close() and munmap() are
    * kept as the two POSIX-named calls the CERT ERR30-C "cleanup after a
-   * diagnosed failure" pattern this checker looks for actually uses. */
+   * diagnosed failure" pattern this checker looks for actually uses --
+   * close() is recognised through its own include/unistd.h
+   * grants_thread_token(errno_grounds) annotation instead of appearing in
+   * Names below, demonstrating that a real header annotation, not just
+   * this hardcoded list, can supply a capable call. */
   static bool isErrnoCapable(const CallEvent &Call) {
     const auto *Function = dyn_cast_or_null<FunctionDecl>(Call.getDecl());
     if (!Function || !Function->getIdentifier())
       return false;
+    if (hasThreadTokenAnnotation(Function, "grants_thread_token:",
+                                 "errno_grounds"))
+      return true;
     static constexpr llvm::StringLiteral Names[] = {
         // NTSTATUS -> errno mapper
         "__set_errno_status",
@@ -89,9 +223,11 @@ class ErrnoDisciplineChecker
         // AFD/Winsock helpers, dirstream cursor, handle-to-path resolver
         "__afd_open", "__afd_addr_from_sockaddr", "__dirstream_next",
         "__handle_path", "raw_mmap",
-        // close()/munmap(): the two POSIX-named "cleanup after a
-        // diagnosed failure" calls this checker's pattern actually uses
-        "close", "munmap",
+        // munmap(): the second of the two POSIX-named "cleanup after a
+        // diagnosed failure" calls this checker's pattern actually uses;
+        // see close()'s own grants_thread_token(errno_grounds) above for
+        // the other one
+        "munmap",
         // remaining POSIX entries, each confirmed directly in this
         // tree's own src/unistd, src/fcntl/open.c and src/stat
         "read", "write", "open", "unlink", "mkdir", "mkfifo", "stat",
@@ -126,13 +262,24 @@ class ErrnoDisciplineChecker
     return false;
   }
 
-  static bool isErrnoLocationCall(const Expr *E) {
+  /* The FunctionDecl `*E` calls, if E is a call to __errno_location and
+   * nothing else -- shared by isErrnoLocationCall below and by the
+   * requires_thread_token(errno_grounds) lookup in checkPreStmt(UnaryOperator),
+   * which needs the actual declaration (to read its annotations back off),
+   * not just a yes/no answer. */
+  static const FunctionDecl *errnoLocationDecl(const Expr *E) {
     const auto *Call = dyn_cast_or_null<CallExpr>(E->IgnoreParenImpCasts());
     if (!Call)
-      return false;
+      return nullptr;
     const FunctionDecl *Function = Call->getDirectCallee();
     return Function && Function->getIdentifier() &&
-           Function->getName() == "__errno_location";
+                   Function->getName() == "__errno_location"
+               ? Function
+               : nullptr;
+  }
+
+  static bool isErrnoLocationCall(const Expr *E) {
+    return errnoLocationDecl(E) != nullptr;
   }
 
   /* errno expands to `(*__errno_location())`; this recognises that
@@ -448,6 +595,8 @@ public:
     SymbolRef Symbol = Call.getReturnValue().getAsSymbol(true);
     if (Symbol)
       State = State->set<ErrnoSetterOf>(Symbol, Statement);
+    State = grantThreadDuplicable(State,
+                                  errnoGroundsFamily(C.getASTContext()));
     C.addTransition(State);
   }
 
@@ -506,10 +655,12 @@ public:
     ProgramStateRef State = C.getState();
     if (isAssignmentTarget(Operation, C)) {
       /* A direct `errno = ...` write is its own trusted origin: it
-       * outranks whatever call was previously under diagnosis. */
-      State = State->set<CallSlot>(SlotAssigned, Operation);
+       * outranks whatever call was previously under diagnosis, and
+       * establishes errno_grounds on its own merits. */
       State = State->remove<CallSlot>(SlotDiagnosed);
       State = State->remove<CallSlot>(SlotLastCapable);
+      State = grantThreadDuplicable(State,
+                                    errnoGroundsFamily(C.getASTContext()));
       C.addTransition(State);
       return;
     }
@@ -543,7 +694,33 @@ public:
       return; /* a capable call happened; its result was just never
                * compared, which is not one of this checker's two proof
                * obligations. */
-    if (!State->get<CallSlot>(SlotAssigned))
+    /* __errno_location()'s own requires_thread_token(errno_grounds)
+     * annotation (include/errno.h) drives this: only a genuine read of
+     * *that* declaration's result asks the question at all, and the
+     * family it asks about comes from the header, not from a name baked
+     * into this checker. A missing annotation silently skips the check,
+     * the same "opt-in" character every other ownership.h annotation
+     * already has. */
+    const FunctionDecl *Location = errnoLocationDecl(Operation->getSubExpr());
+    const IdentifierInfo *Family =
+        Location ? threadTokenFamilyFromAnnotation(Location,
+                                                    "requires_thread_token:")
+                 : nullptr;
+    if (!Family)
+      return;
+    /* Require, not RequireAbsent: this checker only ever asks "has some
+     * origin been established at all", never "has it been consumed by
+     * exactly one read" -- see this file's own top-of-file design note on
+     * why a family-only-keyed fact cannot soundly answer the
+     * Diagnosed-vs-LastCapable identity question the branch above already
+     * settled without it. Discarding the resulting state (rather than
+     * committing it via C.addTransition) mirrors LockDisciplineChecker's
+     * own checkPreCall: this call proves or disproves a precondition, it
+     * never commits a transition. */
+    TokenTransition Transition =
+        applyTokenOperation(threadTokenState(State, Family),
+                            TokenOperation::Require);
+    if (contains(Transition.Events, TokenEvent::MissingRequired))
       report("errno is read with no proven prior call or assignment that "
              "could have set it",
              Operation, State, C);

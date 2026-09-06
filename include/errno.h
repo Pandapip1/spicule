@@ -11,11 +11,17 @@
 
 #include <features.h>
 #include <bits/errno.h>
+#include <ownership.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline reads
+ * this annotation to learn which thread-scoped fact a read of errno
+ * requires proof of (some prior call or assignment on this path could have
+ * set it) -- the family name lives here, not hardcoded in the checker. */
+requires_thread_token(errno_grounds)
 extern int *__errno_location(void);
 #define errno (*__errno_location())
 

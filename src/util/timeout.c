@@ -155,6 +155,14 @@ static int parse_signal(const char *s)
 	return (int)n;
 }
 
+/* Comfortably above any real caller's duration (~31.7 million years)
+ * yet comfortably below time_t's own 64-bit range (include/alltypes.h.
+ * gen: `typedef _Int64 time_t;`, on every platform this tree targets)
+ * with enormous margin left over for deadline_after()'s tv_sec
+ * addition against a live CLOCK_MONOTONIC base. See parse_duration()'s
+ * use below for why this bound has to exist at all. */
+#define MAX_DURATION_SECS 1e15
+
 /* Returns 0 and sets *out (seconds) on success, -1 on a malformed
  * duration -- see this file's header comment for the exact grammar. */
 static int parse_duration(const char *s, double *out)
@@ -173,6 +181,21 @@ static int parse_duration(const char *s, double *out)
 	case 'd': if (end[1]) return -1; v *= 86400; break;
 	default: return -1;
 	}
+	/* Reject non-finite and unrepresentable durations here, before
+	 * they ever reach deadline_after()'s "(time_t)secs" narrowing.
+	 * This libc's own strtod() (src/stdlib/strtod.c) accepts the
+	 * C99 "inf"/"infinity"/"nan" spellings and silently saturates to
+	 * HUGE_VAL on plain numeric overflow (e.g. "1e400"); the 'm'/'h'/
+	 * 'd' multiplies just above can themselves push an already-huge
+	 * finite value to infinity (e.g. "3e304d"). "-inf" is already
+	 * caught by the "v < 0" check above, but +inf and NaN both pass
+	 * it (a NaN comparison is always false, and +inf is not < 0), and
+	 * either one reaching a float-to-integer cast whose target can't
+	 * hold the value is undefined behavior per C11 6.3.1.4 -- not a
+	 * mere truncation. The comparison below is written so a NaN `v`
+	 * (which compares false against everything, including itself)
+	 * fails it and is rejected too, with no separate isnan() needed. */
+	if (!(v <= MAX_DURATION_SECS)) return -1;
 	*out = v;
 	return 0;
 }

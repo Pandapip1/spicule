@@ -112,6 +112,11 @@ static void put_field(char *field, size_t width, const char *fmt, long value)
 	char tmp[32];
 	size_t len;
 	snprintf(tmp, sizeof tmp, fmt, value);
+	/* snprintf() with a nonzero size (sizeof tmp here) always
+	 * NUL-terminates its output buffer (C11 7.21.6.5p2), true by
+	 * construction and not otherwise visible to the checker across
+	 * this call. */
+	__ownership_string_terminated(tmp);
 	len = strlen(tmp);
 	if (len > width) len = width; /* callers keep values in range */
 	memset(field, ' ', width);
@@ -123,7 +128,15 @@ static void put_field(char *field, size_t width, const char *fmt, long value)
 static int write_header(FILE *out, const struct ar_member *m)
 {
 	char hdr[AR_HDR_LEN];
-	size_t nl = strlen(m->name);
+	size_t nl;
+	/* m->name is always populated either by build_member()'s strcpy()
+	 * from a basename already checked to fit within AR_NAME_MAX, or by
+	 * parse_header()'s explicit m->name[AR_NAME_MAX] = 0 -- always
+	 * NUL-terminated by construction (see each function's own
+	 * restatement of this same fact); restated here since this function
+	 * only ever sees the struct through a plain pointer. */
+	__ownership_string_terminated(m->name);
+	nl = strlen(m->name);
 
 	memset(hdr, ' ', sizeof hdr);
 	for (size_t i = 0; i < nl; i++) hdr[i] = m->name[i];
@@ -188,6 +201,12 @@ static int parse_header(const char raw[AR_HDR_LEN], struct ar_member *m)
 	if (i >= 0 && field[i] == '/') field[i] = 0;
 	strncpy(m->name, field, AR_NAME_MAX);
 	m->name[AR_NAME_MAX] = 0;
+	/* The explicit assignment just above always leaves a NUL at
+	 * m->name[AR_NAME_MAX], regardless of whether strncpy() itself had
+	 * to pad with NULs or filled the whole field -- so m->name is
+	 * unconditionally NUL-terminated from this point on, even though
+	 * strncpy()'s own contract alone would not guarantee it. */
+	__ownership_string_terminated(m->name);
 	if (strchr(m->name, '/') || strchr(m->name, '\\')) return -1;
 
 	memcpy(field, raw + 16, 12); field[12] = 0; m->mtime = strtol(field, NULL, 10);
@@ -276,15 +295,38 @@ static int ar_foreach(const char *path, ar_visit_fn visit, void *ctx)
  * reused across multiple name_wanted() calls in the same run. */
 static const char *basename_of(const char *path)
 {
-	const char *slash = strrchr(path, '/');
+	const char *slash;
+	/* path is always one of this file's own argv-derived operand
+	 * strings -- build_member()'s filepath (itself always one of
+	 * do_append_or_replace()'s files[] elements) or name_wanted()'s own
+	 * files[i], both ultimately __util_ar_main()'s own
+	 * elements_withtok(null_terminated, argc) argv slice -- restated
+	 * here since that fact does not survive the plain `const char *`
+	 * parameter crossing into this function. */
+	__ownership_string_terminated(path);
+	slash = strrchr(path, '/');
 	const char *bslash = strrchr(path, '\\');
 	if (bslash && (!slash || bslash > slash)) slash = bslash;
 	return slash ? slash + 1 : path;
 }
 
+/* name is always the address of a struct ar_member's own name[] field
+ * (t_visit()/p_visit()/x_visit() pass m->name, do_delete() passes
+ * arr[i].m.name), never NULL; files is never NULL -- see do_delete()'s
+ * identical comment for why. Both are required so strcmp()'s own
+ * __attribute__((nonnull(1, 2))) is satisfied for the strcmp(...,  name)
+ * call below. */
+static int name_wanted(const char *name, char **files, int nfiles)
+	__attribute__((nonnull(1, 2)));
 static int name_wanted(const char *name, char **files, int nfiles)
 {
 	int i;
+	/* name is always the .name field of a struct ar_member this file
+	 * itself populated -- t_visit()/p_visit()/x_visit() pass m->name,
+	 * do_delete() passes arr[i].m.name -- both always NUL-terminated by
+	 * construction; see write_header()'s identical restatement of the
+	 * same fact for the reason it must be restated here too. */
+	__ownership_string_terminated(name);
 	if (nfiles == 0) return 1;
 	for (i = 0; i < nfiles; i++)
 		if (files[i] && strcmp(basename_of(files[i]), name) == 0) return 1;
@@ -295,6 +337,16 @@ static int name_wanted(const char *name, char **files, int nfiles)
 
 struct t_ctx { char **files; int nfiles; int verbose; int any; };
 
+/* m and ctxp are never NULL along any real path: ar_foreach() (this
+ * function's only caller, always reached through the ar_visit_fn function
+ * pointer) always passes `&m`, the address of its own local struct
+ * ar_member, and every real call site of ar_foreach() in this file passes
+ * `&ctx`, the address of a local struct -- neither can ever be NULL. The
+ * indirect call through ar_visit_fn means this checker analyzes this
+ * function as its own entry point rather than inlining it, so the fact
+ * has to be asserted here rather than derived from a caller. */
+static int t_visit(FILE *ar, const struct ar_member *m, long data_off, void *ctxp)
+	__attribute__((nonnull(2, 4)));
 static int t_visit(FILE *ar, const struct ar_member *m, long data_off, void *ctxp)
 {
 	struct t_ctx *ctx = ctxp;
@@ -318,6 +370,10 @@ static int t_visit(FILE *ar, const struct ar_member *m, long data_off, void *ctx
 
 struct p_ctx { char **files; int nfiles; int verbose; };
 
+/* m and ctxp are never NULL -- see t_visit()'s identical comment above for
+ * why (same ar_foreach()/ar_visit_fn shape). */
+static int p_visit(FILE *ar, const struct ar_member *m, long data_off, void *ctxp)
+	__attribute__((nonnull(2, 4)));
 static int p_visit(FILE *ar, const struct ar_member *m, long data_off, void *ctxp)
 {
 	struct p_ctx *ctx = ctxp;
@@ -332,6 +388,10 @@ static int p_visit(FILE *ar, const struct ar_member *m, long data_off, void *ctx
 		size_t want = remain < (long)sizeof buf ? (size_t)remain : sizeof buf;
 		size_t got = fread(buf, 1, want, ar);
 		if (got == 0) break;
+		/* fread() never returns more than the `want` it was asked
+		 * for, and want <= sizeof buf above -- same restatement as
+		 * copy_bytes()'s identical idiom for the same fact. */
+		__ownership_readable_span(buf, got);
 		if (fwrite(buf, 1, got, stdout) != got) {
 			__util_diagf("ar: error writing to standard output: %s\n", strerror(errno));
 			return -1;
@@ -345,6 +405,10 @@ static int p_visit(FILE *ar, const struct ar_member *m, long data_off, void *ctx
 
 struct x_ctx { char **files; int nfiles; int verbose; int failed; };
 
+/* m and ctxp are never NULL -- see t_visit()'s identical comment above for
+ * why (same ar_foreach()/ar_visit_fn shape). */
+static int x_visit(FILE *ar, const struct ar_member *m, long data_off, void *ctxp)
+	__attribute__((nonnull(2, 4)));
 static int x_visit(FILE *ar, const struct ar_member *m, long data_off, void *ctxp)
 {
 	struct x_ctx *ctx = ctxp;
@@ -355,6 +419,11 @@ static int x_visit(FILE *ar, const struct ar_member *m, long data_off, void *ctx
 	if (!name_wanted(m->name, ctx->files, ctx->nfiles)) return 0;
 	if (fseek(ar, data_off, SEEK_SET) != 0) { ctx->failed = 1; return 0; }
 
+	/* m->name is always populated by parse_header() (the only producer
+	 * ar_foreach() ever passes through to this visitor), which always
+	 * NUL-terminates it -- see parse_header()'s own restatement of the
+	 * same fact. */
+	__ownership_string_terminated(m->name);
 	out = fopen(m->name, "wb");
 	if (!out) {
 		__util_diagf("ar: cannot create '%s': %s\n", m->name, strerror(errno));
@@ -366,6 +435,10 @@ static int x_visit(FILE *ar, const struct ar_member *m, long data_off, void *ctx
 		size_t want = remain < (long)sizeof buf ? (size_t)remain : sizeof buf;
 		size_t got = fread(buf, 1, want, ar);
 		if (got == 0) break;
+		/* fread() never returns more than the `want` it was asked
+		 * for, and want <= sizeof buf above -- same restatement as
+		 * copy_bytes()'s identical idiom for the same fact. */
+		__ownership_readable_span(buf, got);
 		if (fwrite(buf, 1, got, out) != got) {
 			__util_diagf("ar: error writing '%s': %s\n", m->name, strerror(errno));
 			ctx->failed = 1;
@@ -466,7 +539,14 @@ static int emit_member(FILE *out, const struct ar_member *m, FILE *src_ar, long 
 {
 	if (write_header(out, m) < 0) return -1;
 	if (path) {
-		FILE *in = fopen(path, "rb");
+		FILE *in;
+		/* path, whenever non-NULL, is always one of
+		 * do_append_or_replace()'s own files[] elements (an
+		 * argv-derived member name) -- restated here since that fact
+		 * does not survive the plain `const char *` parameter
+		 * crossing into this function. */
+		__ownership_string_terminated(path);
+		in = fopen(path, "rb");
 		if (!in) return -1;
 		if (copy_bytes(in, out, 0, m->size) < 0) { (void)fclose(in); return -1; }
 		(void)fclose(in);
@@ -481,6 +561,12 @@ static int build_member(const char *filepath, struct ar_member *m)
 {
 	struct stat st;
 	const char *bn = basename_of(filepath);
+	/* filepath is always one of do_append_or_replace()'s own files[]
+	 * elements (an argv-derived member name), and basename_of() only
+	 * ever returns a suffix of that same string -- so bn is
+	 * null-terminated by the same argv-wide guarantee, restated here
+	 * since it crosses this function's own boundary. */
+	__ownership_string_terminated(bn);
 	if (strlen(bn) > AR_NAME_MAX) {
 		__util_diagf("ar: %s: member name longer than %d bytes -- not supported "
 		                "by this build's archive format (see src/util/ar.c's header)\n",
@@ -502,7 +588,11 @@ static int build_member(const char *filepath, struct ar_member *m)
 	return 0;
 }
 
-/* -d: delete named members. */
+/* -d: delete named members. files is never NULL: every real call site
+ * (__util_ar_main() below) passes argv+3, a valid pointer into argv's own
+ * storage regardless of nfiles' value. */
+static int do_delete(const char *archive, char **files, int nfiles, int verbose)
+	__attribute__((nonnull(2)));
 static int do_delete(const char *archive, char **files, int nfiles, int verbose)
 {
 	struct rewrite_member *arr;
@@ -519,6 +609,10 @@ static int do_delete(const char *archive, char **files, int nfiles, int verbose)
 	if (!src) { free(arr); __util_diagf("ar: %s: %s\n", archive, strerror(errno)); return 1; }
 
 	snprintf(tmppath, sizeof tmppath, "%s.artmp", archive);
+	/* snprintf() with a nonzero size (sizeof tmppath here) always
+	 * NUL-terminates its output buffer -- same restatement as
+	 * put_field()'s identical idiom. */
+	__ownership_string_terminated(tmppath);
 	tmp = fopen(tmppath, "wb");
 	if (!tmp) {
 		/* fclose(src) is cleanup for the fopen(tmppath) failure just
@@ -554,7 +648,11 @@ static int do_delete(const char *archive, char **files, int nfiles, int verbose)
 	return 0;
 }
 
-/* -q/-r: append or replace-or-append. */
+/* -q/-r: append or replace-or-append. files is never NULL -- see
+ * do_delete()'s identical comment above for why. */
+static int do_append_or_replace(const char *archive, char **files, int nfiles,
+                                  int quick, int update, int suppress_diag, int verbose)
+	__attribute__((nonnull(2)));
 static int do_append_or_replace(const char *archive, char **files, int nfiles,
                                   int quick, int update, int suppress_diag, int verbose)
 {
@@ -579,6 +677,10 @@ static int do_append_or_replace(const char *archive, char **files, int nfiles,
 	if (!consumed) { free(arr); __util_diagf("ar: %s\n", strerror(ENOMEM)); return 1; }
 
 	snprintf(tmppath, sizeof tmppath, "%s.artmp", archive);
+	/* snprintf() with a nonzero size (sizeof tmppath here) always
+	 * NUL-terminates its output buffer -- same restatement as
+	 * put_field()'s identical idiom. */
+	__ownership_string_terminated(tmppath);
 	tmp = fopen(tmppath, "wb");
 	if (!tmp) {
 		free(arr); free(consumed);
@@ -598,6 +700,16 @@ static int do_append_or_replace(const char *archive, char **files, int nfiles,
 			if (!quick) {
 				for (fi = 0; fi < nfiles; fi++) {
 					const char *bn = basename_of(files[fi]);
+					/* bn: files[fi] is one of __util_ar_main()'s own
+					 * argv-derived elements, and basename_of() only
+					 * ever returns a suffix of it. arr[i].m.name: was
+					 * populated by read_all_headers() via
+					 * parse_header(), which always terminates it --
+					 * see parse_header()'s own restatement of the
+					 * same fact. Both are restated here since neither
+					 * fact survives into this loop on its own. */
+					__ownership_string_terminated(bn);
+					__ownership_string_terminated(arr[i].m.name);
 					if (strcmp(bn, arr[i].m.name) != 0) continue;
 					struct ar_member nm;
 					if (build_member(files[fi], &nm) < 0) { status = 1; consumed[fi] = 1; break; }

@@ -47,26 +47,65 @@
 #include "util.h"
 #include "ownership_stubs.h"
 
+/* name and succ are withtok(heap_allocated) -- both are genuinely
+ * heap-allocated (strdup()/__util_reallocarray() respectively) and freed
+ * only once, in __util_tsort_main()'s own final cleanup loop below -- the
+ * same struct-field ownership idiom src/util/man.c's struct man_buf/
+ * struct man_reg/etc. and src/util/find.c's struct node's own acc/pruned
+ * fields already use. Declaring it lets AllocationLifetimeChecker's
+ * checkPostStmt<BinaryOperator> recognize get_or_add()'s
+ * `nodes[nnodes].name = strdup(name)` and add_edge()'s
+ * `nodes[a].succ = g` as moving the allocation into a real owning slot
+ * instead of reporting each one as leaked at the end of its own
+ * function -- without it, neither assignment's destination carries any
+ * annotation the checker can use to tell an owning store from an
+ * ordinary escaping one. Likewise `nodes` itself: get_or_add()'s
+ * `nodes = g` reassignment is recognized the same way once the global
+ * variable declaration itself carries the annotation. */
 struct node {
-	char *name;
+	char *name withtok(heap_allocated);
 	size_t indeg;
-	int *succ;
+	int *succ withtok(heap_allocated);
 	size_t nsucc, cap;
 	int done;
 };
 
-static struct node *nodes;
+static struct node *nodes withtok(heap_allocated);
 static size_t nnodes, nodecap;
 
-static int find_node(const char *name)
+static int find_node(const char *name withtok(null_terminated))
 {
 	size_t i;
-	for (i = 0; i < nnodes; i++)
-		if (!strcmp(nodes[i].name, name)) return (int)i;
+	for (i = 0; i < nnodes; i++) {
+		/* nodes[i].name is a struct node field, not a function
+		 * parameter, so withtok(null_terminated) has no field-level
+		 * spelling to attach to (see include/ownership.h's own
+		 * vocabulary); restate the always-true fact by hand instead,
+		 * the same idiom src/util/pax.c's write_ustar_header() uses
+		 * for struct pax_member's own m->name field. The one real
+		 * populator of this field, get_or_add() below, always writes
+		 * it via strdup(name), which include/string.h declares to
+		 * return a null_terminated string.
+		 *
+		 * Read through a local rather than restating directly on
+		 * nodes[i].name: `nodes` is a file-scope global, and the
+		 * checker's own conservative call-invalidation rule for an
+		 * opaque call (which __ownership_string_terminated() itself
+		 * is, from the analyzer's point of view) re-widens anything
+		 * reachable through a global pointer immediately afterward --
+		 * so a restatement written directly against nodes[i].name
+		 * conjures a fresh symbolic value for the very next read of
+		 * that same field and the fact is lost again before strcmp()
+		 * sees it. A local variable is not reachable through the
+		 * global, so it is not subject to that widening. */
+		char *nm = nodes[i].name;
+		__ownership_string_terminated(nm);
+		if (!strcmp(nm, name)) return (int)i;
+	}
 	return -1;
 }
 
-static int get_or_add(const char *name)
+static int get_or_add(const char *name withtok(null_terminated))
 {
 	int idx = find_node(name);
 	if (idx >= 0) return idx;
@@ -154,6 +193,12 @@ int __util_tsort_main(
 		return 1;
 	}
 	if (argc == 2) {
+		/* argv carries elements_withtok(null_terminated, argc) above,
+		 * but the checker cannot derive "1 < argc" from the argc == 2
+		 * comparison just taken on its own -- restate the contract at
+		 * this one now-in-range index, the same way src/util/test.c's
+		 * __util_test_main() restates it for argv[0]. */
+		__ownership_string_terminated(argv[1]);
 		if (!strcmp(argv[1], "-")) {
 			f = stdin;
 		} else {
@@ -210,8 +255,21 @@ int __util_tsort_main(
 	}
 
 	for (i = 0; i < ntok / 2; i++) {
-		int a = get_or_add(tok[2 * i]);
-		int b = get_or_add(tok[2 * i + 1]);
+		int a, b;
+		/* Every tok[] entry was set, in the tokenizing loop above, to
+		 * `buf + start` immediately after writing a NUL byte at
+		 * buf[pos] (pos being wherever that token's own run of
+		 * non-whitespace bytes ended) -- each one is therefore already
+		 * a real, null-terminated C string, but that fact was
+		 * established over there, not here, and get_or_add()'s own
+		 * withtok(null_terminated) parameter needs it re-proven at
+		 * this call site the same way src/util/test.c's
+		 * __util_test_main() re-proves argv[0]/argv[n] at its own use
+		 * sites. */
+		__ownership_string_terminated(tok[2 * i]);
+		__ownership_string_terminated(tok[2 * i + 1]);
+		a = get_or_add(tok[2 * i]);
+		b = get_or_add(tok[2 * i + 1]);
 		if (a < 0 || b < 0) { __util_diagf("tsort: out of memory\n"); free((void *)tok); free(buf); return 1; }
 		if (a != b && add_edge(a, b) < 0) {
 			__util_diagf("tsort: out of memory\n"); free((void *)tok); free(buf); return 1;

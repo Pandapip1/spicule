@@ -4148,8 +4148,9 @@ static int man_process_line(struct man_ctx *c, struct man_render *r, char *line)
 				const char *s = a.v[i];
 				size_t si = 0, sn = strlen(s);
 				if (!ok) break;
-				while (si < sn && ok) {
+				while (si < sn) {
 					size_t wstart;
+					if (!ok) break;
 					while (si < sn && (s[si] == ' ' || s[si] == '\t')) {
 						if (!mbuf_appendc(&c->acc, s[si])) { ok = 0; break; }
 						si++;
@@ -4267,8 +4268,10 @@ static int man_format(const char *text, size_t len, int width, struct man_buf *o
 	copy[len] = 0;
 
 	line = copy;
-	while (ok && line) {
-		char *nl = strchr(line, '\n');
+	while (line) {
+		char *nl;
+		if (!ok) break;
+		nl = strchr(line, '\n');
 		if (nl) *nl = 0;
 		ok = man_process_line(&c, &r, line);
 		line = nl ? nl + 1 : 0;

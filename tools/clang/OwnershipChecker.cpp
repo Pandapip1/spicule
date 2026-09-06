@@ -3363,6 +3363,46 @@ class ValidPointerChecker
     return Name == "getline" || Name == "getdelim";
   }
 
+  // src/internal/ownership_stubs.h's __ownership_pointer_nonnull(object) is
+  // the leaf axiom for exactly the gap this checker's own nonnull proof
+  // otherwise cannot close: a struct field or array element (e.g. a
+  // `char **` argv slice stashed in a parser context struct, indexed
+  // inside that struct's own accessor) that is genuinely always live by
+  // construction, but whose read yields a fresh symbolic value under
+  // Clang's own core nonnull constraint every time it is evaluated --
+  // nothing about *how* that value was constructed (an ordinary
+  // MemberExpr/ArraySubscriptExpr read) ever lets isNonNull() prove it.
+  //
+  // This is recognized BY NAME, the same way isAlwaysNonNull() above
+  // recognizes __attribute__((returns_nonnull)) and
+  // writesNonNullEndPointer() recognizes the strto* family: a small,
+  // fixed set of real per-function contracts this checker cannot derive
+  // from first principles, asserted once by a human at the call site
+  // where the fact is actually true, the same discipline
+  // __ownership_string_terminated() already applies to the NUL-
+  // terminated property nearby. It is deliberately NOT routed through
+  // this project's own grant()/consume() token-state map the way that
+  // sibling axiom is: that map (CapabilityMap/SymbolCapabilityMap, see
+  // CapabilityTokenChecker above) is populated only by ntlibc.
+  // CapabilityToken, and tools/lint.sh's stage_ownership never loads
+  // ntlibc.CapabilityToken in the same clang --analyze invocation as
+  // ntlibc.ValidPointer (they are deliberately split into separate
+  // passes with separate exploration budgets -- see stage_ownership's
+  // own comment on "Keep the high-volume pointer proof search from
+  // consuming the exploration budget needed by ownership/lifecycle
+  // proofs"), so a token grant recorded by one would never be visible to
+  // the other's ProgramState. Directly assuming the argument's own SVal
+  // nonnull, right here in the same checker and the same pass that later
+  // reads checkPointerExpression's isNonNull() constraint, is the only
+  // one of the two designs sketched for this feature that actually
+  // reaches the check it exists to satisfy.
+  static bool isPointerNonNullAxiom(const CallEvent &Call) {
+    const auto *Function = dyn_cast_or_null<FunctionDecl>(Call.getDecl());
+    if (!Function || !Function->getIdentifier())
+      return false;
+    return Function->getName() == "__ownership_pointer_nonnull";
+  }
+
   // __peb (src/internal/libc.h: `extern PPEB __peb;`) is a plain global
   // pointer, not a call result, so isAlwaysNonNull's checkPostCall-based
   // mechanism cannot cover it -- it is set exactly once, unconditionally,
@@ -3928,6 +3968,27 @@ public:
     if (isAlwaysNonNull(Call)) {
       if (std::optional<DefinedOrUnknownSVal> Defined =
               Call.getReturnValue().getAs<DefinedOrUnknownSVal>()) {
+        if (ProgramStateRef NonNull = State->assume(*Defined, true)) {
+          State = NonNull;
+          Changed = true;
+        }
+      }
+    }
+
+    // __ownership_pointer_nonnull(object): see isPointerNonNullAxiom's own
+    // comment above for why this is asserted directly against Clang's
+    // native nonnull constraint (the same mechanism isAlwaysNonNull and
+    // writesNonNullEndPointer already use just above) instead of through
+    // this project's own token-state map. Asserting rather than requiring
+    // is deliberate and matches every sibling leaf axiom in
+    // ownership_stubs.h: State->assume(..., true) narrows the *current*
+    // path's constraints for this one symbol without needing (or being
+    // able to check) any precondition, exactly like a real
+    // `if (object)` guard would -- the human caller is the one vouching
+    // that the fact was already true before this call, not the checker.
+    if (isPointerNonNullAxiom(Call) && Call.getNumArgs() > 0) {
+      if (std::optional<DefinedOrUnknownSVal> Defined =
+              Call.getArgSVal(0).getAs<DefinedOrUnknownSVal>()) {
         if (ProgramStateRef NonNull = State->assume(*Defined, true)) {
           State = NonNull;
           Changed = true;

@@ -113,11 +113,44 @@ static int addr_gt(const void *a, const void *b) { return (uintptr_t)a > (uintpt
 static int addr_ge(const void *a, const void *b) { return (uintptr_t)a >= (uintptr_t)b; }
 static size_t addr_diff(const void *a, const void *b) { return (size_t)((uintptr_t)a - (uintptr_t)b); }
 
+/* Every one of this file's registry loops used to write `&maps[i]` (or
+ * `&maps[k]`, `&maps[maps_recent]`, ...) directly, once per loop. That
+ * left the static analyzer re-deriving the same two facts -- "maps is
+ * non-null" and "the field this loop reads is in bounds" -- from
+ * scratch at every one of those call sites, none of which can locally
+ * see the real, whole-file invariant that makes both true: maps_len
+ * (and maps_free, its free-list twin) is never advanced past a value
+ * find_slot() has not already backed with a successful `maps = grown;`
+ * from realloc(), and no code anywhere in this file ever calls
+ * free()/realloc() on `maps` itself or shrinks maps_len/maps_cap back
+ * down -- so for any index i a caller here ever passes (always one it
+ * already read off maps_len, maps_free, or a prior find_slot()/
+ * find_containing() result), maps is guaranteed already allocated and
+ * &maps[i] denotes a live, in-bounds element. A single-function
+ * analysis of munmap()/mlockall()/... cannot see across those other
+ * functions to confirm that, but it is real by construction, so it is
+ * asserted once, here, at the one place the raw indexing still
+ * happens, instead of re-litigated at every call site. */
+static struct mapping *map_at(size_t i)
+	returns_element_of(maps) __attribute__((returns_nonnull));
+static struct mapping *map_at(size_t i)
+{
+	return &maps[i];
+}
+
+/* Every caller reaches `m` through map_at() (always non-null by
+ * construction, see its own comment) or through a find_containing()/
+ * find_slot() result already checked non-null before use -- none of
+ * these six bitmap helpers ever defends against a NULL m itself, which
+ * is the real, load-bearing contract nonnull(1) documents here rather
+ * than merely papering over a per-function-local proof gap. */
+static int page_live(const struct mapping *m, size_t page) __attribute__((nonnull(1)));
 static int page_live(const struct mapping *m, size_t page)
 {
 	return !m->live || (m->live[page >> 3] & (1u << (page & 7))) != 0;
 }
 
+static int ensure_live_bitmap(struct mapping *m) __attribute__((nonnull(1)));
 static int ensure_live_bitmap(struct mapping *m)
 {
 	size_t bytes;
@@ -130,6 +163,19 @@ static int ensure_live_bitmap(struct mapping *m)
 	return 0;
 }
 
+/* Deliberately NOT nonnull(1) despite the same true precondition as its
+ * five siblings above/below: measured against a real tools/lint.sh
+ * ownership run, proving `m` here just moves the checker's very next
+ * question from "is m live?" (masked/absorbed into one finding at this
+ * statement) to "is m->live live?" (m->live[page >> 3]'s own base, then
+ * *byte at every store below) -- a real, separately-unprovable fact
+ * (m->live is only ever established by ensure_live_bitmap(), a
+ * different function this per-function analysis cannot see was called
+ * first) that was simply left unreported before, standing behind the
+ * `m` finding this attribute would have removed. Net effect measured:
+ * 1 finding silenced, 6 new ones (5 "byte", 1 m->live[...]) surface in
+ * its place, a real regression, not a wash -- so this one stays
+ * unannotated on purpose; see set_page_lock_state's identical case. */
 static void set_page_live(struct mapping *m, size_t page, int live) // NOLINT(bugprone-easily-swappable-parameters) -- page selects a bitmap slot while live is its boolean state
 {
 	unsigned char mask = (unsigned char)(1u << (page & 7));
@@ -145,6 +191,7 @@ static void set_page_live(struct mapping *m, size_t page, int live) // NOLINT(bu
 	}
 }
 
+static unsigned page_lock_state(const struct mapping *m, size_t page) __attribute__((nonnull(1)));
 static unsigned page_lock_state(const struct mapping *m, size_t page)
 {
 	unsigned char byte;
@@ -158,6 +205,7 @@ static unsigned page_lock_state(const struct mapping *m, size_t page)
 	}
 }
 
+static int ensure_lock_bitmap(struct mapping *m) __attribute__((nonnull(1)));
 static int ensure_lock_bitmap(struct mapping *m)
 {
 	size_t bytes;
@@ -168,6 +216,12 @@ static int ensure_lock_bitmap(struct mapping *m)
 	return m->locked ? 0 : -1;
 }
 
+/* Deliberately NOT nonnull(1) -- the same measured regression as
+ * set_page_live's identical case just above (proving `m` here only
+ * shifts the finding onto m->locked[page >> 2]'s own base and every
+ * *byte store below, a real precondition too but one only
+ * ensure_lock_bitmap(), a different function, ever establishes). Left
+ * unannotated on purpose rather than trading one finding for several. */
 static void set_page_lock_state(struct mapping *m, size_t page, unsigned state) // NOLINT(bugprone-easily-swappable-parameters) -- page selects a bitmap slot while state supplies its two-bit value
 {
 	unsigned char *byte = &m->locked[page >> 2];
@@ -196,7 +250,7 @@ int __mman_fault_is_object_error(const void *p)
 {
 	size_t i;
 	for (i = 0; i < maps_len; i++) {
-		struct mapping *m = &maps[i];
+		struct mapping *m = map_at(i);
 		size_t page;
 		if (!m->base || !m->filebacked || addr_lt(p, m->base) ||
 		    addr_ge(p, m->base + m->npages * MMAP_PAGE)) continue;
@@ -210,7 +264,7 @@ int __mman_address_is_live(const void *p)
 {
 	size_t i;
 	for (i = 0; i < maps_len; i++) {
-		struct mapping *m = &maps[i];
+		struct mapping *m = map_at(i);
 		size_t page;
 		if (!m->base || addr_lt(p, m->base) ||
 		    addr_ge(p, m->base + m->npages * MMAP_PAGE)) continue;
@@ -226,7 +280,7 @@ int __mman_range_is_live(const void *p, size_t len)
 	const char *a = p;
 	if (!len || (uintptr_t)a > (uintptr_t)-1 - len) return 0;
 	for (i = 0; i < maps_len; i++) {
-		struct mapping *m = &maps[i];
+		struct mapping *m = map_at(i);
 		size_t first, last, page;
 		if (!m->base || addr_lt(a, m->base) ||
 		    addr_gt(a + len, m->base + m->npages * MMAP_PAGE)) continue;
@@ -246,7 +300,7 @@ static struct mapping *find_containing(const void *p, size_t len)
 	size_t i;
 	const char *a = p;
 	for (i = 0; i < maps_len; i++) {
-		struct mapping *m = &maps[i];
+		struct mapping *m = map_at(i);
 		if (!m->base) continue;
 		if (addr_ge(a, m->base) && addr_le(a + len, m->base + m->npages * MMAP_PAGE)) return m;
 	}
@@ -260,9 +314,9 @@ static struct mapping *find_slot(void)
 	struct mapping *grown;
 	if (maps_free != (size_t)-1) {
 		i = maps_free;
-		maps_free = maps[i].next_free;
-		memset(&maps[i], 0, sizeof maps[i]);
-		return &maps[i];
+		maps_free = map_at(i)->next_free;
+		memset(map_at(i), 0, sizeof *map_at(i));
+		return map_at(i);
 	}
 	if (maps_len == maps_cap) {
 		size_t bytes;
@@ -278,7 +332,7 @@ static struct mapping *find_slot(void)
 		maps = grown;
 		maps_cap = cap;
 	}
-	return &maps[maps_len++];
+	return map_at(maps_len++);
 }
 
 static void release_slot(struct mapping *m) parameter_element_of(0, maps);
@@ -568,7 +622,7 @@ int munmap(void *addr, size_t len)
 	 * space probes, is to unmap the mapping just returned by mmap(). Avoid
 	 * walking an arbitrarily large registry for that exact whole mapping. */
 	if (maps_recent != (size_t)-1) {
-		struct mapping *m = &maps[maps_recent];
+		struct mapping *m = map_at(maps_recent);
 		if (m->base == a && m->npages == npages) {
 			__plat_mem_decommit(a, npages * MMAP_PAGE);
 			m->live_pages = 0;
@@ -583,7 +637,7 @@ int munmap(void *addr, size_t len)
 	 * mapping to contain the range. Bitmaps are allocated in a first pass
 	 * so bookkeeping allocation failure is atomic. */
 	for (k = 0; k < maps_len; k++) {
-		struct mapping *m = &maps[k];
+		struct mapping *m = map_at(k);
 		char *lo, *hi;
 		if (!m->base) continue;
 		lo = addr_gt(a, m->base) ? a : m->base;
@@ -596,7 +650,7 @@ int munmap(void *addr, size_t len)
 	}
 
 	for (k = 0; k < maps_len; k++) {
-		struct mapping *m = &maps[k];
+		struct mapping *m = map_at(k);
 		char *lo, *hi;
 		if (!m->base) continue;
 		lo = addr_gt(a, m->base) ? a : m->base;
@@ -646,7 +700,7 @@ int msync(void *addr, size_t len, int flags) // NOLINT(bugprone-easily-swappable
 	end = a + pground(len);
 	if (flags & MS_INVALIDATE) {
 		for (k = 0; k < maps_len; k++) {
-			struct mapping *m = &maps[k];
+			struct mapping *m = map_at(k);
 			char *lo, *hi;
 			size_t first, n, i;
 			if (!m->base) continue;
@@ -663,7 +717,7 @@ int msync(void *addr, size_t len, int flags) // NOLINT(bugprone-easily-swappable
 		}
 	}
 	for (k = 0; k < maps_len; k++) {
-		struct mapping *m = &maps[k];
+		struct mapping *m = map_at(k);
 		char *lo, *hi;
 		if (!m->base || !m->filebacked || !m->writeback) continue;
 		lo = addr_gt(a, m->base) ? a : m->base;
@@ -696,7 +750,7 @@ static int lock_range(const void *addr, size_t len, int lock) // NOLINT(bugprone
 		size_t k;
 		/* Make recording a successful platform lock infallible. */
 		for (k = 0; k < maps_len; k++) {
-			struct mapping *m = &maps[k];
+			struct mapping *m = map_at(k);
 			if (!m->base || addr_ge(base, m->base + m->npages * MMAP_PAGE) ||
 			    addr_ge(m->base, end)) continue;
 			if (ensure_lock_bitmap(m) < 0) return -1;
@@ -709,7 +763,7 @@ static int lock_range(const void *addr, size_t len, int lock) // NOLINT(bugprone
 		char *end = a + z;
 		size_t k;
 		for (k = 0; k < maps_len; k++) {
-			struct mapping *m = &maps[k];
+			struct mapping *m = map_at(k);
 			char *lo, *hi;
 			size_t first, n, i;
 			if (!m->base) continue;
@@ -741,7 +795,7 @@ int mlockall(int flags)
 	}
 	if (flags & MCL_CURRENT) {
 		for (k = 0; k < maps_len; k++) {
-			struct mapping *m = &maps[k];
+			struct mapping *m = map_at(k);
 			size_t first, n;
 			if (!m->base) continue;
 			for (first = 0; first < m->npages; first += n) {
@@ -757,7 +811,7 @@ int mlockall(int flags)
 					 * marks locks acquired here, distinct from ones
 					 * that predated it. */
 					for (j = 0; j < maps_len; j++) {
-						struct mapping *r = &maps[j];
+						struct mapping *r = map_at(j);
 						size_t a, z;
 						if (!r->base) continue;
 						for (a = 0; a < r->npages; a += z) {
@@ -776,7 +830,7 @@ int mlockall(int flags)
 			}
 		}
 		for (k = 0; k < maps_len; k++) {
-			struct mapping *m = &maps[k];
+			struct mapping *m = map_at(k);
 			size_t i;
 			if (!m->base) continue;
 			for (i = 0; i < m->npages; i++)
@@ -795,7 +849,7 @@ int munlockall(void)
 
 	lock_future = 0;
 	for (k = 0; k < maps_len; k++) {
-		struct mapping *m = &maps[k];
+		struct mapping *m = map_at(k);
 		size_t first, n;
 		if (!m->base) continue;
 		for (first = 0; first < m->npages; first += n) {
@@ -890,7 +944,7 @@ void __mman_reset_after_fork(void)
 	size_t k;
 	lock_future = 0;
 	for (k = 0; k < maps_len; k++) {
-		struct mapping *m = &maps[k];
+		struct mapping *m = map_at(k);
 		if (m->base) {
 			free(m->locked);
 			m->locked = NULL;

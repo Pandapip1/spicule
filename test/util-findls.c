@@ -286,6 +286,56 @@ static void test_expr_invalid_is_exit_2(void)
 	CHECK(run(expr_path, a) == 2);
 }
 
+/* Regression for a real stack-overflow bug: parse_primary()'s '(' case
+ * (src/util/expr.c) recursed back into parse_or() -- and from there
+ * straight down through parse_and()/parse_cmp()/parse_add()/parse_mul()/
+ * parse_match()/parse_primary() again -- once per '(' operand, with no
+ * depth cap of its own, the same recursion-without-a-depth-cap bug class
+ * already fixed in src/util/m4.c's eval() (M4_EVAL_MAX_DEPTH) and
+ * src/util/awk_parse.c's parser. Since expr(1p) walks argv directly
+ * (this file's own header, and expr.c's), a caller need not go through
+ * any shell expression-length limit at all -- passing enough separate
+ * "(" operands in argv is enough on its own. This builds an argv with
+ * more '(' operands than EXPR_MAX_DEPTH (src/util/expr.c) and checks
+ * only that expr now fails the expression cleanly (exit 2, "the
+ * expression is invalid") instead of dying to a signal (run() folds a
+ * signal death into 128+signum, e.g. 139 for SIGSEGV, which is
+ * unmistakably not the plain 2 a clean depth-cap error exits with). */
+static void test_expr_deep_nesting_does_not_crash(void)
+{
+	enum { N = 5000 };
+	char **argv = malloc((size_t)(2 * N + 3) * sizeof *argv);
+	int i, n = 0;
+
+	if (!argv) { fails++; printf("FAIL: out of memory building deep-nesting argv\n"); return; }
+	argv[n++] = (char *)"expr";
+	for (i = 0; i < N; i++) argv[n++] = (char *)"(";
+	argv[n++] = (char *)"1";
+	for (i = 0; i < N; i++) argv[n++] = (char *)")";
+	argv[n] = 0;
+
+	CHECK(run(expr_path, argv) == 2);
+	free(argv);
+}
+
+/* Regression for a real silent-wrong-answer bug: is_num_candidate()
+ * (src/util/expr.c) accepts any all-digit string as a numeric operand
+ * with no length limit, but do_arith() fed that string straight to
+ * strtol() without checking errno -- strtol() does not fail on a value
+ * too large for `long`, it silently clamps to LONG_MAX and sets
+ * errno=ERANGE. Before this was fixed, "expr <30 nines> - 1" silently
+ * printed LONG_MAX-1 (a plausible-looking but wrong answer) instead of
+ * reporting the literal could not actually be represented; now it's
+ * treated as the same "overflow" error the operator-level checks
+ * already report for a real `long` overflow. */
+static void test_expr_arith_overflow_on_huge_literal(void)
+{
+	char *a[] = { (char *)"expr", (char *)"999999999999999999999999999999",
+		(char *)"-", (char *)"1", 0 };
+	CHECK(run(expr_path, a) == 2);
+	CHECK(err_contains("overflow"));
+}
+
 /* ==== find(1p) ============================================================= */
 
 static void mkscratch_tree(void)
@@ -592,6 +642,8 @@ int main(int argc, char **argv)
 	test_expr_match_capture();
 	test_expr_or_and();
 	test_expr_invalid_is_exit_2();
+	test_expr_deep_nesting_does_not_crash();
+	test_expr_arith_overflow_on_huge_literal();
 
 	test_find_name();
 	test_find_type_d();

@@ -1074,8 +1074,8 @@ static int push_reject(struct hunk ***rejects, size_t *n, size_t *cap, struct hu
 	if (*n >= *cap) {
 		size_t newcap;
 		struct hunk **g;
-		if (!__util_array_capacity(*cap, *n, 1, 8, sizeof **rejects, &newcap)) return 0;
-		g = __util_reallocarray(*rejects, newcap, sizeof **rejects);
+		if (!__util_array_capacity(*cap, *n, 1, 8, sizeof **rejects, &newcap)) return 0; // NOLINT(bugprone-sizeof-expression) -- rejects is hunk***, **rejects is hunk*, the array holds pointers
+		g = __util_reallocarray(*rejects, newcap, sizeof **rejects); // NOLINT(bugprone-sizeof-expression) -- rejects is hunk***, **rejects is hunk*, the array holds pointers
 		if (!g) return 0;
 		*rejects = g; *cap = newcap;
 	}

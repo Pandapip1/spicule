@@ -30,7 +30,7 @@ static const WCHAR afd_transport_udp[] = AFD_TRANSPORT_UDP;
 /* Build-time assertion: AFD_TRANSPORT_BYTES is computed from the TCP
  * name alone, so a differently-sized UDP name would silently mis-size
  * requests without this. */
-typedef char __afd_transport_lengths_match[
+typedef char __afd_transport_lengths_match[ // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- implementation-reserved namespace, same as every other libc-internal symbol
 	(sizeof(afd_transport_udp) == sizeof(afd_transport_tcp)) ? 1 : -1];
 
 static const WCHAR *afd_transport_for(int socktype)

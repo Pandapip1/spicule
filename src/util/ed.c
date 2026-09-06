@@ -470,6 +470,20 @@ static char *read_line_stdin(FILE *f)
 	ssize_t got;
 
 	for (;;) {
+		/* getline()/getdelim() (src/stdio/rw.c) returns -1 on a clean,
+		 * true EOF (no bytes read) without touching errno at all --
+		 * only a *real* failure (ENOMEM, or a genuinely interrupted
+		 * read) sets it, per POSIX's own getline() spec. Resetting
+		 * errno to 0 immediately before the call is what makes the
+		 * "errno == EINTR" check below trustworthy: without it, a
+		 * clean EOF reads whatever errno some earlier, unrelated call
+		 * left behind, and if that happened to be EINTR this loop
+		 * would retry a read that will only ever hit the same EOF
+		 * again -- CERT ERR30-C's own "set errno to 0, call the
+		 * function, only then check errno" pattern, needed here
+		 * because -1 alone does not tell EOF and a real failure apart
+		 * the way it does for most other calls this checker knows. */
+		errno = 0;
 		got = getline(&buf, &cap, f);
 		if (got >= 0) break;
 		if (errno == EINTR) {

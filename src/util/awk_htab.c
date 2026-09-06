@@ -45,7 +45,7 @@ static int rehash(struct awk_htab *t)
 
 	if (t->nbuckets > (size_t)-1 / 2) return 0;
 	newn = t->nbuckets ? t->nbuckets * 2 : 16;
-	nb = calloc(newn, sizeof *nb);
+	nb = calloc(newn, sizeof *nb); // NOLINT(bugprone-sizeof-expression) -- nb is awk_hnode**, *nb is awk_hnode*, the array holds pointers
 
 	if (!nb) return 0;
 	for (i = 0; i < t->nbuckets; i++) {

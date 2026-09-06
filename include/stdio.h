@@ -63,9 +63,34 @@ typedef union _G_fpos64_t {
 	double __align;
 } fpos_t;
 
-extern FILE *const stdin;
-extern FILE *const stdout;
-extern FILE *const stderr;
+/* _Nonnull here is not just decoration: src/stdio/file.c defines all
+ * three as `&stdin_f`/`&stdout_f`/`&stderr_f` -- the address of a real
+ * static object, hence genuinely never null -- but that fact is only
+ * visible in file.c's own translation unit; every other TU sees just
+ * this extern declaration with no initializer. Without _Nonnull here,
+ * Clang's analyzer (having no way to see across TUs) treats each of
+ * these as an unconstrained global and explores a spurious "what if
+ * this is actually null" path, which is what previously produced
+ * tools/clang/ErrnoDisciplineChecker.cpp false positives in every
+ * `argv[i]=="-" ? stdin : fopen(argv[i], ...)` loop (src/util/cut.c,
+ * awk.c, and others): reaching the `!f` failure branch through stdin's
+ * spurious null case, with no real fopen() call anywhere on that path
+ * to blame, reads as "errno read with no proven prior call".
+ *
+ * Restricted to __clang_analyzer__ for the same reason
+ * include/ownership.h's own __ownership_attr is: no normal compile --
+ * tcc (which does not know this Clang-only qualifier at all), plain
+ * clang, or gcc -- reads or benefits from it, so it stays entirely out
+ * of their view rather than risk any of them handling a type qualifier
+ * they were never meant to see. */
+#if defined(__clang_analyzer__)
+#define __stdio_stream_nonnull _Nonnull
+#else
+#define __stdio_stream_nonnull
+#endif
+extern FILE *__stdio_stream_nonnull const stdin;
+extern FILE *__stdio_stream_nonnull const stdout;
+extern FILE *__stdio_stream_nonnull const stderr;
 
 #define stdin  (stdin)
 #define stdout (stdout)
@@ -114,6 +139,10 @@ int fclose(FILE * consume(file_stream_open)) __attribute__((nonnull(1)));
 
 fallible
 int remove(const char *);
+/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline:
+ * src/stdio/misc.c's rename()/renameat() and both platforms'
+ * __plat_rename() set errno on every failure return. */
+grants_thread_token(errno_grounds)
 fallible
 async_signal_safe
 io_operation
@@ -195,6 +224,11 @@ FILE *tmpfile(void);
  || defined(_BSD_SOURCE)
 /* buf is genuinely optional: a null buf gets size bytes allocated. */
 FILE *fmemopen(void *__restrict, size_t, const char *__restrict) __attribute__((nonnull(3)));
+/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline:
+ * src/stdio/mem.c's open_memstream() sets errno on every failure
+ * return, either via malloc() (already errno-capable) or its own
+ * explicit `errno = EINVAL` for a null bufp/sizep. */
+grants_thread_token(errno_grounds)
 FILE *open_memstream(char **, size_t *);
 withtok(file_stream_open)
 FILE *fdopen(int, const char *);
@@ -219,6 +253,7 @@ int putchar_unlocked(int);
  * covers their nullness, not an omission. */
 ssize_t getdelim(char **__restrict, size_t *__restrict, int, FILE *__restrict) __attribute__((nonnull(4)));
 ssize_t getline(char **__restrict, size_t *__restrict, FILE *__restrict) __attribute__((nonnull(3)));
+grants_thread_token(errno_grounds)
 fallible
 int renameat(int, const char *, int, const char *);
 char *ctermid(char *);

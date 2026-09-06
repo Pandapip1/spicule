@@ -86,6 +86,7 @@
 #include <errno.h>
 #include <regex.h>
 #include "util.h"
+#include "ownership_stubs.h" /* __ownership_string_terminated(): struct expr_ctx's `v` (char **, sliced from argv+1) is byte-for-byte the same "struct holds an argv-derived char **" shape as src/util/test.c's struct texpr (commit 33438c1b) and src/util/find.c's struct find_ctx before it -- a checker-opaque struct field, so every strcmp()/strlen() against one of its elements looks like a missing null_terminated token even though it is true by construction (argv's own elements_withtok(null_terminated, argc) contract on __util_expr_main's own parameter). Restated at each point such an element or a heap-allocated (dupstr()/numstr()) result crosses into a plain const char *, the same idiom test.c/find.c already use. */
 
 /* parse_primary()'s '(' case is the only self-recursion this parser
  * does: it calls back into parse_or(), which walks straight back down
@@ -146,8 +147,26 @@ static int null_or_zero(const char *v)
 static const char *peek(struct expr_ctx *c) __attribute__((nonnull(1)));
 static const char *peek(struct expr_ctx *c)
 {
-	return c->i < c->n ? c->v[c->i] : NULL;
+	const char *tok;
+	if (c->i >= c->n) return NULL;
+	/* tok is one of c->v's own elements -- an argv element, sliced from
+	 * argv+1 by __util_expr_main() below -- restate the argv-wide
+	 * null-terminated guarantee here, the single place this
+	 * checker-opaque struct field crosses into a plain const char *, so
+	 * every caller of peek() inherits the fact through its return value
+	 * instead of each needing to restate it again. */
+	tok = c->v[c->i];
+	__ownership_string_terminated(tok);
+	return tok;
 }
+/* Left open: ntlibc.ValidPointer/core.NullDereference still flag this
+ * c->v[c->i] access itself as "not proven nonnull" -- no existing
+ * ownership.h annotation establishes plain pointer nonnull-ness for a
+ * struct field's own array (readable_elements/writable_elements
+ * pairing was tried and does not help; __ownership_string_terminated()
+ * does not establish nonnull-ness either). src/util/test.c's own
+ * ownership-lint fixup (commit 33438c1b) hit and documented the same
+ * unresolved gap for its byte-for-byte identical struct texpr.v. */
 
 /* Allocation failure here does NOT call exit(): __util_expr_main() runs
  * in-process as a shell builtin with no fork (src/sh/builtin.c's
@@ -182,23 +201,53 @@ static const char *peek(struct expr_ctx *c)
  * calling free(), the same shape as this codebase's ordinary
  * `if (p) free(p);` guard for an optional pointer, just against this
  * sentinel instead of NULL, so this value can flow anywhere a genuine
- * dupstr()/numstr() result can. */
+ * dupstr()/numstr() result can.
+ *
+ * Left open: this `if (x != oom_sentinel) free(x)` guard is exactly
+ * why ntlibc.AllocationLifetime/ntlibc.Ownership still flag several
+ * sites below ("dynamic allocation is not freed before function
+ * exit", "consume function exits without releasing its argument",
+ * "deallocator argument is not proven owned") along the symbolic path
+ * where a withtok(heap_allocated) value equals oom_sentinel: the
+ * checker's token model has no way to know oom_sentinel is a static
+ * buffer masquerading as a heap_allocated value precisely so it need
+ * not be freed on that path -- there is no existing ownership.h
+ * vocabulary for "this value vacuously satisfies a linear token
+ * without a real release call" the way zero_vacuous does for a
+ * zero-length span. Confirmed via a real `tools/lint.sh ownership`
+ * run rather than assumed; not fixable without either a new
+ * annotation (out of scope for a per-file annotation pass) or
+ * reworking this file's own OOM-signaling design (a real API change,
+ * not a static-analysis fix). */
 static char oom_sentinel[1];
 
 withtok(heap_allocated)
-static char *dupstr(struct expr_ctx *c, const char *s) __attribute__((nonnull(1, 2)));
+static char *dupstr(struct expr_ctx *c, const char *s) __attribute__((nonnull(1, 2), returns_nonnull));
 withtok(heap_allocated)
 static char *dupstr(struct expr_ctx *c, const char *s)
 {
-	size_t n = strlen(s) + 1;
-	char *p = malloc(n);
+	size_t n;
+	char *p;
+	/* s is always one of: a C string literal (every dupstr(c, "...")
+	 * call site below), numstr()'s own snprintf()-terminated stack
+	 * buffer, or one of c->v's argv elements passed through by
+	 * parse_primary() -- every one of those is genuinely
+	 * null-terminated, but that fact does not survive crossing this
+	 * function's plain `const char *` parameter, the same reason
+	 * peek()'s own struct-field read needs the axiom restated. Returns
+	 * either a real malloc()'d copy or oom_sentinel (a valid static
+	 * one-byte buffer), so the return is never NULL either -- see
+	 * oom_sentinel's own comment above for why it must not be. */
+	__ownership_string_terminated(s);
+	n = strlen(s) + 1;
+	p = malloc(n);
 	if (!p) { xerr(c, "out of memory"); return oom_sentinel; }
 	memcpy(p, s, n);
 	return p;
 }
 
 withtok(heap_allocated)
-static char *numstr(struct expr_ctx *c, long n) __attribute__((nonnull(1)));
+static char *numstr(struct expr_ctx *c, long n) __attribute__((nonnull(1), returns_nonnull));
 withtok(heap_allocated)
 static char *numstr(struct expr_ctx *c, long n)
 {
@@ -208,33 +257,42 @@ static char *numstr(struct expr_ctx *c, long n)
 }
 
 withtok(heap_allocated)
-static char *parse_or(struct expr_ctx *c) __attribute__((nonnull(1)));
+static char *parse_or(struct expr_ctx *c) __attribute__((nonnull(1), returns_nonnull));
 withtok(heap_allocated)
-static char *parse_and(struct expr_ctx *c) __attribute__((nonnull(1)));
+static char *parse_and(struct expr_ctx *c) __attribute__((nonnull(1), returns_nonnull));
 withtok(heap_allocated)
-static char *parse_cmp(struct expr_ctx *c) __attribute__((nonnull(1)));
+static char *parse_cmp(struct expr_ctx *c) __attribute__((nonnull(1), returns_nonnull));
 withtok(heap_allocated)
-static char *parse_add(struct expr_ctx *c) __attribute__((nonnull(1)));
+static char *parse_add(struct expr_ctx *c) __attribute__((nonnull(1), returns_nonnull));
 withtok(heap_allocated)
-static char *parse_mul(struct expr_ctx *c) __attribute__((nonnull(1)));
+static char *parse_mul(struct expr_ctx *c) __attribute__((nonnull(1), returns_nonnull));
 withtok(heap_allocated)
-static char *parse_match(struct expr_ctx *c) __attribute__((nonnull(1)));
+static char *parse_match(struct expr_ctx *c) __attribute__((nonnull(1), returns_nonnull));
 withtok(heap_allocated)
-static char *parse_primary(struct expr_ctx *c) __attribute__((nonnull(1)));
+static char *parse_primary(struct expr_ctx *c) __attribute__((nonnull(1), returns_nonnull));
 
+/* s is always one of peek()'s already-established argv elements
+ * (every call site below is is_cmp_op(peek(c)) or is_cmp_op(tok) where
+ * tok traces back to peek(c)) -- restate the axiom here too since
+ * is_cmp_op is its own function boundary and peek()'s own established
+ * fact does not automatically cross it. */
 static int is_cmp_op(const char *s) __attribute__((nonnull(1), __pure__));
 static int is_cmp_op(const char *s)
 {
+	__ownership_string_terminated(s);
 	return !strcmp(s, "=") || !strcmp(s, ">") || !strcmp(s, ">=") ||
 	       !strcmp(s, "<") || !strcmp(s, "<=") || !strcmp(s, "!=");
 }
 
-/* p is required: every path dereferences it (strcmp against p is
- * unconditional).  c is left unmarked -- diagnostics go through xerr(),
- * which states its own contract. */
+/* c is required: `if (c->err)` dereferences it unconditionally on
+ * entry. op is required: every arm reached once c->err is false
+ * dereferences it via strcmp(). a and b are left unmarked -- they are
+ * consume(heap_allocated) values this function always frees exactly
+ * once (possibly via the oom_sentinel comparison instead of a real
+ * free()), whether or not they are ever read. */
 withtok(heap_allocated)
 static char *do_arith(struct expr_ctx *c, char *a consume(heap_allocated), const char *op,
-	char *b consume(heap_allocated)) __attribute__((nonnull(3)));
+	char *b consume(heap_allocated)) __attribute__((nonnull(1, 3), returns_nonnull));
 withtok(heap_allocated)
 static char *do_arith(struct expr_ctx *c, char *a consume(heap_allocated), const char *op,
 	char *b consume(heap_allocated)) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
@@ -242,6 +300,10 @@ static char *do_arith(struct expr_ctx *c, char *a consume(heap_allocated), const
 	long x, y, r;
 	char *result;
 	if (c->err) { result = dupstr(c, ""); goto done; }
+	/* op is always parse_mul()'s/parse_add()'s own peek()-derived
+	 * token -- restate the axiom here since do_arith is its own
+	 * function boundary. */
+	__ownership_string_terminated(op);
 	if (!is_num_candidate(a) || !is_num_candidate(b)) {
 		xerr(c, "non-numeric argument");
 		result = dupstr(c, "");
@@ -310,9 +372,14 @@ done:
 	return result;
 }
 
+/* c is required: `if (c->err)` dereferences it unconditionally on
+ * entry, same as do_arith(). op is required for the same reason.  a
+ * and b are left unmarked -- see do_arith()'s own comment; the
+ * strcmp(a, b) fallback below is the one place this function reads
+ * them, and only when neither is a numeric candidate. */
 withtok(heap_allocated)
 static char *do_cmp(struct expr_ctx *c, char *a consume(heap_allocated), const char *op,
-	char *b consume(heap_allocated)) __attribute__((nonnull(3)));
+	char *b consume(heap_allocated)) __attribute__((nonnull(1, 3), returns_nonnull));
 withtok(heap_allocated)
 static char *do_cmp(struct expr_ctx *c, char *a consume(heap_allocated), const char *op,
 	char *b consume(heap_allocated)) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
@@ -321,6 +388,16 @@ static char *do_cmp(struct expr_ctx *c, char *a consume(heap_allocated), const c
 	const char *value;
 	char *result;
 	if (c->err) { result = dupstr(c, ""); goto done; }
+	/* op is always parse_cmp()'s own peek()-derived token, same as
+	 * do_arith()'s op. a and b are always a prior parse_add()'s
+	 * withtok(heap_allocated) result -- genuinely null-terminated by
+	 * construction (dupstr()'s memcpy() copies the source's own
+	 * trailing NUL; numstr()'s snprintf() always terminates its
+	 * buffer), but that fact does not survive the consume(heap_allocated)
+	 * parameter crossing this function boundary either. */
+	__ownership_string_terminated(op);
+	__ownership_string_terminated(a);
+	__ownership_string_terminated(b);
 	if (is_num_candidate(a) && is_num_candidate(b)) {
 		long x = strtol(a, NULL, 10), y = strtol(b, NULL, 10);
 		if (x < y) r = -1;
@@ -345,9 +422,13 @@ done:
 	return result;
 }
 
+/* c is required: `if (c->err)` dereferences it unconditionally on
+ * entry, same as do_arith()/do_cmp(). a and pat are required: rc =
+ * regcomp(&re, pat, 0) and rc = regexec(&re, a, ...) each dereference
+ * theirs unconditionally once c->err is false. */
 withtok(heap_allocated)
 static char *do_match(struct expr_ctx *c, char *a consume(heap_allocated),
-	char *pat consume(heap_allocated)) __attribute__((nonnull(2, 3)));
+	char *pat consume(heap_allocated)) __attribute__((nonnull(1, 2, 3), returns_nonnull));
 withtok(heap_allocated)
 static char *do_match(struct expr_ctx *c, char *a consume(heap_allocated),
 	char *pat consume(heap_allocated))
@@ -374,6 +455,19 @@ static char *do_match(struct expr_ctx *c, char *a consume(heap_allocated),
 			else result = malloc(bytes);
 			if (!result) { xerr(c, "out of memory"); result = dupstr(c, ""); }
 			else {
+				/* Safe by regexec()'s own postcondition: pm[1] is a
+				 * sub-match of `a` itself, so
+				 * 0 <= rm_so <= rm_eo <= strlen(a). Left as an
+				 * ntlibc.MemoryContract finding rather than forcing an
+				 * annotation -- this proof only became reachable once
+				 * do_match()'s own nonnull(1,2,3)/returns_nonnull
+				 * removed the spurious paths that previously kept the
+				 * analyzer from exploring this deep, and closing it
+				 * for real would mean giving src/regex/regex.c's
+				 * regexec() a readable_span/extent_at_least contract
+				 * tying pmatch[]'s offsets back to its subject
+				 * string's own length -- shared regex.h
+				 * infrastructure well outside this file's scope. */
 				memcpy(result, a + pm[1].rm_so, (size_t)len);
 				result[len] = 0;
 			}
@@ -421,8 +515,16 @@ withtok(heap_allocated)
 static char *parse_match(struct expr_ctx *c)
 {
 	char *v = parse_primary(c);
-	while (peek(c) && !strcmp(peek(c), ":")) {
+	for (;;) {
+		/* tok is peek(c)'s own already-established argv element --
+		 * restated here too, the same reason parse_add()'s
+		 * identically-restructured loop needs it restated rather
+		 * than relying on peek(c) being inlined twice. */
+		const char *tok = peek(c);
 		char *rhs;
+		if (!tok) break;
+		__ownership_string_terminated(tok);
+		if (strcmp(tok, ":")) break;
 		c->i++;
 		rhs = parse_primary(c);
 		v = do_match(c, v, rhs);
@@ -450,9 +552,17 @@ withtok(heap_allocated)
 static char *parse_add(struct expr_ctx *c)
 {
 	char *v = parse_mul(c);
-	const char *tok;
-	while ((tok = peek(c)) && (!strcmp(tok, "+") || !strcmp(tok, "-"))) {
+	for (;;) {
+		/* tok is peek(c)'s own already-established argv element --
+		 * restated here too since, unlike parse_mul()'s identically
+		 * shaped loop, the analyzer's per-function exploration budget
+		 * does not always carry peek()'s internal axiom this far by
+		 * inlining alone. */
+		const char *tok = peek(c);
 		char *rhs;
+		if (!tok) break;
+		__ownership_string_terminated(tok);
+		if (strcmp(tok, "+") && strcmp(tok, "-")) break;
 		c->i++;
 		rhs = parse_mul(c);
 		v = do_arith(c, v, tok, rhs);

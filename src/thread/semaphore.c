@@ -285,7 +285,17 @@ retry_record:
 		create_result = __plat_named_semaphore_create(object, (long)value, SEM_VALUE_MAX, &h);
 		if (create_result < 0 ||
 		    write(fd, object, (size_t)n + 1) != (ssize_t)n + 1) {
-			saved = create_result == 0 ? EIO : errno;
+			/* __plat_named_semaphore_create()'s own contract (src/internal/
+			 * plat_thread.h) is 0 on success, negative on failure -- never
+			 * positive -- so testing the failure condition directly here
+			 * (rather than its logical complement, "== 0", inverted) is
+			 * the more precise match for what this is actually asking,
+			 * not merely a style preference: it is what lets
+			 * tools/clang/ErrnoDisciplineChecker.cpp prove this errno read
+			 * reflects create_result's own failure without first having
+			 * to rule out a hypothetical positive return this function
+			 * never actually produces. */
+			saved = create_result < 0 ? errno : EIO;
 			(void)close(fd); (void)unlink(path); goto fail_locked;
 		}
 	} else {

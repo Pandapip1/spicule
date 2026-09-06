@@ -181,8 +181,14 @@ struct termios {
 #define B19200    19200
 #define B38400    38400
 
+/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline:
+ * src/termios/termios.c's tcgetattr()/tcsetattr() set errno on every
+ * failure return, via get_console() (__fd_get()'s own EBADF, or an
+ * explicit ENOTTY) or tcsetattr()'s own explicit EINVAL. */
+grants_thread_token(errno_grounds)
 async_signal_safe
 int tcgetattr(int, struct termios *) __attribute__((nonnull(2)));
+grants_thread_token(errno_grounds)
 async_signal_safe
 int tcsetattr(int, int, const struct termios *) __attribute__((nonnull(3)));
 speed_t cfgetispeed(const struct termios *) __attribute__((nonnull(1)));

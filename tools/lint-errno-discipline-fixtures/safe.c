@@ -160,3 +160,16 @@ int immediate_return_after_second_capable_call(const char *path, long st) {
 	}
 	return 0;
 }
+
+/* src/util/cksum.c cksum_one()'s and src/util/tsort.c
+ * __util_tsort_main()'s shape (among at least eight other call sites in
+ * this tree): `errno ? errno : <default>` does not claim the value
+ * reflects any specific call's failure -- it asks "is there a nonzero
+ * value here worth trusting, and if not, use a sane default" -- a
+ * strictly more defensive stance than trusting errno outright, so it
+ * needs no proof of a preceding capable call regardless of what, if
+ * anything, actually ran beforehand. */
+int self_guarded_by_errno_ternary(void) {
+	int saved = errno ? errno : 12;
+	return saved;
+}

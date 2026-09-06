@@ -64,6 +64,7 @@
 
 #include <stddef.h>
 #include <sys/types.h>
+#include <ownership.h>
 #include "plat_handle.h"
 #include "thread_annotations.h"
 
@@ -201,6 +202,12 @@ int __plat_semaphore_getvalue(__plat_handle_t h, int *value)
  * backend that actually uses it, the same precedent as
  * __plat_thread_stack_extent() below), and this subsystem's real call
  * sites (src/thread/semaphore.c's own `&h`) never pass NULL. */
+/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline: every
+ * failure return sets errno, either through __set_errno_status() (the
+ * NT backend) or through a real errno-setting call it fails through to
+ * (the Linux backend's map_named_sem()) -- see both backends' own
+ * implementations. */
+grants_thread_token(errno_grounds)
 int __plat_named_semaphore_create(const char *name, long initial,
                                   long maximum, __plat_handle_t *out)
     __attribute__((nonnull(4)));

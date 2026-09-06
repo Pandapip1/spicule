@@ -115,12 +115,23 @@ static inline int __util_size_mul(size_t a, size_t b, size_t *out)
  * gap that made MemoryContractChecker's new field-span enforcement
  * (checkEndFunction's TouchedRecordSpan flush) unusably noisy against
  * this tree until this was added. */
+/* Both wrappers set errno = ENOMEM on the overflow path below, not just
+ * on malloc()/realloc()'s own failure: real reallocarray(3) (OpenBSD's
+ * original, and glibc's own since 2.26) is specified to fail exactly
+ * this way -- "if an overflow ... errno is set to ENOMEM, and a NULL
+ * pointer is returned" -- and every one of this tree's own callers
+ * (src/util/grep.c pl_add(), and the same shape across ar.c, sed.c,
+ * m4.c, mailx.c, pax.c, csplit.c, diff.c, ed.c, tsort.c, admin.c,
+ * man.c, patch.c, sort.c, find.c, join.c, xargs.c, get.c, ls.c) already
+ * trusts errno unconditionally after either of these returns NULL,
+ * matching that same real-world contract, not a narrower "only on the
+ * underlying allocator's own failure" one. */
 withtok(heap_allocated)
 withtok(writable_span(count * element_size))
 static inline void *__util_mallocarray(size_t count, size_t element_size)
 {
 	size_t bytes;
-	if (!__util_size_mul(count, element_size, &bytes)) return NULL;
+	if (!__util_size_mul(count, element_size, &bytes)) { errno = ENOMEM; return NULL; }
 	return malloc(bytes);
 }
 
@@ -131,18 +142,27 @@ static inline void *__util_reallocarray(
 	size_t element_size)
 {
 	size_t bytes;
-	if (!__util_size_mul(count, element_size, &bytes)) return NULL;
+	if (!__util_size_mul(count, element_size, &bytes)) { errno = ENOMEM; return NULL; }
 	return realloc(ptr, bytes);
 }
 
+/* Every real call site (src/util/{admin,ar,get,grep,tsort,...}.c and
+ * more) uses this exactly the way __util_mallocarray()/
+ * __util_reallocarray() above are used -- "grow this array, and if you
+ * can't, fail the whole operation the same way an allocator failure
+ * would" -- so a `0` return here sets errno = ENOMEM for the identical
+ * reason those two do: overflowing the size arithmetic means this much
+ * cannot be represented/allocated, which is what ENOMEM already means
+ * to every caller that (like every one of the callers in this tree)
+ * already trusts errno unconditionally afterward. */
 static inline int __util_array_capacity(size_t current, size_t used, // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 	size_t additional, size_t initial, size_t element_size, size_t *out)
 {
 	size_t minimum, maximum, capacity;
 	if (!initial || !element_size ||
-	    !__util_size_add(used, additional, &minimum)) return 0;
+	    !__util_size_add(used, additional, &minimum)) { errno = ENOMEM; return 0; }
 	maximum = (size_t)-1 / element_size;
-	if (minimum > maximum || current > maximum) return 0;
+	if (minimum > maximum || current > maximum) { errno = ENOMEM; return 0; }
 	capacity = current < initial ? initial : current;
 	while (capacity < minimum) {
 		if (capacity > maximum / 2) { capacity = minimum; break; }

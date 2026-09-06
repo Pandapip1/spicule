@@ -80,6 +80,42 @@ using ntlibc::algebra::TokenTransition;
 constexpr unsigned SlotDiagnosed = 0;
 constexpr unsigned SlotLastCapable = 1;
 
+/* A third CallSlot key, distinct from the two per-path facts described
+ * above: the setter statement a branch condition this checker can
+ * prove is a genuine failure check -- `!<capable-call>`, or one of the
+ * handful of `<capable-call> <cmp> <constant>` shapes
+ * classifyComparison() below recognises as this codebase's own
+ * established conventions -- *would* diagnose if the branch actually
+ * taken turns out to be the failure one. Unlike SlotDiagnosed/
+ * SlotLastCapable, this one is never read back by the mismatch check
+ * itself -- it is purely a hand-off from checkBranchCondition to
+ * evalAssume, alive for exactly the one branch decision in between,
+ * cleared by whichever of the two consumes it first (or by the next
+ * checkBranchCondition, if evalAssume is for some reason never called
+ * for this exact decision -- e.g. a `!f` or `fd < 0` that is evaluated
+ * but never actually used to decide a branch, such as being merely
+ * assigned to a bool).
+ *
+ * Every comparison this checker cannot place in one of those known
+ * conventions keeps the old, direction-agnostic unconditional
+ * diagnoseIfSetter() treatment instead of going through this slot at
+ * all -- guessing which side of an unfamiliar comparison is "failure"
+ * wrong would silently turn a real violation into a miss, which is
+ * worse than this slot's own narrower false positives it exists to
+ * remove. */
+constexpr unsigned SlotPendingFailOnTrueDiagnosis = 2;
+/* The mirror image of the slot above, reserved for any future
+ * classifyComparison() convention whose failure outcome is the
+ * *false* branch rather than the true one (none currently exist --
+ * every convention classifyComparison() recognises today happens to
+ * be OnTrueOutcome, including after negating `>`/`>=` back to `<`/`<=`
+ * -- but the Diagnosed-commit side in evalAssume is exactly as cheap
+ * to keep symmetric as to special-case away). Kept as a distinct slot
+ * rather than a polarity flag alongside SlotPendingFailOnTrueDiagnosis
+ * so evalAssume can stay a plain "does this slot exist" check in both
+ * directions rather than unpacking a pair. */
+constexpr unsigned SlotPendingFailOnFalseDiagnosis = 3;
+
 static TokenState threadTokenState(ProgramStateRef State,
                                    const IdentifierInfo *Family) {
   const CarrierCapabilityKind *Kind = State->get<ThreadCapabilityMap>(Family);
@@ -180,7 +216,8 @@ static const IdentifierInfo *threadTokenFamilyFromAnnotation(
 
 class ErrnoDisciplineChecker
     : public Checker<check::PostCall, check::PreStmt<BinaryOperator>,
-                     check::PreStmt<UnaryOperator>> {
+                     check::PreStmt<UnaryOperator>, check::BranchCondition,
+                     eval::Assume, check::BeginFunction> {
   mutable std::unique_ptr<BugType> BT;
 
   /* Functions this codebase's own implementation proves capable of
@@ -402,6 +439,45 @@ class ErrnoDisciplineChecker
     }
   }
 
+  /* True when Node (an errno read) is either side of a `errno ? errno :
+   * <default>` conditional -- an idiom this tree uses across at least
+   * ten call sites (src/util/cksum.c, src/util/tsort.c,
+   * src/dirent/scandir.c, src/process/posix_spawn.c, and every
+   * src/ipc/nt/plat_{shm,msg,sem}.c) to fall back to a fixed default
+   * (ENOMEM, EIO, ...) precisely when errno is *not* known to have been
+   * set by whatever failed: unlike every other read this checker
+   * proves, this one is not claiming the value reflects any particular
+   * call's failure at all, it is asking "is there a nonzero value here
+   * worth trusting, and if not, use a sane default instead" -- a
+   * strictly more defensive stance than trusting errno outright, which
+   * is exactly why it needs no proof of a preceding capable call: the
+   * caller has already priced in the possibility that nothing set it. */
+  static bool selfGuardedByErrnoTernary(const UnaryOperator *Node,
+                                        CheckerContext &C) {
+    auto IsErrnoDeref = [](const Expr *E) {
+      const auto *UO = dyn_cast<UnaryOperator>(E->IgnoreParenImpCasts());
+      return UO && isErrnoDeref(UO);
+    };
+    DynTypedNode Current = DynTypedNode::create(*Node);
+    for (;;) {
+      auto Parents = C.getASTContext().getParents(Current);
+      if (Parents.size() != 1)
+        return false;
+      if (const auto *Paren = Parents[0].get<ParenExpr>()) {
+        Current = DynTypedNode::create(*Paren);
+        continue;
+      }
+      if (const auto *Cast = Parents[0].get<ImplicitCastExpr>()) {
+        Current = DynTypedNode::create(*Cast);
+        continue;
+      }
+      const auto *CO = Parents[0].get<ConditionalOperator>();
+      if (!CO)
+        return false;
+      return IsErrnoDeref(CO->getCond()) && IsErrnoDeref(CO->getTrueExpr());
+    }
+  }
+
   /* True when Node (an errno read) is the right-hand operand of a comma
    * expression whose left-hand operand is exactly CapableCall --
    * src/thread/semaphore.c's sem_open(): `saved = NT_SUCCESS(st) ? EIO :
@@ -532,6 +608,27 @@ class ErrnoDisciplineChecker
     return "a direct errno assignment";
   }
 
+  /* True when Setter is a call to one of the four POSIX I/O primitives
+   * whose return value is a byte count, not a status code -- fread/
+   * fwrite (already errno-capable by name) and read/write (ditto).
+   * Every comparison classifyComparison() would otherwise recognise
+   * (`< 0`, `== 0`, `!= 0`, `> 0`, ...) is ambiguous for exactly these
+   * four regardless of operator: 0 means "nothing transferred", which
+   * read()/fread() can reach on a completely clean, non-error EOF
+   * (disambiguated separately, by ferror() or a second read, never by
+   * the count itself), the same way src/util/cksum.c cksum_stream()'s
+   * `while ((n = fread(...)) > 0)` and src/util/get.c
+   * read_whole_file()'s `if (got == 0) break;` both do. Recognising
+   * this by callee identity rather than trying to read the intent out
+   * of the comparison's own shape is what keeps `close(fd) < 0` (a
+   * real status code, where `< 0` unambiguously means failure) fully
+   * intact while still refusing to guess here. */
+  static bool isByteCountCall(const Stmt *Setter) {
+    std::string Name = calleeName(Setter);
+    return Name == "fread" || Name == "fwrite" || Name == "read" ||
+          Name == "write";
+  }
+
   static std::string text(const Stmt *Statement, CheckerContext &C) {
     const SourceManager &SM = C.getSourceManager();
     StringRef Raw =
@@ -616,11 +713,137 @@ public:
     C.addTransition(State->set<CallSlot>(SlotDiagnosed, *Setter));
   }
 
+  /* Which, if either, outcome of a `<capable-call> <cmp> <constant>`
+   * comparison this checker can prove means the call under test
+   * failed. Undetermined keeps the old, direction-agnostic
+   * diagnoseIfSetter() treatment (guessing wrong would silently turn a
+   * real ERR30-C violation into a miss); OnTrueOutcome/OnFalseOutcome
+   * feed checkBranchCondition/evalAssume's branch-sensitive diagnosis;
+   * NeitherOutcome recognises a comparison that -- unlike the other
+   * three -- this checker can positively prove is *not* a failure
+   * check of any kind in either direction, so it should not diagnose
+   * anything on either branch (not even the old unconditional
+   * treatment), rather than merely lacking an opinion. */
+  enum class FailureOutcome { Undetermined, OnTrueOutcome, OnFalseOutcome,
+                             NeitherOutcome };
+
+  /* Shared by checkPreStmt(BinaryOperator) below and by
+   * checkBranchCondition further down: given a `<capable-call> <cmp>
+   * <constant>` comparison (Symbol already established on one side,
+   * ConstVal a compile-time constant on the other -- both callers' own
+   * job to establish before calling this), classify it against this
+   * codebase's own established conventions:
+   *
+   *   - a POSIX `< 0` (or `<= -1`) integer return, or a `!= 0`
+   *     0-means-success return code (src/util/admin.c create_one()'s
+   *     `fclose(rest) != 0`): OnTrueOutcome:
+   *   - a `== -1` or NULL/0 pointer check: also OnTrueOutcome (the
+   *     pointer-vs-integer split only matters for `== 0`/`!= 0`, where
+   *     a null pointer and a 0 return code mean opposite things);
+   *   - a `>`/`>=` bound against 0 or 1 on a non-pointer: NeitherOutcome.
+   *     This is deliberately not "guess the opposite of `<`/`<="`:
+   *     src/util/cksum.c cksum_stream()'s own `while ((n = fread(...))
+   *     > 0)` is exactly this shape and n > 0 means "some bytes were
+   *     read", not "the call succeeded" in any sense that licenses
+   *     trusting errno on the loop's *other* exit either -- fread's 0
+   *     return is separately EOF-or-error, disambiguated by ferror(),
+   *     never by this comparison. Suppressing diagnosis entirely here
+   *     (rather than leaving it Undetermined, which would fall back to
+   *     the old unconditional both-branches treatment) is what keeps a
+   *     stale "fread" diagnosis from leaking out of a byte-counting
+   *     loop like this one into the caller's own, unrelated failure
+   *     check by way of interprocedural inlining;
+   *   - everything else (`==`/`!=` against a positive constant, or
+   *     against 0 for a non-pointer where cksum_stream's own
+   *     ambiguity above generalises) is genuinely Undetermined. */
+  static FailureOutcome classifyComparison(BinaryOperatorKind Op,
+                                           bool SymbolOnLHS, SVal ConstVal,
+                                           QualType SymbolType) {
+    if (!SymbolOnLHS) {
+      /* Normalise so Op always reads as "Symbol Op Constant": `0 >
+       * fd` is the same claim as `fd < 0`. */
+      switch (Op) {
+      case BO_LT: Op = BO_GT; break;
+      case BO_LE: Op = BO_GE; break;
+      case BO_GT: Op = BO_LT; break;
+      case BO_GE: Op = BO_LE; break;
+      default: break;
+      }
+    }
+    bool IsPointer = SymbolType->isPointerType();
+    bool IsZero = ConstVal.isZeroConstant();
+    auto ConstInt = ConstVal.getAs<nonloc::ConcreteInt>();
+    bool IsNegative = ConstInt && ConstInt->getValue().isNegative();
+    bool IsZeroOrOne = IsZero || (ConstInt && ConstInt->getValue() == 1);
+    switch (Op) {
+    case BO_LT:
+    case BO_LE:
+      if (!IsPointer && (IsZero || IsNegative))
+        return FailureOutcome::OnTrueOutcome;
+      return FailureOutcome::Undetermined;
+    case BO_GT:
+    case BO_GE:
+      if (!IsPointer && IsZeroOrOne)
+        return FailureOutcome::NeitherOutcome;
+      return FailureOutcome::Undetermined;
+    case BO_EQ:
+      if (IsPointer && IsZero)
+        return FailureOutcome::OnTrueOutcome;
+      if (!IsPointer && IsNegative)
+        return FailureOutcome::OnTrueOutcome;
+      if (!IsPointer && IsZero)
+        /* `rc == 0` for an integer return code is a success check --
+         * e.g. src/mman/shm.c ensure_namespace()'s own retry loop
+         * (`unlink(path) == 0`) and any `stat()`/`fstat() == 0` --
+         * so the call only failed on the *false* outcome. Sound now
+         * that isByteCountCall() above (checked by both call sites
+         * before this function is even consulted) already routes
+         * fread/fwrite/read/write around this entirely: those are the
+         * only callees for which "0" is not a clean success/failure
+         * split, which is the sole reason this case was previously
+         * left Undetermined. */
+        return FailureOutcome::OnFalseOutcome;
+      return FailureOutcome::Undetermined;
+    case BO_NE:
+      if (!IsPointer && IsZero)
+        return FailureOutcome::OnTrueOutcome;
+      return FailureOutcome::Undetermined;
+    default:
+      return FailureOutcome::Undetermined;
+    }
+  }
+
   /* Recognise `<capable-call> <cmp> <sentinel>` (and the transitive form
    * through a variable the call's result was copied into, which the
    * engine's own symbolic execution already resolves to the same
    * symbol) as "the code is diagnosing this call's failure" -- CERT
-   * ERR30-C's precondition for trusting errno afterward. */
+   * ERR30-C's precondition for trusting errno afterward.
+   *
+   * "<sentinel>" is the operative word this checker's own comment above
+   * already used, and it means what it says: the *other* side of the
+   * comparison must be a compile-time constant (0, -1, NULL, ...), not
+   * an arbitrary runtime value. Without that restriction, a completely
+   * unrelated comparison like src/util/awk.c load_progfiles()'s `if (f
+   * != stdin) fclose(f);` -- deciding whether to close a stream, not
+   * whether a call failed -- also "diagnoses" f's setter (fopen)
+   * whether or not fopen actually failed, leaving a stale Diagnosed
+   * that then collides with fclose()'s own, unrelated LastCapable the
+   * next time any errno read anywhere later in the function runs. A
+   * real sentinel comparison (`fd < 0`, `rc == -1`, `p == NULL`) is
+   * unaffected: its other side is always a literal.
+   *
+   * A comparison classifyComparison can actually place in one of this
+   * codebase's own conventions (OnTrueOutcome/OnFalseOutcome) is *not*
+   * diagnosed here at all -- checkBranchCondition/evalAssume below
+   * handle those branch-aware, for the same reason
+   * checkPreStmt(UnaryOperator)'s old `!X` handling moved there: this
+   * callback fires for every occurrence of the comparison, including
+   * ones never used to decide a branch, which is the wrong granularity
+   * for a fact that must only survive into whichever branch actually is
+   * the failure one. A NeitherOutcome comparison (a byte-count `> 0`
+   * loop guard, not a failure check at all) is not diagnosed here
+   * either, nor by checkBranchCondition -- only a genuinely Undetermined
+   * comparison keeps this function's own unconditional treatment. */
   void checkPreStmt(const BinaryOperator *Operation, CheckerContext &C) const {
     switch (Operation->getOpcode()) {
     case BO_LT:
@@ -633,9 +856,31 @@ public:
     default:
       return;
     }
-    SymbolRef Symbol = C.getSVal(Operation->getLHS()).getAsSymbol(true);
+    SVal LHSVal = C.getSVal(Operation->getLHS());
+    SVal RHSVal = C.getSVal(Operation->getRHS());
+    SymbolRef Symbol = nullptr;
+    bool SymbolOnLHS = true;
+    if (RHSVal.isConstant()) {
+      Symbol = LHSVal.getAsSymbol(true);
+      SymbolOnLHS = true;
+    }
+    if (!Symbol && LHSVal.isConstant()) {
+      Symbol = RHSVal.getAsSymbol(true);
+      SymbolOnLHS = false;
+    }
     if (!Symbol)
-      Symbol = C.getSVal(Operation->getRHS()).getAsSymbol(true);
+      return;
+    if (const Stmt *const *Setter = C.getState()->get<ErrnoSetterOf>(Symbol))
+      if (isByteCountCall(*Setter))
+        return; /* ambiguous for a byte count regardless of operator --
+                  * see isByteCountCall's own comment */
+    FailureOutcome Outcome = classifyComparison(
+        Operation->getOpcode(), SymbolOnLHS, SymbolOnLHS ? RHSVal : LHSVal,
+        SymbolOnLHS ? Operation->getLHS()->getType()
+                    : Operation->getRHS()->getType());
+    if (Outcome != FailureOutcome::Undetermined)
+      return; /* handled by checkBranchCondition/evalAssume instead, or
+                * (NeitherOutcome) not a failure check at all */
     diagnoseIfSetter(Symbol, C);
   }
 
@@ -644,12 +889,15 @@ public:
      * pointer-returning capable call diagnoses that call's failure
      * exactly as `== 0`/`== NULL` already does above -- same trust
      * boundary, just reached through negation instead of an explicit
-     * comparison against zero. */
-    if (Operation->getOpcode() == UO_LNot) {
-      diagnoseIfSetter(C.getSVal(Operation->getSubExpr()).getAsSymbol(true),
-                       C);
+     * comparison against zero. Unlike that BinaryOperator form, this
+     * one is handled entirely by checkBranchCondition/evalAssume below
+     * now (see their own comments), not here: `!X` fires for every
+     * UnaryOperator in the function regardless of whether it is ever
+     * used as a branch condition at all, which is exactly the wrong
+     * granularity for a fact that must only survive into the specific
+     * branch where the call actually failed. */
+    if (Operation->getOpcode() == UO_LNot)
       return;
-    }
     if (!isErrnoDeref(Operation))
       return;
     ProgramStateRef State = C.getState();
@@ -672,6 +920,8 @@ public:
       return;
     }
     if (comparedToSavedErrno(Operation, C, State))
+      return;
+    if (selfGuardedByErrnoTernary(Operation, C))
       return;
     const Stmt *const *Diagnosed = State->get<CallSlot>(SlotDiagnosed);
     const Stmt *const *LastCapable = State->get<CallSlot>(SlotLastCapable);
@@ -724,6 +974,158 @@ public:
       report("errno is read with no proven prior call or assignment that "
              "could have set it",
              Operation, State, C);
+  }
+
+  /* Recognises `!<capable-call>` and the handful of `<capable-call>
+   * <cmp> <constant>` shapes classifyComparison() above can place
+   * in one of this codebase's own conventions (directly, or through a
+   * variable the call's result was copied into) as the condition of
+   * the branch currently being decided, and stashes the setter
+   * statement in SlotPendingFailOnTrueDiagnosis for evalAssume below to
+   * pick up -- never committing SlotDiagnosed itself, unlike the old
+   * checkPreStmt(UnaryOperator) handling for `!X` this replaced. The
+   * two together are what make the diagnosis branch-sensitive: `if
+   * (!f) { ... }`'s `f == 0` true branch is a real diagnosis of f's
+   * setter; falling through past a *successful* call (the false
+   * branch) is not a diagnosis of anything and must not leave one
+   * lying around for some later, unrelated capable call and read to
+   * collide with -- exactly the false positive
+   * src/dirent/readdir.c's fill()/readdir_r(), src/util/admin.c's
+   * create_one() (`fclose(rest) != 0`'s own success falling through to
+   * a *second*, unrelated fwrite() diagnosis further down), and every
+   * util.c "open one file per loop iteration" main() hit before this
+   * fix: a first, successful check has nothing to do with a second,
+   * independent call's later failure, but the old unconditional
+   * diagnoseIfSetter() could not tell the two apart.
+   *
+   * Any other branch condition -- including one this checker cannot
+   * make sense of, or a determinable comparison never actually
+   * diagnosing anything (Symbol not tied to a tracked setter) -- clears
+   * a stale pending candidate first, so evalAssume never accidentally
+   * resurrects an orphaned one left over from a condition that was not
+   * actually this decision's (e.g. one merely assigned to a bool and
+   * never branched on at all, which would otherwise leave
+   * SlotPendingFailOnTrueDiagnosis set with no matching evalAssume call
+   * ever coming along to consume it). */
+  void checkBranchCondition(const Stmt *Condition, CheckerContext &C) const {
+    ProgramStateRef State =
+        C.getState()
+            ->remove<CallSlot>(SlotPendingFailOnTrueDiagnosis)
+            ->remove<CallSlot>(SlotPendingFailOnFalseDiagnosis);
+    const auto *E = dyn_cast<Expr>(Condition);
+    E = E ? E->IgnoreParens() : nullptr;
+    SymbolRef Symbol = nullptr;
+    FailureOutcome Outcome = FailureOutcome::Undetermined;
+    if (const auto *UO = E ? dyn_cast<UnaryOperator>(E) : nullptr) {
+      if (UO->getOpcode() == UO_LNot) {
+        Symbol = C.getSVal(UO->getSubExpr()).getAsSymbol(true);
+        Outcome = FailureOutcome::OnTrueOutcome;
+      }
+    } else if (const auto *BO = E ? dyn_cast<BinaryOperator>(E) : nullptr) {
+      switch (BO->getOpcode()) {
+      case BO_LT: case BO_LE: case BO_GT: case BO_GE: case BO_EQ: case BO_NE:
+        break;
+      default:
+        BO = nullptr;
+      }
+      if (BO) {
+        SVal LHSVal = C.getSVal(BO->getLHS());
+        SVal RHSVal = C.getSVal(BO->getRHS());
+        bool SymbolOnLHS = true;
+        if (RHSVal.isConstant())
+          Symbol = LHSVal.getAsSymbol(true);
+        if (!Symbol && LHSVal.isConstant()) {
+          Symbol = RHSVal.getAsSymbol(true);
+          SymbolOnLHS = false;
+        }
+        if (Symbol)
+          Outcome = classifyComparison(
+              BO->getOpcode(), SymbolOnLHS, SymbolOnLHS ? RHSVal : LHSVal,
+              SymbolOnLHS ? BO->getLHS()->getType() : BO->getRHS()->getType());
+        if (Outcome == FailureOutcome::Undetermined ||
+            Outcome == FailureOutcome::NeitherOutcome)
+          Symbol = nullptr; /* Undetermined: checkPreStmt(BinaryOperator)'s
+                              * own unconditional path already handled
+                              * this one. NeitherOutcome: not a failure
+                              * check in either direction (a byte-count
+                              * loop guard) -- nothing to stash either
+                              * way. */
+      }
+    }
+    if (Symbol) {
+      if (const Stmt *const *Setter = State->get<ErrnoSetterOf>(Symbol)) {
+        if (!isByteCountCall(*Setter))
+          State = State->set<CallSlot>(
+              Outcome == FailureOutcome::OnTrueOutcome
+                  ? SlotPendingFailOnTrueDiagnosis
+                  : SlotPendingFailOnFalseDiagnosis,
+              *Setter);
+      }
+    }
+    C.addTransition(State);
+  }
+
+  /* Consumes the candidate checkBranchCondition just stashed (if any)
+   * for whichever one of the two branches this particular call is
+   * resolving -- Assumption is true exactly on the branch where the
+   * condition holds. checkBranchCondition stashes into
+   * SlotPendingFailOnTrueDiagnosis when it has proven the condition
+   * being true means the call under test failed, or
+   * SlotPendingFailOnFalseDiagnosis when it has proven the opposite
+   * (`rc == 0` for a 0-means-success return code); each is committed to
+   * SlotDiagnosed only on the branch it names as the failure one. Every
+   * other evalAssume call in the whole translation unit sees neither
+   * pending candidate and returns State unchanged, at negligible cost. */
+  ProgramStateRef evalAssume(ProgramStateRef State, SVal /*Cond*/,
+                             bool Assumption) const {
+    if (const Stmt *const *Pending =
+            State->get<CallSlot>(SlotPendingFailOnTrueDiagnosis)) {
+      const Stmt *Setter = *Pending;
+      State = State->remove<CallSlot>(SlotPendingFailOnTrueDiagnosis);
+      if (Assumption)
+        State = State->set<CallSlot>(SlotDiagnosed, Setter);
+      return State;
+    }
+    if (const Stmt *const *Pending =
+            State->get<CallSlot>(SlotPendingFailOnFalseDiagnosis)) {
+      const Stmt *Setter = *Pending;
+      State = State->remove<CallSlot>(SlotPendingFailOnFalseDiagnosis);
+      if (!Assumption)
+        State = State->set<CallSlot>(SlotDiagnosed, Setter);
+      return State;
+    }
+    return State;
+  }
+
+  /* CallSlot's two per-path facts (Diagnosed/LastCapable) and their two
+   * pending hand-off slots are, by design, about whether *this
+   * function's own* control flow has diagnosed a call it itself made --
+   * not a fact meant to reach across a call boundary. Clang's
+   * interprocedural inlining does not know that distinction: without
+   * this reset, a callee inlined into an already-fully-resolved
+   * diagnosis in its caller (the diagnosing comparison true, the read
+   * already matched against it, nothing left pending) inherits that
+   * stale Diagnosed value anyway, and a later, entirely unrelated
+   * capable call and errno read inside the callee's own body then
+   * collides with it -- exactly the false positive
+   * src/mman/shm.c's shm_unlink() calling rename_mapped_away() hit
+   * before this fix: shm_unlink() legitimately diagnoses its own
+   * unlink() failure, then calls rename_mapped_away(), which mallocs,
+   * snprintf()s, and does its own completely independent error
+   * handling -- none of which has anything to do with the unlink()
+   * three call frames up. ThreadCapabilityMap (errno_grounds) is
+   * deliberately left untouched here: *that* fact really is meant to
+   * mean "established at all, anywhere on this path", which is the one
+   * place cross-function persistence is the intended, documented
+   * design (see its own top-of-file comment) rather than an inlining
+   * accident. */
+  void checkBeginFunction(CheckerContext &C) const {
+    ProgramStateRef State = C.getState();
+    State = State->remove<CallSlot>(SlotDiagnosed);
+    State = State->remove<CallSlot>(SlotLastCapable);
+    State = State->remove<CallSlot>(SlotPendingFailOnTrueDiagnosis);
+    State = State->remove<CallSlot>(SlotPendingFailOnFalseDiagnosis);
+    C.addTransition(State);
   }
 };
 

@@ -140,29 +140,21 @@ bool isLockCall(StringRef Name) {
   return false;
 }
 
-// A conservative, explicit list of I/O and syscall-adjacent entry points.
 // Anything spelled Nt*/Zw* (this tree's Windows Native API convention) or a
-// raw syscall() (src/unistd/syscall.c) is I/O regardless of name.
-constexpr llvm::StringLiteral IoNames[] = {
-    "read",     "write",   "pread",     "pwrite",  "readv",    "writev",
-    "open",     "openat",  "creat",     "close",   "lseek",    "fstat",
-    "stat",     "lstat",   "fsync",     "fdatasync", "ioctl",  "fcntl",
-    "socket",   "connect", "accept",    "bind",    "listen",   "send",
-    "recv",     "sendto",  "recvfrom",  "shutdown", "mmap",    "munmap",
-    "mprotect", "brk",     "sbrk",      "unlink",  "rename",   "mkdir",
-    "rmdir",    "chdir",   "getcwd",    "poll",    "select",   "epoll_wait",
-    "epoll_ctl", "kill",   "waitpid",   "wait4",   "execve",   "fork",
-    "vfork",    "clone",   "exit",      "_exit",   "abort",    "raise",
-};
-
-bool isIoCall(StringRef Name) {
+// raw syscall() (src/unistd/syscall.c) is I/O regardless of name; every
+// other real I/O/syscall entry point carries include/ownership.h's
+// io_operation bare, function-level annotate() marker, so any redeclaration
+// may carry it (mirrors FallibleResultChecker.cpp's isFallible()). Replaces
+// the hardcoded IoNames[] list this checker used to carry itself.
+bool isIoCall(const FunctionDecl *Function, StringRef Name) {
   if (Name.starts_with("Nt") || Name.starts_with("Zw"))
     return true;
   if (Name == "syscall")
     return true;
-  for (StringRef Name2 : IoNames)
-    if (Name == Name2)
-      return true;
+  for (const FunctionDecl *Redecl : Function->redecls())
+    for (const AnnotateAttr *Attribute : Redecl->specific_attrs<AnnotateAttr>())
+      if (Attribute->getAnnotation() == "io_operation")
+        return true;
   return false;
 }
 
@@ -373,7 +365,7 @@ class PurityChecker : public Checker<check::ASTCodeBody> {
         fail("acquires or releases a lock", Call);
         return true;
       }
-      if (isIoCall(Name)) {
+      if (isIoCall(Function, Name)) {
         fail("performs I/O or a syscall", Call);
         return true;
       }

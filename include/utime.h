@@ -14,6 +14,7 @@ extern "C" {
 #endif
 
 #include <features.h>
+#include <ownership.h>
 
 #define __NEED_time_t
 
@@ -24,6 +25,7 @@ struct utimbuf {
 	time_t modtime;
 };
 
+async_signal_safe
 int utime (const char *, const struct utimbuf *);
 
 #ifdef __cplusplus

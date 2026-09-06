@@ -18,6 +18,7 @@ extern "C" {
 #endif
 
 #include <features.h>
+#include <ownership.h>
 
 /* utsname.h.html gives no required size for these members; 256 is
  * comfortably above anything any field here can actually produce (the
@@ -31,6 +32,7 @@ struct utsname {
 	char machine[256];
 };
 
+async_signal_safe
 int uname(struct utsname *);
 
 #ifdef __cplusplus

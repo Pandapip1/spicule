@@ -85,6 +85,8 @@ int fclose(FILE *) __attribute__((nonnull(1)));
 fallible
 int remove(const char *);
 fallible
+async_signal_safe
+io_operation
 int rename(const char *, const char *);
 
 int feof(FILE *) __attribute__((nonnull(1)));

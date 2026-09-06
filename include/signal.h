@@ -14,6 +14,7 @@ extern "C" {
 #endif
 
 #include <features.h>
+#include <ownership.h>
 
 #if defined(_POSIX_SOURCE) || defined(_POSIX_C_SOURCE) \
  || defined(_XOPEN_SOURCE) || defined(_GNU_SOURCE) \
@@ -201,19 +202,30 @@ int __libc_current_sigrtmax(void);
 #define SIGRTMIN  (__libc_current_sigrtmin())
 #define SIGRTMAX  (__libc_current_sigrtmax())
 
+async_signal_safe
+io_operation
 int kill(pid_t, int);
 
 /* Every sigset_t-taking function below dereferences its set argument(s)
  * unconditionally, with no NULL check in its implementation. */
+async_signal_safe
 int sigemptyset(sigset_t *) __attribute__((nonnull(1)));
+async_signal_safe
 int sigfillset(sigset_t *) __attribute__((nonnull(1)));
+async_signal_safe
 int sigaddset(sigset_t *, int) __attribute__((nonnull(1)));
+async_signal_safe
 int sigdelset(sigset_t *, int) __attribute__((nonnull(1)));
+async_signal_safe
 int sigismember(const sigset_t *, int) __attribute__((nonnull(1)));
 
+async_signal_safe
 int sigprocmask(int, const sigset_t *__restrict, sigset_t *__restrict);
+async_signal_safe
 int sigsuspend(const sigset_t *);
+async_signal_safe
 int sigaction(int, const struct sigaction *__restrict, struct sigaction *__restrict);
+async_signal_safe
 int sigpending(sigset_t *) __attribute__((nonnull(1)));
 /* sig is deliberately NOT marked: sigwait() guards it with a real
  * `if (sig) *sig = selected;`. */
@@ -225,6 +237,7 @@ int sigwaitinfo(const sigset_t *__restrict, siginfo_t *__restrict) __attribute__
 /* timeout is deliberately NOT marked: sigtimedwait() has a real, live
  * NULL check (`if (!timeout || ...) return EINVAL;`). */
 int sigtimedwait(const sigset_t *__restrict, siginfo_t *__restrict, const struct timespec *__restrict) __attribute__((nonnull(1)));
+async_signal_safe
 int sigqueue(pid_t, int, union sigval);
 
 int sigaltstack(const stack_t *__restrict, stack_t *__restrict);
@@ -239,6 +252,7 @@ void psiginfo(const siginfo_t *, const char *) __attribute__((nonnull(1)));
 #define NSIG _NSIG
 typedef void (*sig_t)(int);
 int killpg(pid_t, int);
+async_signal_safe
 int sigpause(int);
 int siginterrupt(int, int);
 int sigignore(int);
@@ -279,7 +293,10 @@ int sigorset (sigset_t *, const sigset_t *, const sigset_t *) __attribute__((non
 
 typedef int sig_atomic_t;
 
+async_signal_safe
 void (*signal(int, void (*)(int)))(int);
+async_signal_safe
+io_operation
 int raise(int);
 
 #define SIGHUP    1

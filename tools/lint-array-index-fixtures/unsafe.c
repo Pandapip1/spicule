@@ -64,3 +64,64 @@ int argv_unrelated_bound(
 		total += (int)(argv[i] != 0); /* array-index-expect */
 	return total;
 }
+
+/* A plain, unannotated char* carries no null-terminated contract at all --
+ * confirms the new proof route only ever fires off a real, declared
+ * withtok(null_terminated)/elements_withtok(null_terminated, ...) fact, and
+ * never treats an arbitrary char* as null-terminated just because it looks
+ * like one. */
+int plain_pointer_index_zero(char *p)
+{
+	return p[0]; /* array-index-expect */
+}
+
+/* withtok(null_terminated) proves s's own extent is at least one element,
+ * which is exactly enough for s[0] -- but proves nothing at all about
+ * s[1] on its own: a length-0-or-1 string makes this a REAL out-of-bounds
+ * read, and it must stay flagged with no guard present. */
+int direct_null_terminated_unguarded_index_one(
+	const char *s __attribute__((annotate("withtok:null_terminated"))))
+{
+	return s[1]; /* array-index-expect */
+}
+
+/* A branch that exists on the same path, but proves nothing about a[0]'s
+ * own value, must not be mistaken for the dominating guard the m4.c-style
+ * idiom relies on: this checker must trace the SPECIFIC symbol a branch
+ * narrowed, not merely "some branch happened before this subscript". */
+int direct_null_terminated_unrelated_guard(
+	int flag, const char *a __attribute__((annotate("withtok:null_terminated"))))
+{
+	if (flag != 0)
+		return a[1]; /* array-index-expect */
+	return 0;
+}
+
+/* argv[argc] is only guaranteed NULL by POSIX, not a valid null-terminated
+ * string -- elements_withtok(null_terminated, argc) covers argv[0..argc)
+ * only. Trusting a's content here would trust a slot the contract makes no
+ * promise about; the SAME "i < argc" reproof the direct argv[i] subscript
+ * needs must also gate whether a's OWN content is trusted. */
+int argv_content_out_of_bound(
+	int argc,
+	char **argv __attribute__((annotate("elements_withtok:null_terminated:argc"))))
+{
+	char *a = argv[argc]; /* array-index-expect */
+	return a[0]; /* array-index-expect */
+}
+
+/* The argv-shaped analog of direct_null_terminated_unguarded_index_one:
+ * proving a's content is null-terminated (via i < argc) says nothing about
+ * a[0]'s own value, so a[1] must still be rejected with no guard on it. */
+int argv_content_unguarded_index_one(
+	int argc,
+	char **argv __attribute__((annotate("elements_withtok:null_terminated:argc"))))
+{
+	int i;
+	int total = 0;
+	for (i = 0; i < argc; i++) {
+		char *a = argv[i];
+		total += a[1]; /* array-index-expect */
+	}
+	return total;
+}

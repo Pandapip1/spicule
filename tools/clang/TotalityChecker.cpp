@@ -766,7 +766,16 @@ class TotalityVisitor : public RecursiveASTVisitor<TotalityVisitor> {
    * own statements executed, so this stays conservative and adds no
    * false prefix.  An ambiguous or non-statement parent -- unexpected in
    * a plain C function body -- empties the result rather than risk an
-   * incomplete one. */
+   * incomplete one, with one deliberate exception: a call that is itself
+   * a local variable's own initializer (`T x = f(...);`, the single most
+   * common recursive-descent shape in this tree -- every `T v =
+   * production(p);` first line) has that VarDecl as its immediate AST
+   * parent, not a Stmt, since the grammar for a declarator's initializer
+   * has no Stmt node of its own. Climbing one further hop to the
+   * DeclStmt that actually IS the enclosing CompoundStmt's direct child
+   * recovers exactly the unit a plain `T x; x = f(...);` two-statement
+   * spelling would already present here -- same statement boundary,
+   * same preceding-siblings semantics, just without an extra line. */
   std::vector<const Stmt *> precedingStatements(const Stmt *Node) const {
     std::vector<const Stmt *> Result;
     const Stmt *Target = Node;
@@ -776,8 +785,19 @@ class TotalityVisitor : public RecursiveASTVisitor<TotalityVisitor> {
       if (Parents.size() != 1)
         return {};
       const Stmt *Parent = Parents[0].get<Stmt>();
-      if (!Parent)
-        return {};
+      if (!Parent) {
+        const auto *AsVar = Parents[0].get<VarDecl>();
+        if (!AsVar)
+          return {};
+        DynTypedNodeList DeclParents =
+            Context.getParents(DynTypedNode::create(*AsVar));
+        const auto *AsDeclStmt =
+            DeclParents.size() == 1 ? DeclParents[0].get<DeclStmt>() : nullptr;
+        if (!AsDeclStmt)
+          return {};
+        Target = AsDeclStmt;
+        continue;
+      }
       const auto *Compound = dyn_cast<CompoundStmt>(Parent);
       if (!Compound) {
         Target = Parent;
@@ -809,6 +829,131 @@ class TotalityVisitor : public RecursiveASTVisitor<TotalityVisitor> {
            Candidate->Kind == ProgressKind::Up &&
            Candidate->Variable->getType()->isPointerType() &&
            admissibleProgress(*Candidate);
+  }
+
+  /* Is Argument (0-based) of Function's own parameter list annotated
+   * endptr_advances (see ownership.h)?  Mirrors nullTerminatedParameter()
+   * below verbatim -- same redecls walk, same reason (the annotation is a
+   * fact about the declared contract, so any redeclaration carrying it is
+   * as good as the others). */
+  static bool endptrAdvancesParameter(const FunctionDecl *Function,
+                                      unsigned Argument) {
+    if (!Function)
+      return false;
+    for (const FunctionDecl *Redeclaration : Function->redecls()) {
+      if (Argument >= Redeclaration->getNumParams())
+        continue;
+      for (const AnnotateAttr *Attribute :
+           Redeclaration->getParamDecl(Argument)->specific_attrs<AnnotateAttr>())
+        if (Attribute->getAnnotation() == "qual:endptr_advances")
+          return true;
+    }
+    return false;
+  }
+
+  /* Statement's own immediately-preceding sibling in whichever
+   * CompoundStmt directly contains it -- nullptr if Statement is the
+   * first statement there, or isn't a direct CompoundStmt child at all
+   * (an unbraced `if (x) base->field = end;`, say). Deliberately does
+   * NOT climb further like precedingStatements() does: this is used to
+   * confirm one very specific two-statement idiom sits exactly next to
+   * itself, not to gather everything that provably already ran.  Usable
+   * from inside ANY function body mayWriteFieldThroughParam() is
+   * currently walking (unlike precedingStatements(), which is only ever
+   * meaningful relative to Current). */
+  static const Stmt *immediatelyPrecedingSibling(ASTContext &Context,
+                                                 const Stmt *Statement) {
+    DynTypedNodeList Parents =
+        Context.getParents(DynTypedNode::create(*Statement));
+    if (Parents.size() != 1)
+      return nullptr;
+    const auto *Compound = Parents[0].get<CompoundStmt>();
+    if (!Compound)
+      return nullptr;
+    const Stmt *Previous = nullptr;
+    for (const Stmt *Child : Compound->body()) {
+      if (Child == Statement)
+        return Previous;
+      Previous = Child;
+    }
+    return nullptr;
+  }
+
+  /* The CallExpr Statement most directly makes, if any: `f(...);` alone,
+   * `x = f(...);`, or `T v = f(...);` -- exactly the handful of shapes a
+   * one-line "convert and advance" idiom actually appears in.  Not a
+   * general expression walk: a call buried further inside some larger
+   * expression is deliberately left unmatched, the same conservatism
+   * safeFieldAdvance()'s own witness shapes already apply. */
+  static const CallExpr *directCall(const Stmt *Statement) {
+    if (const auto *Declaration = dyn_cast<DeclStmt>(Statement)) {
+      if (!Declaration->isSingleDecl())
+        return nullptr;
+      const auto *Local = dyn_cast<VarDecl>(Declaration->getSingleDecl());
+      return Local ? dyn_cast_or_null<CallExpr>(ignore(Local->getInit()))
+                   : nullptr;
+    }
+    const auto *Expression = dyn_cast<Expr>(Statement);
+    if (!Expression)
+      return nullptr;
+    const Expr *Plain = ignore(Expression);
+    const auto *Binary = dyn_cast_or_null<BinaryOperator>(Plain);
+    if (Binary && Binary->isAssignmentOp())
+      return dyn_cast_or_null<CallExpr>(ignore(Binary->getRHS()));
+    return dyn_cast_or_null<CallExpr>(Plain);
+  }
+
+  /* True for exactly the C standard's own strtol()/strtoul()/strtod()/...
+   * idiom: `T *end; ...; Base->Field = end;`, where `end` was populated,
+   * in the immediately preceding statement, by a call whose own first
+   * argument reads Base->Field's CURRENT value and whose endptr_advances
+   * parameter is `&end`. Base->Field can therefore not have MOVED
+   * BACKWARD across this statement -- see ownership.h's endptr_advances
+   * comment for the exact standard citation -- which is all that is
+   * needed to fold it into an already-witnessed '<' proof the same way
+   * safeFieldAdvance()'s own recognized shapes already are (see
+   * bodyMayWriteField()'s Excused computation). It is deliberately never
+   * itself offered as a witness: the standard guarantees no more than
+   * "did not go backward" here (a completely failed conversion leaves
+   * *endptr == the input pointer), the non-strict half of the proof. */
+  bool toleratedPointerReassign(const Stmt *Statement, const ValueDecl *Base,
+                                const FieldDecl *Field) const {
+    const auto *Expression = dyn_cast<Expr>(Statement);
+    const auto *Binary =
+        Expression ? dyn_cast_or_null<BinaryOperator>(ignore(Expression))
+                   : nullptr;
+    if (!Binary || Binary->getOpcode() != BO_Assign)
+      return false;
+    const auto *Member = dyn_cast_or_null<MemberExpr>(ignore(Binary->getLHS()));
+    if (!Member || Member->getMemberDecl() != Field ||
+        value(Member->getBase()) != Base)
+      return false;
+    const auto *EndReference =
+        dyn_cast_or_null<DeclRefExpr>(ignore(Binary->getRHS()));
+    const auto *End =
+        EndReference ? dyn_cast<VarDecl>(EndReference->getDecl()) : nullptr;
+    if (!End || !End->hasLocalStorage() || End->getType().isVolatileQualified())
+      return false;
+    const Stmt *Previous = immediatelyPrecedingSibling(Context, Statement);
+    const CallExpr *Call = Previous ? directCall(Previous) : nullptr;
+    const FunctionDecl *Callee = Call ? Call->getDirectCallee() : nullptr;
+    if (!Callee || Call->getNumArgs() == 0)
+      return false;
+    const auto *Arg0 = dyn_cast_or_null<MemberExpr>(ignore(Call->getArg(0)));
+    if (!Arg0 || Arg0->getMemberDecl() != Field ||
+        value(Arg0->getBase()) != Base)
+      return false;
+    for (unsigned K = 1; K < Call->getNumArgs() && K < Callee->getNumParams();
+        ++K) {
+      if (!endptrAdvancesParameter(Callee, K))
+        continue;
+      const auto *AddrOf =
+          dyn_cast_or_null<UnaryOperator>(ignore(Call->getArg(K)));
+      if (AddrOf && AddrOf->getOpcode() == UO_AddrOf &&
+          value(AddrOf->getSubExpr()) == End)
+        return true;
+    }
+    return false;
   }
 
   using FieldVisitSet = std::set<std::pair<const FunctionDecl *, unsigned>>;
@@ -857,14 +1002,15 @@ class TotalityVisitor : public RecursiveASTVisitor<TotalityVisitor> {
     return Result;
   }
 
-  /* TolerateAdvances distinguishes the two claims fieldProgressRelation()
-   * can make: proving '<' already has its one required strict step (the
-   * witness), so a further write only threatens that proof if it could
-   * move Field somewhere other than further forward -- an already
-   * recognized advance is harmless piled on top of another.  Proving '='
-   * has no witness to fall back on: literally any write, including a
-   * provably-forward one, means the field did not, in fact, pass through
-   * this call unchanged, so TolerateAdvances must be false there. */
+  /* TolerateAdvances is always true along every path down from
+   * fieldProgressRelation() today (see its own comment: both of its
+   * possible claims -- '<' with a witness in hand, or '<=' with none --
+   * are safe to compose past an already-recognized forward-or-unchanged
+   * write, since neither claim is "Field is bit-for-bit identical").
+   * The parameter still exists, rather than being dropped in favor of a
+   * bare `true`, so a future caller wanting the strictly stronger "not
+   * even a recognized advance occurred" claim can ask for it without
+   * another traversal function to keep in sync with this one. */
   bool bodyMayWriteField(const Stmt *Statement, const ValueDecl *Base,
                          const FieldDecl *Field, FieldVisitSet &Visiting,
                          const Stmt *Ignore, bool TolerateAdvances) const {
@@ -872,7 +1018,9 @@ class TotalityVisitor : public RecursiveASTVisitor<TotalityVisitor> {
       return false;
     if (const auto *Expression = dyn_cast<Expr>(Statement)) {
       const Expr *Plain = ignore(Expression);
-      bool Excused = TolerateAdvances && safeFieldAdvance(Plain, Base, Field);
+      bool Excused = TolerateAdvances &&
+          (safeFieldAdvance(Plain, Base, Field) ||
+           toleratedPointerReassign(Statement, Base, Field));
       if (!Excused) {
         if (const auto *Unary = dyn_cast_or_null<UnaryOperator>(Plain)) {
           const auto *Member = Unary->isIncrementDecrementOp()
@@ -924,13 +1072,34 @@ class TotalityVisitor : public RecursiveASTVisitor<TotalityVisitor> {
 
   /* std::nullopt: no virtual-slot relation applies (Source isn't a
    * pointer to a struct with a tracked field, or the shape wasn't
-   * recognized).  false: the field demonstrably passes through this call
-   * with the exact same value it had on entry ('=').  true: it strictly
-   * advanced first ('<'), by the same escape-to-UB argument
-   * pointerObjectDistanceRank() already relies on for loops -- a
-   * monotonic pointer step through a finite object either meets its
-   * bound in finitely many steps or leaves defined C, which this proof
-   * is not responsible for. */
+   * recognized -- or some intervening statement writes Field in a way
+   * that is neither a recognized advance nor provably absent, so even
+   * "non-decreasing" cannot be claimed).  false: the field demonstrably
+   * never moves BACKWARD before this call ('=' in the size-change matrix
+   * lint-totality.py composes -- read here as "no smaller", i.e. <=,
+   * not literally "identical": every intervening write, if any, is
+   * itself one of the recognized forward-or-unchanged shapes
+   * safeFieldAdvance()/toleratedPointerReassign() already accept
+   * elsewhere, such as a whitespace-skipping helper that may or may not
+   * have actually consumed anything). true: it strictly advanced first
+   * ('<'), by the same escape-to-UB argument pointerObjectDistanceRank()
+   * already relies on for loops -- a monotonic pointer step through a
+   * finite object either meets its bound in finitely many steps or
+   * leaves defined C, which this proof is not responsible for.
+   *
+   * Composing a "<=" edge with a "<" edge anywhere else on the same
+   * cycle is still exactly the strict overall relation lint-totality.py
+   * requires (x <= y < z implies x < z), which is what makes it sound to
+   * tolerate a recognized forward-or-unchanged write here even when this
+   * SPECIFIC call has no witness of its own to offer: unlike the real
+   * (non-virtual) parameter slots, where '=' means the caller handed the
+   * callee the exact same value and TolerateAdvances therefore has to
+   * stay false with no witness (a real write there would be a
+   * contradiction, not just a weaker fact), this virtual slot's whole
+   * purpose is tracking a monotonically-advancing cursor, so "did not go
+   * backward" is a genuine, useful, and always-soundly-composable fact
+   * regardless of whether THIS call site also happens to supply the
+   * cycle's own strict step. */
   std::optional<bool> fieldProgressRelation(const CallExpr *Call,
                                             const ParmVarDecl *Source,
                                             const FunctionDecl *Callee,
@@ -961,7 +1130,7 @@ class TotalityVisitor : public RecursiveASTVisitor<TotalityVisitor> {
     for (const Stmt *Statement : Preceding)
       if (Statement != Witness &&
           bodyMayWriteField(Statement, Source, Field, Visiting, nullptr,
-                            /*TolerateAdvances=*/Witness != nullptr))
+                            /*TolerateAdvances=*/true))
         return std::nullopt;
     return Witness ? std::make_optional(true) : std::make_optional(false);
   }

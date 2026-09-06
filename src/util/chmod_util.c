@@ -40,10 +40,57 @@
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <sys/stat.h>
 #include "libc.h"
 #include "util.h"
 #include "modeparse.h"
+
+enum chmod_fd_result { CHMOD_FD_DONE, CHMOD_FD_FAILED, CHMOD_FD_USAGE_ERROR, CHMOD_FD_UNAVAILABLE };
+
+/* A relative mode ("+w", "-x", ...) is computed from *this file's own
+ * current mode bits*, so the stat() that reads those bits and the
+ * chmod() that applies the result must see the same filesystem
+ * object -- a path re-resolved between the two (an attacker's symlink
+ * swapped into a shared directory, most dangerously) would compute
+ * the new mode from one file and apply it to another. Pinning both to
+ * one fd via fstat()/fchmod() closes that window instead of merely
+ * narrowing it. open() still follows a symlink named by `path` itself,
+ * matching chmod(1p)'s own "act on the referent" rule; O_NONBLOCK/
+ * O_NOCTTY keep opening a FIFO or tty operand from blocking or
+ * stealing a controlling terminal. */
+static enum chmod_fd_result chmod_by_fd(const char *path, const char *mode_spec, int *fail)
+{
+	struct stat st;
+	mode_t newmode;
+	int fd = open(path, O_RDONLY | O_NONBLOCK | O_NOCTTY);
+
+	if (fd < 0) return CHMOD_FD_UNAVAILABLE;
+	if (fstat(fd, &st) != 0) {
+		__util_diagf("chmod: %s: %s\n", path, strerror(errno));
+		(void)close(fd);
+		*fail = 1;
+		return CHMOD_FD_FAILED;
+	}
+	/* The who-omitted umask rule (modeparse.h) is chmod(1p)'s own
+	 * OPERANDS text, not something mkdir(1p)/mkfifo(1p) add on top of
+	 * it -- so a bare `chmod +w file` is exactly as umask-sensitive
+	 * here as `mkdir -m +w newdir` is. */
+	if (__util_parse_mode("chmod", mode_spec, st.st_mode & 07777,
+	                      (mode_t)__umask_get(), &newmode) < 0) {
+		(void)close(fd);
+		return CHMOD_FD_USAGE_ERROR; /* malformed mode operand: usage error, not per-file */
+	}
+	if (fchmod(fd, newmode) != 0) {
+		__util_diagf("chmod: %s: %s\n", path, strerror(errno));
+		(void)close(fd);
+		*fail = 1;
+		return CHMOD_FD_FAILED;
+	}
+	(void)close(fd);
+	return CHMOD_FD_DONE;
+}
 
 int __util_chmod_main(
 	int argc, char **argv elements_withtok(null_terminated, argc))
@@ -64,16 +111,22 @@ int __util_chmod_main(
 	for (i = 2; i < argc; i++) {
 		struct stat st;
 		mode_t newmode;
+		enum chmod_fd_result r = chmod_by_fd(argv[i], mode_spec, &fail);
 
+		if (r == CHMOD_FD_DONE || r == CHMOD_FD_FAILED) continue;
+		if (r == CHMOD_FD_USAGE_ERROR) return 1;
+
+		/* CHMOD_FD_UNAVAILABLE: open() itself failed -- a socket, or
+		 * a real permission problem (an owner can chmod a file whose
+		 * own mode bits deny them read/write, but cannot open() it)
+		 * -- neither is the TOCTOU chmod_by_fd() exists to close, so
+		 * fall back to the plain stat()+chmod() pair this function
+		 * used before it ever tried to open() at all. */
 		if (stat(argv[i], &st) != 0) {
 			__util_diagf("chmod: %s: %s\n", argv[i], strerror(errno));
 			fail = 1;
 			continue;
 		}
-		/* The who-omitted umask rule (modeparse.h) is chmod(1p)'s
-		 * own OPERANDS text, not something mkdir(1p)/mkfifo(1p) add
-		 * on top of it -- so a bare `chmod +w file` is exactly as
-		 * umask-sensitive here as `mkdir -m +w newdir` is. */
 		if (__util_parse_mode("chmod", mode_spec, st.st_mode & 07777,
 		                      (mode_t)__umask_get(), &newmode) < 0)
 			return 1; /* malformed mode operand: usage error, not per-file */

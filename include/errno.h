@@ -22,7 +22,7 @@ extern "C" {
  * requires proof of (some prior call or assignment on this path could have
  * set it) -- the family name lives here, not hardcoded in the checker. */
 requires_thread_token(errno_grounds)
-extern int *__errno_location(void);
+extern int *__errno_location(void) __attribute__((returns_nonnull));
 #define errno (*__errno_location())
 
 #ifdef _GNU_SOURCE

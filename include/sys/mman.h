@@ -44,6 +44,7 @@ extern "C" {
 #endif
 
 #include <features.h>
+#include <ownership.h>
 
 #define __NEED_size_t
 #define __NEED_off_t
@@ -92,8 +93,11 @@ extern "C" {
 #endif
 
 void *mmap(void *, size_t, int, int, int, off_t);
+fallible
 int munmap(void *, size_t);
+fallible
 int mprotect(void *, size_t, int);
+fallible
 int msync(void *, size_t, int);
 int mlock(const void *, size_t);
 int munlock(const void *, size_t);

@@ -188,8 +188,17 @@ static void pv_free_from(struct pv *p, size_t from)
 /* Allocate the caller-visible pointer vector and transfer the pointer
  * entries into it.  offs is caller-controlled under WRDE_DOOFFS, so
  * validate both additions and the final conversion to bytes before
- * allocating or filling the reserved slots. */
+ * allocating or filling the reserved slots.
+ *
+ * withtok(internal_heap_allocated) on this producer (matching this same
+ * family already used above by cmdsub_dollar_text()/cmdsub_backquote_text())
+ * is what lets expand_impl()'s own `pwordexp->we_wordv = v;` below be proven
+ * a real transfer into that field's own withtok(internal_heap_allocated) in
+ * include/wordexp.h, rather than reporting an unaccounted-for allocation at
+ * expand_impl()'s exit. */
+withtok(internal_heap_allocated)
 static char **pv_pack(struct pv *p, size_t offs) __attribute__((nonnull(1)));
+withtok(internal_heap_allocated)
 static char **pv_pack(struct pv *p, size_t offs)
 {
 	size_t i, total;

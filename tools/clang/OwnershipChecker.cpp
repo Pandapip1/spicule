@@ -71,12 +71,16 @@ REGISTER_MAP_WITH_PROGRAMSTATE(StrictLoanMap, StrictLoanKey, const MemRegion *)
 REGISTER_SET_WITH_PROGRAMSTATE(ExpiredStrictLoanSet, const MemRegion *)
 
 REGISTER_MAP_WITH_PROGRAMSTATE(ResourceMap, SymbolRef, unsigned)
-// Origin/frame side tables for ResourceLifecycleChecker::checkEndFunction's
-// leak-at-exit scan, the same two facts AllocationLifetimeChecker's own
-// AllocationOrigin/AllocationFrame record for the identical reason: a
-// diagnostic needs the acquisition site, and the scan needs to skip a
-// resource this function merely inherited (a borrowed parameter, or one
-// still live in a caller's frame) rather than acquired itself.
+// Origin/frame side tables for ResourceLeakChecker's (opt-in, ntlibc.
+// ResourceLeak) leak-at-exit scan, the same two facts AllocationLifetime
+// Checker's own AllocationOrigin/AllocationFrame record for the identical
+// reason: a diagnostic needs the acquisition site, and the scan needs to
+// skip a resource this function merely inherited (a borrowed parameter,
+// or one still live in a caller's frame) rather than acquired itself.
+// Populated by ResourceLifecycleChecker's (ntlibc.Resource, always-on)
+// own track()/checkPostCall -- ResourceLeakChecker only ever reads them,
+// so both checkers must run in the same clang -analyzer-checker= pass for
+// the leak scan to see anything.
 REGISTER_MAP_WITH_PROGRAMSTATE(ResourceOrigin, SymbolRef, const Stmt *)
 REGISTER_MAP_WITH_PROGRAMSTATE(ResourceFrame, SymbolRef,
                                const StackFrameContext *)
@@ -4240,8 +4244,7 @@ public:
 };
 
 class ResourceLifecycleChecker
-    : public Checker<check::PreCall, check::PostCall,
-                     check::PostStmt<BinaryOperator>, check::EndFunction> {
+    : public Checker<check::PreCall, check::PostCall> {
   mutable std::unique_ptr<BugType> BT;
 
   enum Family : unsigned {
@@ -4446,64 +4449,15 @@ class ResourceLifecycleChecker
   }
 
   // Records an acquisition's family, origin, and owning frame together --
-  // the three facts checkEndFunction's leak scan below needs, mirroring
-  // AllocationLifetimeChecker::track()'s identical three-map bookkeeping
-  // for AllocationLifecycle/AllocationOrigin/AllocationFrame.
+  // the three facts ResourceLeakChecker's (opt-in) leak scan needs,
+  // mirroring AllocationLifetimeChecker::track()'s identical three-map
+  // bookkeeping for AllocationLifecycle/AllocationOrigin/AllocationFrame.
   static ProgramStateRef track(ProgramStateRef State, SymbolRef Symbol,
                                Family Value, const Stmt *Origin,
                                const StackFrameContext *Frame) {
     State = State->set<ResourceMap>(Symbol, live(Value));
     State = State->set<ResourceOrigin>(Symbol, Origin);
     return State->set<ResourceFrame>(Symbol, Frame);
-  }
-
-  static ProgramStateRef forget(ProgramStateRef State, SymbolRef Symbol) {
-    return State->remove<ResourceMap>(Symbol)
-        ->remove<ResourceOrigin>(Symbol)
-        ->remove<ResourceFrame>(Symbol);
-  }
-
-  static bool belongsToFrame(ProgramStateRef State, SymbolRef Symbol,
-                             const StackFrameContext *Frame) {
-    const StackFrameContext *const *Owner = State->get<ResourceFrame>(Symbol);
-    return Owner && *Owner == Frame;
-  }
-
-  // `x->fd = fd;`/`f->f = fopen(...);` (a struct field), `*out = h;` (a
-  // parameter's own pointee, AllocationLifetimeChecker.cpp's own
-  // destinationDeclaration() UO_Deref+ParmVarDecl case), `pair[i] = fd;`
-  // (that same out-parameter shape spelled with subscript sugar instead
-  // of a deref, e.g. src/socket/socketpair.c's `pair[0] = client;`), and
-  // a direct store into a static/global variable (src/misc/linux/grp.c's
-  // getgrent() `g_grent_f = fopen(...)`, the same getXXXent()/setXXXent()
-  // cache shape 906692a9 already gave a withtok(file_stream_open)
-  // contract for on AllocationLifetimeChecker) are the real shapes this
-  // codebase stores an acquired resource through on its way to outliving
-  // this function. ResourceMap's families have no withtok-annotated-field
-  // contract of their own to gate this the way AllocationLifetimeChecker's
-  // composite owners are gated, so this trusts each shape unconditionally,
-  // the same "real, checkable AST evidence this analysis cannot see past"
-  // trust boundary isDirectParameterArgument()/handleOutParamArgument()
-  // already give a borrowed argument or out-parameter above.
-  static bool isTrustedResourceDestination(const Expr *LHS) {
-    LHS = LHS->IgnoreParenCasts();
-    if (isa<MemberExpr>(LHS))
-      return true;
-    if (const auto *Subscript = dyn_cast<ArraySubscriptExpr>(LHS)) {
-      const auto *Reference = dyn_cast<DeclRefExpr>(
-          Subscript->getBase()->IgnoreParenCasts());
-      return Reference && isa<ParmVarDecl>(Reference->getDecl());
-    }
-    if (const auto *Reference = dyn_cast<DeclRefExpr>(LHS))
-      if (const auto *Variable = dyn_cast<VarDecl>(Reference->getDecl()))
-        return Variable->hasGlobalStorage();
-    if (const auto *Unary = dyn_cast<UnaryOperator>(LHS))
-      if (Unary->getOpcode() == UO_Deref) {
-        const Expr *Pointer = Unary->getSubExpr()->IgnoreParenImpCasts();
-        if (const auto *Reference = dyn_cast<DeclRefExpr>(Pointer))
-          return isa<ParmVarDecl>(Reference->getDecl());
-      }
-    return false;
   }
 
   // The POSIX acquire functions in acquiredFamily() signal failure with a
@@ -4514,9 +4468,9 @@ class ResourceLifecycleChecker
   // AllocationLifetimeChecker's own checkPostCall splits a malloc-family
   // return on null, is what lets the ordinary "if (fd < 0) return;"/
   // "if (!f) return;" failure check below stay unflagged by
-  // checkEndFunction's leak scan: the failure branch never gains a live
-  // ResourceMap entry in the first place, so there is nothing there to
-  // require releasing. Returns {failed-state, succeeded-state}; either
+  // ResourceLeakChecker's leak scan: the failure branch never gains a
+  // live ResourceMap entry in the first place, so there is nothing there
+  // to require releasing. Returns {failed-state, succeeded-state}; either
   // half may be null if that branch is infeasible under existing
   // constraints.
   static std::pair<ProgramStateRef, ProgramStateRef>
@@ -4929,7 +4883,100 @@ public:
     else if (auto Use = use(Call))
       checkResource(Call, Use->first, Use->second, false, C);
   }
+};
 
+// Opt-in (ntlibc.ResourceLeak; see tools/lint.sh's resourceleak stage): the
+// missing half of ResourceLifecycleChecker's acquire/use/release proof --
+// checkResource there only ever validates a release call's own legitimacy
+// at the moment one is reached, so nothing notices a live resource that no
+// path released at all. This is the ResourceMap analogue of
+// AllocationLifetimeChecker::checkEndFunction's leak-at-exit scan -- same
+// frame-scoping (a resource belongs to whichever frame acquired it, see
+// belongsToFrame), same "return transfers it to the caller" trust boundary
+// -- applied to ResourceMap's simpler live/released facts instead of
+// AllocationLifecycle's token algebra, which ResourceMap's families have
+// no withtok/consume contract of their own to drive.
+//
+// A separate checker class, not more callbacks on ResourceLifecycleChecker
+// itself, so this can be landed opt-in and its own tree-wide backlog
+// triaged independently, the same way totality/sizearith/loopcond each
+// landed as their own checker before earning a place in requested_stages'
+// default list. It reads ResourceMap/ResourceOrigin/ResourceFrame -- the
+// same three program-state tables ResourceLifecycleChecker's track()
+// writes -- rather than duplicating them, so ntlibc.Resource must also be
+// enabled in the same clang -analyzer-checker= invocation for this
+// checker to see anything.
+class ResourceLeakChecker
+    : public Checker<check::PostStmt<BinaryOperator>, check::EndFunction> {
+  mutable std::unique_ptr<BugType> BT;
+
+  static ProgramStateRef forget(ProgramStateRef State, SymbolRef Symbol) {
+    return State->remove<ResourceMap>(Symbol)
+        ->remove<ResourceOrigin>(Symbol)
+        ->remove<ResourceFrame>(Symbol);
+  }
+
+  static bool belongsToFrame(ProgramStateRef State, SymbolRef Symbol,
+                             const StackFrameContext *Frame) {
+    const StackFrameContext *const *Owner = State->get<ResourceFrame>(Symbol);
+    return Owner && *Owner == Frame;
+  }
+
+  // `x->fd = fd;`/`f->f = fopen(...);` (a struct field), `*out = h;` (a
+  // parameter's own pointee, AllocationLifetimeChecker.cpp's own
+  // destinationDeclaration() UO_Deref+ParmVarDecl case), `pair[i] = fd;`
+  // (that same out-parameter shape spelled with subscript sugar instead
+  // of a deref, e.g. src/socket/socketpair.c's `pair[0] = client;`), and
+  // a direct store into a static/global variable (src/misc/linux/grp.c's
+  // getgrent() `g_grent_f = fopen(...)`, the same getXXXent()/setXXXent()
+  // cache shape 906692a9 already gave a withtok(file_stream_open)
+  // contract for on AllocationLifetimeChecker) are the real shapes this
+  // codebase stores an acquired resource through on its way to outliving
+  // this function. ResourceMap's families have no withtok-annotated-field
+  // contract of their own to gate this the way AllocationLifetimeChecker's
+  // composite owners are gated, so this trusts each shape unconditionally,
+  // the same "real, checkable AST evidence this analysis cannot see past"
+  // trust boundary ResourceLifecycleChecker's own isDirectParameterArgument()/
+  // handleOutParamArgument() already give a borrowed argument or
+  // out-parameter.
+  static bool isTrustedResourceDestination(const Expr *LHS) {
+    LHS = LHS->IgnoreParenCasts();
+    if (isa<MemberExpr>(LHS))
+      return true;
+    if (const auto *Subscript = dyn_cast<ArraySubscriptExpr>(LHS)) {
+      const auto *Reference = dyn_cast<DeclRefExpr>(
+          Subscript->getBase()->IgnoreParenCasts());
+      return Reference && isa<ParmVarDecl>(Reference->getDecl());
+    }
+    if (const auto *Reference = dyn_cast<DeclRefExpr>(LHS))
+      if (const auto *Variable = dyn_cast<VarDecl>(Reference->getDecl()))
+        return Variable->hasGlobalStorage();
+    if (const auto *Unary = dyn_cast<UnaryOperator>(LHS))
+      if (Unary->getOpcode() == UO_Deref) {
+        const Expr *Pointer = Unary->getSubExpr()->IgnoreParenImpCasts();
+        if (const auto *Reference = dyn_cast<DeclRefExpr>(Pointer))
+          return isa<ParmVarDecl>(Reference->getDecl());
+      }
+    return false;
+  }
+
+  void report(StringRef Reason, const Stmt *Statement,
+              CheckerContext &C) const {
+    if (!Statement)
+      return;
+    ExplodedNode *Node = C.generateNonFatalErrorNode();
+    if (!Node)
+      return;
+    if (!BT)
+      BT = std::make_unique<BugType>(this, "Unproven resource lifecycle",
+                                     categories::MemoryError);
+    auto Report = std::make_unique<PathSensitiveBugReport>(
+        *BT, diagnosticMessage(Reason, Statement, C), Node);
+    Report->addRange(Statement->getSourceRange());
+    C.emitReport(std::move(Report));
+  }
+
+public:
   // Deliberately not frame-gated, unlike checkEndFunction's use of
   // belongsToFrame below: a resource acquired in one frame and handed by
   // value into a small same-TU helper the analyzer inlines (src/dirent/
@@ -4951,16 +4998,6 @@ public:
     C.addTransition(forget(C.getState(), Source));
   }
 
-  // The missing half of the acquire/use/release proof above: checkResource
-  // only ever validates a release call's own legitimacy at the moment one
-  // is reached, so nothing before this point ever notices a live resource
-  // that no path released at all. This is the ResourceMap analogue of
-  // AllocationLifetimeChecker::checkEndFunction's leak-at-exit scan --
-  // same frame-scoping (a resource belongs to whichever frame acquired
-  // it, see belongsToFrame), same "return transfers it to the caller"
-  // trust boundary -- applied to ResourceMap's simpler live/released facts
-  // instead of AllocationLifecycle's token algebra, which ResourceMap's
-  // families have no withtok/consume contract of their own to drive.
   void checkEndFunction(const ReturnStmt *Return, CheckerContext &C) const {
     ProgramStateRef State = C.getState();
     SymbolRef Returned =
@@ -5018,8 +5055,12 @@ extern "C" void clang_registerCheckers(CheckerRegistry &Registry) {
       "pointer",
       "");
   Registry.addChecker<ResourceLifecycleChecker>(
-      "ntlibc.Resource",
-      "Proves acquire, use, release, and eventual-release resource "
+      "ntlibc.Resource", "Proves acquire, use, and release resource "
       "lifecycles",
+      "");
+  Registry.addChecker<ResourceLeakChecker>(
+      "ntlibc.ResourceLeak",
+      "Proves a tracked resource is released before function exit "
+      "(opt-in, ntlibc.Resource must also be enabled)",
       "");
 }

@@ -50,7 +50,8 @@ static int read_line(FILE *f, char **buf, size_t *cap, size_t *len) // NOLINT(bu
 	return 0;
 }
 
-int __util_comm_main(int argc, char **argv)
+int __util_comm_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int show1 = 1, show2 = 1, show3 = 1;
 	int i;

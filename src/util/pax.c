@@ -1267,7 +1267,8 @@ static int do_copy(char **files, int nfiles, const char *directory, int no_recur
 
 /* ==== option parsing / mode dispatch ====================================== */
 
-int __util_pax_main(int argc, char **argv)
+int __util_pax_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int i;
 	int rflag = 0, wflag = 0;

@@ -223,7 +223,8 @@ static const char *opt_value(char **argv, int argc, int *argi, char opt, const c
 	return argv[*argi];
 }
 
-int __util_awk_main(int argc, char **argv)
+int __util_awk_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	const char *fsarg = NULL;
 	struct vassign *vassigns = NULL;

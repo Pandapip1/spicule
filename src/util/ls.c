@@ -482,7 +482,8 @@ static int list_dir(const struct ls_opts *o, const char *path, int print_header,
 	return 0;
 }
 
-int __util_ls_main(int argc, char **argv)
+int __util_ls_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	struct ls_opts o;
 	int i, exit_status = 0;

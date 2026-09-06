@@ -519,7 +519,8 @@ static void free_lines(struct line *lines, size_t n)
 	free(lines);
 }
 
-int __util_sort_main(int argc, char **argv)
+int __util_sort_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	struct sort_opts o;
 	struct sort_key keys[64];

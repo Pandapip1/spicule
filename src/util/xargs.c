@@ -336,7 +336,8 @@ static size_t argv_bytes(char *const *v, size_t n)
 	return total;
 }
 
-int __util_xargs_main(int argc, char **argv)
+int __util_xargs_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	struct xopts o;
 	int i;

@@ -207,7 +207,8 @@ static int do_remove(const char *dir, char **ids, int nids)
 	return status;
 }
 
-int __util_at_main(int argc, char **argv)
+int __util_at_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int i = 1;
 	int opt_l = 0, opt_r = 0;

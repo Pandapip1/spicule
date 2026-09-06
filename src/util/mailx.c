@@ -867,7 +867,8 @@ static int do_test_for_mail(const struct passwd *me)
 
 /* ==================== option parsing / dispatch ==================== */
 
-int __util_mailx_main(int argc, char **argv)
+int __util_mailx_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int i;
 	int opt_e = 0, opt_f = 0, opt_H = 0, opt_i = 0, opt_N = 0;

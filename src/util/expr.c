@@ -512,7 +512,8 @@ static char *parse_or(struct expr_ctx *c)
 	return v;
 }
 
-int __util_expr_main(int argc, char **argv)
+int __util_expr_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	struct expr_ctx c;
 	char *result;

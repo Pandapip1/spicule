@@ -97,7 +97,8 @@ static int send_all(int fd, const char *buf, size_t len)
 	return 0;
 }
 
-int __util_write_main(int argc, char **argv)
+int __util_write_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	const char *user, *ttyop;
 	struct passwd *pw;

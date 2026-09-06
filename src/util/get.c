@@ -353,7 +353,8 @@ out:
 	return rc;
 }
 
-int __util_get_main(int argc, char **argv)
+int __util_get_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int pflag = 0, i, status = 0, first_operand;
 	const char *rflag = 0;

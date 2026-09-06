@@ -1695,7 +1695,8 @@ static void m4_free(struct m4_state *st)
 
 /* ==== entry point =============================================================== */
 
-int __util_m4_main(int argc, char **argv)
+int __util_m4_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	struct m4_state st;
 	const char *files[256];

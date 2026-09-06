@@ -248,7 +248,8 @@ static int create_one(const char *path, const struct line_array *body,
 	return 0;
 }
 
-int __util_admin_main(int argc, char **argv)
+int __util_admin_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int have_i = 0, have_n = 0, have_t = 0, have_y = 0;
 	const char *iname = 0, *tname = 0, *ycomment = 0;

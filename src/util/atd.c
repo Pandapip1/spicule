@@ -267,7 +267,8 @@ static void poll_once(const char *dir)
 	(void)closedir(dp);
 }
 
-int __util_atd_main(int argc, char **argv)
+int __util_atd_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	char dir[NTLIBC_SPOOL_PATH_MAX];
 	long poll_ms = 1000;

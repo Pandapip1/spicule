@@ -91,7 +91,8 @@ static void cmp_close(struct cmp_file *cf)
 	if (cf->f && !cf->is_stdin) (void)fclose(cf->f);
 }
 
-int __util_cmp_main(int argc, char **argv)
+int __util_cmp_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int opt_l = 0, opt_s = 0;
 	int i;

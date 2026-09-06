@@ -154,7 +154,8 @@ static void concat_serial(FILE *f, const char *delims, size_t ndelim)
 	fputc('\n', stdout);
 }
 
-int __util_paste_main(int argc, char **argv)
+int __util_paste_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	int serial = 0;
 	char *delims = NULL;

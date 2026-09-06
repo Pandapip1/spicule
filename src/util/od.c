@@ -367,7 +367,8 @@ static int parse_type(const char *s, char *type, int *size)
 	return -1;
 }
 
-int __util_od_main(int argc, char **argv)
+int __util_od_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	struct od_opts o;
 	struct instream is;

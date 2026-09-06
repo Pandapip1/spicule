@@ -337,7 +337,8 @@ static void run_entry(const char *crontabs_dir, const struct cron_entry *e, time
 	free(stdin_body);
 }
 
-int __util_crond_main(int argc, char **argv)
+int __util_crond_main(
+	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	char crontabs_dir[NTLIBC_SPOOL_PATH_MAX];
 	char path[NTLIBC_SPOOL_PATH_MAX];

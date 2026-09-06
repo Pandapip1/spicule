@@ -345,6 +345,33 @@ static void test_tr_plain_translate_requires_string2(void)
 	CHECK(run_stdin(tr_path, argv, "abc\n") != 0);
 }
 
+static void test_tr_repeat_huge_count_is_bounded(void)
+{
+	/* [x*N] for a huge, attacker-sized N must not force expand_spec()
+	 * to actually materialize N bytes of 'x' -- see src/util/tr.c's
+	 * header and the explicit-repeat branch's own comment. string1 is
+	 * 2 characters long, so a correct, bounded implementation finishes
+	 * instantly no matter how large N's decimal text spells; before
+	 * the fix this pushed the literal count of bytes, so a few dozen
+	 * bytes of argv could demand gigabytes (or more) of memory for a
+	 * two-character string1. */
+	char *argv[] = { (char *)"tr", (char *)"ab", (char *)"[x*99999999999999]", 0 };
+	CHECK(run_stdin(tr_path, argv, "ab\n") == 0);
+	CHECK(out_equals("xx\n"));
+}
+
+static void test_tr_repeat_huge_count_preserves_later_positions(void)
+{
+	/* The cap must still leave every position string1's expansion can
+	 * address filled with 'x' -- string1 is 10 characters, so a naive
+	 * "only ever keep 1 copy" fix would corrupt positions 1..9 here,
+	 * and the trailing "YZ" after the repeat must still be parsed
+	 * (just never read back, since it falls past string1's length). */
+	char *argv[] = { (char *)"tr", (char *)"abcdefghij", (char *)"[x*999999999999]YZ", 0 };
+	CHECK(run_stdin(tr_path, argv, "abcdefghij\n") == 0);
+	CHECK(out_equals("xxxxxxxxxx\n"));
+}
+
 /* ==== expand(1p) ========================================================== */
 
 static void test_expand_default_tabwidth(void)
@@ -604,6 +631,8 @@ int main(int argc, char **argv)
 	test_tr_octal_escape();
 	test_tr_delete_without_squeeze_rejects_string2();
 	test_tr_plain_translate_requires_string2();
+	test_tr_repeat_huge_count_is_bounded();
+	test_tr_repeat_huge_count_preserves_later_positions();
 
 	test_expand_default_tabwidth();
 	test_expand_dash_t_single_number();

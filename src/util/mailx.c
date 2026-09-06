@@ -159,7 +159,7 @@ static int write_all(int fd, const char *buf withtok(readable_span(len)),
  * *outlen, never counted in it -- callers that want a body treat this
  * purely as a byte span). Returns 0/-1; on success *outbuf and *outlen
  * are always valid (an empty stream yields a 0-length, non-NULL buffer). */
-static int slurp_fd(int fd, char **outbuf, size_t *outlen)
+static int slurp_fd(int fd, char **outbuf withtok(heap_allocated), size_t *outlen)
 {
 	size_t cap = 65536, len = 0;
 	char *buf = malloc(cap);
@@ -194,7 +194,16 @@ static int slurp_fd(int fd, char **outbuf, size_t *outlen)
  * either way on this platform's own backends). */
 static int join_path(const char *dir, const char *leaf, char *out, size_t outsz)
 {
-	size_t dl = strlen(dir);
+	size_t dl;
+	/* Every real call site passes pw->pw_dir (src/misc/{linux,nt}/pwd.c's
+	 * own pw_name/pw_dir/pw_shell all point into one NUL-terminated
+	 * packed buffer, the same fact addr_is_current_user() below has to
+	 * restate for pw_name) -- struct passwd is a shared, foreign type
+	 * (include/pwd.h) with no withtok(null_terminated) of its own on
+	 * pw_dir, so the axiom is restated here by hand rather than by
+	 * touching that shared header. */
+	__ownership_string_terminated(dir);
+	dl = strlen(dir);
 	int need_slash = dl > 0 && dir[dl - 1] != '/' && dir[dl - 1] != '\\';
 	int n = snprintf(out, outsz, need_slash ? "%s/%s" : "%s%s", dir, leaf);
 	return (n < 0 || (size_t)n >= outsz) ? -1 : 0;
@@ -219,6 +228,12 @@ static int addr_is_current_user(const struct passwd *pw, const char *addr)
 {
 	const char *at = strchr(addr, '@');
 	size_t namelen = at ? (size_t)(at - addr) : strlen(addr);
+	/* pw->pw_name, like pw->pw_dir above (see join_path()), is a foreign
+	 * struct passwd field with no withtok(null_terminated) of its own --
+	 * src/misc/{linux,nt}/pwd.c's own fill_from_fields() packs it into a
+	 * NUL-terminated buffer, restated here by hand rather than by
+	 * annotating the shared include/pwd.h struct itself. */
+	__ownership_string_terminated(pw->pw_name);
 	return strlen(pw->pw_name) == namelen && strncmp(pw->pw_name, addr, namelen) == 0;
 }
 
@@ -241,10 +256,21 @@ static int has_header_injection(const char *s)
 	return strpbrk(s, "\r\n") != 0;
 }
 
+/* pw is always __util_mailx_main()'s own `me`, already checked non-NULL
+ * (current_user() returning NULL is refused with a diagnostic before any
+ * caller of this function runs) at every real call site. */
+static int system_mailbox_path(const struct passwd *pw, char *out, size_t outsz)
+	__attribute__((nonnull(1)));
 static int system_mailbox_path(const struct passwd *pw, char *out, size_t outsz)
 {
 	const char *mail = getenv("MAIL");
 	if (mail && *mail) {
+		/* getenv()'s own withtok(null_terminated) return contract
+		 * (include/stdlib.h) is not itself carried across the
+		 * assignment into this local by this checker suite's
+		 * generic call-return handling -- restated here by hand,
+		 * same idiom as src/env/getenv.c's own implementation. */
+		__ownership_string_terminated(mail);
 		if (strlen(mail) >= outsz) return -1;
 		strcpy(out, mail);
 		return 0;
@@ -252,10 +278,16 @@ static int system_mailbox_path(const struct passwd *pw, char *out, size_t outsz)
 	return join_path(pw->pw_dir, "mailbox", out, outsz);
 }
 
+/* Same real precondition as system_mailbox_path() above. */
+static int secondary_mailbox_path(const struct passwd *pw, char *out, size_t outsz)
+	__attribute__((nonnull(1)));
 static int secondary_mailbox_path(const struct passwd *pw, char *out, size_t outsz)
 {
 	const char *mbox = getenv("MBOX");
 	if (mbox && *mbox) {
+		/* Same getenv() return-contract restatement as
+		 * system_mailbox_path() above. */
+		__ownership_string_terminated(mbox);
 		if (strlen(mbox) >= outsz) return -1;
 		strcpy(out, mbox);
 		return 0;
@@ -272,7 +304,7 @@ static int secondary_mailbox_path(const struct passwd *pw, char *out, size_t out
  * whenever it is appended, is unambiguously "preceded by an empty
  * line" once ensure_blank_terminated() adds the separating blank line
  * -- see that function). Returns 0/-1 (malloc failure only). */
-static int append_escaped_body(char **out, size_t *outlen, size_t *outcap,
+static int append_escaped_body(char **out withtok(heap_allocated), size_t *outlen, size_t *outcap,
 	const char *restrict body, size_t bodylen)
 {
 	size_t i = 0;
@@ -341,6 +373,12 @@ static int ensure_blank_terminated(int fd, const char *label)
 	if (n >= 1 && tail[n - 1] == '\n') pad = "\n";                                  /* one newline short */
 	else pad = "\n\n";                                                              /* line not even newline-terminated */
 
+	/* pad is always one of the two string literals just above; the
+	 * checker sees a plain `const char *` that took either branch of a
+	 * conditional assignment, not a syntactic string literal at this use
+	 * site, so the fact is restated by hand rather than left to
+	 * qual:string_literal's own AST-level recognition. */
+	__ownership_string_terminated(pad);
 	return write_all(fd, pad, strlen(pad), label);
 }
 
@@ -504,8 +542,17 @@ struct mbox_msg {
 /* Looks for a "Name:" header (case-insensitively, per RFC 822 field-name
  * rules) anywhere in [from,to) and returns its value's span (leading
  * space after the colon skipped, trailing '\r' if any trimmed). */
-static void find_header(const char *buf, size_t from, size_t to, const char *name,
-	size_t *voff, size_t *vlen)
+/* buf is always parse_mbox()'s own buf parameter (below), itself always
+ * do_receive()'s slurp_fd()-filled buffer -- slurp_fd()'s own header
+ * comment guarantees "*outbuf and *outlen are always valid (an empty
+ * stream yields a 0-length, non-NULL buffer)" -- never NULL. voff/vlen are
+ * always &m->from_off/&m->from_len (etc.) at every real call site below --
+ * also never NULL. */
+static void find_header(const char *buf, size_t from, size_t to,
+	const char *name withtok(null_terminated),
+	size_t *voff, size_t *vlen) __attribute__((nonnull(1, 5, 6)));
+static void find_header(const char *buf, size_t from, size_t to,
+	const char *name withtok(null_terminated), size_t *voff, size_t *vlen)
 {
 	size_t namelen = strlen(name);
 	size_t i = from;
@@ -537,7 +584,13 @@ static void find_header(const char *buf, size_t from, size_t to, const char *nam
  * a diagnostic already printed) if `buf` is non-empty but never
  * contains a single recognizable boundary at all -- refused outright
  * rather than guessed at, per this file's own header comment. */
-static int parse_mbox(const char *buf, size_t len, const char *label, struct mbox_msg **out, size_t *nmsg)
+/* buf is always do_receive()'s own slurp_fd()-filled buffer -- see
+ * find_header()'s own comment above for why that is never NULL. */
+static int parse_mbox(const char *buf, size_t len, const char *label,
+	struct mbox_msg **out withtok(heap_allocated), size_t *nmsg)
+	__attribute__((nonnull(1)));
+static int parse_mbox(const char *buf, size_t len, const char *label,
+	struct mbox_msg **out withtok(heap_allocated), size_t *nmsg)
 {
 	size_t *bounds = 0, nb = 0, cap = 0;
 	size_t i = 0;
@@ -621,6 +674,12 @@ static int parse_mbox(const char *buf, size_t len, const char *label, struct mbo
 	return 0;
 }
 
+/* buf is always do_receive()'s own slurp_fd()-filled buffer (see
+ * find_header()'s comment above), and m is always &msgs[idx-1]/
+ * &msgs[cur-1]/&msgs[i-1] at every real call site (do_receive()/
+ * interactive_loop() below) -- neither is ever NULL. */
+static void print_summary_line(const char *buf, const struct mbox_msg *m, size_t idx, size_t cur)
+	__attribute__((nonnull(1, 2)));
 static void print_summary_line(const char *buf, const struct mbox_msg *m, size_t idx, size_t cur)
 {
 	char sender[64], subj[64];
@@ -642,6 +701,11 @@ static void print_summary_line(const char *buf, const struct mbox_msg *m, size_t
 		idx, sender, subj[0] ? subj : "(no subject)");
 }
 
+/* buf is always do_receive()'s own slurp_fd()-filled buffer (see
+ * find_header()'s comment above), and m is always &msgs[...] at every real
+ * call site below -- neither is ever NULL. */
+static void print_message(const char *buf, const struct mbox_msg *m)
+	__attribute__((nonnull(1, 2)));
 static void print_message(const char *buf, const struct mbox_msg *m)
 {
 	size_t body_start = m->hdr_end;
@@ -663,6 +727,15 @@ static void print_message(const char *buf, const struct mbox_msg *m)
  * originally stored, so the result is a well-formed mbox with no
  * separator bookkeeping needed here (see this file's top-of-file
  * comment). */
+/* buf is always do_receive()'s own slurp_fd()-filled buffer (see
+ * find_header()'s comment above). msgs is always the array parse_mbox()
+ * below filled in, real and non-NULL whenever this is called (both real
+ * callers -- do_receive()'s own quit-on-EOF path and interactive_loop()'s
+ * `q` -- are only ever reached after do_receive() has already checked
+ * n != 0, which parse_mbox() only reports once it has itself allocated a
+ * real, non-NULL array of that many elements). */
+static int rewrite_mailbox(int fd, const char *label, const char *buf, const struct mbox_msg *msgs, size_t n)
+	__attribute__((nonnull(3, 4)));
 static int rewrite_mailbox(int fd, const char *label, const char *buf, const struct mbox_msg *msgs, size_t n)
 {
 	size_t i;
@@ -684,16 +757,34 @@ static int rewrite_mailbox(int fd, const char *label, const char *buf, const str
  * t/type, accept two of each), so this replaces a repeated
  * cmdlen/strncmp comparison per spelling with one readable call per
  * accepted form. */
-static int cmd_is(const char *cmd, int cmdlen, const char *a, const char *b)
+static int cmd_is(const char *cmd, int cmdlen,
+	const char *a withtok(null_terminated), const char *b)
 {
 	if (cmdlen == (int)strlen(a) && !strncmp(cmd, a, (size_t)cmdlen)) return 1;
-	return b && cmdlen == (int)strlen(b) && !strncmp(cmd, b, (size_t)cmdlen);
+	if (!b) return 0;
+	/* Unlike `a` (always a real spelling), `b` is genuinely NULL at one
+	 * real call site (interactive_loop()'s cmd_is(cmd, cmdlen, "x", 0),
+	 * `x` having no second accepted spelling) -- withtok(null_terminated)
+	 * on the parameter itself would require every call site to hold the
+	 * token unconditionally, rejecting that real NULL. Restated here,
+	 * on the branch that has already proven b non-NULL, exactly like
+	 * every other literal second-spelling argument this function is
+	 * otherwise called with. */
+	__ownership_string_terminated(b);
+	return cmdlen == (int)strlen(b) && !strncmp(cmd, b, (size_t)cmdlen);
 }
 
 /* Interactive command loop implementing exactly the minimum mandatory
  * subset this file's header comment names: p/print, d/delete,
  * u/undelete, n/next, h/headers, q/quit, x/exit, plus '=', '#' and '?'.
  * Returns the exit status. */
+/* buf is always do_receive()'s own slurp_fd()-filled buffer (see
+ * find_header()'s comment above). msgs is always do_receive()'s own array,
+ * only ever passed in after do_receive() has checked n != 0 -- see
+ * rewrite_mailbox()'s own comment above for why that makes it real and
+ * non-NULL here too. */
+static int interactive_loop(int fd, const char *label, char *buf, size_t len, struct mbox_msg *msgs, size_t n)
+	__attribute__((nonnull(3, 5)));
 static int interactive_loop(int fd, const char *label, char *buf, size_t len, struct mbox_msg *msgs, size_t n)
 {
 	size_t cur = n ? 1 : 0;
@@ -720,6 +811,20 @@ static int interactive_loop(int fd, const char *label, char *buf, size_t len, st
 			cmdlen = (int)(p - cmd);
 			while (*p == ' ' || *p == '\t') p++;
 			arg = p;
+			/* cmd and arg are both pointers into `line`'s own
+			 * buffer, up to the same NUL line[sc]=0 placed above --
+			 * true, but each is a distinct pointer VALUE (pointer
+			 * arithmetic off line, not line itself), so the token
+			 * granted onto line's own value above does not
+			 * propagate to these derived values by construction;
+			 * restated on each one actually used with a
+			 * null_terminated-requiring call below (strcmp(arg, ...)
+			 * and cmd_is()'s strlen(a)/strlen(b) comparisons against
+			 * cmd, both by way of the `a`/`b` withtok(null_terminated)
+			 * parameters, but the *matching* required-nonnull cmd
+			 * argument stays a bounded [cmd,cmd+cmdlen) span, never
+			 * itself scanned past cmdlen). */
+			__ownership_string_terminated(arg);
 
 			if (cmdlen == 0) {
 				/* blank line: same as `next` */
@@ -815,7 +920,6 @@ static int do_receive(const struct passwd *me, const char *path, int headers_onl
 		(void)close(fd);
 		return 1;
 	}
-
 	if (parse_mbox(buf, len, path, &msgs, &n) < 0) {
 		free(buf);
 		flock(fd, LOCK_UN);
@@ -831,7 +935,6 @@ static int do_receive(const struct passwd *me, const char *path, int headers_onl
 		(void)close(fd);
 		return 0;
 	}
-
 	if (!no_summary) {
 		size_t i;
 		printf("Mailbox %s: %zu message%s\n", path, n, n == 1 ? "" : "s");

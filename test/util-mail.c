@@ -400,6 +400,83 @@ static void roundtrip_test(void)
 	}
 }
 
+/* ---- header-injection refusal ------------------------------------------
+ * A `-s subject` or recipient address carrying a raw embedded newline
+ * must never reach deliver_message()'s single snprintf() unescaped: that
+ * would let it forge extra header lines, or even a blank-line-preceded
+ * fake "From " boundary (mbox format's own message-boundary rule) inside
+ * the delivered message, which reads back on the next receive as a
+ * second, fully forged message. src/util/mailx.c's has_header_injection()
+ * is what is supposed to catch this before deliver_message() ever runs;
+ * these checks prove both injection points (subject, recipient) are
+ * refused outright, and that the mailbox is left byte-for-byte untouched
+ * when they are. */
+static void header_injection_test(void)
+{
+	char mbox[256], bodyfile[256], out[256], err[256];
+	char *args[5];
+	char buf[8192];
+	int rc;
+
+	mkpath(mbox, sizeof mbox, "hi-mbox");
+	mkpath(bodyfile, sizeof bodyfile, "hi-body.txt");
+	mkpath(out, sizeof out, "hi-out.txt");
+	mkpath(err, sizeof err, "hi-err.txt");
+	setenv("MAIL", mbox, 1);
+#ifndef __linux__
+	setenv("USERNAME", "mtestuser", 1);
+#endif
+	write_file(bodyfile, "should not be delivered\n");
+
+	/* A subject that tries to smuggle in a forged boundary + a second,
+	 * fully forged message. */
+	{
+		char evil_subject[128];
+		size_t before_len = 0, after_len = 0;
+		char *before, *after;
+
+		snprintf(evil_subject, sizeof evil_subject,
+			"innocuous\n\nFrom forged@evil Thu Jan  1 00:00:00 1970\nSubject: forged");
+		before = slurp_alloc(mbox, &before_len); /* mbox does not exist yet -- NULL is expected */
+
+		args[0] = mailx_path; args[1] = (char *)"-s"; args[2] = evil_subject;
+		args[3] = (char *)test_user; args[4] = 0;
+		rc = run_prog(mailx_path, args, bodyfile, out, err);
+		CHECK(rc != 0);
+		slurp_into(err, buf, sizeof buf);
+		CHECK(strstr(buf, "newline") != 0);
+
+		after = slurp_alloc(mbox, &after_len);
+		/* Refused before ever opening/appending to the mailbox: it must
+		 * still not exist (same as `before`), never a corrupt partial
+		 * file. */
+		CHECK(before == 0 && after == 0);
+		(void)before_len; (void)after_len;
+		free(before); free(after);
+	}
+
+	/* A recipient address whose part before '@' still matches the one
+	 * real local user (so addr_is_current_user() alone would accept it)
+	 * but which smuggles a newline in after the '@'. */
+	{
+		char evil_rcpt[128];
+		size_t after_len = 0;
+		char *after;
+
+		snprintf(evil_rcpt, sizeof evil_rcpt, "%s@host\nBcc: attacker@evil.example", test_user);
+		args[0] = mailx_path; args[1] = (char *)"-s"; args[2] = (char *)"fine";
+		args[3] = evil_rcpt; args[4] = 0;
+		rc = run_prog(mailx_path, args, bodyfile, out, err);
+		CHECK(rc != 0);
+		slurp_into(err, buf, sizeof buf);
+		CHECK(strstr(buf, "newline") != 0);
+
+		after = slurp_alloc(mbox, &after_len);
+		CHECK(after == 0);
+		free(after);
+	}
+}
+
 /* ---- shell built-in agreement ------------------------------------------ */
 
 static void builtin_agreement_test(void)
@@ -574,6 +651,7 @@ int main(int argc, char **argv)
 	mkdir(scratch, 0700);
 
 	roundtrip_test();
+	header_injection_test();
 	builtin_agreement_test();
 	concurrent_append_test();
 

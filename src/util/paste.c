@@ -3,41 +3,26 @@
  *
  * paste(1p): `paste [-s] [-d list] file...`
  *
- * Default (no -s): "The paste utility shall concatenate the
- * corresponding lines of the given input files, replacing all but the
- * last file's newline characters with a single <tab>." Concretely: read
- * one line from every file for each output row, joined by delimiters,
- * one row per newline; once a file runs out of lines it contributes an
- * empty field for every remaining row (not a missing row -- the merge
- * keeps going, with that column blank, until every file has reached
- * EOF). merge_parallel() below implements exactly that: each file has
- * its own eof flag, a row is only skipped once *all* files are eof.
+ * Default (no -s): concatenate one line from each file per output
+ * row, joined by delimiters. A file that runs out of lines
+ * contributes an empty field (not a missing row) for every remaining
+ * row, until every file has reached EOF (merge_parallel()).
  *
- * -s ("serial"): "the lines of one file at a time shall be concatenated
- * together" -- concat_serial() below joins every line of a single file
- * onto one output row (delimiters between lines from that file), one
- * output row per input file, in argument order.
+ * -s ("serial"): join every line of one file onto a single output
+ * row (concat_serial()), one output row per file, in argument order.
  *
- * -d list: "Use one or more of the characters in list, instead of the
- * default <tab>, to replace the newline of an input line ... used
- * circularly, that is, when list is exhausted, reuse it from the
- * beginning." parse_delim_list() decodes list's own small escape
- * grammar -- '\n' <newline>, '\t' <tab>, '\\' <backslash> -- into an
- * array of raw output bytes; any other backslash sequence is
- * undefined by the standard and refused here rather than guessed at,
- * same "refuse rather than guess an ambiguous ombination" rule this
- * project applies throughout (see src/util/tr.c's header for the same
- * reasoning applied to its own escape grammar).
+ * -d list: use list's characters as delimiters instead of the default
+ * <tab>, cycling once exhausted. list's own escape grammar is just
+ * '\n', '\t', '\\' (parse_delim_list()); any other backslash sequence
+ * is undefined by the standard and refused here rather than guessed
+ * at (same rule as src/util/tr.c's escape grammar).
  *
- * A file operand of "-" means standard input, same convention as
- * src/util/cut.c; a missing/unreadable operand is diagnosed and that
- * file is thereafter treated as permanently empty (paste keeps merging
- * the files that did open, rather than aborting the whole run), and the
- * exit status is still nonzero.
+ * A file operand of "-" means standard input (src/util/cut.c's
+ * convention); an unopenable operand is diagnosed, treated as
+ * permanently empty thereafter, and makes the exit status nonzero.
  *
- * EXIT STATUS: "0 Success. >0 An error occurred." -- 2 for a usage
- * error, 1 for a runtime one (a file that could not be opened), the
- * same split src/util/cut.c uses.
+ * EXIT STATUS: 2 for a usage error, 1 for a runtime one (a file that
+ * could not be opened), same split as src/util/cut.c.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -88,18 +73,12 @@ static void merge_parallel(FILE **files, int nfiles, const char *delims, size_t 
 	for (j = 0; j < nfiles; j++) if (!files[j]) eof[j] = 1;
 
 	for (;;) {
-		/* Read this row's line from every file that isn't eof yet
-		 * *before* printing anything. A file going eof mid-row still
-		 * has to leave its column empty for this row (POSIX: a
-		 * shorter file contributes an empty field, not a dropped
-		 * row, until every file is exhausted) -- but the row after
-		 * the true last line of the longest file must not be
-		 * printed at all, since by then no file has anything left.
-		 * any_data below is what tells those two cases apart: it is
-		 * only set when some file actually produced a line this
-		 * round, so a round where every file is already eof (or
-		 * goes eof on this very read) breaks out before writing a
-		 * spurious all-empty row of bare delimiters. */
+		/* Read this row's line from every non-eof file before
+		 * printing anything: a file going eof mid-row still leaves
+		 * an empty column for this row, but the row after the true
+		 * last line must not be printed at all. any_data tells the
+		 * two cases apart -- it's set only when some file actually
+		 * produced a line this round. */
 		int any_data = 0;
 
 		for (j = 0; j < nfiles; j++) {

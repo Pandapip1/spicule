@@ -34,7 +34,12 @@ void *alignment_roundtrip_conditional(void *a, void *b) {
  * the two are the same object even though the call is opaque to this
  * checker (no strchr() definition is visible to a --analyze pass over
  * one file). */
-#include <string.h>
+/* strchr(), inlined rather than `#include <string.h>`: these fixtures
+ * compile with no include path (see marked_unprovable_cast()'s comment
+ * below), so this must not depend on a header actually resolving -- see
+ * clang's own resource-dir, which is what `<string.h>` would otherwise
+ * come from. */
+char *strchr(const char *, int);
 long needle_in_haystack(const char *s) {
   const char *dot = strchr(s, '.');
   return dot ? dot - s : -1;
@@ -43,7 +48,8 @@ long needle_in_haystack(const char *s) {
 /* strto*'s endptr output is either the input pointer or a later pointer in
  * the same array by contract, even though the opaque call gives the stored
  * value a fresh analyzer symbol. */
-#include <stdlib.h>
+/* strtol(), inlined for the same reason strchr() is above. */
+long strtol(const char *, char **, int);
 long conversion_end_in_input(const char *s) {
   char *end;
   (void)strtol(s, &end, 10);

@@ -62,6 +62,9 @@
 
 struct range { long start, end; };
 
+/* spec is never NULL at either call site (both pass the already-validated
+ * listspec). */
+__attribute__((nonnull(1)))
 static int parse_list(const char *spec, struct range **out withtok(heap_allocated),
                       size_t *out_n)
 {
@@ -124,6 +127,9 @@ static int parse_list(const char *spec, struct range **out withtok(heap_allocate
 	return 0;
 }
 
+/* r is always parse_list()'s own successful `ranges` output, never NULL
+ * (parse_list() fails rather than returning n == 0). */
+__attribute__((nonnull(1)))
 static int is_selected(const struct range *r, size_t n, long pos)
 {
 	size_t i;
@@ -170,7 +176,15 @@ static void process_char_mode(FILE *f, const struct range *ranges, size_t nr, in
 			long pos = 1;
 			while (off < ulen) {
 				size_t clen = char_len((const unsigned char *)line + off, ulen - off);
-				if (is_selected(ranges, nr, pos)) fwrite(line + off, 1, clen, stdout);
+				if (is_selected(ranges, nr, pos)) {
+					/* clen <= ulen - off by char_len()'s own contract
+					 * (never more than the `avail` bytes handed to it), so
+					 * line+off..line+off+clen stays within [line,
+					 * line+ulen] -- same restatement as
+					 * process_field_mode()'s analogous fwrite() below. */
+					__ownership_readable_span(line + off, clen);
+					fwrite(line + off, 1, clen, stdout);
+				}
 				off += clen;
 				pos++;
 			}
@@ -211,6 +225,13 @@ static void process_field_mode(FILE *f, const struct range *ranges, size_t nr, c
 
 				if (is_selected(ranges, nr, field)) {
 					if (wrote_any) fputc(delim, stdout);
+					/* start..start+flen is always within [line, line+ulen]
+					 * (flen is p-start or end-start, both bounded by
+					 * end-start): true by the cursor arithmetic above, not
+					 * traced by the checker across the memchr loop -- same
+					 * restatement src/util/join.c's join_write() already
+					 * does for its own field-slice fwrite(). */
+					__ownership_readable_span(start, flen);
 					fwrite(start, 1, flen, stdout);
 					wrote_any = 1;
 				}
@@ -240,6 +261,11 @@ int __util_cut_main(
 	for (; i < argc; i++) {
 		char *a = argv[i];
 
+		/* a is one of argv's own elements (i < argc), genuinely never
+		 * NULL by this function's own elements_withtok(null_terminated,
+		 * argc) contract on argv -- same restatement as src/util/od.c's
+		 * option loop. */
+		__ownership_pointer_nonnull(a);
 		if (a[0] != '-' || a[1] == 0) break;
 		if (!strcmp(a, "--")) { i++; break; }
 
@@ -315,7 +341,20 @@ int __util_cut_main(
 		else process_char_mode(stdin, ranges, nranges, mode == 'b');
 	} else {
 		for (; i < argc; i++) {
-			FILE *f = !strcmp(argv[i], "-") ? stdin : fopen(argv[i], "r");
+			FILE *f;
+			/* argv[i] is one of argv's own elements (i < argc), genuinely
+			 * null-terminated by this function's own
+			 * elements_withtok(null_terminated, argc) contract on argv --
+			 * restated here since the checker does not trace that fact
+			 * through the two argv[i] uses below. */
+			__ownership_string_terminated(argv[i]);
+			/* use_stdin, not `f != stdin`, decides the fclose() below --
+			 * the checker can't prove opaque pointers unequal, so a direct
+			 * comparison makes the fopen() allocation look conditionally
+			 * leaked (same idiom as src/util/sed.c's
+			 * script_buf_append_file()). */
+			int use_stdin = !strcmp(argv[i], "-");
+			f = use_stdin ? stdin : fopen(argv[i], "r");
 			if (!f) {
 				fprintf(stderr, "cut: %s: %s\n", argv[i], strerror(errno));
 				had_error = 1;
@@ -323,7 +362,7 @@ int __util_cut_main(
 			}
 			if (mode == 'f') process_field_mode(f, ranges, nranges, delim, opt_s);
 			else process_char_mode(f, ranges, nranges, mode == 'b');
-			if (f != stdin) (void)fclose(f);
+			if (!use_stdin) (void)fclose(f);
 		}
 	}
 

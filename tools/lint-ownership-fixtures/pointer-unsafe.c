@@ -141,3 +141,23 @@ char **element_width_leftover_margin_not_provably_bounded(size_t n, char *s)
 	ne[n] = s; /* ownership-expect: pointer-extent-z3 */
 	return ne;
 }
+
+/* The adversarial twin of pointer-safe.c's struct_field_array_element_
+ * nonnull_axiom_is_trusted: the identical struct argv_slice shape and
+ * the identical fixed-offset element read, with the
+ * __ownership_pointer_nonnull() call removed. This is the other half of
+ * that fixture's own proof obligation -- confirming the new axiom did
+ * not accidentally widen ValidPointerChecker::checkPointerExpression's
+ * proof for every struct-field array read regardless of whether the
+ * axiom was actually invoked, only for the one exact call this checker
+ * now recognizes by name (see ValidPointerChecker::isPointerNonNullAxiom
+ * in OwnershipChecker.cpp). */
+struct argv_slice2 { char **v; size_t i; };
+
+char *struct_field_array_element_is_flagged_without_the_axiom(
+    struct argv_slice2 *slice) __attribute__((nonnull(1)));
+char *struct_field_array_element_is_flagged_without_the_axiom(
+    struct argv_slice2 *slice)
+{
+	return slice->v[0]; /* ownership-expect: pointer-null */
+}

@@ -240,9 +240,6 @@ static void ustar_put_oct(unsigned char *field, int width, unsigned long value)
 	__ownership_readable_span(tmp, (size_t)(width - 1));
 	{
 		size_t i;
-		/* Every caller below passes a literal 8 or 12; the cast mirrors
-		 * the two __ownership_*_span() calls just above, which already
-		 * treat width - 1 as a size_t for the same reason. */
 		for (i = 0; i < (size_t)(width - 1); i++) field[i] = tmp[i];
 	}
 	field[width - 1] = 0;
@@ -262,25 +259,17 @@ static int write_ustar_header(FILE *out, const struct pax_member *m)
 	unsigned long sum;
 	size_t i;
 
-	/* m->name is a struct pax_member field, not a function parameter, so
-	 * withtok(null_terminated) has no field-level spelling to attach to
-	 * (see include/ownership.h's own vocabulary); restate the always-true
-	 * fact by hand instead, the same idiom src/util/find.c's own argv-
-	 * derived-string fixes use. Every real populator of this struct
-	 * (parse_ustar_block(), read_cpio_header(), build_member_from_stat(),
-	 * write_cpio_trailer()) writes it via snprintf()/strcpy(), which
-	 * always NUL-terminates. */
+	/* m->name is a struct field, so null_terminated can't attach directly;
+	 * every populator (parse_ustar_block(), read_cpio_header(),
+	 * build_member_from_stat(), write_cpio_trailer()) NUL-terminates it
+	 * via snprintf()/strcpy(). */
 	__ownership_string_terminated(m->name);
 	if (m->type == PAX_DIR) {
 		size_t l = strlen(m->name);
 		if (l == 0 || m->name[l - 1] != '/') {
 			snprintf(namebuf, sizeof namebuf, "%s/", m->name);
-			/* snprintf() is deliberately not itself annotated to grant
-			 * null_terminated (see include/stdio.h's own comment on why
-			 * its buffer argument isn't marked at all), but it always
-			 * NUL-terminates a nonzero-size buffer -- restate that fact
-			 * here the same way strcpy.c/strstr.c do after their own
-			 * writes. */
+			/* snprintf() isn't itself annotated to grant null_terminated,
+			 * but it always NUL-terminates a nonzero-size buffer. */
 			__ownership_string_terminated(namebuf);
 			use_name = namebuf;
 		}
@@ -292,11 +281,8 @@ static int write_ustar_header(FILE *out, const struct pax_member *m)
 		                "(see src/util/pax.c's header)\n", use_name);
 		return -1;
 	}
-	/* ustar_split_name() always NUL-terminates both out-parameters on its
-	 * 0 return (either the whole-name-fits branch's strcpy()+prefix[0]=0,
-	 * or the split branch's two memcpy()+NUL-byte pairs) -- restate that
-	 * fact here since writable_span(...) says nothing about
-	 * termination, only extent. */
+	/* ustar_split_name() always NUL-terminates both out-parameters on a
+	 * 0 return; writable_span() only proves extent, not termination. */
 	__ownership_string_terminated(prefix);
 	__ownership_string_terminated(name);
 	if (!fits_octal(m->mode & 07777, 7)) {
@@ -752,21 +738,14 @@ static int pax_name_matches(const char *name withtok(null_terminated),
 
 /* ==== safety: reject absolute / ".." member names on extract ============= */
 
-/* An archive member name is untrusted input on every build this project
- * targets, including the NT/tcc one: src/internal/nt/path.c's own
- * __ntpath() explicitly resolves EITHER slash and drive-letter roots
- * ("A program hands in UTF-8 with either kind of slash ... possibly
- * with a drive letter"), and src/internal/rpath.c's is_absolute() names
- * both "\\" and "X:" as absolute for exactly that reason. A check that
- * only recognised '/' and a leading '/' would let a hostile ustar/cpio
- * member named e.g. "..\\..\\..\\Users\\x\\evil.dll" or "C:\\evil.dll"
- * sail through unrecognised as either a ".." component or an absolute
- * path, then reach mkdir()/open() below, which -- on that same NT
- * build -- *do* honor backslash separators and drive letters. This
- * checks both spellings unconditionally (not just when building for
- * NT) since a well-formed ustar/cpio name never legitimately contains a
- * backslash or a drive-letter prefix in the first place (ustar_split_
- * name()/write_cpio_header() above only ever emit '/'). */
+/* An archive member name is untrusted: src/internal/rpath.c's
+ * is_absolute() treats both "\\" and "X:" as absolute, since the NT
+ * build's path resolution accepts either slash and drive letters. A
+ * check that only recognised '/' would let a name like "..\\..\\evil"
+ * or "C:\\evil" slip past this and reach mkdir()/open(), which do honor
+ * backslashes and drive letters there. Both spellings are checked
+ * unconditionally since a well-formed ustar/cpio name never contains
+ * either. */
 __attribute__((nonnull(1)))
 static int name_is_safe(const char *name)
 {
@@ -787,20 +766,13 @@ static int name_is_safe(const char *name)
 
 struct materialize_opts { int keep_existing; int newer_only; int verbose; };
 
-/* Creates every directory component of `path` but the last, refusing
- * (errno left as ENOTDIR) if any of them already exists as something
- * other than a real directory. That refusal matters beyond pedantry: a
- * prior member in the very same extraction (name_is_safe() only bars
- * ".."/absolute names, not a symlink) can leave a symlink sitting at an
- * intermediate path component -- e.g. member "trap" (a symlink to
- * anywhere writable) followed by member "trap/evil" -- and plain
- * mkdir()'s EEXIST-is-fine tolerance would otherwise let this loop walk
- * straight through it, so the final open()/mkdir()/etc for "trap/evil"
- * resolves through the symlink and lands wherever it points: the same
- * "extract a symlink, then extract through it" attack real tar/pax
- * implementations have had to close before. lstat(), not stat(), so the
- * component itself is what's checked, not whatever a symlink there
- * ultimately resolves to. */
+/* Creates every directory component of `path` but the last, refusing if
+ * one already exists as something other than a directory. A prior member
+ * (name_is_safe() only bars ".."/absolute names, not a symlink) could
+ * leave a symlink at an intermediate component -- e.g. "trap" then
+ * "trap/evil" -- and mkdir()'s EEXIST tolerance would otherwise walk
+ * through it into wherever it points. lstat(), not stat(), so the
+ * component itself is checked, not what it resolves to. */
 static int ensure_parent_dirs(const char *path)
 {
 	char buf[PAX_PATH_MAX];
@@ -818,16 +790,11 @@ static int ensure_parent_dirs(const char *path)
 	return 0;
 }
 
-/* Drains `m`'s data out of `reader` without writing it anywhere, for a
- * member materialize() has decided not to extract (a -k/-u skip, or a
- * parent-directory failure) -- keeps the archive stream positioned at
- * the next member's header instead of leaving it stuck mid-data. Only
- * PAX_REG and PAX_HARDLINK members carry data blocks of their own
- * (matching reader_skip_data()'s own PAX_REG || PAX_HARDLINK check
- * above -- a foreign/malformed archive is not required to zero a
- * hardlink member's size field the way this build's own writer
- * always does). `reader` is NULL in copy mode (there is no archive to
- * drain from), so this is a harmless no-op there. */
+/* Drains `m`'s data from `reader` for a member materialize() decided not
+ * to extract (a -k/-u skip, or a parent-directory failure), keeping the
+ * archive stream positioned at the next member's header. Only PAX_REG
+ * and PAX_HARDLINK carry data blocks of their own. `reader` is NULL in
+ * copy mode, making this a no-op there. */
 __attribute__((nonnull(2)))
 static void materialize_skip_data(struct pax_reader *reader, const struct pax_member *m)
 {
@@ -868,13 +835,10 @@ static int materialize(const struct pax_member *m, const char *destpath,
 
 	if (opts->verbose) __util_diagf("%s\n", destpath);
 
-	/* Every case below except PAX_REG (which drains its own data into
-	 * the newly-created file) creates an entry with no data blocks of
-	 * its own by this build's own writer's convention; draining
-	 * whatever a *foreign*, possibly-malformed archive claims such an
-	 * entry's size is here once, generically, keeps the archive
-	 * stream positioned correctly for every member that follows
-	 * rather than letting one odd entry desync the rest of the read. */
+	/* Every non-PAX_REG entry has no data of its own by this writer's
+	 * convention; draining whatever a foreign archive claims for such an
+	 * entry's size here keeps the stream positioned correctly for later
+	 * members. */
 	if (reader && m->type != PAX_REG && m->size) pax_reader_copy_data(reader, m, -1);
 
 	switch (m->type) {
@@ -917,13 +881,10 @@ static int materialize(const struct pax_member *m, const char *destpath,
 	default: {
 		int fd;
 		if (exists) (void)unlink(destpath);
-		/* O_EXCL, not O_TRUNC: the lstat() above is long since stale
-		 * by the time this runs, so if something (a symlink, most
-		 * dangerously, planted in a shared destination directory)
-		 * has appeared at destpath since, O_TRUNC would silently
-		 * follow it into whatever file it names. O_EXCL fails on
-		 * that instead; one unlink-and-retry covers the ordinary,
-		 * non-raced case of this same member being (re-)extracted. */
+		/* O_EXCL, not O_TRUNC: the lstat() above is stale by now, so if
+		 * a symlink has since appeared at destpath, O_TRUNC would
+		 * follow it. O_EXCL fails instead; one unlink-and-retry covers
+		 * ordinary re-extraction. */
 		fd = open(destpath, O_WRONLY | O_CREAT | O_EXCL, (mode_t)(m->mode & 07777));
 		if (fd < 0 && errno == EEXIST) {
 			(void)unlink(destpath);
@@ -1094,10 +1055,8 @@ static char **read_stdin_file_list(int *out_n)
 	while (fgets(line, sizeof line, stdin)) {
 		size_t len;
 		char *dup;
-		/* fgets() always NUL-terminates a nonzero-size buffer on success
-		 * (line is PAX_PATH_MAX > 0 bytes); include/stdio.h's own
-		 * declaration doesn't grant this (see its comment on why
-		 * snprintf's sibling isn't marked either), so restate it here. */
+		/* fgets() NUL-terminates on success; stdio.h's declaration
+		 * doesn't grant that fact, so restate it. */
 		__ownership_string_terminated(line);
 		len = strlen(line);
 		if (len && line[len - 1] == '\n') line[--len] = 0;
@@ -1185,13 +1144,10 @@ static void print_listing(const struct pax_member *m, int verbose)
 	}
 }
 
-/* Drains a member's data out of the archive without extracting or
- * printing it, for one this build's own reader has already fully
- * consumed the header of but decided not to materialize (an unmatched
- * pattern, list mode, or a name-safety refusal below) -- keeps the
- * stream positioned at the next member's header. Only PAX_REG and
- * PAX_HARDLINK members carry data blocks of their own; every other type
- * is already zero-size by parse_ustar_block()/read_cpio_header(). */
+/* Drains a member's data without extracting or printing it, for one
+ * whose header was consumed but not materialized (unmatched pattern,
+ * list mode, or a name-safety refusal) -- keeps the stream positioned at
+ * the next header. Only PAX_REG/PAX_HARDLINK carry data of their own. */
 static void reader_skip_data(struct pax_reader *r, const struct pax_member *m)
 {
 	if (m->type == PAX_REG || m->type == PAX_HARDLINK) pax_reader_copy_data(r, m, -1);
@@ -1214,13 +1170,9 @@ static int do_list_or_read(const char *archive,
 		if (rc < 0) { failed = 1; break; }
 		if (rc == 0) break;
 
-		/* m.name/m.linkname are struct fields, not function parameters,
-		 * so withtok(null_terminated) has no field-level spelling to
-		 * attach to; restate the always-true fact by hand instead.
-		 * pax_reader_next() -> parse_ustar_block()/read_cpio_header()
-		 * populate both exclusively via snprintf()/an explicit NUL byte,
-		 * so this holds for every member, hardlink or not (a non-
-		 * hardlink's linkname is left as ""). */
+		/* m.name/m.linkname are struct fields, so null_terminated can't
+		 * attach directly; pax_reader_next() always populates both via
+		 * snprintf()/an explicit NUL. */
 		__ownership_string_terminated(m.name);
 		__ownership_string_terminated(m.linkname);
 
@@ -1235,18 +1187,12 @@ static int do_list_or_read(const char *archive,
 			continue;
 		}
 
-		/* A ustar hardlink member's linkname is, just as much as its own
-		 * name, an untrusted archive-supplied path that materialize()
-		 * below feeds straight to link() as the OLDPATH to link
-		 * *from* -- unlike a symlink's target text (never itself
-		 * dereferenced during extraction; see ensure_parent_dirs()'s
-		 * own comment on where that risk is actually closed), this one
-		 * fires immediately, on this member alone, with no second
-		 * member required. Left unchecked, a hostile archive's
-		 * hardlink member could name any existing file the extracting
-		 * user can already reach (an absolute path, or one escaping
-		 * upward via ".."), aliasing it under the destination tree --
-		 * so it gets the exact same containment check as m.name. */
+		/* m.linkname is just as much untrusted archive input as m.name,
+		 * and materialize() feeds it straight to link() as the OLDPATH
+		 * -- unlike a symlink target, which is never dereferenced during
+		 * extraction. A hostile hardlink member could alias any file the
+		 * extracting user can reach, so it gets the same containment
+		 * check as m.name. */
 		if (!name_is_safe(m.name) ||
 		    (m.type == PAX_HARDLINK && !name_is_safe(m.linkname))) {
 			__util_diagf("pax: %s: refusing to extract an absolute path or a path "

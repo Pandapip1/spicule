@@ -64,22 +64,10 @@ struct fbuf {
 	size_t n, cap;
 };
 
-/* b is required at every call site in this file -- always the address
- * of a real, stack-local struct fbuf, never NULL, and dereferenced
- * unconditionally here (`b->n == b->cap`) before anything else.
- *
- * b->data[b->n]/b->lit[b->n] below still report "pointer dereference
- * is not proven nonnull": when this function is analyzed on its own
- * (not inlined into a caller that zero-initialized the struct), b's
- * incoming n/cap/data/lit are arbitrary, and nothing in this file's
- * annotation vocabulary states the real invariant "cap == 0 whenever
- * data/lit == 0" that would let the checker rule out cap > 0 with a
- * still-null data/lit. withtok(readable_span(n))/writable_span(cap)
- * on the fields (this struct's actual contract) and fields_established
- * on b (tried) both only prove a SPAN once a pointer is already known
- * live; neither expresses a cross-field nullability tie between two
- * plain fields. src/glob/glob.c's own private, identically-shaped
- * struct pv has the same open finding for the same reason. */
+/* b->data[b->n]/b->lit[b->n] below still report "pointer dereference
+ * is not proven nonnull": nothing in this file's annotation vocabulary
+ * ties cap > 0 to data/lit being non-null for a per-call analysis
+ * (src/glob/glob.c's struct pv has the same open finding). */
 static int fbuf_push(struct fbuf *b, char c, int literal)
     __attribute__((nonnull(1)));
 static int fbuf_push(struct fbuf *b, char c, int literal) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
@@ -117,11 +105,6 @@ static void fbuf_free(struct fbuf *b)
 	b->n = b->cap = 0;
 }
 
-/* s is dereferenced unconditionally in the loop condition, even on an
- * empty string; b is deliberately NOT marked -- this function never
- * dereferences it itself, only forwards it into fbuf_push() (already
- * required there), the same "nothing left in this function's own body
- * to describe" reasoning 9be895e's own feholdexcept/feupdateenv used. */
 static int fbuf_push_str(struct fbuf *b, const char *s, int literal)
     __attribute__((nonnull(2)));
 static int fbuf_push_str(struct fbuf *b, const char *s, int literal)
@@ -141,12 +124,8 @@ struct pv {
 	size_t n, cap;
 };
 
-/* p is required (dereferenced unconditionally once past the s check
- * below, and every real call site passes &out, never NULL); s is
- * deliberately NOT marked -- the `if (!s) return -1;` right below is a
- * real, load-bearing check, not decoration: every caller passes it a
- * fresh xstrdup()/malloc() result that can genuinely be NULL on OOM,
- * and this is precisely how that failure propagates. */
+/* s can legitimately be NULL here (an OOM result from a caller's
+ * xstrdup()/malloc()); the check below is real, not decoration. */
 static int pv_push(struct pv *p, char *s) __attribute__((nonnull(1)));
 static int pv_push(struct pv *p, char *s)
 {
@@ -173,17 +152,9 @@ static int pv_push(struct pv *p, char *s)
 	return 0;
 }
 
-/* p required, same shape as pv_push()/pv_free_from()/pv_pack() below --
- * dereferenced unconditionally, no NULL ever passed. (This particular
- * helper currently has no real call site anywhere in this tree -- every
- * cleanup path here uses pv_free_from() instead -- so it is dead code;
- * marked anyway since the fact is still true and costs nothing.)
- *
- * p->v[i] below is the same open "pointer dereference is not proven
- * nonnull" as fbuf_push()'s b->data[b->n]/b->lit[b->n] above -- see
- * that function's comment; struct pv has the identical "cap > 0 does
- * not, by itself, prove v != 0 when p is analyzed as its own entry
- * point" gap. */
+/* No real call site in this tree -- every cleanup path uses
+ * pv_free_from() instead -- so this is dead code, kept annotated
+ * since the fact costs nothing to state. */
 static void pv_free_all(struct pv *p) __attribute__((nonnull(1)));
 static void pv_free_all(struct pv *p)
 {
@@ -211,14 +182,7 @@ static void pv_free_from(struct pv *p, size_t from)
 /* Allocate the caller-visible pointer vector and transfer the pointer
  * entries into it.  offs is caller-controlled under WRDE_DOOFFS, so
  * validate both additions and the final conversion to bytes before
- * allocating or filling the reserved slots.
- *
- * withtok(internal_heap_allocated) on this producer (matching this same
- * family already used above by cmdsub_dollar_text()/cmdsub_backquote_text())
- * is what lets expand_impl()'s own `pwordexp->we_wordv = v;` below be proven
- * a real transfer into that field's own withtok(internal_heap_allocated) in
- * include/wordexp.h, rather than reporting an unaccounted-for allocation at
- * expand_impl()'s exit. */
+ * allocating or filling the reserved slots. */
 withtok(internal_heap_allocated)
 static char **pv_pack(struct pv *p, size_t offs) __attribute__((nonnull(1)));
 withtok(internal_heap_allocated)
@@ -263,11 +227,9 @@ static int is_split_char(char c)
 {
 	const char *ifs = getenv("IFS");
 	if (!ifs) ifs = " \t\n";
-	/* Either the getenv() result (already null_terminated per its own
-	 * declared contract) or the literal default: both are real C
-	 * strings, but the checker's string-literal recognition only
-	 * fires for a variable whose own DECLARATION is a literal
-	 * initializer, not a later conditional reassignment. */
+	/* Both branches are real C strings, but the checker's string-literal
+	 * recognition only fires on a literal initializer at declaration,
+	 * not a later reassignment. */
 	__ownership_string_terminated(ifs);
 	return strchr(ifs, c) != 0;
 }
@@ -286,30 +248,12 @@ struct assignment {
 
 struct assign_ctx { struct assignment *head withtok(internal_heap_allocated); };
 
-/* words/pwordexp both required: words is dereferenced unconditionally
- * by the main scan loop (`while (*p)`, p == words), and pwordexp is
- * dereferenced on every return path (either the success path's
- * `pwordexp->we_wordv = v;`, or a failure path's
- * `pwordexp->we_wordc = 0; pwordexp->we_wordv = 0;`). ctx is left
- * unmarked -- forwarded to expand_param()/assign_param() only, never
- * dereferenced directly here. */
 static int expand_impl(const char *, wordexp_t *, int, int, struct assign_ctx *)
     __attribute__((nonnull(1, 2)));
-/* start/result required: start is passed to memcpy() unconditionally
- * (this tree's own established convention -- see 242ed40's own
- * str/mem doctrine -- treats that as a genuine use regardless of
- * length), and *result = 0 is written unconditionally at entry. ctx is
- * left unmarked, forwarded to expand_param() only. */
 static int expand_trim_pattern(const char *, size_t, int, int,
                                struct assign_ctx *, char **)
     __attribute__((nonnull(1, 6)));
 
-/* ctx/name both required -- ctx->head is read unconditionally, and
- * name is dereferenced on every path (via strcmp() in the scan loop
- * when ctx->head is non-empty, or via xstrdup() below when it is not).
- * value is deliberately NOT marked: this function only ever forwards
- * it into setenv(), which itself does not require it either (see
- * assign_var()'s own comment in arith.c for the identical case). */
 static int assign_param(struct assign_ctx *ctx, const char *name withtok(null_terminated), const char *value)
     __attribute__((nonnull(1, 2)));
 static int assign_param(struct assign_ctx *ctx, const char *name withtok(null_terminated), const char *value)
@@ -318,28 +262,18 @@ static int assign_param(struct assign_ctx *ctx, const char *name withtok(null_te
 	const char *old;
 
 	for (a = ctx->head; a; a = a->next) {
-		/* a->name traces back to this same function's own
-		 * xstrdup(name) below, on some earlier call sharing ctx --
-		 * real, but not visible to a per-call analysis. */
+		/* a->name is xstrdup()'d below on an earlier call; not
+		 * visible to a per-call analysis. */
 		__ownership_string_terminated(a->name);
 		if (!strcmp(a->name, name)) return setenv(name, value, 1) < 0 ? WRDE_NOSPACE : 0;
 	}
 	a = __malloc(sizeof *a);
 	if (!a) return WRDE_NOSPACE;
-	/* a->name's declared null_terminated bundle is checked by
-	 * OwnershipType's own capability-map lookup at this bind, not by
-	 * xstrdup()'s declared contract; a manually-granted (rather than
-	 * malloc-native) fact does not reach that lookup here even when
-	 * established on a temporary immediately beforehand (tried and
-	 * confirmed to make no difference) -- left open, no annotation in
-	 * this codebase's vocabulary closes it. a->name is still a real
-	 * C string: xstrdup() copies name (already proven null_terminated
-	 * above) plus its own NUL. */
+	/* a->name's null_terminated fact doesn't propagate through this
+	 * manual grant for a per-call proof; left open. xstrdup() still
+	 * makes it a real C string. */
 	a->name = xstrdup(name);
 	old = getenv(name);
-	/* getenv()'s own declared contract already grants this on its
-	 * return, but that fact does not survive being stored into a
-	 * plain (un-annotated) local for a later, separate use. */
 	if (old) __ownership_string_terminated(old);
 	a->had_old = old != 0;
 	a->old = old ? xstrdup(old) : 0;
@@ -416,10 +350,6 @@ static const char *param_word_end(const char *p)
  * parameter expansion operates.  A multi-field result is joined with
  * the first IFS byte, as shell "$*" is; the caller performs the final
  * field splitting when the outer expansion is unquoted. */
-/* start/result required, same reasoning as expand_trim_pattern() above
- * (start feeds memcpy() unconditionally; *result = 0 is written at
- * entry regardless of outcome). ctx is left unmarked, forwarded to
- * expand_impl() only. */
 static int expand_param_word(const char *start withtok(readable_span(input_len)),
                              size_t input_len, int flags,
                              int sh, int quoted, struct assign_ctx *ctx,
@@ -463,19 +393,9 @@ static int expand_param_word(const char *start withtok(readable_span(input_len))
 	ifs = getenv("IFS");
 	if (!ifs) ifs = " ";
 	for (i = 0; i < we.we_wordc; i++) {
-		/* Every we.we_wordv[] entry is a real C string built by this
-		 * same file's own pv_pack()/xstrdup(), but that fact does not
-		 * survive the wordexp_t out-parameter boundary for a
-		 * per-call analysis. This fixes the strlen() call's own
-		 * missing-null_terminated finding; the separate, still-open
-		 * "we.we_wordv[i] pointer dereference is not proven nonnull"
-		 * is the array-element analogue of fbuf_push()'s b->data/
-		 * b->lit comment above and wordfree()'s we_wordv comment
-		 * below -- expand_impl() (called just above, through this
-		 * same recursive expansion) really does always fill exactly
-		 * we_wordc live entries, but nothing in this vocabulary ties
-		 * an out-parameter struct's count field to its pointer
-		 * field's element-by-element liveness for a per-call proof. */
+		/* Every we.we_wordv[] entry is a real C string (built by
+		 * pv_pack()/xstrdup()), but that fact doesn't survive the
+		 * wordexp_t out-parameter boundary for a per-call analysis. */
 		__ownership_string_terminated(we.we_wordv[i]);
 		n += strlen(we.we_wordv[i]);
 	}
@@ -505,24 +425,14 @@ static int expand_param_word(const char *start withtok(readable_span(input_len))
 		n += z;
 	}
 	if (!quoted && input_len && is_split_char(start[input_len - 1])) s[n++] = start[input_len - 1];
-	/* n has been rebuilt by re-summing exactly the same field lengths
-	 * (plus the same trailing-IFS byte, if any) the bytes allocation
-	 * above sized `bytes` from, so it is still < bytes here -- but a
-	 * manual __ownership_writable_span(s, n + 1) axiom asserting that
-	 * does not help: MemoryContractChecker's own real proof already
-	 * covers it on some paths (flagging the axiom itself as
-	 * narrowable/redundant scaffolding) while ValidPointerChecker's
-	 * separate extent check at this exact write still cannot re-derive
-	 * the two loops' matching sums either way. Left unannotated. */
+	/* n is rebuilt here by re-summing the same lengths `bytes` was
+	 * sized from above, so it's still < bytes, but no annotation in
+	 * this vocabulary lets the checker re-derive that. Left unannotated. */
 	s[n] = 0;
 	wordfree(&we);
-	/* *result = s here is the same open "dynamic allocation is not
-	 * freed before function exit" as expand_trim_pattern()'s
-	 * *result = pattern below: <wordexp.h>'s own header comment on
-	 * we_wordv documents the general shape (AllocationLifetimeChecker's
-	 * checkPostCall recognizes a transfer through a producer's own
-	 * pointer-typed RETURN, or an argument echoed back unchanged, but
-	 * not a store through a `T **` out-parameter like `result` here). */
+	/* *result = s is a store through a `T **` out-parameter, which
+	 * AllocationLifetimeChecker's escape recognition doesn't follow
+	 * (unlike a producer's own pointer return). */
 	*result = s;
 	return 0;
 }
@@ -546,9 +456,6 @@ static int expand_param_word(const char *start withtok(readable_span(input_len))
  * single field of decimal digits and nothing about it depends on
  * quoting.  2.5.2's '@' and '*' are NOT here: they can produce more
  * than one field, which only the caller's scan can express. */
-/* pp is dereferenced immediately (`p = *pp + 1`); b/ctx are left
- * unmarked -- both are only ever forwarded into fbuf_push()/
- * fbuf_push_str()/assign_param(), never dereferenced directly here. */
 // NOLINTNEXTLINE(misc-no-recursion) -- parameter and arithmetic expansion mirror nested shell-word syntax
 static int expand_param(const char **pp, struct fbuf *b, int flags, int sh,
                         int quoted, struct assign_ctx *ctx)
@@ -579,15 +486,10 @@ static int expand_param(const char **pp, struct fbuf *b, int flags, int sh,
 		if (snprintf(name, sizeof name, "%.*s", (int)len, start) !=
 		    (int)len)
 			return WRDE_SYNTAX;
-		/* snprintf() does not itself grant the checker's
-		 * null_terminated fact for the buffer it just terminated. */
 		__ownership_string_terminated(name);
 		*pp = p + 1;
 		val = getenv(name);
 		if (!val && (flags & WRDE_UNDEF)) return WRDE_BADVAL;
-		/* getenv()'s own declared contract already grants this on
-		 * its return, but that fact does not survive being stored
-		 * into a plain (un-annotated) local for the strlen() below. */
 		if (val) __ownership_string_terminated(val);
 		return fbuf_push_long(b, val ? (long)strlen(val) : 0) ? WRDE_NOSPACE : 0;
 	}
@@ -658,13 +560,8 @@ static int expand_param(const char **pp, struct fbuf *b, int flags, int sh,
 	if (len >= sizeof name) return WRDE_SYNTAX;
 	if (snprintf(name, sizeof name, "%.*s", (int)len, start) != (int)len)
 		return WRDE_SYNTAX;
-	/* snprintf() does not itself grant the checker's null_terminated
-	 * fact for the buffer it just terminated. */
 	__ownership_string_terminated(name);
 	val = getenv(name);
-	/* getenv()'s own declared contract already grants this on its
-	 * return, but that fact does not survive being stored into a
-	 * plain (un-annotated) local for the later uses below. */
 	if (val) __ownership_string_terminated(val);
 	if (braced && *p != '}') {
 		const char *word, *end;
@@ -740,10 +637,6 @@ static int expand_param(const char **pp, struct fbuf *b, int flags, int sh,
 		if (op == '?') {
 			if (flags & WRDE_SHOWERR) {
 				const char *message = *replacement ? replacement : "parameter is unset";
-				/* replacement is expand_param_word()'s own
-				 * __malloc()'d, NUL-terminated result (or the
-				 * literal fallback); neither survives the
-				 * out-parameter boundary for a per-call proof. */
 				__ownership_string_terminated(message);
 				(void)write(2, message, strlen(message));
 				(void)write(2, "\n", 1);
@@ -793,9 +686,6 @@ static int expand_trim_pattern(const char *start, size_t len, int flags, // NOLI
 		text = __malloc(bytes);
 	}
 	if (!text) return WRDE_NOSPACE;
-	/* text's own writable extent (bytes = len+1, from the __malloc()
-	 * above) already proves this memcpy(); a matching manual axiom
-	 * here was redundant scaffolding narrower than that real proof. */
 	__ownership_readable_span(start, len);
 	memcpy(text, start, len);
 	text[len] = 0;
@@ -864,8 +754,6 @@ static int expand_trim_pattern(const char *start, size_t len, int flags, // NOLI
  * results are not re-scanned for pathname expansion) to b. If the
  * user is unknown, '~'/"~user" is left unexpanded, matching every
  * shell's fallback. */
-/* pp dereferenced immediately; b left unmarked, forward-only into
- * fbuf_push()/fbuf_push_str(). */
 static int expand_tilde(const char **pp, struct fbuf *b)
     __attribute__((nonnull(1)));
 static int expand_tilde(const char **pp, struct fbuf *b)
@@ -928,7 +816,6 @@ static int fbuf_push_long(struct fbuf *b, long v)
 
 /* POSIX.1-2024 dollar-single-quotes.  The result is quoted data, so
  * neither field splitting nor pathname expansion sees these bytes. */
-/* pp dereferenced immediately; b left unmarked, forward-only. */
 static int expand_dollar_single(const char **pp, struct fbuf *b)
     __attribute__((nonnull(1)));
 static int expand_dollar_single(const char **pp, struct fbuf *b)
@@ -991,8 +878,6 @@ static int expand_dollar_single(const char **pp, struct fbuf *b)
  * as an arithmetic expansion" -- arithmetic wins whenever the text
  * parses as one, which is exactly what wordexp.c's caller already
  * guarantees by only reaching here when p[1]/p[2] are both '('. */
-/* pp dereferenced immediately (`p = *pp + 3`); b/ctx left unmarked --
- * forward-only into fbuf_push_long()/__wordexp_arith()/expand_param(). */
 // NOLINTNEXTLINE(misc-no-recursion) -- parameter and arithmetic expansion mirror nested shell-word syntax
 static int expand_arith(const char **pp, struct fbuf *b, int flags, int sh,
                         struct assign_ctx *ctx) __attribute__((nonnull(1)));
@@ -1115,9 +1000,6 @@ arithmetic_done:
  * returns the command text between them, freshly __malloc'd, or NULL on
  * an unterminated substitution or OOM (*syntax distinguishes the two).
  */
-/* Both required: *syntax = 0 is written unconditionally at entry
- * (before any error path), and *pp is dereferenced immediately
- * (`p = *pp + 2`). */
 withtok(internal_heap_allocated)
 static char *cmdsub_dollar_text(const char **pp, int *syntax)
     __attribute__((nonnull(1, 2)));
@@ -1174,7 +1056,6 @@ static char *cmdsub_dollar_text(const char **pp, int *syntax)
  * kept together with the character it precedes), freshly __malloc'd, or
  * NULL on an unterminated substitution or OOM (*syntax distinguishes
  * the two). */
-/* Same shape and same reasoning as cmdsub_dollar_text() just above. */
 withtok(internal_heap_allocated)
 static char *cmdsub_backquote_text(const char **pp, int *syntax)
     __attribute__((nonnull(1, 2)));
@@ -1218,9 +1099,6 @@ static char *cmdsub_backquote_text(const char **pp, int *syntax)
  * standard output (trailing newlines already stripped by __sh_cmdsub()
  * per 2.6.3) in *out, __malloc'd and owned by the caller. Returns 0, or
  * a WRDE_* code. */
-/* out is written unconditionally at entry (`*out = 0;`, before the
- * WRDE_NOCMD check even runs); pp is dereferenced via `**pp` once
- * program is resolved. */
 static int run_cmdsub(const char **pp, int flags, char **out)
     __attribute__((nonnull(1, 3)));
 static int run_cmdsub(const char **pp, int flags, char **out)
@@ -1241,12 +1119,9 @@ static int run_cmdsub(const char **pp, int flags, char **out)
 
 	if (__sh_cmdsub(program, out, &status)) {
 		__free(program);
-		/* The shell could not parse or could not execute it. There is
-		 * no WRDE_* code for "the embedded command was bad" -- and
-		 * WRDE_CMDSUB would be a lie, since the substitution was
-		 * neither refused nor unsupported -- so WRDE_SYNTAX does the
-		 * same double duty src/wordexp/arith.c's header already
-		 * documents it doing for a malformed arithmetic expression. */
+		/* No WRDE_* code means "the embedded command was bad", and
+		 * WRDE_CMDSUB would be a lie (not refused/unsupported), so
+		 * WRDE_SYNTAX does double duty here, as in arith.c. */
 		return WRDE_SYNTAX;
 	}
 	__free(program);
@@ -1260,29 +1135,12 @@ static int run_cmdsub(const char **pp, int flags, char **out)
  *
  * The `while (*p)`/`*p` below (and its siblings in expand_impl(),
  * expand_arith(), expand_trim_pattern(), and expand_param()) report an
- * open "pointer dereference is not proven nonnull"/"dereference extent
- * is not proven sufficient": this file's scan advances its cursor by
- * calling cmdsub_dollar_text()/cmdsub_backquote_text()/run_cmdsub()/
- * expand_param()/expand_arith()/expand_tilde()/expand_dollar_single()
- * with `&p` (a `const char **`, so the callee can both hand back a
- * separate result AND move the cursor past what it consumed). Passing
- * a local's address to any of these means Clang's own core engine (not
- * just this project's checker -- confirmed with plain core.NullDeref
- * on a from-scratch reproduction) can no longer treat a later read of
- * *pp as the same proven-in-bounds value it was before the call, even
- * though every real implementation only ever advances it to another
- * position still inside the original, live buffer. Tried and found
- * ineffective: __attribute__((returns_nonnull)) on a callee (works for
- * a plain return-value cursor advance, e.g. param_word_end(), which is
- * why that one has no open finding -- but none of the functions above
- * hand the new position back that way), and a manual
- * __ownership_readable_span(p, 1) axiom right after the call (does not
- * change the core engine's own invalidation). The one annotation this
- * codebase has for a comparable "T** out-param, real postcondition"
- * shape is ownership.h's endptr_advances, and it is deliberately
- * strto*()-specific plumbing wired into TotalityChecker's own
- * recursive-descent proof, not a general nonnull/extent fact any
- * checker here re-derives for an arbitrary `const char **`. Left open. */
+ * open "pointer dereference is not proven nonnull": passing &p to the
+ * cursor-advancing helpers (cmdsub_dollar_text() etc.) means Clang's
+ * core engine can no longer treat a later *pp read as the same
+ * proven-in-bounds value, even though it only ever advances within the
+ * original buffer. Neither returns_nonnull nor a manual
+ * __ownership_readable_span() axiom after the call fixes this. Left open. */
 static int validate_words(const char *words, int flags)
     __attribute__((nonnull(1)));
 static int validate_words(const char *words, int flags)
@@ -1370,11 +1228,6 @@ static int validate_words(const char *words, int flags)
  * for bytes that must stay literal) into one or more output words,
  * pushing them onto out. Live '*'/'?'/'[' bytes trigger glob(); no live
  * metacharacters means the field is used exactly as scanned. */
-/* b required (b->n read unconditionally at the top); out is
- * deliberately NOT marked -- the very first failure path
- * (`plain = __malloc(...); if (!plain) return WRDE_NOSPACE;`) returns
- * without ever touching it, and every other use is only as an argument
- * to pv_push()/globfree(), never dereferenced by this function itself. */
 static int emit_field(struct fbuf *b, struct pv *out) __attribute__((nonnull(1)));
 static int emit_field(struct fbuf *b, struct pv *out)
 {
@@ -1383,10 +1236,8 @@ static int emit_field(struct fbuf *b, struct pv *out)
 	char *plain;
 	struct fbuf pat;
 
-	/* b->lit[i] here has the same open "pointer dereference is not
-	 * proven nonnull" as fbuf_push()'s own b->lit[b->n] -- see that
-	 * function's comment; this is the same struct fbuf, read rather
-	 * than written. */
+	/* Same open "pointer dereference is not proven nonnull" as
+	 * fbuf_push()'s b->lit[b->n] -- see that function's comment. */
 	for (i = 0; i < b->n; i++)
 		if (!b->lit[i] && (b->data[i] == '*' || b->data[i] == '?' || b->data[i] == '['))
 			{ has_meta = 1; break; }
@@ -1402,17 +1253,10 @@ static int emit_field(struct fbuf *b, struct pv *out)
 	}
 	plain[b->n] = 0;
 
-	/* pv_push(out, plain) transfers plain's allocation into
-	 * out->v[out->n++] (an array element), which is the same open
-	 * "dynamic allocation is not freed before function exit" as the
-	 * pv_push(out, w) below and expand_param_word()/
-	 * expand_trim_pattern()'s own T**-out-parameter transfers: struct
-	 * pv's v field carries elements_withtok(internal_heap_allocated, n)
-	 * (this file's own real per-element contract for it), but
-	 * AllocationLifetimeChecker's escape recognition -- unlike
-	 * MemoryContractChecker's extent proofs, which do read
-	 * elements_withtok -- does not read that annotation family at all;
-	 * confirmed no different with it in place. */
+	/* pv_push(out, plain)'s transfer into out->v[] is the same open
+	 * "dynamic allocation is not freed before function exit" as below:
+	 * AllocationLifetimeChecker's escape recognition doesn't read
+	 * struct pv's elements_withtok(internal_heap_allocated, n). */
 	if (!has_meta) return pv_push(out, plain) ? WRDE_NOSPACE : 0;
 
 	pat.data = 0; pat.lit = 0; pat.n = pat.cap = 0;
@@ -1432,21 +1276,11 @@ static int emit_field(struct fbuf *b, struct pv *out)
 		if (rc == 0) {
 			size_t j;
 			for (j = 0; j < g.gl_pathc; j++) {
-				/* glob(3)'s own contract: gl_pathv[0..gl_pathc) are
-				 * real, NUL-terminated pathnames; <glob.h>'s
-				 * gl_pathv field only carries internal_heap_allocated
-				 * (the array itself), not a per-element contract.
-				 * This fixes xstrdup()'s own missing-null_terminated
-				 * finding; g.gl_pathv[j]'s separate, still-open
-				 * "pointer dereference is not proven nonnull" is the
-				 * same class of gap (struct field populated by an
-				 * opaque call -- glob() here -- not provably nonnull
-				 * per element at a per-call analysis). */
+				/* glob(3)'s contract: gl_pathv[0..gl_pathc) are real,
+				 * NUL-terminated pathnames; <glob.h>'s gl_pathv field
+				 * has no per-element contract of its own. */
 				__ownership_string_terminated(g.gl_pathv[j]);
 				char *w = xstrdup(g.gl_pathv[j]);
-				/* w's own transfer into pv_push(out, w) is the same
-				 * open allocation-lifetime finding as
-				 * pv_push(out, plain) above. */
 				if (!w || pv_push(out, w)) { globfree(&g); __free(plain); return WRDE_NOSPACE; }
 			}
 			globfree(&g);
@@ -1466,11 +1300,6 @@ nospace:
 /* Field-split the live bytes appended by an unquoted expansion.  Input
  * syntax whitespace is handled by the main scanner; IFS applies here,
  * to expansion results. */
-/* b required (`n = b->n - before` reads it unconditionally at entry,
- * before the `if (!n) return 0;` early-out even runs); out/active are
- * only ever forwarded into emit_field()/dereferenced inside the
- * `is_split_char` branch of the loop, not unconditionally, so they are
- * left unmarked. */
 static int split_appended(struct fbuf *b, struct pv *out, int *active,
                           size_t before) __attribute__((nonnull(1)));
 static int split_appended(struct fbuf *b, struct pv *out, int *active,
@@ -1511,10 +1340,6 @@ static int split_appended(struct fbuf *b, struct pv *out, int *active,
  * returns 0 and leaves *end alone.  Only the bare and fully-braced
  * spellings: "${@:-x}" and friends are other expansions this does not
  * implement, and must not be mistaken for this one. */
-/* p is dereferenced unconditionally (`q = p + 1` then `*q`); end is
- * deliberately NOT marked -- it is only written on the two matching
- * returns, never on the "no match" return, so there is no path on
- * which every call writes it. */
 static int at_or_star(const char *p, const char **end) __attribute__((nonnull(1)));
 static int at_or_star(const char *p, const char **end)
 {
@@ -1560,11 +1385,6 @@ static int at_or_star(const char *p, const char **end)
  * An empty parameter mid-list is kept as an empty field when quoted (a
  * quoted null is a field, 2.6) and dropped when not (2.5.2: "any empty
  * fields may be discarded"), which is what `quoted ||` below says. */
-/* b/active required: `before = b->n` and `*active = 0`/`*active = 1`
- * are genuine direct dereferences in this function's own body (not
- * merely forwarded), and every real call site passes &field/&active,
- * never NULL. out is left unmarked -- only ever forwarded into
- * emit_field(), never dereferenced by push_params() itself. */
 static int push_params(struct fbuf *b, struct pv *out, int *active, int star, int quoted)
     __attribute__((nonnull(1, 3)));
 static int push_params(struct fbuf *b, struct pv *out, int *active, int star, int quoted)
@@ -1632,22 +1452,10 @@ static int expand_impl(const char *words, wordexp_t *pwordexp, int flags, int sh
 
 	out.v = 0; out.n = out.cap = 0;
 	if (flags & WRDE_APPEND) {
-		/* pwordexp->we_wordv is deliberately NOT freed here, even
-		 * though its pointers are copied into out.v below: RETURN
-		 * VALUE says a non-WRDE_NOSPACE error leaves these fields
-		 * "unmodified", which has to mean the memory they point to
-		 * stays valid, not just that the pointer variable itself is
-		 * untouched. So the old array is only actually freed once a
-		 * path below commits to replacing it (success, or
-		 * WRDE_NOSPACE, which is explicitly allowed to update these
-		 * fields) -- see the "other errors" branch of fail: below. */
-		/* out.n/out.cap are only set to the real count once out.v
-		 * actually holds that many elements (just below) -- setting
-		 * them first and allocating second would let a struct pv
-		 * with a nonzero count but a still-NULL/still-short v exist
-		 * even momentarily, which is exactly the inconsistent
-		 * mid-state MemoryContractChecker's paired-field proof is
-		 * there to catch. */
+		/* pwordexp->we_wordv is not freed here even though its pointers
+		 * are copied into out.v: RETURN VALUE requires it stay valid on
+		 * a non-WRDE_NOSPACE error, so it's freed only once a path below
+		 * commits to replacing it. */
 		size_t count = pwordexp->we_wordc;
 		if (count) {
 			char *const *old = pwordexp->we_wordv + pwordexp->we_offs;
@@ -1870,10 +1678,8 @@ fail:
 			pwordexp->we_wordv = v;
 			pwordexp->we_wordc = out.n;
 		} else {
-			/* Could not even allocate room to report partial
-			 * success: fall back to leaving pwordexp exactly as it
-			 * was (same reasoning as the "other errors" branch
-			 * below), and free only what this call itself added. */
+			/* Couldn't even allocate room to report partial success:
+			 * leave pwordexp as it was, freeing only what this call added. */
 			pv_free_from(&out, base);
 			if (!(flags & WRDE_APPEND)) {
 				pwordexp->we_wordc = 0;
@@ -1882,12 +1688,8 @@ fail:
 		}
 	} else {
 		/* RETURN VALUE: "on other errors ... these fields remain
-		 * unmodified" -- pwordexp->we_wordv (if WRDE_APPEND) was
-		 * deliberately left untouched above, so free only the words
-		 * *this* call added (out.v[base..n)), not the carried-over
-		 * ones out.v[0..base) that still belong to it, plus the out.v
-		 * array wrapper itself (a separate allocation from
-		 * pwordexp->we_wordv, safe to free either way). */
+		 * unmodified" -- so free only the words *this* call added
+		 * (out.v[base..n)), not the carried-over ones out.v[0..base). */
 		pv_free_from(&out, base);
 		if (!(flags & WRDE_APPEND)) {
 			pwordexp->we_wordc = 0;
@@ -1928,13 +1730,10 @@ void wordfree(wordexp_t *pwordexp)
 
 	if (!pwordexp || !pwordexp->we_wordv) return;
 	offs = pwordexp->we_offs;
-	/* pwordexp->we_wordv[offs + i]'s open "dereference extent is not
-	 * proven sufficient" is <wordexp.h>'s own documented limit on its
-	 * we_wordv withtok(internal_heap_allocated): that annotation proves
-	 * this file's internal we_wordv handling never leaks/double-frees,
-	 * not that we_wordc real elements are actually there when the
-	 * struct arrives here from an arbitrary caller between wordexp()
-	 * and wordfree() -- see that header's comment on this exact field. */
+	/* we_wordv[offs+i]'s open "dereference extent is not proven
+	 * sufficient" is <wordexp.h>'s documented limit: its
+	 * withtok(internal_heap_allocated) proves no leak/double-free, not
+	 * that we_wordc elements are really there for an arbitrary caller. */
 	for (i = 0; i < pwordexp->we_wordc; i++) __free(pwordexp->we_wordv[offs + i]);
 	__free((void *)pwordexp->we_wordv);
 	pwordexp->we_wordv = 0;

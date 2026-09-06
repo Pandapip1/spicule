@@ -118,6 +118,7 @@ static int read_whole_stream(FILE *f, char **out withtok(heap_allocated),
 	return 1;
 }
 
+withtok(heap_allocated)
 static struct dline *dline_grow(struct dline *out, size_t *cap, size_t used)
 {
 	size_t newcap;
@@ -137,6 +138,7 @@ static struct dline *dline_grow(struct dline *out, size_t *cap, size_t used)
  * display it, matching real diff's own handling of a missing final
  * newline (see the header comment's -c/-u/default "\ No newline..."
  * marker and the -e/-f stderr diagnostic). */
+withtok(heap_allocated)
 static struct dline *split_lines(const char *buf, size_t len, size_t *nout, int *noeol)
 {
 	struct dline *out = 0;
@@ -402,7 +404,7 @@ oom:
 
 struct hunk { size_t a0, a1, b0, b1; };
 
-static int hunk_push(struct hunk **hunks, size_t *cap, size_t *n,
+static int hunk_push(struct hunk **hunks withtok(heap_allocated), size_t *cap, size_t *n,
 	size_t a0, size_t a1, size_t b0, size_t b1)
 {
 	if (*n >= *cap) {
@@ -776,7 +778,8 @@ struct diff_opts {
 	long context;
 };
 
-static int diff_files(const char *path1, const char *path2, const char *label1, const char *label2,
+static int diff_files(const char *path1 withtok(null_terminated), const char *path2 withtok(null_terminated),
+	const char *label1, const char *label2,
 	const struct diff_opts *opts, FILE *out, int dirmode)
 {
 	FILE *f1, *f2;
@@ -933,10 +936,21 @@ static int diff_files(const char *path1, const char *path2, const char *label1, 
 
 struct namelist { char **names; size_t n; };
 
+static int namecmp(const void *pa, const void *pb) __attribute__((nonnull(1, 2)));
 static int namecmp(const void *pa, const void *pb)
 {
 	const char *const *a = pa;
 	const char *const *b = pb;
+	/* qsort() only ever calls its comparator with addresses of real
+	 * array elements, never NULL, so a/b are always valid; the strings
+	 * they point to are every element list_dir_sorted() ever stores
+	 * into `names[]`, each a malloc()'d, NUL-terminated copy of a
+	 * dirent's own NUL-terminated d_name (checked non-NULL right after
+	 * the malloc(), before being stored) -- true by construction, but
+	 * unprovable through qsort's generic `const void *` callback shape,
+	 * hence asserted here by hand. */
+	__ownership_string_terminated(*a);
+	__ownership_string_terminated(*b);
 	return strcmp(*a, *b);
 }
 

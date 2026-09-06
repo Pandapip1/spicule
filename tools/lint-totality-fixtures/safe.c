@@ -1363,3 +1363,83 @@ __SIZE_TYPE__ z3_guarded_write_progress(int fd, const char *buf,
 	}
 	return off;
 }
+
+/* A condensed version of src/util/m4.c's own ev_primary()/ev_unary()
+ * operator-precedence chain -- the real-world shape a full-tree
+ * totality survey found unprovable across ~1470 recursion edges despite
+ * fieldProgressRelation() already existing, and which turned out to be
+ * three separate, general blind spots rather than one:
+ *
+ *   1. eval_unary() calling itself as `int r = eval_unary(ev);` --
+ *      a fresh local's own initializer, not a plain assignment to an
+ *      already-declared one. A CallExpr nested there has that VarDecl
+ *      itself as its immediate AST parent, not a Stmt (a declarator's
+ *      initializer has no Stmt node of its own), which used to make
+ *      precedingStatements() return empty and the dominating `ev->p++`
+ *      right next to it invisible.
+ *   2. eval_primary()'s and eval_unary()'s own calls to eval_ws() in
+ *      between an established witness and the recursive call that
+ *      relies on it: eval_ws() may or may not actually consume
+ *      anything (it depends on whether the input has leading
+ *      whitespace right there), so it is neither a witness itself nor,
+ *      under the OLD "prove exactly unchanged or bail" TolerateAdvances
+ *      rule, tolerable filler -- even though "never moves backward" is
+ *      all the proof actually needs from it.
+ *   3. eval_primary()'s digit branch: `long v = strtol(ev->p, &end,
+ *      0); ev->p = end;` is neither a `+=`-shaped step nor reachable
+ *      through safeFieldAdvance()'s witness shapes at all, so it used
+ *      to read as an arbitrary, adversarial write to ev->p -- poisoning
+ *      every OTHER caller's witness search that transitively called
+ *      through eval_primary(), which is all of them.
+ *
+ * See TotalityChecker.cpp's toleratedPointerReassign(),
+ * precedingStatements()'s VarDecl-initializer climb, and
+ * fieldProgressRelation()'s own comment on why tolerating a recognized
+ * forward-or-unchanged write even with no witness in hand is sound. */
+long strtol(const char *, char **
+	__attribute__((annotate("qual:endptr_advances"))), int);
+
+struct eval_cursor {
+	const char *p;
+};
+
+static void eval_ws(struct eval_cursor *ev)
+{
+	while (*ev->p == ' ')
+		ev->p++;
+}
+
+static int eval_unary(struct eval_cursor *ev);
+
+static int eval_primary(struct eval_cursor *ev)
+{
+	eval_ws(ev);
+	if (*ev->p == '(') {
+		ev->p++;
+		int v = eval_unary(ev);
+		eval_ws(ev);
+		if (*ev->p == ')')
+			ev->p++;
+		return v;
+	}
+	if (*ev->p >= '0' && *ev->p <= '9') {
+		char *end;
+		long v = strtol(ev->p, &end, 0);
+		ev->p = end;
+		return (int)v;
+	}
+	if (*ev->p)
+		ev->p++;
+	return 0;
+}
+
+static int eval_unary(struct eval_cursor *ev)
+{
+	eval_ws(ev);
+	if (*ev->p == '-') {
+		ev->p++;
+		int r = eval_unary(ev);
+		return -r;
+	}
+	return eval_primary(ev);
+}

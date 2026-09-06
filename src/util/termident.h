@@ -40,6 +40,7 @@
  *    what filters the ptmx master case out). isatty() is only a
  *    fallback, for a path this route could not resolve.
  */
+// NOLINTBEGIN(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 #ifndef _NTLIBC_UTIL_TERMIDENT_H
 #define _NTLIBC_UTIL_TERMIDENT_H
 
@@ -66,3 +67,5 @@ struct term_ident {
 int __util_find_terminal(struct term_ident *out) __attribute__((nonnull(1)));
 
 #endif
+
+// NOLINTEND(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)

@@ -39,6 +39,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include "util.h"
+#include "ownership_stubs.h" /* __ownership_string_terminated(): every operand this file compares or measures traces back to argv, whose own elements_withtok(null_terminated, argc) contract on __util_test_main's own parameter this file's struct texpr fields (char **v, sliced out of argv+1) and locals cannot see through automatically -- the same idiom src/util/find.c's byte-for-byte identical struct find_ctx (char **v; size_t n, i; int err;) already uses for its own argv slice. */
 
 /* test(1p) EXIT STATUS: "0 expression evaluated to true", "1 expression
  * evaluated to false or expression was missing", ">1 An error
@@ -99,6 +100,11 @@ static int to_int(struct texpr *t, const char *s, long *out)
 static int is_binop(const char *s) __attribute__((nonnull(1), __pure__));
 static int is_binop(const char *s)
 {
+	/* s is always one of struct texpr's own v[] elements -- an argv
+	 * element, restated here the same way find.c's basename_of()/etc.
+	 * restate the argv-wide null-terminated guarantee at each point a
+	 * checker-opaque struct field crosses into a plain const char *. */
+	__ownership_string_terminated(s);
 	return !strcmp(s, "=") || !strcmp(s, "!=") ||
 	       !strcmp(s, "-eq") || !strcmp(s, "-ne") ||
 	       !strcmp(s, "-lt") || !strcmp(s, "-le") ||
@@ -175,6 +181,12 @@ static int do_unary(struct texpr *t, const char *op, const char *arg) // NOLINT(
 static int do_binary(struct texpr *t, const char *a, const char *op, const char *b) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
 	long x, y;
+	/* a, op and b are always t_primary()'s/eval_argc()'s own v[] elements
+	 * -- argv elements, restated here the same way is_binop() restates
+	 * them for its own single operand. */
+	__ownership_string_terminated(a);
+	__ownership_string_terminated(op);
+	__ownership_string_terminated(b);
 	if (!strcmp(op, "=")) return strcmp(a, b) == 0 ? T_TRUE : T_FALSE;
 	if (!strcmp(op, "!=")) return strcmp(a, b) != 0 ? T_TRUE : T_FALSE;
 	if (to_int(t, a, &x) || to_int(t, b, &y)) return T_ERR;
@@ -212,13 +224,26 @@ static int t_primary(struct texpr *t)
 
 	if (t->i >= t->n) { terr(t, "argument expected", 0); return T_ERR; }
 	tok = t->v[t->i];
+	/* tok is one of t->v's own elements -- an argv element -- restate the
+	 * argv-wide null-terminated guarantee here, the same way
+	 * find.c's parse_primary() restates it right after its own
+	 * identically-shaped `t = c->v[c->i];` extraction. */
+	__ownership_string_terminated(tok);
 
 	if (!strcmp(tok, "(")) {
 		int r;
 		t->i++;
 		r = t_oexpr(t);
 		if (t->err) return T_ERR;
-		if (t->i >= t->n || strcmp(t->v[t->i], ")")) { terr(t, "')' expected", 0); return T_ERR; } // NOLINT(bugprone-suspicious-string-compare) -- nonzero intentionally detects a mismatched closing token
+		if (t->i < t->n) {
+			/* the would-be closing ")" -- also one of t->v's own
+			 * elements, same as tok above. */
+			const char *close = t->v[t->i];
+			__ownership_string_terminated(close);
+			if (strcmp(close, ")")) { terr(t, "')' expected", 0); return T_ERR; } // NOLINT(bugprone-suspicious-string-compare) -- nonzero intentionally detects a mismatched closing token
+		} else {
+			terr(t, "')' expected", 0); return T_ERR;
+		}
 		t->i++;
 		return r;
 	}
@@ -242,12 +267,17 @@ static int t_nexpr(struct texpr *t) __attribute__((nonnull(1)));
 // NOLINTNEXTLINE(misc-no-recursion) -- recursive descent mirrors nested test-expression grammar
 static int t_nexpr(struct texpr *t)
 {
-	if (t->i < t->n && !strcmp(t->v[t->i], "!")) {
-		int r;
-		t->i++;
-		r = t_nexpr(t);
-		if (r == T_ERR || t->err) return T_ERR;
-		return r == T_TRUE ? T_FALSE : T_TRUE;
+	if (t->i < t->n) {
+		/* an argv element, same as t_primary()'s own tok. */
+		const char *tok = t->v[t->i];
+		__ownership_string_terminated(tok);
+		if (!strcmp(tok, "!")) {
+			int r;
+			t->i++;
+			r = t_nexpr(t);
+			if (r == T_ERR || t->err) return T_ERR;
+			return r == T_TRUE ? T_FALSE : T_TRUE;
+		}
 	}
 	return t_primary(t);
 }
@@ -257,17 +287,23 @@ static int t_aexpr(struct texpr *t)
 {
 	int r = t_nexpr(t);
 	size_t remaining = t->i < t->n ? t->n - t->i : 0;
-	while (remaining > 0 && !t->err && t->i < t->n &&
-	       !strcmp(t->v[t->i], "-a")) {
-		int rhs;
-		remaining--;
-		t->i++;
-		rhs = t_nexpr(t);
-		/* Evaluated, not short-circuited: an error in either operand
-		 * of -a is still an error (status >1), and skipping the right
-		 * operand would hide a malformed one behind a false left. */
-		if (r == T_ERR || rhs == T_ERR) r = T_ERR;
-		else r = (r == T_TRUE && rhs == T_TRUE) ? T_TRUE : T_FALSE;
+	while (remaining > 0 && !t->err && t->i < t->n) {
+		/* an argv element, same as t_nexpr()'s own tok. */
+		const char *tok = t->v[t->i];
+		__ownership_string_terminated(tok);
+		if (strcmp(tok, "-a")) break;
+		{
+			int rhs;
+			remaining--;
+			t->i++;
+			rhs = t_nexpr(t);
+			/* Evaluated, not short-circuited: an error in either
+			 * operand of -a is still an error (status >1), and
+			 * skipping the right operand would hide a malformed
+			 * one behind a false left. */
+			if (r == T_ERR || rhs == T_ERR) r = T_ERR;
+			else r = (r == T_TRUE && rhs == T_TRUE) ? T_TRUE : T_FALSE;
+		}
 	}
 	return t->err ? T_ERR : r;
 }
@@ -277,14 +313,19 @@ static int t_oexpr(struct texpr *t)
 {
 	int r = t_aexpr(t);
 	size_t remaining = t->i < t->n ? t->n - t->i : 0;
-	while (remaining > 0 && !t->err && t->i < t->n &&
-	       !strcmp(t->v[t->i], "-o")) {
-		int rhs;
-		remaining--;
-		t->i++;
-		rhs = t_aexpr(t);
-		if (r == T_ERR || rhs == T_ERR) r = T_ERR;
-		else r = (r == T_TRUE || rhs == T_TRUE) ? T_TRUE : T_FALSE;
+	while (remaining > 0 && !t->err && t->i < t->n) {
+		/* an argv element, same as t_aexpr()'s own tok. */
+		const char *tok = t->v[t->i];
+		__ownership_string_terminated(tok);
+		if (strcmp(tok, "-o")) break;
+		{
+			int rhs;
+			remaining--;
+			t->i++;
+			rhs = t_aexpr(t);
+			if (r == T_ERR || rhs == T_ERR) r = T_ERR;
+			else r = (r == T_TRUE || rhs == T_TRUE) ? T_TRUE : T_FALSE;
+		}
 	}
 	return t->err ? T_ERR : r;
 }
@@ -306,7 +347,10 @@ static int eval_argc(struct texpr *t)
 		return T_FALSE;
 	case 1:
 		/* "1 argument: Exit true (0) if $1 is not null; otherwise,
-		 * exit false." */
+		 * exit false." v[0] is one of t->v's own elements -- an argv
+		 * element -- restated here the same way t_primary()'s tok
+		 * is restated. */
+		__ownership_string_terminated(v[0]);
 		return v[0][0] != 0 ? T_TRUE : T_FALSE;
 	case 2:
 		/* "If $1 is '!', exit true if $2 is null, false if $2 is not
@@ -314,6 +358,8 @@ static int eval_argc(struct texpr *t)
 		 * negated evaluation of it, so `test ! -n` is false: it is
 		 * the negation of "-n" being a non-null string, not a
 		 * malformed unary primary and not "not (-n)". */
+		__ownership_string_terminated(v[0]);
+		__ownership_string_terminated(v[1]);
 		if (!strcmp(v[0], "!")) return v[1][0] == 0 ? T_TRUE : T_FALSE;
 		if (is_unop(v[0])) return do_unary(t, v[0], v[1]);
 		terr(t, "unary operator expected", v[0]);
@@ -322,6 +368,9 @@ static int eval_argc(struct texpr *t)
 		/* "If $2 is a binary primary, perform the binary test of $1
 		 * and $3." -- checked first, which is what makes
 		 * `test "(" = ")"` a string comparison. */
+		__ownership_string_terminated(v[0]);
+		__ownership_string_terminated(v[1]);
+		__ownership_string_terminated(v[2]);
 		if (is_binop(v[1])) return do_binary(t, v[0], v[1], v[2]);
 		if (!strcmp(v[0], "!")) {
 			struct texpr sub = *t;
@@ -340,6 +389,8 @@ static int eval_argc(struct texpr *t)
 	case 4:
 		/* "If $1 is '!', negate the three-argument test of $2, $3,
 		 * and $4." */
+		__ownership_string_terminated(v[0]);
+		__ownership_string_terminated(v[3]);
 		if (!strcmp(v[0], "!")) {
 			struct texpr sub = *t;
 			int r;
@@ -386,13 +437,32 @@ int __util_test_main(
 	size_t n = (size_t)argc;
 	if (n) n--;
 
+	/* argv[0] always exists: every caller (bin/test.c's real process
+	 * argv, src/sh/builtin.c's shell-command argv, fuzz/fuzz_test.c's
+	 * synthesized argv) supplies it, matching the same never-argc-0
+	 * invariant every C program's own argv[0] carries -- restate argv's
+	 * own elements_withtok(null_terminated, argc) contract at this one
+	 * index since the checker cannot derive "0 < argc" from that
+	 * invariant on its own. */
+	__ownership_string_terminated(argv[0]);
+
 	/* "In the second form of the utility, where the utility name used
 	 * is [ rather than test, the application shall ensure that the
 	 * closing square bracket is a separate argument."  Its absence is
 	 * an error, and the bracket itself is "not ... counted in this
 	 * algorithm". */
 	if (!strcmp(argv[0], "[")) {
-		if (n < 1 || strcmp(argv[n], "]")) { // NOLINT(bugprone-suspicious-string-compare) -- nonzero intentionally detects a mismatched closing bracket argument
+		const char *last;
+		if (n < 1) { __util_diagf("[: missing `]'\n"); return T_ERR; }
+		/* n == argc - 1 here, argv's own last in-range index -- same
+		 * restatement as argv[0] above, once n < 1 has ruled out the
+		 * out-of-range case.  Read through one named local rather
+		 * than re-indexing argv[n] a second time for the strcmp()
+		 * below, the same way find.c's parse_primary() reads its own
+		 * would-be closing token once into `close`. */
+		last = argv[n];
+		__ownership_string_terminated(last);
+		if (strcmp(last, "]")) { // NOLINT(bugprone-suspicious-string-compare) -- nonzero intentionally detects a mismatched closing bracket argument
 			__util_diagf("[: missing `]'\n");
 			return T_ERR;
 		}

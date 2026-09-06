@@ -67,7 +67,12 @@
  * same publish-by-rename idiom as above. crond (src/util/crond.c)
  * notices a new crontab by stat()ing its mtime once per poll tick and
  * reparsing only when it has changed -- no lock needed there either,
- * for the same reason: it only ever sees a complete file. */
+ * for the same reason: it only ever sees a complete file.
+ *
+ * This internal header, like the public C library headers, must use the
+ * implementation-reserved namespace for its guard and its own declarations
+ * so they cannot collide with user code. */
+// NOLINTBEGIN(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 #ifndef _NTLIBC_SPOOL_H
 #define _NTLIBC_SPOOL_H
 
@@ -157,3 +162,5 @@ int __spool_job_header(const char *path, time_t *run_at, char *queue, size_t que
 const char *__spool_crontab_path(char *buf, size_t bufsz);
 
 #endif
+
+// NOLINTEND(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)

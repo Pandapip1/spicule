@@ -51,7 +51,12 @@
  * itself, and leaves it there for the user to read directly, rather
  * than silently discarding it or pretending mail was sent. See
  * src/util/atd.c's own header for exactly how.
+ *
+ * This internal header, like the public C library headers, must use the
+ * implementation-reserved namespace for its guard and its own declarations
+ * so they cannot collide with user code.
  */
+// NOLINTBEGIN(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 #ifndef _NTLIBC_UTIL_ATBATCH_H
 #define _NTLIBC_UTIL_ATBATCH_H
 
@@ -91,3 +96,5 @@ int __atbatch_submit(const char *queue, time_t run_at, const char *srcfile,
 	char *id_out, size_t id_out_sz);
 
 #endif
+
+// NOLINTEND(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)

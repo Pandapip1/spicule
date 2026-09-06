@@ -57,7 +57,7 @@ static struct awk_node *mknode(enum awk_ntype type)
 
 static void addlist(struct awk_node ***list, int *n, struct awk_node *item)
 {
-	struct awk_node **g = __util_reallocarray(*list, (size_t)*n + 1, sizeof **list);
+	struct awk_node **g = __util_reallocarray(*list, (size_t)*n + 1, sizeof **list); // NOLINT(bugprone-sizeof-expression) -- list is awk_node***, **list is awk_node*, the array holds pointers
 	if (!g) oom();
 	*list = g;
 	(*list)[*n] = item;
@@ -608,7 +608,7 @@ static struct awk_node *parse_in(struct awk_parser *p)
 		in = mknode(N_IN);
 		in->str = arrname;
 		if (l->type == N_ELIST) { in->list = l->list; in->nlist = l->nlist; free(l); }
-		else { in->list = malloc(sizeof *in->list); if (!in->list) oom(); in->list[0] = l; in->nlist = 1; }
+		else { in->list = malloc(sizeof *in->list); if (!in->list) oom(); in->list[0] = l; in->nlist = 1; } // NOLINT(bugprone-sizeof-expression) -- list is awk_node**, *list is awk_node*, the array holds pointers
 		l = in;
 	}
 	return l;

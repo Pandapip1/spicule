@@ -1174,7 +1174,7 @@ static char *bi_translit(const char *s, const char *from, const char *to)
 	memset(&b, 0, sizeof b);
 	for (i = 0; i < ls; i++) {
 		char c = s[i];
-		const char *pos = memchr(from, c, lf);
+		const char *pos = memchr(from, c, lf); // NOLINT(bugprone-not-null-terminated-result) -- deliberately bounded to lf (from's length, excluding its own NUL) so a translated character c == '\0' can never match from's terminator; the suggested strchr(from, c) would match there instead, which is a real behavioral change, not an equivalent rewrite
 		if (!pos) { strbuf_append(&b, &c, 1); continue; }
 		{
 			size_t idx = (size_t)(pos - from);

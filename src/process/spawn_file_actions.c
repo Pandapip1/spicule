@@ -64,7 +64,7 @@ static struct __spawn_action *fa_push(posix_spawn_file_actions_t *fa)
  * (src/internal/libc.h; sysconf(_SC_OPEN_MAX) reports it). */
 static int fd_ok(int fd) { return fd >= 0 && fd < FD_MAX; }
 
-int posix_spawn_file_actions_init(posix_spawn_file_actions_t *fa)
+int posix_spawn_file_actions_init(posix_spawn_file_actions_t *fa construct(spawn_file_actions))
 {
 	fa->__len = 0;
 	fa->__cap = 0;
@@ -72,7 +72,7 @@ int posix_spawn_file_actions_init(posix_spawn_file_actions_t *fa)
 	return 0;
 }
 
-int posix_spawn_file_actions_destroy(posix_spawn_file_actions_t *fa)
+int posix_spawn_file_actions_destroy(posix_spawn_file_actions_t *fa destroy(spawn_file_actions))
 {
 	int i, e = errno;
 	/* fa->__actions[i]: same fa->__len > 0 implies fa->__actions != NULL
@@ -88,7 +88,7 @@ int posix_spawn_file_actions_destroy(posix_spawn_file_actions_t *fa)
 	return 0;
 }
 
-int posix_spawn_file_actions_addclose(posix_spawn_file_actions_t *fa, int fd)
+int posix_spawn_file_actions_addclose(posix_spawn_file_actions_t *fa handle(spawn_file_actions), int fd)
 {
 	struct __spawn_action *a;
 	if (!fd_ok(fd)) return EBADF;
@@ -99,7 +99,7 @@ int posix_spawn_file_actions_addclose(posix_spawn_file_actions_t *fa, int fd)
 	return 0;
 }
 
-int posix_spawn_file_actions_adddup2(posix_spawn_file_actions_t *fa, int fd, int newfd)
+int posix_spawn_file_actions_adddup2(posix_spawn_file_actions_t *fa handle(spawn_file_actions), int fd, int newfd)
 {
 	struct __spawn_action *a;
 	if (!fd_ok(fd) || !fd_ok(newfd)) return EBADF;
@@ -111,7 +111,7 @@ int posix_spawn_file_actions_adddup2(posix_spawn_file_actions_t *fa, int fd, int
 	return 0;
 }
 
-int posix_spawn_file_actions_addopen(posix_spawn_file_actions_t *__restrict fa,
+int posix_spawn_file_actions_addopen(posix_spawn_file_actions_t *__restrict fa handle(spawn_file_actions),
                                      int fd, const char *__restrict path withtok(null_terminated), int oflag, mode_t mode) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
 	struct __spawn_action *a;

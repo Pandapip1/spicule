@@ -22,6 +22,14 @@
  *    format markers ("!"/"***"/"---" for context; the ed "c"/"." shape
  *    for -e), not just "diff -c produced *some* different-looking
  *    output than the default".
+ *  - diff -C with a count past INT_MAX (but a perfectly valid, in-range
+ *    `long`, e.g. from strtol() on a 64-bit `long`) regression-tests
+ *    that opts.context is never narrowed through an `int`: a stray
+ *    "(int)n" there used to silently wrap such a count (mod 2^32,
+ *    landing back near 0 for the value used below), which would have
+ *    turned a "diff the whole file as context" request into the exact
+ *    opposite -- context-less hunks -- without ever needing an
+ *    actually huge input file to reach.
  *  - cmp's -l test checks the exact octal byte values, not just that
  *    -l produced more than one line.
  *  - cmp's default-vs-prefix test (one file a proper prefix of the
@@ -215,6 +223,28 @@ static void test_diff_dash_c(void)
 	CHECK(out_contains("+ f\n"));
 }
 
+/* -C with a count that overflows `int` (but not `long`): must saturate to
+ * "as much context as the file has", not silently wrap back down to a
+ * tiny (or zero) count. 4294967296 is 2^32 -- 0 mod 2^32, so a stray
+ * "(int)n" narrowing would turn this into "-C 0" and both hunks would
+ * print with no surrounding context at all, and as two separate groups
+ * (their gap is bigger than 2*0). With the huge count honored, file1's
+ * unchanged lines "a"/"c"/"d"/"e" all appear as one merged context block
+ * around both hunks. */
+static void test_diff_dash_C_huge_context(void)
+{
+	char *argv[] = { (char *)"diff", (char *)"-C", (char *)"4294967296",
+		(char *)"scratch/d1", (char *)"scratch/d2", 0 };
+	CHECK(run(diff_path, argv) == 1);
+	CHECK(out_contains("  a\n"));
+	CHECK(out_contains("  c\n"));
+	CHECK(out_contains("  d\n"));
+	CHECK(out_contains("  e\n"));
+	CHECK(out_contains("! b\n"));
+	CHECK(out_contains("! B\n"));
+	CHECK(out_contains("+ f\n"));
+}
+
 /* -u: unified format's own real markers ("@@ ... @@", leading "-"/"+"). */
 static void test_diff_dash_u(void)
 {
@@ -385,6 +415,7 @@ int main(int argc, char **argv)
 	test_diff_pure_append_and_delete();
 	test_diff_identical_is_silent_and_zero();
 	test_diff_dash_c();
+	test_diff_dash_C_huge_context();
 	test_diff_dash_u();
 	test_diff_dash_e();
 	test_diff_exit_status();

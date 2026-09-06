@@ -274,7 +274,8 @@ static long str_arg(struct sink *sk, const void *arg, int wide_arg, int prec, in
 	}
 	{						/* char * -> wide */
 		const char *s = arg;
-		while (*s || !mbsinit(&st)) {
+		for (;;) {
+			if (!*s && mbsinit(&st)) break;
 			wchar_t wc = 0;
 			size_t r = mbrtowc(&wc, s, MB_LEN_MAX, &st);
 			size_t used;

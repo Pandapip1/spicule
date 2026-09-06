@@ -56,7 +56,11 @@ static const char *read_num(const char *s, int maxdigits, long *out)
 	s = skip_ws(s);
 	if (*s == '+' || *s == '-') { neg = (*s == '-'); s++; }
 	if (!isdigit((unsigned char)*s)) return NULL;
-	while (isdigit((unsigned char)*s) && n < maxdigits) { v = v * 10 + (*s++ - '0'); n++; }
+	while (n < maxdigits) {
+		if (!isdigit((unsigned char)*s)) break;
+		v = v * 10 + (*s++ - '0');
+		n++;
+	}
 	*out = neg ? -v : v;
 	return s;
 }

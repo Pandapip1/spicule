@@ -344,8 +344,8 @@ static enum date_kind parse_date(char *const *words, int n, int *ip, struct tm *
 	if (strlen(w) == 10 && w[4] == '-' && w[7] == '-') {
 		int y, mo, dd, k;
 		int ok = 1;
-		for (k = 0; k < 10 && ok; k++)
-			if (k != 4 && k != 7 && !isdigit((unsigned char)w[k])) ok = 0;
+		for (k = 0; k < 10; k++)
+			if (k != 4 && k != 7 && !isdigit((unsigned char)w[k])) { ok = 0; break; }
 		if (ok) {
 			y = (w[0] - '0') * 1000 + (w[1] - '0') * 100 + (w[2] - '0') * 10 + (w[3] - '0');
 			mo = (w[5] - '0') * 10 + (w[6] - '0');

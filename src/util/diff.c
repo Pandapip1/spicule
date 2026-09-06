@@ -270,8 +270,15 @@ static int myers_build_ops(const struct dline *a, long n, int noeol_a,
 {
 	long max = n + m;
 	long vsize, off, d, found_d = -1;
-	int *v;
-	int **trace;
+	/* v/trace/saved/vv store edit-graph x-coordinates, which range up to
+	 * n (== na, a file's line count) -- these must be the same width as
+	 * n/m/x/y (long) themselves.  Storing them as `int` would silently
+	 * truncate for a single input file with more than INT_MAX lines,
+	 * corrupting the backward pass's reconstructed x/y positions (and,
+	 * via editop_push()'s size_t cast of a wrapped-negative x/y, could
+	 * turn into an out-of-bounds index into the line arrays). */
+	long *v;
+	long **trace;
 	struct editop *ops = 0;
 	size_t opscap = 0, nops = 0;
 	long x, y;
@@ -295,7 +302,7 @@ static int myers_build_ops(const struct dline *a, long n, int noeol_a,
 
 	for (d = 0; d <= max; d++) {
 		long k;
-		int *saved;
+		long *saved;
 
 		for (k = -d; k <= d; k += 2) {
 			long xk, yk;
@@ -305,7 +312,7 @@ static int myers_build_ops(const struct dline *a, long n, int noeol_a,
 				xk = v[k - 1 + off] + 1;
 			yk = xk - k;
 			while (xk < n && yk < m && lines_equal_final(a, xk, n, noeol_a, b, yk, m, noeol_b, bflag)) { xk++; yk++; }
-			v[k + off] = (int)xk;
+			v[k + off] = xk;
 			if (xk >= n && yk >= m) found_d = d;
 		}
 
@@ -327,7 +334,7 @@ static int myers_build_ops(const struct dline *a, long n, int noeol_a,
 	{
 		long dd;
 		for (dd = found_d; dd >= 1; dd--) {
-			int *vv = trace[dd - 1];
+			long *vv = trace[dd - 1];
 			long k = x - y;
 			long prev_k, prev_x, prev_y;
 			if (k == -dd || (k != dd && vv[k - 1 + off] < vv[k + 1 + off]))
@@ -504,7 +511,19 @@ static void print_ctxline(FILE *out, const char *prefix, enum side side,
 	size_t n = (side == SIDE_A) ? na : nb;
 	int noeol = (side == SIDE_A) ? noeol_a : noeol_b;
 
-	fprintf(out, "%s%.*s\n", prefix, (int)lines[idx].len, lines[idx].s);
+	/* fwrite(), not fprintf("%.*s", (int)len, ...): a dline's length is
+	 * size_t and its text is not NUL-terminated (it points straight into
+	 * the mmap'd/malloc'd file buffer -- see split_lines()).  A single
+	 * input line at or beyond 2 GiB would have its length silently
+	 * truncated by a (int) cast, and on wraparound to a *negative* int,
+	 * printf's "%.*s" treats a negative precision as "no precision at
+	 * all" (C11 7.21.6.1p5) -- i.e. it would print until a stray NUL
+	 * byte turns up in the untrimmed buffer, an out-of-bounds read past
+	 * the actual line. fwrite()'s count is size_t, so no such truncation
+	 * is possible regardless of line length. */
+	fputs(prefix, out);
+	fwrite(lines[idx].s, 1, lines[idx].len, out);
+	fputc('\n', out);
 	if (noeol && idx + 1 == n) fprintf(out, "\\ No newline at end of file\n");
 }
 
@@ -539,6 +558,16 @@ static void print_default(FILE *out, const struct hunk *hunks, size_t nh,
 
 /* ==== -e (ed script) and -f (its "alternative form") ======================= */
 
+/* fwrite(), not fprintf("%.*s", (int)len, ...) -- see print_ctxline()'s
+ * comment on why a size_t line length truncated to int (and, on a line at
+ * or past 2 GiB, wrapped negative) turns "%.*s" into an unbounded,
+ * out-of-bounds read of the non-NUL-terminated dline text. */
+static void print_line_body(FILE *out, const struct dline *l)
+{
+	fwrite(l->s, 1, l->len, out);
+	fputc('\n', out);
+}
+
 static void print_ed(FILE *out, const struct hunk *hunks, size_t nh, const struct dline *b)
 {
 	size_t i;
@@ -555,7 +584,7 @@ static void print_ed(FILE *out, const struct hunk *hunks, size_t nh, const struc
 		}
 		if (a_empty) fprintf(out, "%zua\n", h->a0);
 		else { print_range(out, h->a0, h->a1, ','); fprintf(out, "c\n"); }
-		for (j = h->b0; j < h->b1; j++) fprintf(out, "%.*s\n", (int)b[j].len, b[j].s);
+		for (j = h->b0; j < h->b1; j++) print_line_body(out, &b[j]);
 		fprintf(out, ".\n");
 	}
 }
@@ -577,7 +606,7 @@ static void print_falt(FILE *out, const struct hunk *hunks, size_t nh, const str
 		}
 		if (a_empty) fprintf(out, "a%zu\n", h->a0);
 		else { fputc('c', out); print_range(out, h->a0, h->a1, ' '); fputc('\n', out); }
-		for (j = h->b0; j < h->b1; j++) fprintf(out, "%.*s\n", (int)b[j].len, b[j].s);
+		for (j = h->b0; j < h->b1; j++) print_line_body(out, &b[j]);
 		fprintf(out, ".\n");
 	}
 }
@@ -744,7 +773,7 @@ struct diff_opts {
 	int fmt_set;
 	int bflag;
 	int rflag;
-	int context;
+	long context;
 };
 
 static int diff_files(const char *path1, const char *path2, const char *label1, const char *label2,
@@ -1099,7 +1128,7 @@ int __util_diff_main(int argc, char **argv)
 					return 2;
 				}
 				if (!set_fmt(&opts, fmtc == 'C' ? FMT_CONTEXT : FMT_UNIFIED)) goto conflict;
-				opts.context = (int)n;
+				opts.context = n;
 				p = (char *)"";
 				break;
 			}

@@ -4212,7 +4212,8 @@ class ResourceLifecycleChecker
       return std::nullopt;
     StringRef Name = Function->getName();
     if (Name == "open" || Name == "openat" || Name == "creat" ||
-        Name == "socket" || Name == "accept" || Name == "dup" || Name == "dup2")
+        Name == "socket" || Name == "accept" || Name == "dup" ||
+        Name == "dup2" || Name == "mkstemp" || Name == "mkostemp")
       return Descriptor;
     if (Name == "fopen" || Name == "fdopen" || Name == "tmpfile" ||
         Name == "popen")

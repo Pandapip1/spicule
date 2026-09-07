@@ -37,6 +37,7 @@
 #define _NTLIBC_UTIL_TABLIST_H
 
 #include <stddef.h>
+#include <ownership.h>
 
 /* Either a single repeat interval (tab stops at every `interval`
  * columns: 1, 1+interval, 1+2*interval, ...) or an explicit strictly-
@@ -45,7 +46,7 @@
  * with one comparison. */
 struct tablist {
 	int interval;
-	long *stops;
+	long *stops withtok(heap_allocated); /* non-NULL iff interval == 0 && nstops > 0 */
 	size_t nstops;
 };
 

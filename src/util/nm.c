@@ -150,17 +150,13 @@ struct nm_sym {
 	char type; /* already-cased type letter, see sym_type_letter() */
 };
 
-/* Classifies one symbol table entry per this file's header comment
- * ("Output" section). `shdrs`/`shnum` are the object's own section
- * header table, needed to classify a defined symbol by the section it
- * lives in. s->st_info: "pointer dereference is not proven nonnull" is
- * left open here -- adding __attribute__((nonnull(1))) closes that one
- * finding but unblocks ntlibc.ValidPointer's further exploration of this
- * function into a harder, previously-masked extent question
- * (shdrs[s->st_shndx] needing shdrs's own real element count tied to
- * shnum, which elements_withtok cannot express for anything but this
- * function's own parameters and shnum itself carries no such pairing),
- * a net regression that was reverted. */
+/* Classifies one symbol table entry per this file's header ("Output"
+ * section). `shdrs`/`shnum` are the object's section header table, used
+ * to classify a defined symbol by its section. s->st_info's "not proven
+ * nonnull" finding is left open: __attribute__((nonnull(1))) closes it
+ * but unblocks ValidPointer into a harder question (shdrs[s->st_shndx]
+ * needing an element count tied to shnum that elements_withtok can't
+ * express here) -- a net regression, reverted. */
 static char sym_type_letter(const Elf64_Sym *s, const Elf64_Shdr *shdrs, uint16_t shnum)
 {
 	unsigned bind = ELF64_ST_BIND(s->st_info);
@@ -199,15 +195,12 @@ static char sym_type_letter(const Elf64_Sym *s, const Elf64_Shdr *shdrs, uint16_
 static int cmp_by_name(const void *a, const void *b)
 {
 	const struct nm_sym *sa = a, *sb = b;
-	/* sa->name/sb->name are always non-NULL, NUL-terminated strings: only
-	 * entries that passed process_file()'s own `if (!name || !*name)
-	 * continue;` check are ever stored into out[], and qsort() only ever
-	 * calls this comparator with pointers to two live out[] elements.
-	 * The restatement below closes the null-termination finding but
-	 * leaves one weaker "not proven nonnull" finding on sa->name itself
-	 * (evaluating it as this call's own argument is the first thing in
-	 * this function that needs it) -- a real net improvement over the
-	 * three findings this function had with no annotation at all. */
+	/* sa->name/sb->name are non-NULL, NUL-terminated: only entries
+	 * passing process_file()'s `if (!name || !*name) continue;` are
+	 * stored into out[], and qsort() only calls this with live out[]
+	 * elements. The restatement below closes null-termination but
+	 * leaves a weaker "not proven nonnull" finding on sa->name -- still
+	 * a net improvement over the three findings with no annotation. */
 	__ownership_string_terminated(sa->name);
 	__ownership_string_terminated(sb->name);
 	return strcmp(sa->name, sb->name);
@@ -221,11 +214,9 @@ static int cmp_by_name(const void *a, const void *b)
 static int cmp_by_value(const void *a, const void *b)
 {
 	const struct nm_sym *sa = a, *sb = b;
-	/* sa->type/sb->type: "pointer dereference is not proven nonnull" on
-	 * sa/sb themselves is left open here, the same qsort-comparator-
-	 * argument gap cmp_by_name()'s own comment describes for sa->name --
-	 * no annotation tried closed it without pushing the same proof
-	 * elsewhere. */
+	/* sa/sb "not proven nonnull" is left open here -- same qsort-
+	 * comparator-argument gap as cmp_by_name()'s sa->name; no annotation
+	 * tried closed it without pushing the proof elsewhere. */
 	int ua = sa->type == 'U' || sa->type == 'w';
 	int ub = sb->type == 'U' || sb->type == 'w';
 	if (ua != ub) return ua ? -1 : 1;
@@ -274,18 +265,18 @@ static unsigned char *read_whole_file(int fd, size_t *out_size)
 }
 
 /* Bounds-checks and locates the symbol table (SHT_SYMTAB, falling back
- * to SHT_DYNSYM if no SHT_SYMTAB section exists -- a stripped or
- * shared-object-shaped file may only have the latter) and its linked
- * string table within an already-validated ELF64 buffer. Returns 1 and
- * fills *symtab, *nsyms, *strtab, *strtab_size on success, or 0 (no
- * diagnostic -- the caller distinguishes "no symbols" from "corrupt"
- * for its own message) if neither section exists or either is
- * malformed. shdrs[i]/shdrs[best]: "pointer dereference is not proven
- * nonnull" is left open here -- __attribute__((nonnull(4))) on shdrs
- * closes that finding but unblocks exploration into a harder,
- * previously-masked question (st->sh_offset/st->sh_size needing shdrs's
- * own real element count tied to eh->e_shnum, which nothing here
- * currently expresses), a net regression that was reverted. */
+ * to SHT_DYNSYM if none exists -- a stripped or shared-object-shaped
+ * file may only have the latter) and its linked string table within an
+ * already-validated ELF64 buffer. Returns 1 and fills *symtab, *nsyms,
+ * *strtab, *strtab_size on success, or 0 (no diagnostic -- the caller
+ * distinguishes "no symbols" from "corrupt") if neither section exists
+ * or either is malformed.
+ *
+ * shdrs[i]/shdrs[best] "not proven nonnull" is left open:
+ * __attribute__((nonnull(4))) closes it but unblocks exploration into a
+ * harder question (st->sh_offset/st->sh_size needing an element count
+ * tied to e_shnum that nothing here expresses) -- a net regression,
+ * reverted. */
 static int find_symtab(const unsigned char *buf, size_t size, const Elf64_Ehdr *eh,
                         const Elf64_Shdr *shdrs,
                         const Elf64_Shdr **symtab, size_t *nsyms,
@@ -468,16 +459,12 @@ int __util_nm_main(
 		char *a = argv[i];
 		char *p;
 
-		/* a[0]: "pointer dereference is not proven nonnull" -- left
-		 * open, the same accepted class as the identical argv[i][0]
-		 * access in src/util/du.c, cp.c, m4.c, and others' own option
-		 * loops (see du.c's own comment). argv's own
-		 * elements_withtok(null_terminated, argc) above proves every
-		 * element up to argc has a reachable NUL, but that token carries
-		 * no companion "and the pointer itself is not NULL" qualifier,
-		 * so ntlibc.OwnershipChecker's AggregateElementToken machinery
-		 * has nothing to hand ntlibc.ValidPointer here. No annotation in
-		 * ownership.h currently closes this. */
+		/* a[0] "not proven nonnull" is left open, same class as the
+		 * identical argv[i][0] access in du.c, cp.c, m4.c (see du.c's
+		 * comment). elements_withtok(null_terminated, argc) proves a
+		 * reachable NUL per element but carries no "pointer itself is
+		 * non-NULL" qualifier, so AggregateElementToken has nothing to
+		 * hand ValidPointer here. No annotation closes this. */
 		if (a[0] != '-' || a[1] == 0) break;
 		if (!strcmp(a, "--")) { i++; break; }
 		for (p = a + 1; *p; p++) {

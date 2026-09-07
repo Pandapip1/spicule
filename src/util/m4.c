@@ -273,15 +273,12 @@ static struct m4_macro *lookup(struct m4_state *st, const char *name)
 {
 	struct m4_macro *m;
 	/* OPEN LINT FINDING (ntlibc.CapabilityToken, "required ownership
-	 * capability token is not held"): every real caller passes a
-	 * NUL-terminated name (a wbuf[] scan buffer or an argv-derived
-	 * macro argument), but adding withtok(null_terminated) to this
-	 * lookup()-family of small helpers cascades the same Require
-	 * obligation to their own (many, unrelated) callers instead of
-	 * closing it, and a local __ownership_string_terminated(name)
-	 * restatement here instead trips this checker's linear-token
-	 * tracking into a spurious "source ownership token has already
-	 * moved" on m->name's own read just below. Left open. */
+	 * capability token is not held"): callers pass a NUL-terminated
+	 * name, but adding withtok(null_terminated) here cascades the
+	 * Require obligation to this helper's many unrelated callers, and
+	 * a local __ownership_string_terminated(name) restatement instead
+	 * trips a spurious "token already moved" on m->name's read just
+	 * below. Left open. */
 	for (m = st->macros; m; m = m->next)
 		if (!strcmp(m->name, name)) return m;
 	return NULL;
@@ -366,16 +363,13 @@ static void pop_one(struct m4_state *st, const char *name)
 
 /* buf is always consumed (freed directly, or stored into the pushed
  * frame's own withtok(heap_allocated) buf field for getc_raw() to free
- * later) -- but declaring `buf consume(heap_allocated)` here mistrains
+ * later), but declaring `buf consume(heap_allocated)` here mistrains
  * ntlibc.Ownership: it starts reporting getc_raw()'s later, unrelated
- * `free(f->buf)` as a double-free ("ownership is already consumed") on
- * every path that reaches getc_raw() through this function, a false
- * positive this checker's cross-procedural tracking cannot avoid once a
- * scalar consume() parameter and a heap_allocated struct field alias the
- * same value. Left unannotated; a caller passing a fresh allocation here
- * (ungetc_raw(), dispatch_macro()) is left with the same open
- * "not proven freed" class of finding already accepted in
- * src/util/sort.c/join.c. */
+ * `free(f->buf)` as a double-free once a scalar consume() parameter and
+ * a heap_allocated struct field alias the same value. Left unannotated;
+ * callers passing a fresh allocation (ungetc_raw(), dispatch_macro())
+ * are left with the same open "not proven freed" class already
+ * accepted in sort.c/join.c. */
 static void push_frame(struct m4_state *st, char *buf, size_t len)
 {
 	struct m4_frame *f;
@@ -1283,11 +1277,10 @@ static char *bi_m4wrap(struct m4_state *st, char **args, int nargs) __attribute_
 		st->wraps = g; st->wraps_cap = newcap;
 	}
 	/* OPEN LINT FINDING (ntlibc.ValidPointer, "pointer dereference is
-	 * not proven nonnull"): on the nwraps < wraps_cap fast path,
-	 * st->wraps was allocated by a PRIOR, separate call to bi_m4wrap
-	 * (m4wrap() called more than once) -- a real fact this checker's
-	 * per-call analysis can't see across distinct top-level calls into
-	 * the same st. Left open. */
+	 * not proven nonnull"): on the fast path, st->wraps was allocated by
+	 * a prior, separate bi_m4wrap() call -- a fact this checker's
+	 * per-call analysis can't see across distinct calls into the same
+	 * st. Left open. */
 	st->wraps[st->nwraps++] = copy;
 	return strdup("");
 }
@@ -1310,23 +1303,17 @@ static char *bi_traceoff(struct m4_state *st, char **args, int nargs)
 
 /* OPEN LINT FINDINGS (ntlibc.CapabilityToken, "required ownership
  * capability token is not held", ~45 sites across every bi_*() builtin
- * reachable from here down through build_user_expansion()/scan()):
- * args[] elements (collect_args()'s strbuf_finalize() results),
- * st->lq/st->rq/st->bc/st->ec (m4_state's fixed-size quote/comment
- * delimiter buffers), and every builtin's own string parameters (path,
- * tmpl, cmd, ...) are ALL genuinely NUL-terminated by construction, but
- * that fact never survives into a withtok(null_terminated) proof here:
- * adding the Require contract to any one of these ~30 small, mutually
- * dispatched helper functions' own signatures only pushes the same
- * obligation onto call_builtin()'s single, generic switch dispatch (and
- * from there to dispatch_macro()/scan()), which cannot itself prove any
- * more than each callee already could -- verified empirically (see the
- * agent-m4ddc branch history) to net MORE findings, not fewer. A local
- * __ownership_string_terminated() restatement inside one such helper
- * (lookup()) was tried too, and instead mistrained ntlibc.OwnershipType
- * into a spurious "source ownership token has already moved" on the
- * very same expression. Left open across this whole call tree rather
- * than papered over with either. */
+ * down through build_user_expansion()/scan()): args[] elements,
+ * st->lq/rq/bc/ec, and every builtin's string parameters are all
+ * genuinely NUL-terminated by construction, but that fact never
+ * survives into a withtok(null_terminated) proof here -- adding the
+ * Require contract to any one of these ~30 helpers only pushes the same
+ * obligation onto call_builtin()'s generic dispatch, which can't prove
+ * any more than each callee already could (verified empirically to net
+ * MORE findings, not fewer). A local __ownership_string_terminated()
+ * restatement (tried in lookup()) instead mistrained OwnershipType into
+ * a spurious "token already moved". Left open across this whole call
+ * tree rather than papered over with either. */
 withtok(heap_allocated)
 static char *call_builtin(struct m4_state *st, int id, char **args, int nargs)
 {
@@ -1540,13 +1527,11 @@ static char **collect_args(struct m4_state *st, int *out_nargs)
 			args = g; cap = newcap;
 		}
 		/* OPEN LINT FINDING (ntlibc.AllocationLifetime, "returned
-		 * allocation has no dynamic-storage token contract"): args[]
-		 * is a plain local char **, so storing strbuf_finalize()'s
-		 * heap_allocated result into an array element isn't a
-		 * recognized ownership transfer the way a struct field
-		 * assignment is -- there is no elements_withtok-style
-		 * contract for a local variable's own elements (only for a
-		 * function's own parameters). free_args() below does free
+		 * allocation has no dynamic-storage token contract"): args[] is
+		 * a plain local char **, so storing strbuf_finalize()'s result
+		 * into an element isn't a recognized transfer the way a struct
+		 * field assignment is -- elements_withtok has no equivalent for
+		 * a local variable's elements. free_args() below does free
 		 * every element; left open rather than papered over. */
 		args[n++] = strbuf_finalize(&b);
 		if (term == ')' || term == 0 || st->exit_pending) break;

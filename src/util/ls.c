@@ -62,18 +62,13 @@ struct entry {
 static const struct ls_opts *g_sort_opts;
 static const struct ls_opts *g_time_opts;
 
-/* g_time_opts/g_sort_opts below are always set to &o in __util_ls_main
- * before any sorting or printing runs -- never read while still NULL.
- * ntlibc.ValidPointer has no annotation that closes this for a file-scope
- * static set once by a function this checker analyzes separately: the one
- * candidate mechanism (__ownership_pointer_nonnull, tried against both a
- * direct global read and a snapshot into a local) narrows the fact only
- * up to the next opaque call, and this project's own axiom stubs are
- * exactly such opaque calls -- the call that would assert "g_time_opts is
- * live" ends up invalidating other, already-fine proofs nearby (e->st in
- * time_field(), a->stat_ok in cmp_entries()) instead of net-fixing
- * anything. Left open, the same accepted class as
- * src/util/du.c's own documented argv[i][0] gap. */
+/* g_time_opts/g_sort_opts are always set to &o in __util_ls_main before
+ * any sorting or printing runs -- never read while still NULL.
+ * ntlibc.ValidPointer can't close this for a file-scope static set once
+ * by a separately-analyzed function; __ownership_pointer_nonnull only
+ * narrows up to the next opaque call, and asserting it here invalidates
+ * other nearby proofs instead of net-fixing anything. Left open, same
+ * class as src/util/du.c's argv[i][0] gap. */
 static time_t time_field(const struct entry *e)
 {
 	if (g_time_opts->c) return e->st.st_ctime;
@@ -86,15 +81,12 @@ static int cmp_entries(const void *pa, const void *pb)
 	const struct entry *a = pa, *b = pb;
 	int r;
 
-	/* a->name/b->name are always NUL-terminated: either freshly malloc'd
-	 * and NUL-set by read_directory(), or an argv element carried
-	 * through unchanged by __util_ls_main's -d/plain-file paths -- never
-	 * a bare uninitialized pointer. Left as an open CapabilityToken
-	 * finding at each strcmp() below rather than restated by hand: every
-	 * placement tried (once up top, or right at each call) either left
-	 * this unresolved or made ntlibc.ValidPointer's separate proof of a/b
-	 * (this comparator's own qsort-supplied arguments) or of
-	 * time_field()'s e parameter worse instead. */
+	/* a->name/b->name are always NUL-terminated (malloc'd by
+	 * read_directory(), or an argv element carried through unchanged) --
+	 * never a bare uninitialized pointer. Left as an open CapabilityToken
+	 * finding at each strcmp() below: restating it by hand only made
+	 * ntlibc.ValidPointer's separate proof of a/b or of time_field()'s e
+	 * worse. */
 	if (g_sort_opts->S) {
 		off_t sa = a->stat_ok ? a->st.st_size : 0, sb = b->stat_ok ? b->st.st_size : 0;
 		if (sa < sb) r = 1;
@@ -293,10 +285,10 @@ static void print_comma(const struct ls_opts *o, struct entry *ent, size_t n)
 		char *disp = build_display_name(o, &ent[i]);
 		size_t l;
 		if (!disp) continue;
-		/* build_display_name()'s own withtok(null_terminated) return
-		 * contract doesn't survive this declaration-initializer copy into
-		 * a plain local -- restate it, the same AggregateElementToken gap
-		 * this project already documents for a const argv-element read. */
+		/* build_display_name()'s withtok(null_terminated) contract
+		 * doesn't survive this copy into a plain local -- restate it,
+		 * same AggregateElementToken gap as the argv-element read
+		 * elsewhere. */
 		__ownership_string_terminated(disp);
 		l = strlen(disp) + (i + 1 < n ? 2 : 0);
 		if (col > 0 && col + (int)l > tw) { putchar('\n'); col = 0; }
@@ -364,12 +356,10 @@ static char *join_path(const char *dir, const char *name)
 	__ownership_string_terminated(name);
 	dl = strlen(dir);
 	nl = strlen(name);
-	/* dir[dl - 1] (guarded by dl > 0 just below): dl == strlen(dir), so
-	 * this index is always within dir's own NUL-terminated extent, but
-	 * ntlibc.ValidPointer's extent proof doesn't derive readable_span
-	 * from null_terminated + strlen()'s return alone, and restating it
-	 * by hand (__ownership_readable_span(dir, dl)) didn't close this
-	 * either -- left open. */
+	/* dir[dl - 1] (guarded by dl > 0 below) is always within dir's
+	 * NUL-terminated extent since dl == strlen(dir), but ValidPointer
+	 * can't derive readable_span from null_terminated + strlen() alone --
+	 * restating it by hand didn't close this either. Left open. */
 	need_slash = dl > 0 && dir[dl - 1] != '/';
 	if (!__util_size_add(dl, (size_t)need_slash, &bytes) ||
 	    !__util_size_add(bytes, nl, &bytes) ||
@@ -407,13 +397,11 @@ static int read_directory(const struct ls_opts *o, const char *dir, struct entry
 		if (!o->a && !o->A && de->d_name[0] == '.') continue;
 		if (o->A && (is_dot || is_dotdot)) continue;
 
-		/* grow_entries() only ever returns 0 after leaving *arr set to a
-		 * live allocation with room for at least n+1 entries, but that
-		 * fact is established through a T** out-parameter, which
-		 * ntlibc.ValidPointer's interprocedural reasoning does not carry
-		 * back to this call site (and restating it by hand here made the
-		 * proof worse, not better, by forcing a harder extent proof on
-		 * every arr[n].* access below) -- left open. */
+		/* grow_entries() returning 0 leaves *arr sized for at least n+1
+		 * entries, but that fact is established through a T**
+		 * out-parameter that ValidPointer's interprocedural reasoning
+		 * doesn't carry back here -- restating it by hand only
+		 * worsened the proof. Left open. */
 		if (grow_entries(&arr, &n, &cap) < 0) { (void)closedir(dp); goto nomem; }
 		{
 			size_t namebytes;
@@ -581,10 +569,9 @@ int __util_ls_main(
 				continue;
 			}
 			if (S_ISDIR(st.st_mode)) continue;
-			/* grow_entries() only ever returns 0 after leaving *arr set
-			 * to a live allocation with room for at least nplain+1
-			 * entries -- same T** out-parameter gap as read_directory()'s
-			 * identical call, left open there. */
+			/* grow_entries() returning 0 leaves *arr sized for at
+			 * least nplain+1 entries -- same T** out-parameter gap
+			 * as read_directory()'s identical call, left open there. */
 			if (grow_entries(&plain, &nplain, &cap) < 0) { __util_diagf("ls: out of memory\n"); exit_status = 1; continue; }
 			plain[nplain].name = (char *)files[fi];
 			plain[nplain].st = st;

@@ -128,13 +128,11 @@ static int awk_fatal_armed;
 void awk_unwind_fatal(void)
 {
 	if (awk_fatal_armed) longjmp(awk_fatal_env, 1);
-	/* No __util_awk_main() call is on the stack to catch this (e.g. a
-	 * direct awk_parse_program() call, the way fuzz/fuzz_awk.c's own
-	 * harness makes one to pre-check a program before deciding whether
-	 * to run it) -- see awk_priv.h's own comment on awk_fatal_armed.
-	 * Falling back to the historical diagnostic-plus-exit(2) behavior
-	 * is still correct for that caller; only __util_awk_main() itself
-	 * needs (and gets) the non-exiting path. */
+	/* No __util_awk_main() is on the stack to catch this (e.g. a direct
+	 * awk_parse_program() call, as fuzz/fuzz_awk.c's harness makes) --
+	 * see awk_priv.h's comment on awk_fatal_armed. Falling back to
+	 * diagnostic-plus-exit(2) is still correct there; only
+	 * __util_awk_main() gets the non-exiting path. */
 	exit(2);
 }
 
@@ -192,19 +190,17 @@ static char *load_progfiles(char **files elements_withtok(null_terminated, nfile
 		if (len == 0) {
 			buf_grow_append(&buf, &len, &cap, "\n", 1);
 		} else {
-			/* len only ever grows inside buf_grow_append(), whose own
-			 * growth branch always leaves *buf non-null (or unwinds
-			 * fatally without returning) before *len is advanced --
-			 * a cross-call double-indirection invariant this checker
-			 * can't derive on its own. */
+			/* len only grows inside buf_grow_append(), whose growth
+			 * branch always leaves *buf non-null before *len advances --
+			 * a cross-call invariant this checker can't derive on its
+			 * own. */
 			__ownership_pointer_nonnull(buf);
-			/* ntlibc.ValidPointer still can't prove buf's extent covers
-			 * index len-1 here: the real extent buf_grow_append()'s own
-			 * realloc() call establishes doesn't survive back out through
-			 * its char** parameter (a known checker gap -- no existing
-			 * ownership.h annotation narrows ValidPointer's own extent
-			 * state the way __ownership_pointer_nonnull() narrows its
-			 * nonnull state; left open). */
+			/* ValidPointer still can't prove buf's extent covers index
+			 * len-1: the real extent buf_grow_append()'s realloc()
+			 * establishes doesn't survive back out through its char**
+			 * parameter. No annotation narrows extent state the way
+			 * __ownership_pointer_nonnull() narrows nonnull state; left
+			 * open. */
 			if (buf[len - 1] != '\n') buf_grow_append(&buf, &len, &cap, "\n", 1);
 		}
 	}
@@ -230,15 +226,12 @@ static int split_assignment(char *s, char **name_out, char **val_out)
 	return 1;
 }
 
-/* -F/-v/-f all share the standard getopt(3)-style rule that an option's
- * argument is either attached (`-Fx`) or, when nothing is attached, the
- * next argv element (`-F x`). Returns that argument text, advancing
- * *argi past it in the "next argv element" case; on the missing-
- * argument case prints the diagnostic itself and returns NULL, which
- * the caller must treat as "return 2" (this function cannot do that
- * unwind itself: it runs before __util_awk_main()'s own setjmp() is
- * armed, so a plain return here is already exactly what every other
- * error in this same option loop does). */
+/* -F/-v/-f share the getopt(3)-style rule that an option's argument is
+ * either attached (`-Fx`) or the next argv element (`-F x`). Returns
+ * that text, advancing *argi in the "next element" case; on a missing
+ * argument, prints the diagnostic and returns NULL, which the caller
+ * must treat as "return 2" (this function can't unwind itself: it runs
+ * before __util_awk_main()'s setjmp() is armed). */
 withtok(null_terminated)
 static const char *opt_value(char **argv elements_withtok(null_terminated, argc),
 	int argc, int *argi, char opt, const char *arg withtok(null_terminated))
@@ -255,15 +248,12 @@ int __util_awk_main(
 	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	const char *fsarg = NULL;
-	/* vassigns/progfiles and each -v's strdup() are freed once applied,
-	 * below -- but only on the path that reaches that point. Every
-	 * option-parsing usage error (an early `return 2` in the loop below,
-	 * or the missing-program-text/bad-progfile/syntax-error returns
-	 * further down) leaves whatever had already accumulated unfreed.
-	 * ntlibc.AllocationLifetime flags each of those returns; left open
-	 * rather than threading a cleanup path through every CLI usage
-	 * error, matching this file's own tail comment on why the parsed
-	 * program itself is never freed either. */
+	/* vassigns/progfiles and each -v's strdup() are freed once applied
+	 * below, but only on the path that reaches that point -- every
+	 * early usage-error return leaves them unfreed.
+	 * ntlibc.AllocationLifetime flags those returns; left open rather
+	 * than threading cleanup through every CLI usage error, same
+	 * rationale as this file's tail comment on the parsed program. */
 	struct vassign *vassigns = NULL;
 	int nvassigns = 0;
 	char **progfiles = NULL;
@@ -330,14 +320,12 @@ int __util_awk_main(
 	}
 
 	/* ---- fatal-error unwind: armed once here, covers every phase below
-	 * (loading -f progfiles, parsing, running) without separate per-
-	 * phase machinery -- see awk_priv.h's own long comment on
-	 * awk_fatal_env/awk_unwind_fatal() for the full design, including
-	 * why the catching branch below deliberately touches nothing but
-	 * awk_fatal_armed and a hardcoded status (ip/prog/progtext are
-	 * ordinary, non-volatile locals modified after this setjmp(), so
-	 * touching them from here would itself be undefined behavior --
-	 * see that same comment's point 3). */
+	 * (loading -f progfiles, parsing, running) without per-phase
+	 * machinery -- see awk_priv.h's comment on awk_fatal_env/
+	 * awk_unwind_fatal() for the full design. The catching branch below
+	 * deliberately touches nothing but awk_fatal_armed and a hardcoded
+	 * status: ip/prog/progtext are ordinary non-volatile locals modified
+	 * after this setjmp(), so touching them here would itself be UB. */
 	if (setjmp(awk_fatal_env)) {
 		awk_fatal_armed = 0;
 		return 2;
@@ -358,12 +346,11 @@ int __util_awk_main(
 	}
 
 	prog = awk_parse_program(progtext);
-	/* progtext is heap-owned only in the -f path (load_progfiles());
-	 * the bare-program-text path above points it at argv[i], which
-	 * must not be freed. awk_parse_program() never retains src past
-	 * its own return (its lexer just walks it; token text is copied
-	 * separately), so it is safe to free here regardless of whether
-	 * parsing succeeded. */
+	/* progtext is heap-owned only in the -f path (load_progfiles()); the
+	 * bare-program-text path points it at argv[i], which must not be
+	 * freed. awk_parse_program() never retains src past its own return
+	 * (its lexer just walks it), so freeing here is safe regardless of
+	 * whether parsing succeeded. */
 	if (have_f) free(progtext);
 	if (!prog) { awk_fatal_armed = 0; return 2; }
 
@@ -385,17 +372,12 @@ int __util_awk_main(
 
 	status = awk_interp_run(&ip);
 	awk_interp_free(&ip);
-	/* The parsed program (AST/lexer-owned strings/compiled literal
-	 * EREs) is deliberately never freed -- this is a short-lived CLI
-	 * process (or, as a shell built-in, one bi_awk() invocation), so
-	 * the OS reclaims it at exit either way; see this file's own
-	 * header for the same allocation-failure-handling philosophy
-	 * (fatal rather than threaded through every call site) applied
-	 * one step further, to a whole-of-run allocation nothing in this
-	 * tree's other utilities needs to free piecemeal either (compare
-	 * src/util/sort.c's own free_lines() -- sort frees because it may
-	 * run again in the same process's loop in principle; awk's own
-	 * program is parsed exactly once per process). */
+	/* The parsed program (AST/lexer-owned strings/compiled EREs) is
+	 * deliberately never freed -- a short-lived CLI process (or one
+	 * bi_awk() shell-builtin invocation), so the OS reclaims it at exit
+	 * either way. Compare src/util/sort.c's free_lines(), which frees
+	 * because it may run again in the same process's loop; awk's
+	 * program is parsed exactly once per process. */
 	awk_fatal_armed = 0;
 	return status;
 }

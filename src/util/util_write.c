@@ -73,6 +73,7 @@
  */
 #include "util.h"
 #include "termident.h"
+#include "ownership_stubs.h" /* __ownership_string_terminated() */
 #include <pwd.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -140,6 +141,13 @@ int __util_write_main(
 		return 1;
 	}
 
+	/* ttyop: an argv element read through a const char * (the
+	 * AggregateElementToken propagation gap this idiom already works
+	 * around in tail.c/head.c/cksum.c). t.shortname: a struct field
+	 * __util_find_terminal() always NUL-terminates on success (see
+	 * termident.h's own comment). */
+	if (ttyop) __ownership_string_terminated(ttyop);
+	__ownership_string_terminated(t.shortname);
 	if (ttyop && strcmp(ttyop, t.shortname) != 0) {
 		__util_diagf("write: %s is not logged in on %s\n", user, ttyop);
 		return 1;
@@ -163,11 +171,29 @@ int __util_write_main(
 	if (timestr) {
 		strncpy(tbuf, timestr, sizeof tbuf - 1);
 		tbuf[sizeof tbuf - 1] = 0;
+		/* strncpy() only proves extent; the explicit assignment above
+		 * is what actually NUL-terminates tbuf. */
+		__ownership_string_terminated(tbuf);
 		tlen = strlen(tbuf);
+		/* KNOWN CHECKER GAP (ntlibc.ValidPointer, "dereference extent is
+		 * not proven sufficient" on tbuf[tlen-1]/tbuf[--tlen] below):
+		 * tlen <= sizeof tbuf - 1 (63) always holds here, by construction,
+		 * from the fixed NUL written to tbuf[sizeof tbuf - 1] just above
+		 * -- but the checker's strlen-return-to-extent correlation
+		 * (OwnershipChecker.cpp's trackScanExtent) deliberately declines
+		 * to run against a fixed local array, which already has a real,
+		 * stronger extent (64) than anything derivable from strlen()'s
+		 * return; a manual __ownership_writable_span/readable_span
+		 * restatement here is rejected by ntlibc.MemoryContract itself as
+		 * narrowing an already-proven-stronger fact ("manual memory proof
+		 * axiom can be narrowed"). Left open rather than worked around. */
 		while (tlen && (tbuf[tlen - 1] == '\n' || tbuf[tlen - 1] == '\r')) tbuf[--tlen] = 0;
 	}
 	snprintf(banner, sizeof banner, "Message from %s (%s) [%s]...\n",
 		pw->pw_name, t.shortname, tbuf);
+	/* snprintf() isn't itself annotated to grant null_terminated, but it
+	 * always NUL-terminates a nonzero-size buffer. */
+	__ownership_string_terminated(banner);
 
 	if (send_all(wfd, banner, strlen(banner)) != 0) {
 		__util_diagf("write: %s\n", strerror(errno));
@@ -176,6 +202,8 @@ int __util_write_main(
 	}
 
 	while (fgets(line, sizeof line, stdin)) {
+		/* fgets() always NUL-terminates on a non-NULL return. */
+		__ownership_string_terminated(line);
 		if (send_all(wfd, line, strlen(line)) != 0) {
 			__util_diagf("write: %s\n", strerror(errno));
 			status = 1;

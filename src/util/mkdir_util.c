@@ -67,6 +67,7 @@
 #include "libc.h"
 #include "util.h"
 #include "modeparse.h"
+#include "ownership_stubs.h" /* __ownership_string_terminated(): dirname() (libgen.h) has no ownership annotations of its own, but always returns either "." or a NUL it just wrote into its argument -- see src/misc/dirname.c */
 
 /* Creates `path`, and with -p, any missing intermediate components too.
  * `leaf_mode` is applied only to `path` itself -- an intermediate
@@ -75,9 +76,11 @@
  * would use, since neither mkdir(1p) nor mkfifo(1p) says what an
  * automatically-created ancestor's mode should be. Returns 0 on success
  * (including "already existed as a directory" under has_p), -1 with
- * errno set otherwise. */
+ * errno set otherwise. `path` is always null-terminated: both call sites
+ * (the initial __util_mkdir_main call and the recursive dirname() call
+ * below) pass a buffer that genuinely has a reachable NUL. */
 // NOLINTNEXTLINE(misc-no-recursion) -- parent creation recurses on a strictly shorter path prefix
-static int mkdir_p(char *path, mode_t leaf_mode, int is_leaf, int has_p)
+static int mkdir_p(char *path withtok(null_terminated), mode_t leaf_mode, int is_leaf, int has_p)
 {
 	struct stat st;
 
@@ -96,6 +99,7 @@ static int mkdir_p(char *path, mode_t leaf_mode, int is_leaf, int has_p)
 		if (n >= sizeof parent) { errno = ENAMETOOLONG; return -1; }
 		memcpy(parent, path, n + 1);
 		p = dirname(parent);
+		__ownership_string_terminated(p);
 		if (!strcmp(p, path)) return -1; /* dirname made no progress: true root, ENOENT stands */
 		/* "." means the parent is just the current directory, which
 		 * always exists -- nothing to create, go straight to retrying
@@ -116,15 +120,24 @@ int __util_mkdir_main(
 	const char *mode_spec = 0;
 	mode_t leaf_mode = 0777;
 
-	for (i = 1; i < argc && argv[i][0] == '-' && argv[i][1]; i++) {
+	i = 1;
+	while (i < argc) {
+		/* argv's own elements_withtok(null_terminated, argc) proves
+		 * every element up to argc has a reachable NUL, but not that
+		 * the element pointer itself is nonnull -- genuinely true
+		 * (main()'s argv[0..argc-1] are never NULL), just not a fact
+		 * an array-element read can carry across to ValidPointer. */
+		__ownership_pointer_nonnull(argv[i]);
+		if (argv[i][0] != '-' || !argv[i][1]) break;
 		if (!strcmp(argv[i], "--")) { i++; break; }
-		if (!strcmp(argv[i], "-p")) { opt_p = 1; continue; }
+		if (!strcmp(argv[i], "-p")) { opt_p = 1; i++; continue; }
 		if (!strcmp(argv[i], "-m")) {
 			if (i + 1 >= argc) {
 				__util_diagf("mkdir: -m: option requires an argument\n");
 				return 1;
 			}
 			mode_spec = argv[++i];
+			i++;
 			continue;
 		}
 		__util_diagf("mkdir: %s: invalid option\n", argv[i]);
@@ -144,13 +157,16 @@ int __util_mkdir_main(
 
 	for (; i < argc; i++) {
 		char path[PATH_MAX];
-		size_t n = strlen(argv[i]);
+		size_t n;
+		__ownership_string_terminated(argv[i]); /* AggregateElementToken's null_terminated grant from argv's own elements_withtok doesn't survive into this second loop */
+		n = strlen(argv[i]);
 		if (n >= sizeof path) {
 			__util_diagf("mkdir: %s: %s\n", argv[i], strerror(ENAMETOOLONG));
 			fail = 1;
 			continue;
 		}
 		memcpy(path, argv[i], n + 1);
+		__ownership_string_terminated(path); /* memcpy just copied argv[i]'s own NUL (n + 1 bytes) into path */
 		if (mkdir_p(path, leaf_mode, 1, opt_p) < 0) {
 			int saved = errno;
 			__util_diagf("mkdir: %s: %s\n", argv[i], strerror(saved));

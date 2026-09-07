@@ -84,6 +84,12 @@ static int fill(DIR *dp, struct dirent *out)
 		const unsigned char *types = f->vfs == __VFS_ROOT ? root_types : dev_types;
 		size_t count = f->vfs == __VFS_ROOT ? 3 : 5;
 		if ((size_t)dp->tell >= count) { dp->done = 1; return 1; }
+		/* types[dp->tell]/names[dp->tell] below are in-bounds by the check
+		 * just above; left unannotated because ntlibc.ValidPointer only
+		 * loses that proof on the x86_64-win32 (LLP64) target, where
+		 * dp->tell (long, 32-bit) widens to size_t (64-bit) for the guard
+		 * but indexes at its own native width -- a known cast-direction
+		 * gap in the checker's array-bounds solver, not a real bug. */
 		memset(out, 0, sizeof *out);
 		out->d_ino = (ino_t)(dp->tell < 2 ? (f->vfs == __VFS_ROOT ? __VFS_ROOT :
 		                    (dp->tell == 0 ? __VFS_DEV : __VFS_ROOT)) :

@@ -55,7 +55,9 @@ static int read_two_digits(const char *s, int *out)
 	return 0;
 }
 
-/* touch(1p) -t: "[[CC]YY]MMDDhhmm[.SS]". */
+/* touch(1p) -t: "[[CC]YY]MMDDhhmm[.SS]". out is never NULL at its one
+ * call site (the address of a stack local). */
+__attribute__((nonnull(2)))
 static int parse_touch_t(const char *spec, struct timespec *out)
 {
 	size_t mainlen = strcspn(spec, ".");
@@ -134,6 +136,11 @@ int __util_touch_main(
 	struct timespec want[2] = {{0, 0}, {0, 0}};
 	int have_explicit = 0;
 
+	/* ntlibc.ValidPointer cannot prove argv[i][0] nonnull here: the
+	 * dereference sits directly inside this loop's compound condition
+	 * (see src/util/rmdir.c's identical, already-documented case for the
+	 * same known checker gap, not a real bug -- argv[i] for i < argc is
+	 * always live). */
 	for (i = 1; i < argc && argv[i][0] == '-' && argv[i][1]; i++) {
 		const char *a = argv[i];
 		size_t option_len;

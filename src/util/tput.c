@@ -159,6 +159,19 @@ static int print_cup(const struct term_entry *t, const char *rowarg, const char 
 	char *end1, *end2;
 	long row, col;
 
+	/* OPEN LINT FINDING (ntlibc.ValidPointer, "*rowarg" not proven
+	 * nonnull): rowarg/colarg are always argv[i+1]/argv[i+2] from this
+	 * file's one call site, which checks i + 2 < argc first, so both are
+	 * always live, null-terminated argv elements. Tried adding
+	 * withtok(null_terminated) to this function's own parameters
+	 * instead of leaving this open, but verified (tools/lint.sh
+	 * ownership) that it is a net regression: the *rowarg finding stays
+	 * (the fact still doesn't reach a raw `!*rowarg` in a compound
+	 * condition, the same shape src/util/rmdir.c's argv[i][0] gap
+	 * documents) and it adds two new findings at the call site instead
+	 * (argv[i + 1]/argv[i + 2]'s offset subscript doesn't hand off the
+	 * elements_withtok(null_terminated, argc) token the way a bare
+	 * argv[i] read does), so left open here rather than kept. */
 	if (!t->has_cup) return 1; /* not defined for this terminal */
 	row = strtol(rowarg, &end1, 10);
 	col = strtol(colarg, &end2, 10);

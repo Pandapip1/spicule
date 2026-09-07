@@ -3352,16 +3352,22 @@ class ValidPointerChecker
   // `strtol(s, &end, 10); if (*end) ...` therefore looked like a possible
   // null dereference even though the conversion call itself established the
   // opposite.  Keep this list literal and limited to the standard narrow and
-  // wide conversion families whose second argument is endptr.
+  // wide conversion families whose second argument is endptr. The
+  // intmax_t/uintmax_t siblings (C11 7.8.2.3) are specified in the exact
+  // same endptr terms as strtol/strtoul, so they belong here too --
+  // src/util/dd.c's parse_dd_num() calling strtoumax() hit exactly this
+  // gap (ValidPointer could not prove `s = end;`'s later `*s` nonnull)
+  // before these four names were added.
   static bool writesNonNullEndPointer(const CallEvent &Call) {
     const auto *Function = dyn_cast_or_null<FunctionDecl>(Call.getDecl());
     if (!Function || !Function->getIdentifier())
       return false;
     StringRef Name = Function->getName();
     static constexpr llvm::StringLiteral Names[] = {
-        "strtod",  "strtof",   "strtold", "strtol",  "strtoll",
-        "strtoul", "strtoull", "wcstod",  "wcstof",  "wcstold",
-        "wcstol",  "wcstoll",  "wcstoul", "wcstoull"};
+        "strtod",   "strtof",    "strtold",   "strtol",    "strtoll",
+        "strtoul",  "strtoull",  "strtoimax", "strtoumax", "wcstod",
+        "wcstof",   "wcstold",   "wcstol",    "wcstoll",   "wcstoul",
+        "wcstoull", "wcstoimax", "wcstoumax"};
     for (StringRef Candidate : Names)
       if (Name == Candidate)
         return true;

@@ -169,7 +169,7 @@ static const char *const m4_builtin_names[BI_COUNT] = {
 
 /* ==== growable byte buffer ================================================== */
 
-struct m4_strbuf { char *data; size_t len, cap; };
+struct m4_strbuf { char *data withtok(heap_allocated); size_t len, cap; };
 
 static int strbuf_append(struct m4_strbuf *b, const char *data, size_t n)
 {
@@ -204,6 +204,7 @@ static int strbuf_append(struct m4_strbuf *b, const char *data, size_t n)
 /* Transfers ownership of b->data (or a fresh empty string, if nothing
  * was ever appended) to the caller.  b must not be reused afterward
  * without being reinitialized. */
+withtok(heap_allocated)
 static char *strbuf_finalize(struct m4_strbuf *b)
 {
 	if (!b->data) {
@@ -217,31 +218,31 @@ static char *strbuf_finalize(struct m4_strbuf *b)
 /* ==== state structures ======================================================= */
 
 struct m4_frame {
-	char *buf;
+	char *buf withtok(heap_allocated);
 	size_t len, pos;
-	struct m4_frame *down;
+	struct m4_frame *down withtok(heap_allocated);
 };
 
 struct m4_macro_def {
 	int is_builtin;
 	int builtin_id;
-	char *text;			/* NULL when is_builtin */
-	struct m4_macro_def *down;	/* the pushdef()'d definition beneath, if any */
+	char *text withtok(heap_allocated);		/* NULL when is_builtin */
+	struct m4_macro_def *down withtok(heap_allocated);	/* the pushdef()'d definition beneath, if any */
 };
 
 struct m4_macro {
-	char *name;
-	struct m4_macro_def *top;	/* current (topmost) definition, or NULL */
-	struct m4_macro *next;
+	char *name withtok(heap_allocated) withtok(null_terminated);
+	struct m4_macro_def *top withtok(heap_allocated);	/* current (topmost) definition, or NULL */
+	struct m4_macro *next withtok(heap_allocated);
 };
 
 struct m4_trace {
-	char *name;
-	struct m4_trace *next;
+	char *name withtok(heap_allocated) withtok(null_terminated);
+	struct m4_trace *next withtok(heap_allocated);
 };
 
 struct m4_state {
-	struct m4_macro *macros;
+	struct m4_macro *macros withtok(heap_allocated);
 
 	char lq[M4_MAXDELIM + 1], rq[M4_MAXDELIM + 1];
 	int comment_on;
@@ -250,9 +251,9 @@ struct m4_state {
 	struct m4_strbuf div[10];	/* index 1..9 used; 0 unused */
 	int cur_divert;
 
-	struct m4_frame *top;
+	struct m4_frame *top withtok(heap_allocated);
 
-	char **wraps; size_t nwraps, wraps_cap, wrap_pos;
+	char **wraps withtok(heap_allocated); size_t nwraps, wraps_cap, wrap_pos;
 
 	int exit_pending, exit_code;
 	int had_error;
@@ -263,7 +264,7 @@ struct m4_state {
 	int sysval;
 
 	int trace_all;
-	struct m4_trace *traced;
+	struct m4_trace *traced withtok(heap_allocated);
 };
 
 /* ==== macro table ============================================================= */
@@ -271,6 +272,16 @@ struct m4_state {
 static struct m4_macro *lookup(struct m4_state *st, const char *name)
 {
 	struct m4_macro *m;
+	/* OPEN LINT FINDING (ntlibc.CapabilityToken, "required ownership
+	 * capability token is not held"): every real caller passes a
+	 * NUL-terminated name (a wbuf[] scan buffer or an argv-derived
+	 * macro argument), but adding withtok(null_terminated) to this
+	 * lookup()-family of small helpers cascades the same Require
+	 * obligation to their own (many, unrelated) callers instead of
+	 * closing it, and a local __ownership_string_terminated(name)
+	 * restatement here instead trips this checker's linear-token
+	 * tracking into a spurious "source ownership token has already
+	 * moved" on m->name's own read just below. Left open. */
 	for (m = st->macros; m; m = m->next)
 		if (!strcmp(m->name, name)) return m;
 	return NULL;
@@ -353,6 +364,18 @@ static void pop_one(struct m4_state *st, const char *name)
 
 /* ==== input-frame stack and character pushback =============================== */
 
+/* buf is always consumed (freed directly, or stored into the pushed
+ * frame's own withtok(heap_allocated) buf field for getc_raw() to free
+ * later) -- but declaring `buf consume(heap_allocated)` here mistrains
+ * ntlibc.Ownership: it starts reporting getc_raw()'s later, unrelated
+ * `free(f->buf)` as a double-free ("ownership is already consumed") on
+ * every path that reaches getc_raw() through this function, a false
+ * positive this checker's cross-procedural tracking cannot avoid once a
+ * scalar consume() parameter and a heap_allocated struct field alias the
+ * same value. Left unannotated; a caller passing a fresh allocation here
+ * (ungetc_raw(), dispatch_macro()) is left with the same open
+ * "not proven freed" class of finding already accepted in
+ * src/util/sort.c/join.c. */
 static void push_frame(struct m4_state *st, char *buf, size_t len)
 {
 	struct m4_frame *f;
@@ -439,7 +462,7 @@ static void out_put(struct m4_state *st, struct m4_strbuf *buf, const char *data
 
 /* ==== small parsing helpers =================================================== */
 
-static const char *argn(char **args, int nargs, int i)
+static const char *argn(char **args, int nargs, int i) __attribute__((returns_nonnull))
 {
 	return (i < nargs && args[i]) ? args[i] : "";
 }
@@ -728,6 +751,7 @@ static int32_t ev_lor(struct m4_eval *e)
 	}
 }
 
+withtok(heap_allocated)
 static char *format_radix(int32_t value, int radix __arith_range(2, 36),
 	int width)
 {
@@ -768,7 +792,7 @@ static int is_traced(struct m4_state *st, const char *name)
 	return 0;
 }
 
-static void trace_add(struct m4_state *st, const char *name)
+static void trace_add(struct m4_state *st, const char *name) __attribute__((nonnull(1)))
 {
 	struct m4_trace *t = malloc(sizeof *t);
 	if (!t) { st->had_error = 1; return; }
@@ -777,7 +801,7 @@ static void trace_add(struct m4_state *st, const char *name)
 	t->next = st->traced; st->traced = t;
 }
 
-static void trace_remove_all(struct m4_state *st)
+static void trace_remove_all(struct m4_state *st) __attribute__((nonnull(1)))
 {
 	while (st->traced) {
 		struct m4_trace *n = st->traced->next;
@@ -786,7 +810,7 @@ static void trace_remove_all(struct m4_state *st)
 	}
 }
 
-static void trace_remove(struct m4_state *st, const char *name)
+static void trace_remove(struct m4_state *st, const char *name) __attribute__((nonnull(1)))
 {
 	struct m4_trace **pp = &st->traced;
 	while (*pp) {
@@ -810,7 +834,7 @@ static void trace_print(const char *name, char **args, int nargs)
 
 /* ==== whole-file/stream slurp (for stdin/file operands and include()) ======== */
 
-static int slurp(FILE *f, char **out, size_t *outlen)
+static int slurp(FILE *f, char **out withtok(heap_allocated), size_t *outlen)
 {
 	struct m4_strbuf b;
 	char tmp[4096];
@@ -835,6 +859,7 @@ static void install_definition(struct m4_state *st, const char *name, const char
 		define_macro(st, name, 0, 0, rawtext, push);
 }
 
+withtok(heap_allocated)
 static char *bi_define(struct m4_state *st, char **args, int nargs)
 {
 	const char *name = argn(args, nargs, 0);
@@ -843,6 +868,7 @@ static char *bi_define(struct m4_state *st, char **args, int nargs)
 	return strdup("");
 }
 
+withtok(heap_allocated)
 static char *bi_pushdef(struct m4_state *st, char **args, int nargs)
 {
 	const char *name = argn(args, nargs, 0);
@@ -851,6 +877,7 @@ static char *bi_pushdef(struct m4_state *st, char **args, int nargs)
 	return strdup("");
 }
 
+withtok(heap_allocated)
 static char *bi_undefine(struct m4_state *st, char **args, int nargs)
 {
 	int i;
@@ -858,6 +885,7 @@ static char *bi_undefine(struct m4_state *st, char **args, int nargs)
 	return strdup("");
 }
 
+withtok(heap_allocated)
 static char *bi_popdef(struct m4_state *st, char **args, int nargs)
 {
 	int i;
@@ -865,6 +893,7 @@ static char *bi_popdef(struct m4_state *st, char **args, int nargs)
 	return strdup("");
 }
 
+withtok(heap_allocated)
 static char *bi_defn(struct m4_state *st, char **args, int nargs)
 {
 	struct m4_strbuf b;
@@ -886,12 +915,14 @@ static char *bi_defn(struct m4_state *st, char **args, int nargs)
 	return strbuf_finalize(&b);
 }
 
+withtok(heap_allocated)
 static char *bi_ifdef(struct m4_state *st, char **args, int nargs)
 {
 	struct m4_macro *m = lookup(st, argn(args, nargs, 0));
 	return strdup((m && m->top) ? argn(args, nargs, 1) : argn(args, nargs, 2));
 }
 
+withtok(heap_allocated)
 static char *bi_ifelse(char **args, int nargs)
 {
 	for (;;) {
@@ -903,6 +934,7 @@ static char *bi_ifelse(char **args, int nargs)
 	}
 }
 
+withtok(heap_allocated)
 static char *bi_shift(struct m4_state *st, char **args, int nargs)
 {
 	struct m4_strbuf b;
@@ -917,6 +949,7 @@ static char *bi_shift(struct m4_state *st, char **args, int nargs)
 	return strbuf_finalize(&b);
 }
 
+withtok(heap_allocated)
 static char *bi_changequote(struct m4_state *st, char **args, int nargs)
 {
 	if (nargs == 0) { strcpy(st->lq, "`"); strcpy(st->rq, "'"); return strdup(""); }
@@ -931,6 +964,7 @@ static char *bi_changequote(struct m4_state *st, char **args, int nargs)
 	return strdup("");
 }
 
+withtok(heap_allocated)
 static char *bi_changecom(struct m4_state *st, char **args, int nargs)
 {
 	if (nargs == 0 || !args[0][0]) { st->comment_on = 0; return strdup(""); }
@@ -954,6 +988,7 @@ static char *bi_changecom(struct m4_state *st, char **args, int nargs)
 	return strdup("");
 }
 
+withtok(heap_allocated)
 static char *bi_include(struct m4_state *st, const char *path, int required)
 {
 	FILE *f = fopen(path, "rb");
@@ -971,6 +1006,7 @@ static char *bi_include(struct m4_state *st, const char *path, int required)
 	return buf;
 }
 
+withtok(heap_allocated)
 static char *bi_divert(struct m4_state *st, char **args, int nargs)
 {
 	long n;
@@ -997,6 +1033,7 @@ static void undivert_one(struct m4_state *st, int n)
 	if (st->div[n].data) st->div[n].data[0] = 0;
 }
 
+withtok(heap_allocated)
 static char *bi_undivert(struct m4_state *st, char **args, int nargs)
 {
 	if (nargs == 0) {
@@ -1013,6 +1050,7 @@ static char *bi_undivert(struct m4_state *st, char **args, int nargs)
 	return strdup("");
 }
 
+withtok(heap_allocated)
 static char *bi_index(const char *s, const char *sub)
 {
 	long pos = -1;
@@ -1024,6 +1062,7 @@ static char *bi_index(const char *s, const char *sub)
 	return strdup(buf);
 }
 
+withtok(heap_allocated)
 static char *bi_substr(struct m4_state *st, const char *s, const char *start_s, const char *len_s)
 {
 	long start, len = 0;
@@ -1058,6 +1097,7 @@ static char *bi_substr(struct m4_state *st, const char *s, const char *start_s, 
 	return r;
 }
 
+withtok(heap_allocated)
 static char *bi_translit(const char *s, const char *from, const char *to)
 {
 	size_t ls = strlen(s), lf = strlen(from), lt = strlen(to), i;
@@ -1075,13 +1115,14 @@ static char *bi_translit(const char *s, const char *from, const char *to)
 	return strbuf_finalize(&b);
 }
 
-static void dump_one(struct m4_macro *m)
+static void dump_one(struct m4_macro *m) __attribute__((nonnull(1)))
 {
 	if (!m->top) return;
 	if (m->top->is_builtin) fprintf(stderr, "%s:\t<builtin>\n", m->name);
 	else fprintf(stderr, "%s:\t%s\n", m->name, m->top->text);
 }
 
+withtok(heap_allocated)
 static char *bi_dumpdef(struct m4_state *st, char **args, int nargs)
 {
 	if (nargs == 0) {
@@ -1097,6 +1138,7 @@ static char *bi_dumpdef(struct m4_state *st, char **args, int nargs)
 	return strdup("");
 }
 
+withtok(heap_allocated)
 static char *bi_eval(struct m4_state *st, char **args, int nargs)
 {
 	const char *expr = argn(args, nargs, 0);
@@ -1121,6 +1163,7 @@ static char *bi_eval(struct m4_state *st, char **args, int nargs)
 	return format_radix(v, (int)radix, (int)width);
 }
 
+withtok(heap_allocated)
 static char *bi_incr(struct m4_state *st, char **args, int nargs)
 {
 	long v; char buf[32];
@@ -1130,6 +1173,7 @@ static char *bi_incr(struct m4_state *st, char **args, int nargs)
 	return strdup(buf);
 }
 
+withtok(heap_allocated)
 static char *bi_decr(struct m4_state *st, char **args, int nargs)
 {
 	long v; char buf[32];
@@ -1139,6 +1183,7 @@ static char *bi_decr(struct m4_state *st, char **args, int nargs)
 	return strdup(buf);
 }
 
+withtok(heap_allocated)
 static char *bi_syscmd(struct m4_state *st, const char *cmd)
 {
 	int status = system(cmd);
@@ -1156,6 +1201,7 @@ static char *bi_syscmd(struct m4_state *st, const char *cmd)
 	return strdup("");
 }
 
+withtok(heap_allocated)
 static char *bi_sysval(struct m4_state *st)
 {
 	char buf[16];
@@ -1163,6 +1209,7 @@ static char *bi_sysval(struct m4_state *st)
 	return strdup(buf);
 }
 
+withtok(heap_allocated)
 static char *bi_maketemp(const char *tmpl)
 {
 	size_t n = strlen(tmpl), x = n, xrun;
@@ -1181,6 +1228,7 @@ static char *bi_maketemp(const char *tmpl)
 	return strbuf_finalize(&b);
 }
 
+withtok(heap_allocated)
 static char *bi_mkstemp(struct m4_state *st, const char *tmpl)
 {
 	char buf[PATH_MAX];
@@ -1201,6 +1249,7 @@ static char *bi_mkstemp(struct m4_state *st, const char *tmpl)
 	return strdup(buf);
 }
 
+withtok(heap_allocated)
 static char *bi_m4exit(struct m4_state *st, char **args, int nargs)
 {
 	long code;
@@ -1218,7 +1267,8 @@ static char *bi_m4exit(struct m4_state *st, char **args, int nargs)
 	return strdup("");
 }
 
-static char *bi_m4wrap(struct m4_state *st, char **args, int nargs)
+withtok(heap_allocated)
+static char *bi_m4wrap(struct m4_state *st, char **args, int nargs) __attribute__((nonnull(1)))
 {
 	char *copy = strdup(argn(args, nargs, 0));
 	if (!copy) { st->had_error = 1; return strdup(""); }
@@ -1232,10 +1282,17 @@ static char *bi_m4wrap(struct m4_state *st, char **args, int nargs)
 		if (!g) { free(copy); st->had_error = 1; return strdup(""); }
 		st->wraps = g; st->wraps_cap = newcap;
 	}
+	/* OPEN LINT FINDING (ntlibc.ValidPointer, "pointer dereference is
+	 * not proven nonnull"): on the nwraps < wraps_cap fast path,
+	 * st->wraps was allocated by a PRIOR, separate call to bi_m4wrap
+	 * (m4wrap() called more than once) -- a real fact this checker's
+	 * per-call analysis can't see across distinct top-level calls into
+	 * the same st. Left open. */
 	st->wraps[st->nwraps++] = copy;
 	return strdup("");
 }
 
+withtok(heap_allocated)
 static char *bi_traceon(struct m4_state *st, char **args, int nargs)
 {
 	if (nargs == 0) { st->trace_all = 1; trace_remove_all(st); }
@@ -1243,6 +1300,7 @@ static char *bi_traceon(struct m4_state *st, char **args, int nargs)
 	return strdup("");
 }
 
+withtok(heap_allocated)
 static char *bi_traceoff(struct m4_state *st, char **args, int nargs)
 {
 	if (nargs == 0) { st->trace_all = 0; trace_remove_all(st); }
@@ -1250,6 +1308,26 @@ static char *bi_traceoff(struct m4_state *st, char **args, int nargs)
 	return strdup("");
 }
 
+/* OPEN LINT FINDINGS (ntlibc.CapabilityToken, "required ownership
+ * capability token is not held", ~45 sites across every bi_*() builtin
+ * reachable from here down through build_user_expansion()/scan()):
+ * args[] elements (collect_args()'s strbuf_finalize() results),
+ * st->lq/st->rq/st->bc/st->ec (m4_state's fixed-size quote/comment
+ * delimiter buffers), and every builtin's own string parameters (path,
+ * tmpl, cmd, ...) are ALL genuinely NUL-terminated by construction, but
+ * that fact never survives into a withtok(null_terminated) proof here:
+ * adding the Require contract to any one of these ~30 small, mutually
+ * dispatched helper functions' own signatures only pushes the same
+ * obligation onto call_builtin()'s single, generic switch dispatch (and
+ * from there to dispatch_macro()/scan()), which cannot itself prove any
+ * more than each callee already could -- verified empirically (see the
+ * agent-m4ddc branch history) to net MORE findings, not fewer. A local
+ * __ownership_string_terminated() restatement inside one such helper
+ * (lookup()) was tried too, and instead mistrained ntlibc.OwnershipType
+ * into a spurious "source ownership token has already moved" on the
+ * very same expression. Left open across this whole call tree rather
+ * than papered over with either. */
+withtok(heap_allocated)
 static char *call_builtin(struct m4_state *st, int id, char **args, int nargs)
 {
 	switch (id) {
@@ -1291,6 +1369,7 @@ static char *call_builtin(struct m4_state *st, int id, char **args, int nargs)
 
 /* ==== $0, $1-$9, $#, $star, $@ substitution into a user macro's stored body === */
 
+withtok(heap_allocated)
 static char *build_user_expansion(const char *name, const char *body, char **args, int nargs, struct m4_state *st)
 {
 	struct m4_strbuf out;
@@ -1460,6 +1539,15 @@ static char **collect_args(struct m4_state *st, int *out_nargs)
 			if (!g) { free(b.data); st->had_error = 1; break; }
 			args = g; cap = newcap;
 		}
+		/* OPEN LINT FINDING (ntlibc.AllocationLifetime, "returned
+		 * allocation has no dynamic-storage token contract"): args[]
+		 * is a plain local char **, so storing strbuf_finalize()'s
+		 * heap_allocated result into an array element isn't a
+		 * recognized ownership transfer the way a struct field
+		 * assignment is -- there is no elements_withtok-style
+		 * contract for a local variable's own elements (only for a
+		 * function's own parameters). free_args() below does free
+		 * every element; left open rather than papered over. */
 		args[n++] = strbuf_finalize(&b);
 		if (term == ')' || term == 0 || st->exit_pending) break;
 		/* term == ',': loop around to collect the next argument */

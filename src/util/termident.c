@@ -64,14 +64,11 @@ static int describe_fd(int fd, struct term_ident *out)
 				set_shortname(out, out->path);
 				return 1;
 			}
-			/* A real, resolved char-device path that is not
-			 * tty-shaped (/dev/null, /dev/zero, /dev/ptmx, ...):
-			 * not a terminal.  Fall through to isatty() below,
-			 * same as any other non-terminal fd. */
+			/* Resolved but not tty-shaped (/dev/null, /dev/zero,
+			 * /dev/ptmx, ...): not a terminal. */
 		}
-		/* readlink() failing here (no /proc -- NT, or a Linux
-		 * process started with procfs unmounted) is not itself
-		 * proof fd is not a terminal; fall through to isatty(). */
+		/* readlink() failing here (no /proc -- NT, or procfs
+		 * unmounted) is not proof fd is not a terminal. */
 	}
 
 	/* NT (or any Linux fd whose real path this library could not

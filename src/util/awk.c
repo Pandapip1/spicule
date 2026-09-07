@@ -114,6 +114,7 @@
 #include <errno.h>
 #include "awk_priv.h"
 #include "util.h"
+#include "ownership_stubs.h" /* __ownership_string_terminated(), __ownership_pointer_nonnull() */
 
 struct vassign { char *name, *val; };
 
@@ -137,7 +138,7 @@ void awk_unwind_fatal(void)
 	exit(2);
 }
 
-static void buf_grow_append(char **buf, size_t *len, size_t *cap, const char *s, size_t n)
+static void buf_grow_append(char **buf withtok(heap_allocated), size_t *len, size_t *cap, const char *s, size_t n)
 {
 	/* *len + n + 1, computed raw, wraps for an adversarial n (a huge
 	 * -f program file) and would then wrongly compare as "already
@@ -161,25 +162,53 @@ static void buf_grow_append(char **buf, size_t *len, size_t *cap, const char *s,
 	(*buf)[*len] = 0;
 }
 
-static char *load_progfiles(char **files, int nfiles)
+withtok(heap_allocated)
+static char *load_progfiles(char **files elements_withtok(null_terminated, nfiles), int nfiles)
 {
 	char *buf = NULL;
 	size_t len = 0, cap = 0;
 	int i;
 
 	for (i = 0; i < nfiles; i++) {
-		FILE *f = strcmp(files[i], "-") == 0 ? stdin : fopen(files[i], "r");
+		const char *fname = files[i];
+		FILE *f;
 		char chunk[4096];
 		size_t n;
+
+		__ownership_string_terminated(fname);
+		/* Every fopen()'d f is fclose()'d below (the `f != stdin` guard).
+		 * ntlibc.AllocationLifetime still flags it: it has no axiom that
+		 * fopen()'s result is provably disjoint from the global stdin
+		 * singleton, so it can't rule out f aliasing stdin on the branch
+		 * where fclose() is (rightly) skipped -- a known checker gap,
+		 * left open. */
+		f = strcmp(fname, "-") == 0 ? stdin : fopen(fname, "r");
 		if (!f) {
-			__util_diagf("awk: %s: %s\n", files[i], strerror(errno));
+			__util_diagf("awk: %s: %s\n", fname, strerror(errno));
 			free(buf);
 			return NULL;
 		}
 		while ((n = fread(chunk, 1, sizeof chunk, f)) > 0)
 			buf_grow_append(&buf, &len, &cap, chunk, n);
 		if (f != stdin) (void)fclose(f);
-		if (len == 0 || buf[len - 1] != '\n') buf_grow_append(&buf, &len, &cap, "\n", 1);
+		if (len == 0) {
+			buf_grow_append(&buf, &len, &cap, "\n", 1);
+		} else {
+			/* len only ever grows inside buf_grow_append(), whose own
+			 * growth branch always leaves *buf non-null (or unwinds
+			 * fatally without returning) before *len is advanced --
+			 * a cross-call double-indirection invariant this checker
+			 * can't derive on its own. */
+			__ownership_pointer_nonnull(buf);
+			/* ntlibc.ValidPointer still can't prove buf's extent covers
+			 * index len-1 here: the real extent buf_grow_append()'s own
+			 * realloc() call establishes doesn't survive back out through
+			 * its char** parameter (a known checker gap -- no existing
+			 * ownership.h annotation narrows ValidPointer's own extent
+			 * state the way __ownership_pointer_nonnull() narrows its
+			 * nonnull state; left open). */
+			if (buf[len - 1] != '\n') buf_grow_append(&buf, &len, &cap, "\n", 1);
+		}
 	}
 	if (!buf) buf = strdup("");
 	return buf;
@@ -212,7 +241,9 @@ static int split_assignment(char *s, char **name_out, char **val_out)
  * unwind itself: it runs before __util_awk_main()'s own setjmp() is
  * armed, so a plain return here is already exactly what every other
  * error in this same option loop does). */
-static const char *opt_value(char **argv, int argc, int *argi, char opt, const char *arg)
+withtok(null_terminated)
+static const char *opt_value(char **argv elements_withtok(null_terminated, argc),
+	int argc, int *argi, char opt, const char *arg withtok(null_terminated))
 {
 	if (arg[2]) return arg + 2;
 	if (++*argi >= argc) {
@@ -226,6 +257,15 @@ int __util_awk_main(
 	int argc, char **argv elements_withtok(null_terminated, argc))
 {
 	const char *fsarg = NULL;
+	/* vassigns/progfiles and each -v's strdup() are freed once applied,
+	 * below -- but only on the path that reaches that point. Every
+	 * option-parsing usage error (an early `return 2` in the loop below,
+	 * or the missing-program-text/bad-progfile/syntax-error returns
+	 * further down) leaves whatever had already accumulated unfreed.
+	 * ntlibc.AllocationLifetime flags each of those returns; left open
+	 * rather than threading a cleanup path through every CLI usage
+	 * error, matching this file's own tail comment on why the parsed
+	 * program itself is never freed either. */
 	struct vassign *vassigns = NULL;
 	int nvassigns = 0;
 	char **progfiles = NULL;
@@ -241,6 +281,7 @@ int __util_awk_main(
 		char *arg = argv[i];
 		const char *val;
 
+		__ownership_string_terminated(arg);
 		if (!strcmp(arg, "--")) { i++; break; }
 		if (arg[0] != '-' || arg[1] == 0) break;
 
@@ -255,6 +296,7 @@ int __util_awk_main(
 			char *dup;
 			val = opt_value(argv, argc, &i, 'v', arg);
 			if (!val) return 2;
+			__ownership_string_terminated(val);
 			dup = strdup(val);
 			if (!dup) { __util_diagf("awk: out of memory\n"); return 2; }
 			if (!split_assignment(dup, &name, &v2)) {
@@ -306,6 +348,10 @@ int __util_awk_main(
 
 	if (have_f) {
 		progtext = load_progfiles(progfiles, nprogfiles);
+		/* progfiles only ever borrows pointers into argv (see the -f
+		 * case below); the array itself is never needed again once
+		 * load_progfiles() has read every entry. */
+		free(progfiles);
 		if (!progtext) { awk_fatal_armed = 0; return 2; }
 	} else {
 		if (i >= argc) { __util_diagf("awk: missing program text\n"); awk_fatal_armed = 0; return 2; }
@@ -328,8 +374,14 @@ int __util_awk_main(
 	if (fsarg) awk_interp_set_str(&ip, "FS", fsarg);
 	{
 		int vi;
-		for (vi = 0; vi < nvassigns; vi++)
+		for (vi = 0; vi < nvassigns; vi++) {
 			awk_interp_set_str(&ip, vassigns[vi].name, vassigns[vi].val);
+			/* vassigns[vi].name is the strdup() from the -v case
+			 * below; .val just points partway into that same
+			 * block, so freeing .name alone is enough. */
+			free(vassigns[vi].name);
+		}
+		free(vassigns);
 	}
 	awk_interp_setup_argv(&ip, argv[0], argc - i, argv + i);
 

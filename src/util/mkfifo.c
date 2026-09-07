@@ -38,6 +38,7 @@
 #include "libc.h"
 #include "util.h"
 #include "modeparse.h"
+#include "ownership_stubs.h" /* __ownership_pointer_nonnull(): restates argv[i]'s nonnull-ness where AggregateElementToken proves only its NUL-termination */
 
 int __util_mkfifo_main(
 	int argc, char **argv elements_withtok(null_terminated, argc))
@@ -46,7 +47,15 @@ int __util_mkfifo_main(
 	const char *mode_spec = 0;
 	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
 
-	for (i = 1; i < argc && argv[i][0] == '-' && argv[i][1]; i++) {
+	i = 1;
+	while (i < argc) {
+		/* argv's own elements_withtok(null_terminated, argc) proves
+		 * every element up to argc has a reachable NUL, but not that
+		 * the element pointer itself is nonnull -- genuinely true
+		 * (main()'s argv[0..argc-1] are never NULL), just not a fact
+		 * an array-element read can carry across to ValidPointer. */
+		__ownership_pointer_nonnull(argv[i]);
+		if (argv[i][0] != '-' || !argv[i][1]) break;
 		if (!strcmp(argv[i], "--")) { i++; break; }
 		if (!strcmp(argv[i], "-m")) {
 			if (i + 1 >= argc) {
@@ -54,6 +63,7 @@ int __util_mkfifo_main(
 				return 1;
 			}
 			mode_spec = argv[++i];
+			i++;
 			continue;
 		}
 		__util_diagf("mkfifo: %s: invalid option\n", argv[i]);

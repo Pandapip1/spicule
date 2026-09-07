@@ -50,6 +50,7 @@
 #include <limits.h>
 #include <unistd.h>
 #include "util.h"
+#include "ownership_stubs.h" /* __ownership_pointer_nonnull(): restates argv[i]'s nonnull-ness where AggregateElementToken proves only its NUL-termination */
 
 #define ISSEP(c) ((c) == '/' || (c) == '\\')
 
@@ -61,7 +62,7 @@ static int byte_is_invalid(char c)
 
 /* Returns 0 if `path` passed every default-mode check, nonzero (with at
  * least one diagnostic already written to stderr) otherwise. */
-static int check_one(const char *path)
+static int check_one(const char *path withtok(null_terminated))
 {
 	long name_max = pathconf(path, _PC_NAME_MAX);
 	long path_max = pathconf(path, _PC_PATH_MAX);
@@ -96,6 +97,15 @@ static int check_one(const char *path)
 	}
 
 	start = path + dstart;
+	/* *start/*start (below, and inside the ISSEP() run and the post-run
+	 * recheck): "dereference extent is not proven sufficient" --
+	 * genuinely safe (path carries withtok(null_terminated), and start
+	 * only ever advances to a position already read as non-NUL), but
+	 * ntlibc.ValidPointer's extent proof runs entirely off RegionStore's
+	 * dynamic-extent tracking, which null_terminated (a pure reachable-
+	 * NUL fact, see string_tokens.h) never populates -- a data-dependent
+	 * pointer walk over a borrowed, unsized char* has no annotation in
+	 * this tree that closes it. Left open. */
 	while (*start) {
 		size_t clen;
 
@@ -161,6 +171,12 @@ int __util_pathchk_main(
 	int i, status = 0;
 
 	for (i = 1; i < argc; i++) {
+		/* argv's own elements_withtok(null_terminated, argc) proves
+		 * every element up to argc has a reachable NUL, but not that
+		 * the element pointer itself is nonnull -- genuinely true
+		 * (main()'s argv[0..argc-1] are never NULL), just not a fact
+		 * an array-element read can carry across to ValidPointer. */
+		__ownership_pointer_nonnull(argv[i]);
 		/* A lone "-" is a conventional pathname (often "read from
 		 * stdin" elsewhere), not an option -- getopt(3) draws the same
 		 * line. */
@@ -180,8 +196,10 @@ int __util_pathchk_main(
 		return 2;
 	}
 
-	for (; i < argc; i++)
+	for (; i < argc; i++) {
+		__ownership_string_terminated(argv[i]); /* AggregateElementToken's null_terminated grant from argv's own elements_withtok doesn't survive across the check_one() call boundary */
 		if (check_one(argv[i])) status = 1;
+	}
 
 	return status;
 }

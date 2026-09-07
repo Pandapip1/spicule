@@ -62,8 +62,8 @@ struct mapping {
 	size_t npages;
 	size_t live_pages;
 	size_t next_free;
-	unsigned char *live;
-	unsigned char *locked;
+	unsigned char *live withtok(heap_allocated);
+	unsigned char *locked withtok(heap_allocated);
 	int filebacked;         /* section view, not a private anonymous
 	                          * reservation -- see plat_mem.h */
 	__plat_handle_t writeback; /* independent writable MAP_SHARED file handle */
@@ -76,7 +76,7 @@ struct mapping {
 
 /* Grows as needed; allocation failure is the only limit (a fixed ceiling
  * once made valid address-space exhaustion probes stop early). */
-static struct mapping *maps;
+static struct mapping *maps withtok(heap_allocated);
 static size_t maps_len;
 static size_t maps_cap;
 static size_t maps_free = (size_t)-1;
@@ -327,6 +327,10 @@ static struct mapping *find_slot(void)
 		bytes = cap * sizeof *maps; /* proven <= SIZE_MAX by __array_next_capacity's own element_size bound above */
 		grown = realloc(maps, bytes);
 		if (!grown) return NULL;
+		/* grown's whole extent is `bytes == cap * sizeof *maps` by
+		 * construction, but ValidPointer's extent proof cannot cancel
+		 * that product against a bounded loop index the way it can a
+		 * single fixed offset -- a real checker gap, left open. */
 		for (i = maps_cap; i < cap; i++)
 			grown[i] = (struct mapping){0};
 		maps = grown;

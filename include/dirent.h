@@ -70,7 +70,7 @@ int            dirfd(DIR *) __attribute__((nonnull(1)));
  * by construction. filter/compar are optional and left unmarked. */
 int alphasort(const struct dirent **, const struct dirent **)
     __attribute__((nonnull(1, 2)));
-int scandir(const char *, struct dirent ***, int (*)(const struct dirent *), int (*)(const struct dirent **, const struct dirent **))
+int scandir(const char *, struct dirent *** withtok(internal_heap_allocated), int (*)(const struct dirent *), int (*)(const struct dirent **, const struct dirent **))
     __attribute__((nonnull(2)));
 
 #if defined(_XOPEN_SOURCE) || defined(_GNU_SOURCE) || defined(_BSD_SOURCE)

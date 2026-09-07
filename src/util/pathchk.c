@@ -15,35 +15,28 @@
  * STDOUT: "Not used."  EXIT STATUS: "0 All pathname operands passed all
  * of the checks. >0 An error occurred."
  *
- * -p and -P are refused rather than silently ignored: -p checks against
- * the compile-time {_POSIX_NAME_MAX}/{_POSIX_PATH_MAX} floor instead of
- * this filesystem's real limits, and -P additionally forbids a leading
- * '-' or an empty pathname -- both are real, different check sets this
- * file does not implement, and pretending `pathchk -p x` ran the -p
- * checks when it silently ran the default ones would be exactly the
- * undiagnosable wrongness src/sh/builtin.c's bi_set() comment (and
- * test/sh-design.md's refusal list) already refuse elsewhere in this
- * project.
+ * -p and -P are refused rather than silently ignored: -p checks the
+ * compile-time {_POSIX_NAME_MAX}/{_POSIX_PATH_MAX} floor instead of this
+ * filesystem's real limits, and -P also forbids a leading '-' or an
+ * empty pathname -- different check sets this file doesn't implement.
+ * Silently running the default checks instead would be the same
+ * undiagnosable wrongness src/sh/builtin.c's bi_set() comment refuses
+ * elsewhere in this project.
  *
- * {NAME_MAX}/{PATH_MAX} come from pathconf() (src/unistd/sysconf.c),
- * which is what "based on the underlying file system" means, rather
- * than the <limits.h> compile-time constants -p uses -- they happen to
- * answer with those same constants today (this library has only one
- * filesystem backend), but going through pathconf() is what stays
- * correct if that ever stops being true.
+ * {NAME_MAX}/{PATH_MAX} come from pathconf() (src/unistd/sysconf.c) --
+ * "based on the underlying file system", not the <limits.h> constants
+ * -p uses. They resolve to the same values today (one filesystem
+ * backend), but pathconf() stays correct if that ever changes.
  *
  * "[A] byte sequence that is not valid in its containing directory" has
- * no single POSIX answer -- validity is a property of the filesystem, and
- * this library has exactly one backend (NTFS/NT).  What is checked is
- * NTFS's own reserved set: the ASCII control bytes 0x00-0x1F and the six
- * characters '<', '>', ':', '"', '|', '?', '*' that NT's own filesystems
- * refuse in a component -- a stated, deliberately NT-specific reading of
- * a rule that is filesystem-defined by design, not a portable one.
+ * no portable answer -- validity is filesystem-defined, and this
+ * library has one backend (NTFS/NT). What's checked is NTFS's reserved
+ * set: the control bytes 0x00-0x1F and '<>:"|?*'.
  *
- * "Nonexistent path prefixes shall not be treated as an error" (the same
+ * "Nonexistent path prefixes shall not be treated as an error" (same
  * DESCRIPTION paragraph) is why the search-permission check below stops,
- * rather than errors, the moment a prefix does not exist: there is
- * nothing left to check permissions of.
+ * rather than errors, the moment a prefix doesn't exist: there's nothing
+ * left to check permissions of.
  */
 #include <stdio.h>
 #include <string.h>
@@ -97,15 +90,15 @@ static int check_one(const char *path withtok(null_terminated))
 	}
 
 	start = path + dstart;
-	/* *start/*start (below, and inside the ISSEP() run and the post-run
-	 * recheck): "dereference extent is not proven sufficient" --
-	 * genuinely safe (path carries withtok(null_terminated), and start
-	 * only ever advances to a position already read as non-NUL), but
-	 * ntlibc.ValidPointer's extent proof runs entirely off RegionStore's
-	 * dynamic-extent tracking, which null_terminated (a pure reachable-
-	 * NUL fact, see string_tokens.h) never populates -- a data-dependent
-	 * pointer walk over a borrowed, unsized char* has no annotation in
-	 * this tree that closes it. Left open. */
+	/* *start dereferences below (the ISSEP() run and the post-run
+	 * recheck) get "dereference extent is not proven sufficient"
+	 * findings. Genuinely safe: path carries withtok(null_terminated)
+	 * and start only ever advances to a position already read as
+	 * non-NUL. But ntlibc.ValidPointer's extent proof runs off
+	 * RegionStore's dynamic-extent tracking, which null_terminated (a
+	 * pure reachable-NUL fact) never populates -- a data-dependent walk
+	 * over a borrowed, unsized char* has no annotation here that closes
+	 * it. Left open. */
 	while (*start) {
 		size_t clen;
 
@@ -171,11 +164,9 @@ int __util_pathchk_main(
 	int i, status = 0;
 
 	for (i = 1; i < argc; i++) {
-		/* argv's own elements_withtok(null_terminated, argc) proves
-		 * every element up to argc has a reachable NUL, but not that
-		 * the element pointer itself is nonnull -- genuinely true
-		 * (main()'s argv[0..argc-1] are never NULL), just not a fact
-		 * an array-element read can carry across to ValidPointer. */
+		/* elements_withtok(null_terminated, argc) proves NUL-termination
+		 * but not nonnull-ness of argv[i] itself (true in practice, but
+		 * not provable from an array-element read). */
 		__ownership_pointer_nonnull(argv[i]);
 		/* A lone "-" is a conventional pathname (often "read from
 		 * stdin" elsewhere), not an option -- getopt(3) draws the same
@@ -197,7 +188,7 @@ int __util_pathchk_main(
 	}
 
 	for (; i < argc; i++) {
-		__ownership_string_terminated(argv[i]); /* AggregateElementToken's null_terminated grant from argv's own elements_withtok doesn't survive across the check_one() call boundary */
+		__ownership_string_terminated(argv[i]); /* elements_withtok's grant doesn't survive across the check_one() call boundary */
 		if (check_one(argv[i])) status = 1;
 	}
 

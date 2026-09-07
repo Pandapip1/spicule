@@ -535,3 +535,42 @@ int snprintf_with_proven_nonzero_size_needs_no_restatement(void)
 	snprintf(buf, sizeof buf, "%s", "hi");
 	return buf[0] == 'h';
 }
+
+/* src/internal/fd.c's __fd_install()/__fd_get(): a successful install's own
+ * return value, when passed to __fd_get() with nothing in between that
+ * could invalidate the slot, is guaranteed to find it -- ValidPointer
+ * Checker's own by-name PendingInstalledFd tracking (isFdInstall/isFdGet/
+ * fdGetArgProvenLive) proves this without a manual
+ * __ownership_pointer_nonnull() restatement, closing the gap
+ * src/socket/{socket,accept,socketpair}.c (commit 3dd52b7a) previously had
+ * to work around by hand at every call site. */
+struct __fd { int state; };
+int __fd_install(void *handle, unsigned flags, int type);
+struct __fd *__fd_get(int fd);
+void __plat_close(void *handle);
+
+int fd_get_after_successful_install_needs_no_restatement(void *handle)
+{
+	int fd = __fd_install(handle, 0, 0);
+	if (fd < 0) { __plat_close(handle); return -1; }
+	struct __fd *f = __fd_get(fd);
+	f->state = 1;
+	return fd;
+}
+
+/* The same idiom, but the fd's own symbol reaches __fd_get() through a
+ * plain copy to a second local (`newfd = fd; ... __fd_get(newfd)`) rather
+ * than the install call's own immediate LHS -- confirming the proof
+ * follows the SYMBOL, not the specific variable spelling the install call
+ * happened to assign to (dup.c-style plumbing might reasonably do this). */
+int fd_get_after_install_through_copied_local_needs_no_restatement(void *handle)
+{
+	int fd = __fd_install(handle, 0, 0);
+	int newfd;
+	struct __fd *f;
+	if (fd < 0) { __plat_close(handle); return -1; }
+	newfd = fd;
+	f = __fd_get(newfd);
+	f->state = 2;
+	return newfd;
+}

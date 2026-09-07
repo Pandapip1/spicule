@@ -233,6 +233,43 @@ static bool indexBelowExtent(const ArraySubscriptExpr *Access, SymbolRef Upper,
   return true;
 }
 
+/* never_allocated (include/ownership.h) names a file-scope object whose value
+ * is a fixed process-lifetime singleton no acquisition ever returns --
+ * stdin/stdout/stderr, which src/stdio/file.c defines as the addresses of
+ * three static FILE objects.
+ *
+ * The const requirement is load-bearing, not decoration: a mutable global
+ * could legitimately be assigned an fopen() result, and asserting
+ * disjointness from it would then prune a real path. unsafe.c's
+ * mutable_singleton_leak pins that. */
+static bool neverAllocatedSingleton(const VarDecl *Variable) {
+  if (!Variable || !Variable->hasGlobalStorage() ||
+      !Variable->getType().isConstQualified() ||
+      !Variable->getType()->isPointerType())
+    return false;
+  for (const AnnotateAttr *Attribute :
+       Variable->specific_attrs<AnnotateAttr>())
+    if (Attribute->getAnnotation() == "never_allocated")
+      return true;
+  return false;
+}
+
+/* Pointee only, so neither the singleton's own const nor the _Nonnull
+ * include/stdio.h carries on stdin/stdout/stderr defeats the match. A
+ * producer of an unrelated pointee type (malloc's void * against a FILE *
+ * singleton) is skipped: still disjoint, but no source can write that
+ * comparison. */
+static bool sameSingletonPointee(QualType Left, QualType Right) {
+  if (Left.isNull() || Right.isNull())
+    return false;
+  const auto *LeftPointer = Left->getAs<PointerType>();
+  const auto *RightPointer = Right->getAs<PointerType>();
+  if (!LeftPointer || !RightPointer)
+    return false;
+  return LeftPointer->getPointeeType().getCanonicalType().getUnqualifiedType() ==
+         RightPointer->getPointeeType().getCanonicalType().getUnqualifiedType();
+}
+
 static std::optional<TokenContract>
 returnsOwnership(const FunctionDecl *Function) {
   if (!Function)
@@ -344,6 +381,55 @@ class AllocationLifetimeChecker
                      check::PostStmt<ImplicitCastExpr>, check::LiveSymbols,
                      check::EndFunction> {
   mutable std::unique_ptr<BugType> BT;
+  mutable const ASTContext *SingletonContext = nullptr;
+  mutable llvm::SmallVector<const VarDecl *, 4> Singletons;
+
+  /* Walked lazily rather than collected from a checkASTDecl<VarDecl> hook:
+   * the AST and path-sensitive passes interleave per function body, so a hook
+   * would only have seen the globals declared ahead of whichever body was
+   * analyzed first. One walk answers it for the whole unit, independent of
+   * analysis order. */
+  ArrayRef<const VarDecl *> singletons(const ASTContext &Context) const {
+    if (SingletonContext == &Context)
+      return Singletons;
+    SingletonContext = &Context;
+    Singletons.clear();
+    for (const Decl *Top : Context.getTranslationUnitDecl()->decls())
+      if (const auto *Variable = dyn_cast<VarDecl>(Top))
+        if (neverAllocatedSingleton(Variable) &&
+            !llvm::is_contained(Singletons, Variable->getCanonicalDecl()))
+          Singletons.push_back(Variable->getCanonicalDecl());
+    return Singletons;
+  }
+
+  /* The point-of-origin half of never_allocated: a freshly granted allocation
+   * is none of the singletons, so every later `result == singleton` test is
+   * decided from this one fact instead of splitting the path. Deliberately
+   * not applied to checkBeginFunction's incoming consume(...) parameters --
+   * this function did not acquire those, and nothing rules out a caller
+   * passing a singleton in. */
+  ProgramStateRef assumeDistinctFromSingletons(ProgramStateRef State,
+                                               SVal Allocation,
+                                               QualType AllocationType,
+                                               CheckerContext &C) const {
+    SValBuilder &Builder = C.getSValBuilder();
+    for (const VarDecl *Singleton : singletons(C.getASTContext())) {
+      if (!sameSingletonPointee(Singleton->getType(), AllocationType))
+        continue;
+      SVal Value = State->getSVal(State->getLValue(Singleton,
+                                                   C.getLocationContext()),
+                                  Singleton->getType());
+      SVal Distinct = Builder.evalBinOp(State, BO_NE, Allocation, Value,
+                                        Builder.getConditionType());
+      std::optional<DefinedOrUnknownSVal> Condition =
+          Distinct.getAs<DefinedOrUnknownSVal>();
+      if (!Condition)
+        continue;
+      if (ProgramStateRef Narrowed = State->assume(*Condition, true))
+        State = Narrowed;
+    }
+    return State;
+  }
 
   static LifecycleFamilyId familyId(const IdentifierInfo *Family) {
     return {static_cast<uint64_t>(reinterpret_cast<std::uintptr_t>(Family))};
@@ -877,6 +963,8 @@ public:
       if (const Stmt *Statement = Call.getOriginExpr())
         reportLifecycleEvents(Succeeded.Events, Statement, NonNullState, C);
     }
+    NonNullState = assumeDistinctFromSingletons(
+        NonNullState, ReturnValue, Function->getReturnType(), C);
     NonNullState = track(NonNullState, Result, Call.getOriginExpr(),
                          C.getStackFrame(), Family, false);
     if (Old && hasLifecycleFact(NonNullState, Old))

@@ -160,3 +160,30 @@ void inherited_destroy(void *object)
 /* allocation-contract-expect: malformed implementation is an error */
 /* allocation-contract-expect: conflicting implementation is an error */
 /* allocation-contract-expect: same-family transformer is not a terminal freer */
+
+/* The adversarial half of safe.c's stream_guarded_by_singleton(): a correct
+ * singleton guard plus a genuine leak on an unrelated early return.
+ * never_allocated must decide the guard without blunting the leak proof. */
+void stream_leaks_before_singleton_guard(const char *path, int fail)
+{
+	void *f = fopen_stub(path);
+	if (!f)
+		return;
+	if (fail)
+		return; /* allocation-lifetime-expect: open stream leaked on an early return */
+	if (f != standard_stream)
+		fclose_stub(f);
+}
+
+/* never_allocated on a MUTABLE global states nothing: such a global can
+ * legitimately hold an acquisition's own result, so `f == mutable_stream` is
+ * a real path and skipping fclose_stub() on it is a real leak.  Pins the
+ * const half of neverAllocatedSingleton()'s side conditions. */
+void mutable_singleton_leak(const char *path)
+{
+	void *f = fopen_stub(path);
+	if (!f)
+		return;
+	if (f != mutable_stream)
+		fclose_stub(f);
+} /* allocation-lifetime-expect: mutable global is not a singleton */

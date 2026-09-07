@@ -211,7 +211,7 @@ gid_t getegid(void);
  * count alone, and POSIX-conforming callers pass a null pointer for
  * that form. */
 async_signal_safe
-int getgroups(int, gid_t []);
+int getgroups(int n, gid_t *g withtok(writable_elements(n)));
 async_signal_safe
 int setuid(uid_t);
 int seteuid(uid_t);
@@ -236,7 +236,7 @@ long fpathconf(int, int);
 long sysconf(int);
 /* buf is NOT required: confstr(name, NULL, 0) queries the needed length
  * without writing anything. */
-size_t confstr(int, char *, size_t);
+size_t confstr(int, char *buf withtok(writable_span(len)), size_t len);
 
 #if defined(_XOPEN_SOURCE) || defined(_GNU_SOURCE) || defined(_BSD_SOURCE)
 #define F_ULOCK 0

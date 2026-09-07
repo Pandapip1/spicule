@@ -18,6 +18,7 @@
 #include <errno.h>
 #include "libc.h"
 #include "plat_unistd.h"
+#include "ownership_stubs.h"
 
 withtok(heap_allocated)
 char *getcwd(char *buf withtok(heap_allocated), size_t size)
@@ -28,6 +29,9 @@ char *getcwd(char *buf withtok(heap_allocated), size_t size)
 	int vfs = __vfs_cwd_get();
 	if (vfs == __VFS_ROOT || vfs == __VFS_DEV) {
 		const char *path = vfs == __VFS_ROOT ? "/" : "/dev";
+		/* Both arms are string literals; the checker's literal
+		 * recognition doesn't reach through the ternary assignment. */
+		__ownership_string_terminated(path);
 		len = strlen(path);
 		if (!buf) {
 			if (!size) size = len + 1;

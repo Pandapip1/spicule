@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include "plat_unistd.h"
+#include "ownership_stubs.h"
 
 int gethostname(char *name withtok(writable_span(len)), size_t len)
 {
@@ -20,6 +21,9 @@ int gethostname(char *name withtok(writable_span(len)), size_t len)
 	char h[256];
 	size_t n;
 	__plat_hostname(h, sizeof h);
+	/* __plat_hostname() always NUL-terminates h (see its own contract in
+	 * plat_unistd.h); the checker can't see across the backend call. */
+	__ownership_string_terminated(h);
 	n = strlen(h);
 	if (n >= len) {
 		if (len) memmove(name, h, len);

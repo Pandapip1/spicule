@@ -267,7 +267,7 @@ int getdtablesize(void) { return FD_MAX; }
  * value, returning 0 with errno unchanged -- has no name to reach it in
  * this tree; a case wanting it can't just set s to "", since the tail
  * below counts the null it writes and returns 1. */
-size_t confstr(int name, char *buf, size_t len)
+size_t confstr(int name, char *buf withtok(writable_span(len)), size_t len)
 {
 	const char *s;
 	size_t i;
@@ -276,6 +276,11 @@ size_t confstr(int name, char *buf, size_t len)
 	case _CS_PATH: s = "/bin:/usr/bin"; break;
 	default: errno = EINVAL; return 0;
 	}
+	/* Both writes stay inside writable_span(len) (i+1 < len bounds the
+	 * loop write, i <= len-1 bounds the terminator); checker gap
+	 * (spicule.ValidPointer) -- the nonnull proof that span's zero_vacuous
+	 * grants doesn't reach through the loop-bound guard the way a plain
+	 * `if (len)` would. */
 	for (i = 0; s[i] && i + 1 < len; i++) buf[i] = s[i];
 	if (len) buf[i] = 0;
 	while (s[i]) i++;

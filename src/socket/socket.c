@@ -29,6 +29,7 @@
 #include "libc.h"
 #include "plat_socket.h"
 #include "plat_fd.h"
+#include "ownership_stubs.h"
 
 int socket(int domain, int type, int protocol) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
@@ -53,9 +54,13 @@ int socket(int domain, int type, int protocol) // NOLINT(bugprone-easily-swappab
 
 	fd = __fd_install(h, (cloexec ? O_CLOEXEC : 0) | (nonblock ? O_NONBLOCK : 0), __FD_SOCKET);
 	if (fd < 0) { __plat_close(h); return -1; }
-	/* __fd_get(fd) can't be NULL here: fd just came back from a
-	 * successful __fd_install(). */
-	__fd_get(fd)->pad = (t == SOCK_DGRAM) ? __SOCK_ST_DGRAM : 0;
+	{
+		/* Can't be NULL here: fd just came back from a successful
+		 * __fd_install(). */
+		struct __fd *nf = __fd_get(fd);
+		__ownership_pointer_nonnull(nf);
+		nf->pad = (t == SOCK_DGRAM) ? __SOCK_ST_DGRAM : 0;
+	}
 	return fd;
 }
 

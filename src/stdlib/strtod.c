@@ -137,6 +137,10 @@ __wraps static void bn_shl(bn_t *a, int k)
 	}
 	if (w) {
 		if (a->n + w > BN_LIMBS) w = BN_LIMBS - a->n; /* cannot happen; do not corrupt memory if it does */
+		/* OPEN LINT FINDING (spicule.ValidPointer): a->d[i+w] is in
+		 * bounds given the clamp above, but proving it needs the
+		 * clamp's own arithmetic tied back to BN_LIMBS across the
+		 * reassignment of w -- outside this checker's index proof. */
 		for (i = a->n - 1; i >= 0; i--) a->d[i + w] = a->d[i];
 		for (i = 0; i < w; i++) a->d[i] = 0;
 		a->n += w;

@@ -24,6 +24,12 @@ char *l64a(long v)
 	static char buf[7];
 	uint32_t x = (uint32_t)v;
 	char *p = buf;
+	/* OPEN LINT FINDING (spicule.ValidPointer): digits[x & 63] is always
+	 * in bounds (digits has 65 bytes, x & 63 is at most 63). Isolated,
+	 * this proves clean; with a64l() above it in the same TU (whose
+	 * strchr(digits, ...)/pointer-difference use of digits confuses this
+	 * extent proof for the unrelated l64a() below), it does not -- a
+	 * checker analysis-order artifact, not a real bound issue. */
 	while (x) { *p++ = digits[x & 63]; x /= 64; }
 	*p = 0;
 	return buf;

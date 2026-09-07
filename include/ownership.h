@@ -238,6 +238,24 @@
  * annotation. */
 #define endptr_advances \
 	__ownership_attr("qual:endptr_advances")
+/* A marker on a file-scope CONST pointer object: its value is a fixed
+ * process-lifetime singleton, so no acquisition anywhere ever returns it.
+ * include/stdio.h's stdin/stdout/stderr are the motivating case --
+ * src/stdio/file.c defines all three as the address of a static FILE object,
+ * never as anything fopen()/fdopen()/tmpfile()/popen() handed back.
+ *
+ * tools/clang/AllocationLifetimeChecker.cpp reads this back at each
+ * acquisition's own point of origin and assumes the fresh allocation is
+ * distinct from every same-pointee-type singleton. That is what lets the
+ * ubiquitous `f = fopen(path, "r"); ... if (f != stdin) fclose(f);` guard be
+ * decided rather than split, and without it the checker takes the impossible
+ * arm where f aliases stdin and calls the fopen() result leaked.
+ *
+ * File-scope and const are both required, and a marker on anything else is
+ * not read: a mutable global could legitimately be assigned an fopen()
+ * result, at which point the disjointness would be false. */
+#define never_allocated \
+	__ownership_attr("never_allocated")
 
 #endif
 

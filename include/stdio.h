@@ -88,9 +88,14 @@ typedef union _G_fpos64_t {
 #else
 #define __stdio_stream_nonnull
 #endif
-extern FILE *__stdio_stream_nonnull const stdin;
-extern FILE *__stdio_stream_nonnull const stdout;
-extern FILE *__stdio_stream_nonnull const stderr;
+/* never_allocated (include/ownership.h) states the pointer-identity half of
+ * the same fact _Nonnull states above: being the addresses of three static
+ * FILE objects, these are never a value fopen()/fdopen()/tmpfile()/popen()
+ * returned either. That closes the sibling false positive in
+ * tools/clang/AllocationLifetimeChecker.cpp. */
+extern FILE *__stdio_stream_nonnull const stdin never_allocated;
+extern FILE *__stdio_stream_nonnull const stdout never_allocated;
+extern FILE *__stdio_stream_nonnull const stderr never_allocated;
 
 #define stdin  (stdin)
 #define stdout (stdout)

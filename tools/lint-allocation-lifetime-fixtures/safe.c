@@ -221,3 +221,17 @@ void terminal_release(void *object consume(foreign_terminal_allocated))
 {
 	(void)object;
 }
+
+/* The idiom src/util/uniq.c, comm.c, join.c and sort.c all want: open a named
+ * file or fall back to a standard stream, and close only what was opened.
+ * The guard is decidable only because never_allocated let the checker assume,
+ * at fopen_stub()'s own point of origin, that the fresh stream is not the
+ * singleton. */
+void stream_guarded_by_singleton(const char *path)
+{
+	void *f = fopen_stub(path);
+	if (!f)
+		return;
+	if (f != standard_stream)
+		fclose_stub(f);
+}

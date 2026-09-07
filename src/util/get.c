@@ -72,7 +72,7 @@
 #include "ownership_stubs.h"
 
 struct sfile {
-	char *buf;   /* whole file, NUL-terminated */
+	char *buf withtok(heap_allocated);   /* whole file, NUL-terminated */
 	size_t len;
 };
 
@@ -85,10 +85,12 @@ struct sfile {
  * seeking at all. */
 static int read_whole_file(const char *path, struct sfile *out)
 {
-	FILE *f = fopen(path, "rb");
 	size_t cap = 65536, len = 0;
 	char *buf;
+	FILE *f;
 
+	__ownership_string_terminated(path); /* real C string by this function's own contract */
+	f = fopen(path, "rb");
 	if (!f) return -1;
 	buf = malloc(cap);
 	if (!buf) {
@@ -132,6 +134,14 @@ static int read_whole_file(const char *path, struct sfile *out)
 		return -1;
 	}
 	(void)fclose(f);
+	/* len < cap holds here by the same grow-then-read loop invariant as
+	 * always (each grow step leaves cap > len + 1, fread() never returns
+	 * more than cap - len - 1), but the checker's own dynamic-extent
+	 * comparison for a raw indexed write can't see it across the loop's
+	 * realloc()s -- the same already-open finding on src/util/mailx.c's
+	 * byte-for-byte identical slurp_fd()'s own `buf[len] = 0;`. Not
+	 * closable by withtok(readable_span/writable_span): those cover a
+	 * function call's buffer argument, not a raw array-index expression. */
 	buf[len] = 0;
 	out->buf = buf;
 	out->len = len;
@@ -149,6 +159,12 @@ static int verify_checksum(const struct sfile *s, const char **rest_out, size_t 
 	unsigned actual;
 	char *end;
 
+	/* read_whole_file() only ever hands back a live malloc()'d,
+	 * NUL-terminated buffer -- both facts genuinely true by
+	 * construction, not visible to the checker across the struct
+	 * field. */
+	__ownership_pointer_nonnull(s->buf);
+	__ownership_string_terminated(s->buf);
 	if (s->len < 3 || s->buf[0] != '\001' || s->buf[1] != 'h') return -1;
 	expect = strtoul(s->buf + 2, &end, 10);
 	nl = strchr(s->buf, '\n');
@@ -251,6 +267,11 @@ done:
 static int write_body(FILE *out, struct line_ref *lines, size_t n)
 {
 	size_t i;
+	/* lines/n is a plain pointer-plus-count parameter pair (no
+	 * per-element token connects them), the same open checker-vocabulary
+	 * gap already documented for struct sh_pipeline.commands in
+	 * src/sh/execute.c's and src/sh/print.c's own ownership commits --
+	 * left open here for the same reason, not annotated around. */
 	for (i = 0; i < n; i++) {
 		__ownership_readable_span(lines[i].p, lines[i].len);
 		if (fwrite(lines[i].p, 1, lines[i].len, out) != lines[i].len) return -1;
@@ -283,6 +304,12 @@ static int get_one(const char *path, int pflag, const char *rflag)
 		rc = 1;
 		goto out;
 	}
+	if (rflag) {
+		/* rflag is an argv element (real C string); sid was just
+		 * filled by find_sid()'s own successful snprintf(). */
+		__ownership_string_terminated(rflag);
+		__ownership_string_terminated(sid);
+	}
 	if (rflag && strcmp(rflag, sid) != 0) {
 		__util_diagf("get: %s: no such delta: %s\n", path, rflag);
 		rc = 1;
@@ -298,14 +325,20 @@ static int get_one(const char *path, int pflag, const char *rflag)
 		if (write_body(stdout, lines, nlines) != 0) rc = 1;
 		fprintf(stderr, "%s\n%zu lines\n", sid, nlines);
 	} else {
-		char *dircopy = strdup(path), *basecopy = strdup(path);
+		char *dircopy, *basecopy;
 		char gpath[4096];
 		const char *dir, *base;
 		FILE *g;
 
+		__ownership_string_terminated(path); /* an argv element */
+		dircopy = strdup(path);
+		basecopy = strdup(path);
 		if (!dircopy || !basecopy) { free(dircopy); free(basecopy); rc = 1; goto out; }
 		dir = dirname(dircopy);
 		base = basename(basecopy);
+		/* basename() never returns NULL for a non-NULL argument
+		 * (libgen.h contract; opaque to the checker). */
+		__ownership_pointer_nonnull(base);
 		/* has_sfile_name()'s counterpart in admin.c already enforces
 		 * "s.*" on write; a file this reader is handed that lacks it
 		 * is not one this project's own admin.c could have produced. */
@@ -315,10 +348,12 @@ static int get_one(const char *path, int pflag, const char *rflag)
 			rc = 1;
 			goto out;
 		}
+		__ownership_string_terminated(dir); /* dirname()'s own contract, same as basename() above */
 		if (strcmp(dir, ".") == 0) snprintf(gpath, sizeof gpath, "%s", base + 2);
 		else snprintf(gpath, sizeof gpath, "%s/%s", dir, base + 2);
 		free(dircopy); free(basecopy);
 
+		__ownership_string_terminated(gpath); /* snprintf() always NUL-terminates a nonzero-size buffer */
 		g = fopen(gpath, "wb");
 		if (!g) { __util_diagf("get: %s: %s\n", gpath, strerror(errno)); rc = 1; goto out; }
 		/* fclose(g) must run whether or not write_body() failed --
@@ -361,6 +396,10 @@ int __util_get_main(
 
 	for (i = 1; i < argc; i++) {
 		const char *a = argv[i];
+		/* argv[0..argc) is never NULL (main()'s own contract);
+		 * elements_withtok(null_terminated, argc) proves only the
+		 * NUL, not this. */
+		__ownership_pointer_nonnull(a);
 		if (a[0] != '-' || a[1] == 0) break;
 		if (strcmp(a, "-p") == 0) pflag = 1;
 		else if (strcmp(a, "-r") == 0) {

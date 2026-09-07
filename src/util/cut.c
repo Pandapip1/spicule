@@ -240,9 +240,6 @@ int __util_cut_main(
 	for (; i < argc; i++) {
 		char *a = argv[i];
 
-		/* a is argv[i], i < argc, never NULL per argv's own
-		 * elements_withtok(null_terminated, argc) contract. */
-		__ownership_pointer_nonnull(a);
 		if (a[0] != '-' || a[1] == 0) break;
 		if (!strcmp(a, "--")) { i++; break; }
 

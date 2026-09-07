@@ -816,12 +816,6 @@ int __util_find_main(
 
 	while (i < argc) {
 		const char *a = argv[i];
-		/* a is one of argv's own elements (i < argc), genuinely never
-		 * NULL by this function's own elements_withtok(null_terminated,
-		 * argc) contract on argv -- restated here the same way
-		 * src/util/od.c's __util_od_main() restates its own analogous
-		 * argv-slice fact. */
-		__ownership_pointer_nonnull(a);
 		if (a[0] == '-' || !strcmp(a, "(") || !strcmp(a, "!")) break;
 		if (npaths >= (int)(sizeof paths / sizeof paths[0])) {
 			__util_diagf("find: too many path operands\n");

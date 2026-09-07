@@ -336,9 +336,6 @@ static int get_one(const char *path, int pflag, const char *rflag)
 		if (!dircopy || !basecopy) { free(dircopy); free(basecopy); rc = 1; goto out; }
 		dir = dirname(dircopy);
 		base = basename(basecopy);
-		/* basename() never returns NULL for a non-NULL argument
-		 * (libgen.h contract; opaque to the checker). */
-		__ownership_pointer_nonnull(base);
 		/* has_sfile_name()'s counterpart in admin.c already enforces
 		 * "s.*" on write; a file this reader is handed that lacks it
 		 * is not one this project's own admin.c could have produced. */
@@ -396,10 +393,6 @@ int __util_get_main(
 
 	for (i = 1; i < argc; i++) {
 		const char *a = argv[i];
-		/* argv[0..argc) is never NULL (main()'s own contract);
-		 * elements_withtok(null_terminated, argc) proves only the
-		 * NUL, not this. */
-		__ownership_pointer_nonnull(a);
 		if (a[0] != '-' || a[1] == 0) break;
 		if (strcmp(a, "-p") == 0) pflag = 1;
 		else if (strcmp(a, "-r") == 0) {

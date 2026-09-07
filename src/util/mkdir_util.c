@@ -95,10 +95,6 @@ int __util_mkdir_main(
 
 	i = 1;
 	while (i < argc) {
-		/* elements_withtok(null_terminated, argc) proves NUL-termination
-		 * but not nonnull-ness of argv[i] itself (true in practice, but
-		 * not provable from an array-element read). */
-		__ownership_pointer_nonnull(argv[i]);
 		if (argv[i][0] != '-' || !argv[i][1]) break;
 		if (!strcmp(argv[i], "--")) { i++; break; }
 		if (!strcmp(argv[i], "-p")) { opt_p = 1; i++; continue; }

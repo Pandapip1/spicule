@@ -28,11 +28,9 @@ static int match_name(const char *text, size_t len, int lo, int hi, const char *
 }
 
 /* Parses one number-or-name at `*pp`, advancing `*pp` past it. `dow7`
- * folds a literal 7 to 0 (day-of-week's own special case; harmless
- * for every other field since 7 is never in range there anyway
- * except month, where folding would be wrong -- so this is only ever
- * passed 1 for the dow field). Returns the value or -1 on a malformed
- * token. */
+ * is nonzero only for the day-of-week field, where a literal 7 is
+ * allowed and later folded to 0. Returns the value or -1 on a
+ * malformed token. */
 static int parse_one(const char **pp, int lo, int hi, const char *const *names, int dow7)
 {
 	const char *p = *pp;
@@ -51,15 +49,10 @@ static int parse_one(const char **pp, int lo, int hi, const char *const *names, 
 	v = strtol(p, &end, 10);
 	if (end == p) return -1;
 	*pp = end;
-	/* 7 stays 7 here rather than folding to 0 immediately: a range's
-	 * a-b order (checked by the caller against these raw values) has
-	 * to see "5-7" as ascending, not as "5-0" -- 7 is only an alias
-	 * for 0 when a bit actually gets set, which __crontime_parse_field()
-	 * does itself once the whole range is known. Folding early would
-	 * make every range ending in 7 look like it wraps and get rejected,
-	 * defeating the entire reason crontab(5) allows 7 as Sunday: writing
-	 * a range that reaches the end of the week (e.g. "5-7" for Fri-Sun)
-	 * without wrapping. */
+	/* 7 stays 7 here, not folded to 0 yet: the caller checks a-b is
+	 * ascending on these raw values, and "5-7" must not look like "5-0"
+	 * (which would reject Fri-Sun ranges as wrapping). Folded to 0 only
+	 * once the range is set, in __crontime_parse_field(). */
 	if (v < lo || v > (dow7 ? 7 : hi)) return -1;
 	return (int)v;
 }
@@ -103,30 +96,23 @@ int __crontime_parse_field(const char *text, int lo, int hi,
 			if (!isdigit((unsigned char)*p)) return -1;
 			errno = 0;
 			s = strtol(p, &end, 10);
-			/* s is cast to `int` below and then used as out[]'s own
-			 * loop stride -- an unchecked strtol() clamp to LONG_MAX
-			 * (a field like "0-59/99999999999999999999", well inside
-			 * crontab(5)'s own a-b/N grammar) truncates to a small or
-			 * negative `int` on cast (this project also builds with a
-			 * 32-bit `long` on NT/tcc), turning one out-of-range digit
-			 * string into out[]'s own loop walking backward off the
-			 * struct crontime this array lives in until it segfaults.
-			 * INT_MAX is already a wildly unrealistic step for any
-			 * field with at most 60 values, so rejecting anything that
-			 * large costs nothing real. */
+			/* s becomes the loop stride below (cast to int). An
+			 * unchecked strtol() overflow (e.g.
+			 * "0-59/99999999999999999999") truncates to a small or
+			 * negative int on cast, walking out[] off the end of
+			 * struct crontime until it segfaults. Rejecting anything
+			 * past INT_MAX costs nothing real -- no field has more
+			 * than 60 values. */
 			if (end == p || errno == ERANGE || s <= 0 || s > INT_MAX) return -1;
 			p = end;
 			step = (int)s;
 		}
 		if (b < a) return -1; /* crontab(5) ranges never wrap */
 		{
-			/* Bounding `step` above keeps the cast itself faithful,
-			 * but `v += step` in a plain for-loop can still overflow
-			 * `int` once v is already close to `b` (b is always small
-			 * -- at most 59 -- while step can be as large as INT_MAX):
-			 * checking "would the next v pass b" before computing it,
-			 * rather than computing v+step and comparing, never forms
-			 * the out-of-range sum at all. */
+			/* step can be up to INT_MAX while b is at most 59, so
+			 * `v += step` could overflow int. Check "does the next v
+			 * pass b" before adding, rather than compute v+step and
+			 * compare, so the overflow never happens. */
 			int v = a;
 			for (;;) {
 				/* Fold a raw 7 to 0 only here, once the range itself

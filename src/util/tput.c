@@ -40,18 +40,17 @@
  *
  * This dev host has a real terminfo database (NixOS's
  * /run/current-system/sw/share/terminfo), but that's an artifact of
- * this machine, not something a shipped binary could rely on: Windows
- * NT has no terminal database at all, and this project's native-Linux
- * target is a from-scratch bootstrap environment (see boot/kaem/)
- * that cannot assume ncurses-data/terminfo is installed either. So the
- * table is fixed: five terminal types (xterm, xterm-256color, vt100,
- * ansi, dumb) with capability strings hand-copied from `infocmp`
+ * this machine: Windows NT has no terminal database at all, and this
+ * project's native-Linux target is a from-scratch bootstrap environment
+ * (see boot/kaem/) that can't assume terminfo is installed either. So
+ * the table is fixed: five terminal types (xterm, xterm-256color,
+ * vt100, ansi, dumb), capability strings hand-copied from `infocmp`
  * against the real system database, minus `$<N>` padding/delay
- * notations (e.g. vt100's `bold=\E[1m$<2>`) -- that syntax exists for
- * hardware terminals with real transmission timing constraints neither
- * an NT console nor a modern pty has, so every modern terminfo/termcap
- * library treats it as a no-op too. An unrecognised `-T`/`$TERM` fails
- * cleanly (exit 3) rather than fabricating capabilities.
+ * notations (e.g. vt100's `bold=\E[1m$<2>`) -- that syntax is for
+ * hardware terminals with real transmission timing constraints no NT
+ * console or modern pty has, so every modern terminfo/termcap library
+ * no-ops it too. An unrecognised `-T`/`$TERM` fails cleanly (exit 3)
+ * rather than fabricating capabilities.
  *
  * `cols`/`lines` try one real, live answer first -- ioctl(1, TIOCGWINSZ)
  * (src/ioctl/ioctl.c) -- before falling back to the table's static
@@ -163,15 +162,14 @@ static int print_cup(const struct term_entry *t, const char *rowarg, const char 
 	 * nonnull): rowarg/colarg are always argv[i+1]/argv[i+2] from this
 	 * file's one call site, which checks i + 2 < argc first, so both are
 	 * always live, null-terminated argv elements. Tried adding
-	 * withtok(null_terminated) to this function's own parameters
-	 * instead of leaving this open, but verified (tools/lint.sh
-	 * ownership) that it is a net regression: the *rowarg finding stays
-	 * (the fact still doesn't reach a raw `!*rowarg` in a compound
-	 * condition, the same shape src/util/rmdir.c's argv[i][0] gap
-	 * documents) and it adds two new findings at the call site instead
-	 * (argv[i + 1]/argv[i + 2]'s offset subscript doesn't hand off the
-	 * elements_withtok(null_terminated, argc) token the way a bare
-	 * argv[i] read does), so left open here rather than kept. */
+	 * withtok(null_terminated) to this function's own parameters instead
+	 * of leaving this open, but it's a net regression (tools/lint.sh
+	 * ownership): the *rowarg finding stays (same shape as
+	 * src/util/rmdir.c's argv[i][0] gap -- doesn't reach a raw
+	 * `!*rowarg` in a compound condition) and it adds two new findings
+	 * at the call site (an offset subscript like argv[i + 1] doesn't
+	 * hand off the elements_withtok(null_terminated, argc) token the way
+	 * a bare argv[i] read does). Left open. */
 	if (!t->has_cup) return 1; /* not defined for this terminal */
 	row = strtol(rowarg, &end1, 10);
 	col = strtol(colarg, &end2, 10);

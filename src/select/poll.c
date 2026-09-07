@@ -94,7 +94,7 @@ int poll(struct pollfd *pfds, nfds_t nfds, int timeout) // NOLINT(bugprone-easil
 		{
 			int k;
 			for (k = 0; k < ncons; k++) {
-				if (__plat_wait_ready(console_h[k])) {
+				if (__plat_console_ready(console_h[k])) {
 					struct pollfd *p = &pfds[console_idx[k]];
 					if (!p->revents) total++;
 					p->revents = (short)(p->revents | (p->events & (POLLIN | POLLRDNORM)));

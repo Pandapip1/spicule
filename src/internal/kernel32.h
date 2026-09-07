@@ -39,13 +39,10 @@ typedef BOOL (NTAPI *PHANDLER_ROUTINE)(DWORD CtrlType);
  * src/signal/signal.c) rather than linked against kernel32's import
  * library, so no extern prototype for it is needed. */
 
-/* Console mode bits (GetConsoleMode()/SetConsoleMode(), input handle):
- * https://learn.microsoft.com/en-us/windows/console/setconsolemode
- * "SetConsoleMode function - Windows Console", input-mode table.  Used
- * by src/termios/termios.c to back c_lflag's ISIG/ICANON/ECHO. */
-#define ENABLE_PROCESSED_INPUT 0x0001
-#define ENABLE_LINE_INPUT      0x0002
-#define ENABLE_ECHO_INPUT      0x0004
+/* The console input mode bits GetConsoleMode()/SetConsoleMode() take
+ * are not declared here: they are the same values the console driver's
+ * own CONSOLE_MODE_MSG carries, so src/internal/condrv.h owns them and
+ * both transports share one definition. */
 
 /* GetConsoleScreenBufferInfo() output, used by src/ioctl/ioctl.c for
  * TIOCGWINSZ.  Layout is the documented Win32 one (wincon.h); declared

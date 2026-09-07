@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include "pthread_impl.h"
 #include "plat_thread.h"
+#include "ownership_stubs.h"
 
 struct key_slot {
 	unsigned generation;
@@ -180,6 +181,10 @@ static void reset_once(void *argument)
 {
 	struct once_cleanup *cleanup = argument;
 	__plat_fast_lock();
+	/* cleanup->control is pthread_once()'s own control parameter, already
+	 * dereferenced by that function before this cleanup handler could
+	 * ever run -- not visible here across the struct field. */
+	__ownership_pointer_nonnull(cleanup->control);
 	*cleanup->control = PTHREAD_ONCE_INIT;
 	wake_once_waiters_locked(cleanup->control);
 	__plat_fast_unlock();

@@ -67,6 +67,7 @@
 #include <sys/stat.h>
 #include <ftw.h>
 #include "util.h"
+#include "ownership_stubs.h"
 
 /* nftw()'s callback takes no user-data parameter -- a well-known wart of
  * the historical ftw()/nftw() interface, inherited as-is from POSIX
@@ -130,7 +131,7 @@ int __util_remove_tree(const char *path)
 	return rm_tree_failed ? -1 : 0;
 }
 
-static int names_dot_or_dotdot(const char *path)
+static int names_dot_or_dotdot(const char *path withtok(null_terminated))
 {
 	size_t n = strlen(path);
 	size_t start, len;
@@ -143,7 +144,7 @@ static int names_dot_or_dotdot(const char *path)
 	       (len == 2 && path[start] == '.' && path[start + 1] == '.');
 }
 
-static int rm_one(const char *path, int recursive, int force) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
+static int rm_one(const char *path withtok(null_terminated), int recursive, int force) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
 	struct stat lst;
 
@@ -190,6 +191,14 @@ int __util_rm_main(
 		char *a = argv[i];
 		char *p;
 
+		/* a is one of argv's own elements; restate the argv-wide
+		 * null-terminated guarantee here, the same way
+		 * src/util/cp.c's identical loop shape already does -- a
+		 * plain local like `a` is not something the checker can trace
+		 * back to argv on its own. The raw a[0] read just below stays
+		 * open regardless (same as cp.c's own identical loop). */
+		__ownership_string_terminated(a);
+
 		if (a[0] != '-' || a[1] == 0) break;   /* not an option; a bare "-" is an operand */
 		if (!strcmp(a, "--")) { i++; break; }
 
@@ -215,8 +224,14 @@ int __util_rm_main(
 		return 2;
 	}
 
-	for (; i < argc; i++)
+	for (; i < argc; i++) {
+		/* argv[i] is genuinely null-terminated by this function's own
+		 * elements_withtok(null_terminated, argc) contract on argv --
+		 * restated here since that token does not survive the direct
+		 * argv[i] read this checker can trace on its own. */
+		__ownership_string_terminated(argv[i]);
 		if (rm_one(argv[i], recursive, force) < 0) had_error = 1;
+	}
 
 	return had_error ? 1 : 0;
 }

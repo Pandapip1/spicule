@@ -4,6 +4,7 @@
 #include <getopt.h>
 #include <string.h>
 #include "libc.h"
+#include "ownership_stubs.h"
 
 char *optarg;
 int optind = 1, opterr = 1, optopt, optreset;
@@ -14,15 +15,21 @@ int __optpos; // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp
 
 extern char *__progname;
 
-static void writestr(const char *s)
+static void writestr(const char *s withtok(null_terminated))
 {
 	(void)write(2, s, strlen(s));
 }
 
 /* "prog: msg: -c\n", or "prog: msg: --name\n" for getopt_long. */
-void __getopt_msg(const char *msg, const char *optname, size_t l) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
+void __getopt_msg(const char *msg withtok(null_terminated),
+    const char *optname, size_t l) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
 	const char *p = __progname ? __progname : "";
+	/* __progname is argv[0] (or "" before it is set), always a real
+	 * NUL-terminated C string -- the checker can't see across the
+	 * ternary assignment (same shape src/unistd/getcwd.c's own
+	 * ternary-of-literals uses). */
+	unsafe_assume_string_terminated(p);
 	writestr(p);
 	writestr(": ");
 	writestr(msg);
@@ -31,7 +38,14 @@ void __getopt_msg(const char *msg, const char *optname, size_t l) // NOLINT(bugp
 	(void)write(2, "\n", 1);
 }
 
-int getopt(int argc, char *const argv[], const char *optstring)
+/* Checker gap (spicule.ValidPointer): every argv[optind] access below is
+ * guarded by an "optind < argc" check earlier on the same path (elements_
+ * withtok(null_terminated, argc) above already proves each in-bounds
+ * element itself null-terminated), but the generic dereference-extent
+ * proof does not carry that guard across a persistent global index the
+ * way it does for a local loop counter -- left open rather than
+ * restructured to help the checker prove an already-true fact. */
+int getopt(int argc, char *const argv[] elements_withtok(null_terminated, argc), const char *optstring)
 {
 	int c, d;
 	char optchar[3];

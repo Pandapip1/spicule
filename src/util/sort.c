@@ -584,10 +584,6 @@ int __util_sort_main(
 					if (++i >= argc) { __util_diagf("sort: -k: option requires an argument\n"); return 2; }
 					val = argv[i];
 				}
-				/* val is an offset into argv[i]'s bytes, or argv[i]
-				 * itself -- never NULL per argv's own
-				 * elements_withtok(null_terminated, argc) contract. */
-				__ownership_pointer_nonnull(val);
 				if (o.nkeys >= sizeof keys / sizeof keys[0]) {
 					__util_diagf("sort: too many -k options\n");
 					return 2;
@@ -608,8 +604,6 @@ int __util_sort_main(
 					if (++i >= argc) { __util_diagf("sort: -t: option requires an argument\n"); return 2; }
 					val = argv[i];
 				}
-				/* val -- see the -k case's identical note above. */
-				__ownership_pointer_nonnull(val);
 				if (val[0] == 0 || val[1] != 0) {
 					__util_diagf("sort: -t: field separator must be exactly one character\n");
 					return 2;

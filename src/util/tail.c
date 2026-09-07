@@ -345,10 +345,6 @@ int __util_tail_main(
 				return 1;
 			}
 			numstr = argv[++i];
-			/* Restate the argv elements_withtok(null_terminated, argc)
-			 * contract on numstr (i < argc), same as od.c's argv-slice
-			 * reads. */
-			__ownership_pointer_nonnull(numstr);
 			if (parse_signed_number(numstr, &fe, &num) < 0) {
 				__util_diagf("tail: %s: invalid number\n", numstr);
 				return 1;

@@ -33,7 +33,6 @@
 #include "libc.h"
 #include "plat_socket.h"
 #include "plat_fd.h"
-#include "ownership_stubs.h"
 
 int accept(int fd, struct sockaddr *__restrict addr, socklen_t *__restrict len)
 {
@@ -51,10 +50,7 @@ int accept(int fd, struct sockaddr *__restrict addr, socklen_t *__restrict len)
 
 	newfd = __fd_install(newh, 0, __FD_SOCKET);
 	if (newfd < 0) { __plat_close(newh); return -1; }
-	/* Can't be NULL here: newfd just came back from a successful
-	 * __fd_install() with nothing in between that could remove it. */
 	struct __fd *nf = __fd_get(newfd);
-	__ownership_pointer_nonnull(nf);
 	nf->pad = __SOCK_ST_BOUND | __SOCK_ST_CONNECTED;
 	memcpy(nf->peer, &peer, sizeof peer);
 	nf->peer_len = sizeof peer;

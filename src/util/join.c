@@ -481,10 +481,6 @@ int __util_join_main(
 			const char *val;
 			if (arg[2]) val = arg + 2;
 			else { if (++i >= argc) { __util_diagf("join: -t: option requires an argument\n"); goto bad; } val = argv[i]; }
-			/* val is an offset into argv[i], or argv[i] itself -- never
-			 * NULL per argv's own elements_withtok(null_terminated, argc)
-			 * contract. */
-			__ownership_pointer_nonnull(val);
 			if (val[0] == 0 || val[1] != 0) { __util_diagf("join: -t: field separator must be exactly one character\n"); goto bad; }
 			delim = val[0];
 			have_delim = 1;

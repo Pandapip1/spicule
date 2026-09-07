@@ -4,9 +4,9 @@
  * The trivial target .so tools/linux-build-dlfcn.sh dlopen()s to prove
  * src/dlfcn/linux/plat_dlfcn.c's ELF loader end to end. Built by the
  * HOST's own clang/lld as an ordinary aarch64 shared object (this is
- * the file being loaded, not ntlibc's own code -- it deliberately
- * does NOT use any ntlibc header or type, and does not link against
- * ntlibc, glibc, or anything else: -nodefaultlibs/-nostdlib at build
+ * the file being loaded, not spicule's own code -- it deliberately
+ * does NOT use any spicule header or type, and does not link against
+ * spicule, glibc, or anything else: -nodefaultlibs/-nostdlib at build
  * time, so the only two kinds of relocation it can possibly need are
  * exactly the two kinds this pass's loader implements support for:
  *

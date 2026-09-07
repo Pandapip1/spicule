@@ -80,7 +80,7 @@ static void fixture(void)
 /* __real_stat, not stat: every harness is linked with -Wl,--wrap=stat so
  * a plain `stat` call resolves to __wrap_stat, which answers in the
  * *host's* struct stat layout (for libFuzzer's own use) rather than
- * ntlibc's smaller one -- calling it here overflows the caller's buffer.
+ * spicule's smaller one -- calling it here overflows the caller's buffer.
  * Confirmed: the first version of this file called stat() and ASan
  * reported a stack-buffer-overflow within four inputs. */
 extern int __real_stat(const char *, struct stat *);

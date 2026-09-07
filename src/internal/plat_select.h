@@ -22,8 +22,8 @@
  * own banner) and stays in the front door entirely, unchanged; only the
  * raw syscalls each step of that strategy needs are relocated here.
  */
-#ifndef _NTLIBC_PLAT_SELECT_H
-#define _NTLIBC_PLAT_SELECT_H
+#ifndef _SPICULE_PLAT_SELECT_H
+#define _SPICULE_PLAT_SELECT_H
 
 #include "plat_handle.h"
 

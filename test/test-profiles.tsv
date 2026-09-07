@@ -86,13 +86,13 @@
 #
 # Probing them for real is a design change and deliberately not done here;
 # this note exists so the limitation is known rather than silent.
-ntlibc	sh_engine_heredoc_queue_leak	runtime=wine	NA	memory leak is observable only under the native sanitizer profile
-ntlibc	sh_engine_heredoc_queue_leak	runtime=windows	NA	memory leak is observable only under the native sanitizer profile
-ntlibc	sh_engine_heredoc_queue_leak	runtime=reactos	NA	memory leak is observable only under the native sanitizer profile
-ntlibc	posix_termios_tcflush_discards_input	capability.console=no	NA	the runner has no console input queue to flush
-ntlibc	posix_statvfs_statvfs_eloop	runtime=wine,capability.symlink=no	NA	the runner cannot construct the symbolic-link loop
-ntlibc	posix_unistd_chmod_readonly_roundtrip	runtime=wine	NA	Wine accepts the readonly attribute update on its fallback handle but does not apply it
-ntlibc	posix_unreferenced_fchmodat_wine_readonly	runtime=wine	NA	Wine does not apply readonly attributes through root-relative or reparse-point handles
-ntlibc	posix_statvfs_posix_fallocate_reserves_storage	runtime=wine	PASS	patched Wine now honors FileAllocationInformation: CI observed the formerly BUG storage assertion pass and the exact st_blocks probe passed 40/40 locally
-ntlibc	posix_socket_send_recv_and_socketpair_interfaces	runtime=wine	NA	test-policy.py's isolated probe still runs main()'s unconditional network_probe() first; its bind() (IOCTL_AFD_BIND) fails under Wine (see posix-socket.c's SKIP message), so the probe exits UNRESOLVED before this case's own AF_UNIX-only code ever gets to matter
-ntlibc	posix_socket_ipv6_address_types	runtime=wine	NA	same network_probe() poisoning as posix_socket_send_recv_and_socketpair_interfaces: bind() fails under Wine before this struct-only case runs, so the isolated probe exits UNRESOLVED regardless of this case's own behavior
+spicule	sh_engine_heredoc_queue_leak	runtime=wine	NA	memory leak is observable only under the native sanitizer profile
+spicule	sh_engine_heredoc_queue_leak	runtime=windows	NA	memory leak is observable only under the native sanitizer profile
+spicule	sh_engine_heredoc_queue_leak	runtime=reactos	NA	memory leak is observable only under the native sanitizer profile
+spicule	posix_termios_tcflush_discards_input	capability.console=no	NA	the runner has no console input queue to flush
+spicule	posix_statvfs_statvfs_eloop	runtime=wine,capability.symlink=no	NA	the runner cannot construct the symbolic-link loop
+spicule	posix_unistd_chmod_readonly_roundtrip	runtime=wine	NA	Wine accepts the readonly attribute update on its fallback handle but does not apply it
+spicule	posix_unreferenced_fchmodat_wine_readonly	runtime=wine	NA	Wine does not apply readonly attributes through root-relative or reparse-point handles
+spicule	posix_statvfs_posix_fallocate_reserves_storage	runtime=wine	PASS	patched Wine now honors FileAllocationInformation: CI observed the formerly BUG storage assertion pass and the exact st_blocks probe passed 40/40 locally
+spicule	posix_socket_send_recv_and_socketpair_interfaces	runtime=wine	NA	test-policy.py's isolated probe still runs main()'s unconditional network_probe() first; its bind() (IOCTL_AFD_BIND) fails under Wine (see posix-socket.c's SKIP message), so the probe exits UNRESOLVED before this case's own AF_UNIX-only code ever gets to matter
+spicule	posix_socket_ipv6_address_types	runtime=wine	NA	same network_probe() poisoning as posix_socket_send_recv_and_socketpair_interfaces: bind() fails under Wine before this struct-only case runs, so the isolated probe exits UNRESOLVED regardless of this case's own behavior

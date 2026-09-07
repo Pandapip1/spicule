@@ -37,7 +37,7 @@
  * WHAT THIS MEASURES THAT THE ORIGINAL RUN COULD NOT.  That run wrote
  * only on the server end, so its client-end column sat at full quota in
  * every cell -- evidence that the client->server direction was never
- * exercised, not that the client end is inert.  ntlibc's own pipe()
+ * exercised, not that the client end is inert.  spicule's own pipe()
  * makes the READ end the pipe's server and the WRITE end its client
  * (src/unistd/pipe.c), so the end select() actually probes for
  * writability is exactly the end that run left unmeasured.  Everything

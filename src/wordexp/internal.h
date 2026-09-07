@@ -7,7 +7,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Private glue between this directory's few translation units. Nothing
- * here is part of ntlibc's public surface or shared with any other
+ * here is part of spicule's public surface or shared with any other
  * directory -- src/internal/libc.h is the place for that, and neither
  * of the pieces declared below belongs there: each is a single-purpose
  * helper only wordexp.c itself calls, split into its own file purely

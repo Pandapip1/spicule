@@ -22,8 +22,8 @@
  * that has not yet been converted to go through a __plat_* function
  * keeps compiling and behaving exactly as before.
  */
-#ifndef _NTLIBC_PLAT_HANDLE_H
-#define _NTLIBC_PLAT_HANDLE_H
+#ifndef _SPICULE_PLAT_HANDLE_H
+#define _SPICULE_PLAT_HANDLE_H
 
 typedef void *__plat_handle_t;
 #define __PLAT_HANDLE_NULL ((__plat_handle_t)0)

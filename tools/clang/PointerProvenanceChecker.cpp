@@ -153,20 +153,20 @@ class PointerProvenanceChecker
     return Current ? Current->getDeclKindName() : "unknown";
   }
 
-  using RelationContract = ntlibc::ElementRelationContract;
+  using RelationContract = spicule::ElementRelationContract;
 
   static std::optional<RelationContract>
-  relationContract(const FunctionDecl *FD, ntlibc::ElementRelationKind Kind,
+  relationContract(const FunctionDecl *FD, spicule::ElementRelationKind Kind,
                    std::optional<unsigned> Parameter = std::nullopt) {
     if (!FD)
       return std::nullopt;
     for (const FunctionDecl *Redeclaration : FD->redecls()) {
       for (const auto *Attribute : Redeclaration->specific_attrs<AnnotateAttr>()) {
         std::optional<RelationContract> Contract =
-            ntlibc::parseElementRelation(Attribute->getAnnotation());
+            spicule::parseElementRelation(Attribute->getAnnotation());
         if (!Contract || Contract->Kind != Kind)
           continue;
-        if (Kind == ntlibc::ElementRelationKind::Return || !Parameter ||
+        if (Kind == spicule::ElementRelationKind::Return || !Parameter ||
             *Parameter == Contract->Parameter)
           return Contract;
       }
@@ -200,7 +200,7 @@ class PointerProvenanceChecker
         continue;
       for (const auto *Attribute : FD->specific_attrs<AnnotateAttr>()) {
         std::optional<RelationContract> Contract =
-            ntlibc::parseElementRelation(Attribute->getAnnotation());
+            spicule::parseElementRelation(Attribute->getAnnotation());
         StringRef Name = Contract ? Contract->Registry : StringRef();
         const VarDecl *Registry =
             Name.empty() ? nullptr : registryDecl(Name, Ctx);
@@ -789,7 +789,7 @@ class PointerProvenanceChecker
   // unsafe_assume_valid_pointer() -- see hasAnnotatedAncestor() above.
   static bool isUnsafeAssumeValidPointer(const CastExpr *Cast,
                                          ASTContext &Ctx) {
-    return hasAnnotatedAncestor(Cast, "ntlibc_unsafe_assume_valid_pointer",
+    return hasAnnotatedAncestor(Cast, "spicule_unsafe_assume_valid_pointer",
                                 Ctx);
   }
 
@@ -802,7 +802,7 @@ class PointerProvenanceChecker
   static bool isUnsafeAssumeSharedProvenance(const BinaryOperator *Operation,
                                              ASTContext &Ctx) {
     return hasAnnotatedAncestor(
-        Operation, "ntlibc_unsafe_assume_shared_provenance", Ctx);
+        Operation, "spicule_unsafe_assume_shared_provenance", Ctx);
   }
 
   void report(StringRef Reason, const Stmt *Statement,
@@ -1029,7 +1029,7 @@ public:
     const auto *FD = dyn_cast_or_null<FunctionDecl>(
         C.getLocationContext()->getDecl());
     std::optional<RelationContract> Contract = relationContract(
-        FD, ntlibc::ElementRelationKind::Return);
+        FD, spicule::ElementRelationKind::Return);
     const Expr *Value = Return->getRetValue();
     if (!Contract || !Value ||
         Value->isNullPointerConstant(C.getASTContext(),
@@ -1058,7 +1058,7 @@ public:
       return;
     for (unsigned Index = 0; Index < Call.getNumArgs(); ++Index) {
       std::optional<RelationContract> Contract = relationContract(
-          FD, ntlibc::ElementRelationKind::Parameter, Index);
+          FD, spicule::ElementRelationKind::Parameter, Index);
       if (!Contract)
         continue;
       const VarDecl *Registry =
@@ -1088,7 +1088,7 @@ public:
     bool Changed = false;
     for (unsigned Index = 0; Index < FD->getNumParams(); ++Index) {
       std::optional<RelationContract> Contract = relationContract(
-          FD, ntlibc::ElementRelationKind::Parameter, Index);
+          FD, spicule::ElementRelationKind::Parameter, Index);
       if (!Contract)
         continue;
       const VarDecl *Registry =
@@ -1154,7 +1154,7 @@ public:
     if (const auto *OriginCall =
             dyn_cast_or_null<CallExpr>(Call.getOriginExpr())) {
       std::optional<RelationContract> Contract = relationContract(
-          FD, ntlibc::ElementRelationKind::Return);
+          FD, spicule::ElementRelationKind::Return);
       if (Contract && OriginCall->getDirectCallee() == FD &&
           relationEligible(FD, C.getASTContext())) {
         ProgramStateRef State = C.getState();
@@ -1296,7 +1296,7 @@ extern "C" const char clang_analyzerAPIVersionString[] =
 
 extern "C" void clang_registerCheckers(CheckerRegistry &Registry) {
   Registry.addChecker<PointerProvenanceChecker>(
-      "ntlibc.PointerProvenance",
+      "spicule.PointerProvenance",
       "Proves pointer ordering, subtraction, and integer conversion provenance",
       "");
 }

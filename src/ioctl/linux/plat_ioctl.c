@@ -4,7 +4,7 @@
  * Linux implementation of src/internal/plat_ioctl.h -- see that header
  * for the contract each function makes, and src/mman/linux/plat_mem.c's
  * banner for the general discipline this file follows (raw syscall(2),
- * no host libc, -nostdinc against ntlibc's own headers, aarch64
+ * no host libc, -nostdinc against spicule's own headers, aarch64
  * syscall numbers confirmed against this host's own <sys/syscall.h> as
  * an oracle).
  *
@@ -16,7 +16,7 @@
  * __plat_fionread_pipe() is a single native ioctl(FIONREAD) syscall,
  * the exact request this function's name already promises, versus NT's
  * FilePipeLocalInformation query standing in for it.  FIONREAD's value
- * (0x541b) is ntlibc's own <sys/ioctl.h> value, unchanged: it already
+ * (0x541b) is spicule's own <sys/ioctl.h> value, unchanged: it already
  * matches the Linux kernel ABI (this IS the Linux ioctl request
  * number), so no translation is needed -- the same situation plat_mem.c
  * describes for PROT_/MAP_.
@@ -46,7 +46,7 @@
  * single ioctl(TIOCGWINSZ) syscall, no translation of any kind needed
  * -- TIOCGWINSZ's numeric value (0x5413) and struct winsize's layout
  * (ws_row/ws_col/ws_xpixel/ws_ypixel, four unsigned shorts) are already
- * ntlibc's own <sys/ioctl.h> values, and those already match the real
+ * spicule's own <sys/ioctl.h> values, and those already match the real
  * Linux kernel ABI bit-for-bit (confirmed against this host's own
  * <asm-generic/ioctls.h>/<asm-generic/termios.h>), the same "no
  * translation needed" situation __plat_fionread_pipe()'s own FIONREAD
@@ -58,7 +58,7 @@
  * pre-judge that.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)

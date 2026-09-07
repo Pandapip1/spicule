@@ -26,11 +26,11 @@
  * "r") is baked into it, and there is no lower buffer-taking entry point
  * underneath. src/internal/nss_paths.h's own banner describes the seam
  * that already exists for exactly this: __NSS_NSSWITCH_PATH() expands to
- * __nss_path("NTLIBC_TEST_NSSWITCH_PATH", "/etc/nsswitch.conf"), an
+ * __nss_path("SPICULE_TEST_NSSWITCH_PATH", "/etc/nsswitch.conf"), an
  * undocumented env-var override this library's own test fixtures use,
  * with TZ and HOSTALIASES as precedent. This harness uses that same
  * seam: it fwrite()s the fuzz input into a path inside ntstubs.c's own
- * simulated volume, then setenv()s NTLIBC_TEST_NSSWITCH_PATH to that
+ * simulated volume, then setenv()s SPICULE_TEST_NSSWITCH_PATH to that
  * path before calling __nsswitch_order().
  */
 #include <stdio.h>
@@ -82,7 +82,7 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 	if (n && fwrite(content, 1, n, f) != n) { fclose(f); return 0; }
 	if (fclose(f) != 0) return 0;
 
-	if (setenv("NTLIBC_TEST_NSSWITCH_PATH", "/fuzz_nsswitch.conf", 1) != 0)
+	if (setenv("SPICULE_TEST_NSSWITCH_PATH", "/fuzz_nsswitch.conf", 1) != 0)
 		return 0;
 
 	memset(&buf, GUARD, sizeof buf);

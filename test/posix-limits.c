@@ -14,7 +14,7 @@
  *
  *  1. Where POSIX gives a floor/ceiling ("Minimum Acceptable Value",
  *     "Maximum Acceptable Value"), assert the *direction* the spec
- *     states, not ntlibc's exact number -- otherwise the test is a
+ *     states, not spicule's exact number -- otherwise the test is a
  *     change-detector, not a conformance check.
  *
  *  2. Where a value is genuinely arch-dependent (this target is LLP64:
@@ -25,7 +25,7 @@
  *     rather than hardcoded, so one assertion covers both arches.
  *
  * The one place that derivation itself is impossible: `long`'s actual
- * *compiler*-chosen width. ntlibc deliberately keeps `long` 32-bit on
+ * *compiler*-chosen width. spicule deliberately keeps `long` 32-bit on
  * both PE arches (LONG_BIT, LONG_MAX/MIN, ULONG_MAX), which is a real
  * width for this tcc's -win32/-win64 targets (confirmed empirically:
  * __SIZEOF_LONG__ is 4 under both), but a *native* gcc/clang building
@@ -33,7 +33,7 @@
  * bytes on x86_64 while these headers still say 32-bit -- an expected,
  * documented divergence between the NT target and the native asan
  * harness (see tools/asan-build.sh's `math`/`strto` entries; NOT a bug
- * to fix, since ntlibc has no native x86_64 target at all). Rather than
+ * to fix, since spicule has no native x86_64 target at all). Rather than
  * add another tools/asan-build.sh not_native() entry and lose this
  * file's other, unrelated coverage under `make asan`, the few
  * assertions that actually depend on the compiler's own `long` being
@@ -204,7 +204,7 @@ static void test_limits_pathname(void)
 	/* IOV_MAX: the XSI floor is {_XOPEN_IOV_MAX}, which <limits.h> now
 	 * defines -- so the macro is used rather than the spec's literal.
 	 * This line previously read `CHECK(IOV_MAX >= 16)` under a comment
-	 * saying the constant was "not defined as a macro by ntlibc", which
+	 * saying the constant was "not defined as a macro by spicule", which
 	 * is how that gap stayed invisible: an audit hit the absence, worked
 	 * around it with a literal, and left no fence and no ledger row, so
 	 * from outside it was indistinguishable from "checked, fine". */
@@ -215,7 +215,7 @@ static void test_limits_pathname(void)
  * required floors (every conforming implementation sets them to
  * precisely the spec's number, since they name the guaranteed-portable
  * minimum a strictly conforming application may rely on, not
- * ntlibc's own capability) -- a representative cross-section, spot-
+ * spicule's own capability) -- a representative cross-section, spot-
  * checked directly against the fetched spec table; the remainder were
  * verified by inspection to match and are not each re-asserted here to
  * avoid a 40-line wall of identical-shaped CHECKs. ---- */
@@ -245,7 +245,7 @@ static void test_limits_posix_floors(void)
 
 	/* CHILD_MAX and ATEXIT_MAX are Runtime Invariant Values that "may
 	 * be omitted if the corresponding value is equal to or greater
-	 * than the stated minimum, but is indeterminate." ntlibc reports
+	 * than the stated minimum, but is indeterminate." spicule reports
 	 * CHILD_MAX only via sysconf(_SC_CHILD_MAX) (src/unistd/sysconf.c,
 	 * out of this audit's scope) and defines neither macro -- both
 	 * omissions are spec-conformant, not gaps. */
@@ -308,7 +308,7 @@ static void test_float_dbl(void)
 	/* DECIMAL_DIG: "Minimum Acceptable Value: 10", and by definition
 	 * (C99 5.2.4.2.2p11) must be >= the widest type's DECIMAL_DIG,
 	 * i.e. >= DBL_DECIMAL_DIG here (DBL_DECIMAL_DIG isn't POSIX/C89 but
-	 * ntlibc defines it; check the ordering it implies instead). */
+	 * spicule defines it; check the ordering it implies instead). */
 	CHECK(DECIMAL_DIG >= 10);
 	CHECK(DECIMAL_DIG >= DBL_DIG);
 }
@@ -317,7 +317,7 @@ static void test_float_dbl(void)
  * double` is 64-bit (an alias for `double`) under this tcc on the NT
  * target, but genuinely 80-bit under the mingw-w64/gcc fallback
  * compiler and under native gcc/clang (`make asan`) -- see
- * src/math/ldbl_math.h's NTLIBC_LDBL_EXTENDED and this file's #if below,
+ * src/math/ldbl_math.h's SPICULE_LDBL_EXTENDED and this file's #if below,
  * which uses the identical __SIZEOF_LONG_DOUBLE__ test.
  *
  * BUG found and fixed: arch/i386/bits/float.h and
@@ -329,7 +329,7 @@ static void test_float_dbl(void)
  * mantissa precision (LDBL_EPSILON claimed ~2^-63 precision a 53-bit
  * mantissa cannot deliver). Fixed by conditionally selecting between
  * the 80-bit values and DBL_*-equivalent values, gated on
- * __SIZEOF_LONG_DOUBLE__ exactly as NTLIBC_LDBL_EXTENDED is. This
+ * __SIZEOF_LONG_DOUBLE__ exactly as SPICULE_LDBL_EXTENDED is. This
  * function is the regression test: it holds for *either* branch,
  * because it is written entirely in terms of sizeof(long double) and
  * the type's own arithmetic, never a hardcoded width. */
@@ -398,7 +398,7 @@ static void test_stdint_exact_width(void)
 /* ---- least/fast types: magnitude floors only (POSIX: "not less than"
  * the exact-width floor for that N), and the actual sizeof() must be
  * large enough to hold that floor -- checked via the *_MAX macro
- * matching sizeof() exactly, since ntlibc picks concrete types for
+ * matching sizeof() exactly, since spicule picks concrete types for
  * these (int_leastN_t == intN_t; int_fast16/32_t widened to 32 bits;
  * int_fast8/64_t == int8/64_t) rather than synthesizing new ones. ---- */
 static void test_stdint_least_fast(void)
@@ -472,7 +472,7 @@ static void test_stdint_wchar(void)
 		CHECK(WCHAR_MAX >= 127);
 		CHECK(WCHAR_MIN <= -127);
 	} else {
-		/* unsigned wchar_t (ntlibc's case: 16-bit UTF-16 code unit). */
+		/* unsigned wchar_t (spicule's case: 16-bit UTF-16 code unit). */
 		CHECK(WCHAR_MAX >= 255);
 		CHECK(WCHAR_MIN == 0);
 	}
@@ -480,7 +480,7 @@ static void test_stdint_wchar(void)
 	 * floor -- (wchar_t)-1 is the type's actual maximum. */
 	CHECK((uintmax_t)WCHAR_MAX == (uintmax_t)(wchar_t)-1);
 
-	/* WINT_MIN/MAX floor: signed +-32767 or unsigned 0..65535; ntlibc's
+	/* WINT_MIN/MAX floor: signed +-32767 or unsigned 0..65535; spicule's
 	 * wint_t is `unsigned` (32-bit, include/alltypes.h.in), wider than
 	 * wchar_t itself (a wint_t must be able to hold WEOF as well as
 	 * every wchar_t value). */
@@ -488,7 +488,7 @@ static void test_stdint_wchar(void)
 	CHECK(WINT_MIN == 0U);
 
 	/* SIG_ATOMIC_MIN/MAX floor: signed +-127 or unsigned 0..255;
-	 * ntlibc's sig_atomic_t is `int` (include/alltypes.h.in). */
+	 * spicule's sig_atomic_t is `int` (include/alltypes.h.in). */
 	CHECK(SIG_ATOMIC_MAX >= 127);
 	CHECK(SIG_ATOMIC_MIN <= -127);
 	CHECK((uintmax_t)SIG_ATOMIC_MAX == ((uintmax_t)1 << (sizeof(sig_atomic_t) * CHAR_BIT - 1)) - 1);
@@ -759,7 +759,7 @@ static void test_imaxdiv(void)
 }
 
 /* ==================================================================
- * <limits.h> header content -- the mandatory constants ntlibc does not
+ * <limits.h> header content -- the mandatory constants spicule does not
  * define.  Audit group U (XBD header contents); see
  * test/POSIX-COVERAGE.md "XBD header contents (group U)".
  *

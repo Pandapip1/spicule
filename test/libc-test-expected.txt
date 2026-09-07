@@ -33,7 +33,7 @@
 # read_ledger()), not from what happens to be listed below. This mirrors
 # test/posix-opts-expected.txt's own wildcard row exactly.
 #
-# Baseline: ntlibc 661c577, libc-test 68edb8b, x86_64-win32-tcc, under
+# Baseline: spicule 661c577, libc-test 68edb8b, x86_64-win32-tcc, under
 # the project's patched Wine (which implements RtlCloneUserProcess, so
 # nothing here is Wine-fork-blocked; on stock Wine several of these
 # become NA at run time instead, by design).
@@ -50,7 +50,7 @@ daemon-failure	runtime=wine,target_arch=x86_64,kernel32=no	NA	The test needs the
 dlopen	runtime=wine,target_arch=x86_64,kernel32=no	NA	dlopen() correctly reports the missing module, but this harness only builds each corpus source as its own standalone executable, so dlopen_dso.so is never produced for this test to open (see dlopen_dso's own row).
 dlopen_dso	runtime=wine,target_arch=x86_64,kernel32=no	UNIMPL	tcc: error: unresolved reference to 'main'
 execle-env	runtime=wine,target_arch=x86_64,kernel32=no	NA	no /bin/sh on the target; execle("/bin/sh",...) cannot succeed
-fcntl	runtime=wine,target_arch=x86_64,kernel32=no	BUG	F_SETLK across fork(): the child's lock request succeeds against a range the parent holds, when POSIX requires a conflict. Real NT/Wine lock code is process-keyed, not file-object-keyed, so this is suspected to be an identity bug in the patched Wine fork's RtlCloneUserProcess clone handshake, not ntlibc's fork()/fcntl().
+fcntl	runtime=wine,target_arch=x86_64,kernel32=no	BUG	F_SETLK across fork(): the child's lock request succeeds against a range the parent holds, when POSIX requires a conflict. Real NT/Wine lock code is process-keyed, not file-object-keyed, so this is suspected to be an identity bug in the patched Wine fork's RtlCloneUserProcess clone handshake, not spicule's fork()/fcntl().
 malloc-brk-fail	runtime=wine,target_arch=x86_64,kernel32=no	NA	Design difference: malloc() uses the pre-existing NT process heap (src/malloc/nt/plat_malloc.c), whose already-reserved arena can still satisfy allocation after address-space exhaustion, unlike the musl/brk-specific premise this test assumes.
 malloc-oom	runtime=wine,target_arch=x86_64,kernel32=no	NA	t_setrlim(RLIMIT_DATA, 0) is stubbed (setrlimit() not enforced), so the NT process heap's existing reserve is never exhausted and the malloc-OOM premise is never established.
 mbc	runtime=wine,target_arch=x86_64,kernel32=no	NA	Design difference: wchar_t is 16-bit here (the Windows ABI), so a non-BMP character decodes as a UTF-16 surrogate pair rather than the single wchar_t this test expects.
@@ -62,7 +62,7 @@ pthread_robust	runtime=wine,target_arch=x86_64,kernel32=no	NA	Design difference:
 setenv-oom	runtime=wine,target_arch=x86_64,kernel32=no	NA	t_setrlim(RLIMIT_DATA, 0) is not enforced, so the NT process heap's existing reserve is never exhausted and setenv() succeeding is not an OOM defect.
 sigprocmask-internal	runtime=wine,target_arch=x86_64,kernel32=no	NA	Design difference: __libc_current_sigrtmin() is 35 here, so signals 32-34 are not reserved and are blockable.
 socket	runtime=wine,target_arch=x86_64,kernel32=no	BUG	Builds and links clean under x86_64-win32-tcc (SOCK_NONBLOCK now supported) but fails at runtime under the project's patched Wine in real CI (rc=1); the prior PASS rested on compile/link evidence alone (no Wine in that sandbox), and the specific failing assertion is not yet triaged.
-spawn	runtime=wine,target_arch=x86_64,kernel32=no	NA	posix_spawnp() spawns "echo", which has no NT executable image (echo is a cmd.exe builtin, not on PATH), so it correctly answers ENOENT; ntlibc's own posix_spawnp() coverage (test/posix-spawn.c) resolves a name that does exist.
+spawn	runtime=wine,target_arch=x86_64,kernel32=no	NA	posix_spawnp() spawns "echo", which has no NT executable image (echo is a cmd.exe builtin, not on PATH), so it correctly answers ENOENT; spicule's own posix_spawnp() coverage (test/posix-spawn.c) resolves a name that does exist.
 sscanf_long	runtime=wine,target_arch=x86_64,kernel32=no	NA	Unverifiable in this environment: the test needs an enforced RLIMIT_STACK, but t_setrlim is stubbed.
 syscall-sign-extend	runtime=wine,target_arch=x86_64,kernel32=no	UNIMPL	syscall-sign-extend.c:7: error: include file 'sys/syscall.h' not found
 tgmath	runtime=wine,target_arch=x86_64,kernel32=no	UNIMPL	tgmath.c:28 uses `0.5+0*I`, but I is undefined under this tcc (no _Complex support); tgmath's real-only float/double/long-double dispatch works, only the complex half of this case fails.

@@ -17,7 +17,7 @@ FIXTURES = ROOT / "tools/lint-fallible-result-fixtures"
 DIAGNOSTIC = re.compile(
     r"^(.*?):(\d+):(\d+): warning: (fallible result is discarded); "
     r"origin '(.*)'; context '(.*)'; expression '(.*)' "
-    r"\[ntlibc\.FallibleResult\]$"
+    r"\[spicule\.FallibleResult\]$"
 )
 
 

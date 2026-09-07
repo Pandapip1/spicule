@@ -241,7 +241,7 @@ int ordered_nonnegative_subtraction(int total, int removed)
 
 static int cleanup_preserved_total;
 extern void free(void *);
-__attribute__((annotate("ntlibc_arith_scalar_noop")))
+__attribute__((annotate("spicule_arith_scalar_noop")))
 void __free(void *allocation)
 {
 	free(allocation);
@@ -282,9 +282,9 @@ void positive_member_countdown(struct member_countdown *state)
 }
 
 #define fixture_arith_range(minimum, maximum) \
-	__attribute__((annotate("ntlibc_arith_range:" #minimum ":" #maximum)))
+	__attribute__((annotate("spicule_arith_range:" #minimum ":" #maximum)))
 #define fixture_nonzero_field_on_success(argument, field) \
-	__attribute__((annotate("ntlibc_arith_nonzero_field_on_success:" \
+	__attribute__((annotate("spicule_arith_nonzero_field_on_success:" \
 		#argument ":" #field)))
 
 static unsigned range_checked_divisor(unsigned value,
@@ -416,7 +416,7 @@ int mask_at_int_bounds(unsigned value)
 }
 
 #define ARITH_OUTPUT_EXCLUDES_MIN(argument) \
-	__attribute__((annotate("ntlibc_arith_output_excludes_min:" #argument)))
+	__attribute__((annotate("spicule_arith_output_excludes_min:" #argument)))
 
 extern double frexp(double, int *) ARITH_OUTPUT_EXCLUDES_MIN(1);
 extern float frexpf(float, int *) ARITH_OUTPUT_EXCLUDES_MIN(1);

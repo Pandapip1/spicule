@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Cross-process signal delivery: kill() to another ntlibc process now
+ * Cross-process signal delivery: kill() to another spicule process now
  * consults THAT process's own disposition instead of only ever guessing
  * the default action -- see src/signal/sigdelivery.c and
  * src/signal/signal.c's file banner for the whole mechanism. This file
@@ -76,7 +76,7 @@ static void sleep_ms(long ms)
 	select(0, NULL, NULL, NULL, &tv);
 }
 
-/* Give a freshly __spawn()'d ntlibc process time to reach
+/* Give a freshly __spawn()'d spicule process time to reach
  * __sig_delivery_init() before this process's first kill() targets it --
  * see this file's banner. Generous on purpose (this project's own notes
  * record that a busy CI box manufactures false failures out of tight

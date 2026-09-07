@@ -126,7 +126,7 @@ static void test_mktime_overflow_returns_minus_one(void)
  * the processor time used by the process" -- CPU time, not wall-clock
  * time. Sleeping (wall-clock elapsed) should barely move clock()'s CPU
  * time, unlike a busy loop of comparable wall duration. */
-#if NTLIBC_TEST(PASS, posix_time_clocks_per_sec_type) /* CLOCKS_PER_SEC has type clock_t.
+#if SPICULE_TEST(PASS, posix_time_clocks_per_sec_type) /* CLOCKS_PER_SEC has type clock_t.
 	 * basedefs/time.h.html, "The <time.h> header shall define the
 	 * following macros": "CLOCKS_PER_SEC -- A number used to convert
 	 * the value returned by the clock() function into seconds.  The
@@ -453,7 +453,7 @@ static void test_strptime_literal_percent_and_ws_run(void)
 	CHECK(end && *end == 0 && tm.tm_year == 100 && tm.tm_mon == 1);
 }
 
-#if NTLIBC_TEST(PASS, posix_time_tzname_dst_designation) /* BUG: tzname[1] is always tzname[0]; TZ's DST designation is
+#if SPICULE_TEST(PASS, posix_time_tzname_dst_designation) /* BUG: tzname[1] is always tzname[0]; TZ's DST designation is
 	 * never parsed.  tzset.html DESCRIPTION: "The tzset() function
 	 * shall set the external variable tzname as follows:
 	 *
@@ -515,7 +515,7 @@ static void test_tzname_dst_designation(void)
 
 /* tzset.html DESCRIPTION: "The daylight variable shall be set to 0 if
  * Daylight Savings Time conversions should never be applied ...
- * otherwise it shall be set to a non-zero value." ntlibc's tzset() has
+ * otherwise it shall be set to a non-zero value." spicule's tzset() has
  * no DST ruleset at all (src/time/tzset.c), so daylight is always 0,
  * for every TZ value including ones with a DST suffix -- already
  * covered for one such TZ in test/time.c (PST8PDT,M3.2.0,M11.1.0);
@@ -533,12 +533,12 @@ static void test_tzset_daylight_always_zero(void)
 }
 
 /* timespec_get: C11 (and POSIX.1-2024, not POSIX.1-2017 base -- see
- * https://man7.org/linux/man-pages/man3/timespec_get.3.html); ntlibc
+ * https://man7.org/linux/man-pages/man3/timespec_get.3.html); spicule
  * still declares it in <time.h>. "returns the nonzero base if it is a
  * supported time base ... or 0 otherwise." test/time.c already checks
  * TIME_UTC success and an unsupported-base failure; add that ts is left
  * alone on failure (unspecified by the standard, but worth pinning
- * ntlibc's actual behaviour) and that repeated calls are monotonic
+ * spicule's actual behaviour) and that repeated calls are monotonic
  * non-decreasing along with CLOCK_REALTIME. */
 static void test_timespec_get_matches_realtime(void)
 {
@@ -571,8 +571,8 @@ static void test_timespec_get_matches_realtime(void)
  *
  * Every expected value below was independently computed with GNU
  * coreutils `date -u -d @<epoch> +%U/%W/%V/%G/%g` (glibc's strftime),
- * not derived from ntlibc or from memory. */
-#if NTLIBC_TEST(PASS, posix_time_strftime_iso_week_thursday_years) /* BUG: %V/%G/%g lose a week in every year that begins on a
+ * not derived from spicule or from memory. */
+#if SPICULE_TEST(PASS, posix_time_strftime_iso_week_thursday_years) /* BUG: %V/%G/%g lose a week in every year that begins on a
 	 * Thursday.  strftime.html's %V entry: "Replaced by the week number
 	 * of the year (Monday as the first day of the week) as a decimal
 	 * number [01,53].  If the week containing 1 January has four or
@@ -707,7 +707,7 @@ static void write_posix_datemsk(void)
 	CHECK(setenv("DATEMSK", POSIX_DATEMSK_PATH, 1) == 0);
 }
 
-#if NTLIBC_TEST(PASS, posix_time_getdate_no_datemsk_must_fail) /* getdate.html ERRORS code 1 -- "The DATEMSK environment variable
+#if SPICULE_TEST(PASS, posix_time_getdate_no_datemsk_must_fail) /* getdate.html ERRORS code 1 -- "The DATEMSK environment variable
 	is null or undefined" -- is now implemented for real:
 	src/time/getdate.c no longer falls back to a built-in template
 	list when $DATEMSK is unset (see that file's header comment for

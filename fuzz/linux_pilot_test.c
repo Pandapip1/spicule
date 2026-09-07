@@ -1,18 +1,18 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Linux platform pilot smoke test -- NOT part of ntlibc, same standing
+ * Linux platform pilot smoke test -- NOT part of spicule, same standing
  * as fuzz/ntstubs.c's own native-build scaffolding.
  *
- * Exercises the REAL ntlibc public entry points (mmap/munmap/mprotect/
+ * Exercises the REAL spicule public entry points (mmap/munmap/mprotect/
  * msync/read/write/lseek/dup/close, from the real src/mman/mman.c and
  * src/unistd/{close,read,write,lseek,dup}.c, statically linked here)
  * against the new src/mman/linux/plat_mem.c and src/unistd/linux/
  * plat_fd.c backends, running as a real, native aarch64 Linux process
  * on this host -- no Wine, no emulation.
  *
- * The one thing it does NOT go through ntlibc for is opening the test
- * file in the first place: ntlibc's own open() front door still calls
+ * The one thing it does NOT go through spicule for is opening the test
+ * file in the first place: spicule's own open() front door still calls
  * NT-only path resolution directly (__ntpath_at, src/fcntl/open.c) and
  * was explicitly out of scope for this pilot. A raw openat(2) stands in
  * for it here, exactly the same shape of scaffolding fuzz/ntstubs.c
@@ -45,24 +45,24 @@ int main(void)
 	int fd, fd2;
 	char buf[64];
 	void *map;
-	const char msg1[] = "hello from ntlibc on linux";
-	const char msg2[] = "HELLO-FROM-NTLIBC-ON-LINUX"; /* same length */
+	const char msg1[] = "hello from spicule on linux";
+	const char msg2[] = "HELLO-FROM-SPICULE-ON-LINUX"; /* same length */
 
 	/* open() itself is out of scope here -- see this file's own banner. */
-	rawfd = syscall(SYS_openat, AT_FDCWD, "/tmp/ntlibc-linux-pilot-test",
+	rawfd = syscall(SYS_openat, AT_FDCWD, "/tmp/spicule-linux-pilot-test",
 	                O_CREAT | O_TRUNC | O_RDWR, 0644L);
 	if (rawfd < 0) { printf("FAIL - raw openat setup (errno=%ld)\n", -rawfd); return 1; }
 	printf("ok   - raw openat() setup succeeded (raw fd=%ld)\n", rawfd);
 
-	/* Register the raw fd in ntlibc's OWN fd table -- boxed the same
+	/* Register the raw fd in spicule's OWN fd table -- boxed the same
 	 * way src/unistd/linux/plat_fd.c encodes a handle (fd+1) -- and get
-	 * back ntlibc's own fd number, which is what every front door
+	 * back spicule's own fd number, which is what every front door
 	 * below actually expects. This is the one piece of "installing an
 	 * externally obtained descriptor" that a real Linux open() port
 	 * would do internally; here it's done directly since open() itself
 	 * is out of scope. */
 	fd = __fd_install((HANDLE)(rawfd + 1), O_RDWR, __FD_FILE);
-	CHECK(fd >= 0, "__fd_install() registered the raw fd in ntlibc's table");
+	CHECK(fd >= 0, "__fd_install() registered the raw fd in spicule's table");
 	if (fd < 0) return 1;
 
 	/* --- unistd/linux/plat_fd.c: write() --- */
@@ -143,7 +143,7 @@ int main(void)
 	}
 
 	CHECK(close(fd) == 0, "close() of the real fd succeeded");
-	syscall(SYS_unlinkat, AT_FDCWD, "/tmp/ntlibc-linux-pilot-test", 0);
+	syscall(SYS_unlinkat, AT_FDCWD, "/tmp/spicule-linux-pilot-test", 0);
 
 	printf("\n%s\n", failures ? "SOME CHECKS FAILED" : "ALL CHECKS PASSED");
 	return failures ? 1 : 0;

@@ -17,7 +17,7 @@ FIXTURES = ROOT / "tools/lint-integer-sentinel-fixtures"
 DIAGNOSTIC = re.compile(
     r"^(.*?):(\d+):(\d+): warning: value from (.*?) carries excluded sentinel "
     r"(-?\d+) not proven ruled out before (.*?); origin '(.*?)'; "
-    r"context '(.*?)'; use '(.*?)' \[ntlibc\.IntegerSentinel\]$"
+    r"context '(.*?)'; use '(.*?)' \[spicule\.IntegerSentinel\]$"
 )
 
 

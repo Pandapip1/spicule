@@ -13,7 +13,7 @@
  * ---- what this actually implements --------------------------------------
  *
  * Real write(1p) sends to a *different* logged-in user's terminal, but
- * ntlibc has exactly one real user identity (src/misc/pwd.c), so there
+ * spicule has exactly one real user identity (src/misc/pwd.c), so there
  * is no second account to invent:
  *
  *   - `user` must name this process's own user (getpwnam(user) --
@@ -141,13 +141,13 @@ int __util_write_main(
 		 * is what actually NUL-terminates tbuf. */
 		__ownership_string_terminated(tbuf);
 		tlen = strlen(tbuf);
-		/* KNOWN CHECKER GAP (ntlibc.ValidPointer on tbuf[tlen-1]/
+		/* KNOWN CHECKER GAP (spicule.ValidPointer on tbuf[tlen-1]/
 		 * tbuf[--tlen] below): tlen <= sizeof tbuf - 1 always holds, from
 		 * the fixed NUL just written above, but OwnershipChecker.cpp's
 		 * trackScanExtent declines to correlate strlen()'s return with a
 		 * fixed local array's already-stronger extent, and a manual
 		 * __ownership_writable_span/readable_span restatement here is
-		 * rejected by ntlibc.MemoryContract as narrowing an
+		 * rejected by spicule.MemoryContract as narrowing an
 		 * already-proven-stronger fact. Left open rather than worked
 		 * around. */
 		while (tlen && (tbuf[tlen - 1] == '\n' || tbuf[tlen - 1] == '\r')) tbuf[--tlen] = 0;

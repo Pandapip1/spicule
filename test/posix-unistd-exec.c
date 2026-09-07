@@ -29,7 +29,7 @@
  * -- which has no RtlCloneUserProcess -- would hang rather than fail.
  *
  * Oracle: mixed.  The empty-string and directory cases below are
- * decided inside ntlibc (src/process/find_program.c and
+ * decided inside spicule (src/process/find_program.c and
  * src/process/spawn.c's own checks), so Wine is sound for them; the
  * [ENOEXEC] answer comes from RtlCreateUserProcess refusing an invalid
  * image, which the real-Windows legs are the authority on.
@@ -312,7 +312,7 @@ static void test_not_a_regular_file(void)
 	CHECK(execve("./ex-dir", av, environ) == -1);
 	reached++;
 
-#if NTLIBC_TEST(PASS, posix_unistd_exec_directory_reports_eacces) /* Executing a directory reports [EACCES], as exec.html requires.
+#if SPICULE_TEST(PASS, posix_unistd_exec_directory_reports_eacces) /* Executing a directory reports [EACCES], as exec.html requires.
 	 *
 	 * exec.html ERRORS: "The exec functions *shall* fail if: ...
 	 * [EACCES] The new process image file is not a regular file and
@@ -435,12 +435,12 @@ static void test_failed_exec_leaves_image_unchanged(void)
 	 * process" -- exec never writes the caller's own environ. */
 	{
 		char *envp[2];
-		envp[0] = (char *)"NTLIBC_EXEC_CLAUSE_PROBE=1";
+		envp[0] = (char *)"SPICULE_EXEC_CLAUSE_PROBE=1";
 		envp[1] = 0;
 		errno = 0;
 		CHECK(execve("./ex-no-such-program.exe", av, envp) == -1 && errno == ENOENT);
 		reached++;
-		CHECK(getenv("NTLIBC_EXEC_CLAUSE_PROBE") == NULL);
+		CHECK(getenv("SPICULE_EXEC_CLAUSE_PROBE") == NULL);
 		CHECK(environ != NULL && environ[0] != NULL);
 	}
 }

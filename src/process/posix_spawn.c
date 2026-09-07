@@ -23,7 +23,7 @@
  * child sees exactly the table the actions produced, and the parent
  * gets its own back.
  *
- * Three things make that safe: ntlibc has no threads, so nothing can
+ * Three things make that safe: spicule has no threads, so nothing can
  * race the parent's table during the window; the save is of the *table
  * slot*, not a descriptor (struct __fd copied out and the slot zeroed),
  * since __fd_runtime_data() rewrites every inheritable slot's handle in
@@ -50,14 +50,14 @@
  *     runs its own crt1 before main(), and signal.c's `handlers[]` is a
  *     static SIG_DFL for every fresh child regardless of the mask named.
  *
- *   POSIX_SPAWN_SETSIGMASK -- honoured on NT via an ntlibc-specific
+ *   POSIX_SPAWN_SETSIGMASK -- honoured on NT via an spicule-specific
  *     trailer on the same RuntimeData blob that carries the descriptor
  *     table (SIG_RUNTIME_MAGIC): __spawn_set_pending_sigmask() sets it
  *     before __spawn(), __fd_init() reads it back before the child's
  *     main() runs at all, so the mask is in place before the child's
  *     first instruction. Not equivalent to POSIX in one respect: the
  *     kernel there carries the mask across exec for *any* image, while
- *     this trailer only reaches an ntlibc-built child. Refused with
+ *     this trailer only reaches an spicule-built child. Refused with
  *     EINVAL on Linux -- the mechanism is NT-specific and unverified
  *     there (test/posix-spawn.c's fence).
  *
@@ -102,7 +102,7 @@
  * every path out, including success.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -259,7 +259,7 @@ static int do_action(const struct __spawn_action *a, struct saved_slot *sv, int 
 			if (dup2(t, a->u.open.fd) < 0) { int e = errno; (void)close(t); return e; }
 			(void)close(t);
 		}
-		/* Checker gap (ntlibc.ResourceLeak): when t == a->u.open.fd
+		/* Checker gap (spicule.ResourceLeak): when t == a->u.open.fd
 		 * already, it IS the requested slot from here on (no dup2/close
 		 * needed or wanted) -- the checker can't see that aliasing, so
 		 * it reports t as never released. */

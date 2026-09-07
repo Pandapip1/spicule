@@ -22,7 +22,7 @@
  *               iswupper_l iswxdigit_l towctrans_l towlower_l
  *               towupper_l wctrans_l wctype_l
  *
- * This is NOT the "ntlibc is C-locale-only, so a locale argument has
+ * This is NOT the "spicule is C-locale-only, so a locale argument has
  * nothing to select" case, and that distinction is the whole finding.
  * The per-locale API is present and implemented here: include/locale.h
  * declares newlocale/duplocale/freelocale/uselocale and defines
@@ -93,7 +93,7 @@ static int fails;
  * .../functions/isalpha.html and the sibling isXXX pages
  * ================================================================== */
 
-#if NTLIBC_TEST(PASS, posix_ctype_locale_isalpha_l_family)
+#if SPICULE_TEST(PASS, posix_ctype_locale_isalpha_l_family)
 #include <ctype.h>
 #include <locale.h>
 
@@ -176,7 +176,7 @@ static void test_posix_ctype_locale_isalpha_l_family(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_ctype_locale_tolower_l)
+#if SPICULE_TEST(PASS, posix_ctype_locale_tolower_l)
 #include <ctype.h>
 #include <locale.h>
 
@@ -227,7 +227,7 @@ static void test_posix_ctype_locale_tolower_l(void)
  * iswctype.html, wctrans.html, towctrans.html
  * ================================================================== */
 
-#if NTLIBC_TEST(PASS, posix_ctype_locale_iswalpha_l_family)
+#if SPICULE_TEST(PASS, posix_ctype_locale_iswalpha_l_family)
 #include <wctype.h>
 #include <locale.h>
 
@@ -284,7 +284,7 @@ static void test_posix_ctype_locale_iswalpha_l_family(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_ctype_locale_towlower_l)
+#if SPICULE_TEST(PASS, posix_ctype_locale_towlower_l)
 #include <wctype.h>
 #include <locale.h>
 
@@ -315,7 +315,7 @@ static void test_posix_ctype_locale_towlower_l(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_ctype_locale_wctype_l_iswctype_l)
+#if SPICULE_TEST(PASS, posix_ctype_locale_wctype_l_iswctype_l)
 #include <wctype.h>
 #include <locale.h>
 
@@ -361,7 +361,7 @@ static void test_posix_ctype_locale_wctype_l_iswctype_l(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_ctype_locale_wctrans_l_towctrans_l)
+#if SPICULE_TEST(PASS, posix_ctype_locale_wctrans_l_towctrans_l)
 #include <wctype.h>
 #include <locale.h>
 
@@ -408,7 +408,7 @@ static void test_posix_ctype_locale_wctrans_l_towctrans_l(void)
 int main(void)
 {
 	/* Every case here is still fenced out of the normal build (see
-	 * test-policy.h: NTLIBC_TEST() is 0 outside tools/test-policy.py's
+	 * test-policy.h: SPICULE_TEST() is 0 outside tools/test-policy.py's
 	 * per-case probe), but `grep '_l(' include/ctype.h include/wctype.h`
 	 * no longer returns nothing: include/ctype.h and include/wctype.h
 	 * now declare the whole isalnum_l() ... wctrans_l() family (see

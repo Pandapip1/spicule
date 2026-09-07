@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Test-harness scaffolding for the Linux socket-backend pilot -- NOT
- * part of ntlibc, same standing as fuzz/linux_pilot_harness.c (the
+ * part of spicule, same standing as fuzz/linux_pilot_harness.c (the
  * mman/unistd pilot's own harness) and fuzz/ntstubs.c before it.
  *
  * src/socket/sendrecv.c's real recv()/send() front doors need only

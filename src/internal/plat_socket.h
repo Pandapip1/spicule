@@ -75,8 +75,8 @@
  * the underlying transport's stream-vs-datagram nature; listen/accept
  * are refused a datagram socket entirely by the front door, before
  * either backend is reached -- see src/socket/listen.c). */
-#ifndef _NTLIBC_PLAT_SOCKET_H
-#define _NTLIBC_PLAT_SOCKET_H
+#ifndef _SPICULE_PLAT_SOCKET_H
+#define _SPICULE_PLAT_SOCKET_H
 
 #include <stddef.h>
 #include <sys/types.h>

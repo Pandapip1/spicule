@@ -50,7 +50,7 @@ int pipe(int [2]);
  * fds into pipe2() without dereferencing it itself. */
 fallible
 int pipe2(int [2], int) __attribute__((nonnull(1)));
-/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline: close()
+/* tools/clang/ErrnoDisciplineChecker.cpp's spicule.ErrnoDiscipline: close()
  * is one of the two POSIX-named "cleanup after a diagnosed failure" calls
  * that checker's CERT ERR30-C pattern actually looks for, and is recognised
  * through this annotation rather than through that checker's own hardcoded
@@ -309,7 +309,7 @@ long syscall(long, ...);  /* undefined-ok: no stable, numbered
 	library calls directly are the closest analogue. Real on Linux. */
 int execvpe(const char *, char *const [], char *const []);
 int issetugid(void);
-/* Real on Linux (getrandom(2)) and, under NTLIBC_USE_KERNEL32, on NT
+/* Real on Linux (getrandom(2)) and, under SPICULE_USE_KERNEL32, on NT
  * (BCryptGenRandom). The default ntdll-only NT build reports ENOSYS. */
 int getentropy(void *, size_t);
 extern int optreset;

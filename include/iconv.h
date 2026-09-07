@@ -10,7 +10,7 @@
  *
  * Only UTF-8 and UTF-16LE are supported (all four combinations,
  * including self-to-self as a validating copy) -- POSIX leaves supported
- * codesets implementation-defined, and these are the two ntlibc already
+ * codesets implementation-defined, and these are the two spicule already
  * converts between internally for every ntdll call. Anything else fails
  * with (iconv_t)-1/EINVAL. Names are matched case-insensitively, ignoring
  * '-'/'_'; "UCS-2LE" is deliberately not accepted as a UTF-16LE spelling

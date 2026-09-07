@@ -6,7 +6,7 @@
 # never the right resolution, since two branches that each add a source
 # file conflict here textually even though the "right" merge is just
 # regenerating from the merged tree. Route every one of these files through
-# the ntlibc-kaem merge driver (tools/merge-kaem.sh) instead of git's
+# the spicule-kaem merge driver (tools/merge-kaem.sh) instead of git's
 # default text merge, during `merge`, `rebase` and `cherry-pick` alike.
 #
 # Filenames are keyed on platform+arch (build-$platform-$arch.kaem), not
@@ -20,7 +20,7 @@
 # the same way it sets core.hooksPath for .githooks, and CONTRIBUTING.md's
 # "Merging/rebasing/cherry-picking across a source-file add" section for
 # how it actually resolves a conflict and the manual fallback.
-boot/kaem/build-nt-i386.kaem merge=ntlibc-kaem
-boot/kaem/build-nt-x86_64.kaem merge=ntlibc-kaem
-boot/kaem/build-nt-aarch64.kaem merge=ntlibc-kaem
-boot/kaem/build-linux-aarch64.kaem merge=ntlibc-kaem
+boot/kaem/build-nt-i386.kaem merge=spicule-kaem
+boot/kaem/build-nt-x86_64.kaem merge=spicule-kaem
+boot/kaem/build-nt-aarch64.kaem merge=spicule-kaem
+boot/kaem/build-linux-aarch64.kaem merge=spicule-kaem

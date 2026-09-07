@@ -108,8 +108,8 @@
  * Wine's, whose driver is a separate design with its own incompatible
  * ioctl codes and does not answer this one -- falls back cleanly.
  */
-#ifndef _NTLIBC_CONDRV_H
-#define _NTLIBC_CONDRV_H
+#ifndef _SPICULE_CONDRV_H
+#define _SPICULE_CONDRV_H
 
 #include "nt.h"
 
@@ -165,7 +165,7 @@ typedef struct _CONSOLE_MODE_MSG {
 
 /* conmsgl2.h's CONSOLE_SCREENBUFFERINFO_MSG, with its COORD pairs
  * written out as the X,Y short pairs they are: COORD itself lives in
- * kernel32.h, which only exists behind NTLIBC_USE_KERNEL32, and this
+ * kernel32.h, which only exists behind SPICULE_USE_KERNEL32, and this
  * message has to be reachable without it.  Every field is IN OUT there;
  * only the window size is read here.
  *

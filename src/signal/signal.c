@@ -19,7 +19,7 @@
  * Console control events arrive through kernel32's console control handler,
  * not NT exceptions: conhost dispatches them by having user32 inject a
  * thread into this process, so there really is no ntdll path to them. With
- * NTLIBC_USE_KERNEL32, __signal_init() turns CTRL_C_EVENT/CTRL_BREAK_EVENT
+ * SPICULE_USE_KERNEL32, __signal_init() turns CTRL_C_EVENT/CTRL_BREAK_EVENT
  * into SIGINT the same way the vectored handler turns DBG_CONTROL_C/
  * DBG_CONTROL_BREAK into one.
  *
@@ -32,7 +32,7 @@
  * process) stands.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -49,7 +49,7 @@
 #include "plat_fd.h"
 #include "plat_misc.h"
 #include "unsafe_pointer.h"
-#ifdef NTLIBC_USE_KERNEL32
+#ifdef SPICULE_USE_KERNEL32
 #include "kernel32.h"
 #endif
 
@@ -57,7 +57,7 @@
  * own note further down and sigdelivery.c's banner ("Locking."), which
  * says outright that signal.c acquires that lock around every external
  * entry point touching this state. */
-static void (*handlers[_NSIG])(int) NTLIBC_GUARDED_BY(__ntlibc_sig_lock_token);
+static void (*handlers[_NSIG])(int) SPICULE_GUARDED_BY(__spicule_sig_lock_token);
 static __thread sigset_t blocked;
 
 /* Standard signals coalesce while pending. Real-time signals retain one
@@ -71,7 +71,7 @@ struct pending_state {
 };
 /* The process-wide queue, guarded the same way handlers[] above is; the
  * per-thread one right below it is TLS and needs no lock at all. */
-static struct pending_state process_pending NTLIBC_GUARDED_BY(__ntlibc_sig_lock_token);
+static struct pending_state process_pending SPICULE_GUARDED_BY(__spicule_sig_lock_token);
 static __thread struct pending_state thread_pending;
 /* raise() is thread-directed.  Other entries into __raise_internal_info()
  * are process-directed and retain the shared pending queue used by the
@@ -84,8 +84,8 @@ static __thread int wait_active;
  * and sigset() leave these at their zero-initialized defaults (empty
  * mask, no flags), matching their simpler contract.  Same lock as
  * handlers[] above -- sigaction() installs all three together. */
-static sigset_t act_mask[_NSIG] NTLIBC_GUARDED_BY(__ntlibc_sig_lock_token);
-static int act_flags[_NSIG] NTLIBC_GUARDED_BY(__ntlibc_sig_lock_token);
+static sigset_t act_mask[_NSIG] SPICULE_GUARDED_BY(__spicule_sig_lock_token);
+static int act_flags[_NSIG] SPICULE_GUARDED_BY(__spicule_sig_lock_token);
 
 static int sig_valid(int sig) { return sig > 0 && sig < _NSIG; }
 
@@ -334,7 +334,7 @@ static int self_stop_signal;
 static void stop_event_name(pid_t pid, int sig, WCHAR name[56], // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 			    UNICODE_STRING *us)
 {
-	static const char prefix[] = "\\BaseNamedObjects\\ntlibc-stop.";
+	static const char prefix[] = "\\BaseNamedObjects\\spicule-stop.";
 	unsigned upid = (unsigned)pid;
 	unsigned usig = (unsigned)sig;
 	int i = 0, n;
@@ -736,7 +736,7 @@ int kill(pid_t pid, int sig)
 	if (sig != 0 && !sig_valid(sig)) { errno = EINVAL; return -1; }
 
 	/* pid==0 (own process group) and pid==-1 (every permitted process)
-	 * both name sets ntlibc can't enumerate in general, but under the
+	 * both name sets spicule can't enumerate in general, but under the
 	 * group-of-one model (src/unistd/ids.c: every process is its own
 	 * group, no process list beyond our own children) both sets provably
 	 * contain only the caller -- so "send to {caller}" is the real thing
@@ -876,7 +876,7 @@ int sigorset(sigset_t *d, const sigset_t *a, const sigset_t *b) { size_t i; for 
 /* Called with the signal lock held. Delivery drops it only around the user
  * callback and reacquires it before returning here. */
 static void drain_unblocked_pending(void)
-    NTLIBC_REQUIRES(__ntlibc_sig_lock_token);
+    SPICULE_REQUIRES(__spicule_sig_lock_token);
 static void drain_unblocked_pending(void)
 {
 	int i;
@@ -924,7 +924,7 @@ int sigprocmask(int how, const sigset_t *set, sigset_t *old)
 /* pthread_sigmask.html gives this the same mask operation as
  * sigprocmask(), but pthread interfaces return the error number directly
  * and do not report it through errno.  There is one process-wide mask while
- * ntlibc has only its initial thread; keeping the wrapper here makes that
+ * spicule has only its initial thread; keeping the wrapper here makes that
  * contract usable now and leaves the storage boundary obvious when real
  * per-thread masks arrive. */
 int pthread_sigmask(int how, const sigset_t *set, sigset_t *old)
@@ -1034,7 +1034,7 @@ int sigqueue(pid_t pid, int sig, union sigval value)
  * for only 64 real signals); glibc measured the same way.
  *
  * The suspend path is a real wait: self-generated delivery is synchronous
- * (see this file's banner), but the NTLIBC_USE_KERNEL32 console-control
+ * (see this file's banner), but the SPICULE_USE_KERNEL32 console-control
  * handler and the cross-process delivery thread (sigdelivery.c) can still
  * queue a blocked signal from outside while this loop is parked; the same
  * delivery event wakes it either way, and state is always rechecked after
@@ -1428,7 +1428,7 @@ static LONG NTAPI exception_handler(EXCEPTION_POINTERS *ep)
 	return EXCEPTION_CONTINUE_EXECUTION;
 }
 
-#ifdef NTLIBC_USE_KERNEL32
+#ifdef SPICULE_USE_KERNEL32
 /* Runs on a thread kernel32 creates, not the main thread -- races a main
  * thread inside sigprocmask() touching the same handlers/blocked/
  * process_pending globals, exactly like sigdelivery.c's delivery thread;
@@ -1459,9 +1459,9 @@ static BOOL NTAPI ctrl_handler(DWORD type)
 }
 #endif
 
-#ifdef NTLIBC_USE_KERNEL32
+#ifdef SPICULE_USE_KERNEL32
 /* Reached via LdrLoadDll()/LdrGetProcedureAddress() (ntdll exports) rather
- * than linking kernel32's import library, so NTLIBC_USE_KERNEL32 stays a
+ * than linking kernel32's import library, so SPICULE_USE_KERNEL32 stays a
  * load-time decision: the binary still only links against ntdll (see
  * CONTRIBUTING.md for why kernel32 is meant to stay the exception). */
 static void install_ctrl_handler(void)
@@ -1498,7 +1498,7 @@ void __signal_init(void)
 	 * work (linux/sigdelivery.c). */
 	__plat_sig_install_fault_handlers();
 #endif
-#ifdef NTLIBC_USE_KERNEL32
+#ifdef SPICULE_USE_KERNEL32
 	install_ctrl_handler();
 #else
 	/* No ntdll path to console control events exists (see

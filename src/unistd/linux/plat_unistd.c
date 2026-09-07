@@ -18,13 +18,13 @@
  * reports __VFS_NONE, and Linux's own readlinkat(2) already answers
  * ENOENT/EINVAL correctly on its own.
  *
- * `dirfd` here may be ntlibc's own AT_FDCWD sentinel or an ntlibc fd-table
+ * `dirfd` here may be spicule's own AT_FDCWD sentinel or an spicule fd-table
  * index, never a raw Linux fd on its own. resolve_dirfd() below turns
  * either into what the raw *at() syscalls need: AT_FDCWD passed straight
  * through (numerically identical to Linux's own), or the fd table's boxed
  * handle unboxed back into the real fd it names.
  *
- * ntlibc's own <fcntl.h> AT_FDCWD/AT_SYMLINK_NOFOLLOW/AT_REMOVEDIR/
+ * spicule's own <fcntl.h> AT_FDCWD/AT_SYMLINK_NOFOLLOW/AT_REMOVEDIR/
  * AT_SYMLINK_FOLLOW/O_CLOEXEC values are numerically identical to the
  * kernel ABI's own, so they are used directly below rather than
  * reintroduced under an _LX suffix.
@@ -40,7 +40,7 @@
  * getpid() reachable on this backend.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -276,7 +276,7 @@ int acct(const char *filename)
 	return 0;
 }
 
-/* Turns ntlibc's own AT_FDCWD sentinel or fd-table index into what the
+/* Turns spicule's own AT_FDCWD sentinel or fd-table index into what the
  * raw *at() syscalls need. Returns -1 with errno already set only on a
  * bad table index -- never a legitimate result otherwise, since AT_FDCWD
  * is -100 and every unboxed real fd is >= 0. */

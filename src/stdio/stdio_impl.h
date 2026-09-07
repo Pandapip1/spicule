@@ -18,8 +18,8 @@
  * directly out of the memory block, since there is no fd to be economical
  * about calling into.
  */
-#ifndef _NTLIBC_STDIO_IMPL_H
-#define _NTLIBC_STDIO_IMPL_H
+#ifndef _SPICULE_STDIO_IMPL_H
+#define _SPICULE_STDIO_IMPL_H
 
 #include <stdio.h>
 #include <sys/types.h>

@@ -162,7 +162,7 @@ struct termios {
 #define TCION  3
 
 /* POSIX leaves the B* encoding unspecified; these are just the bps
- * number itself, since ntlibc has no real serial line to encode a rate
+ * number itself, since spicule has no real serial line to encode a rate
  * for. */
 #define B0        0
 #define B50       50
@@ -181,7 +181,7 @@ struct termios {
 #define B19200    19200
 #define B38400    38400
 
-/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline:
+/* tools/clang/ErrnoDisciplineChecker.cpp's spicule.ErrnoDiscipline:
  * src/termios/termios.c's tcgetattr()/tcsetattr() set errno on every
  * failure return, via get_console() (__fd_get()'s own EBADF, or an
  * explicit ENOTTY) or tcsetattr()'s own explicit EINVAL. */

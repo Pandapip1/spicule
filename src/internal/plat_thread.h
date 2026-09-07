@@ -59,8 +59,8 @@
  *     private front-door state (struct __pthread, the aio request table,
  *     ...) that has no business being visible from src/thread/nt/.
  */
-#ifndef _NTLIBC_PLAT_THREAD_H
-#define _NTLIBC_PLAT_THREAD_H
+#ifndef _SPICULE_PLAT_THREAD_H
+#define _SPICULE_PLAT_THREAD_H
 
 #include <stddef.h>
 #include <sys/types.h>
@@ -68,11 +68,11 @@
 #include "plat_handle.h"
 #include "thread_annotations.h"
 
-#ifdef NTLIBC_LOCKSET_ANALYSIS
+#ifdef SPICULE_LOCKSET_ANALYSIS
 /* The fast lock is the ntdll PEB lock on NT and the corresponding
  * process-wide futex lock on Linux.  The capability token names the
  * logical lock, independently of which backend supplies it. */
-extern __ntlibc_lock_capability __ntlibc_peb_lock_token;
+extern __spicule_lock_capability __spicule_peb_lock_token;
 #endif
 
 /* NT's __stdcall on i386, the only calling convention x86_64 has -- the
@@ -109,7 +109,7 @@ typedef void (__PLAT_APC_CALL *__plat_apc_fn)(void *, void *, void *);
  * immediate poll -- the caller's own convention, unchanged) is passed
  * through verbatim. */
 /* h is required: the Linux backend (src/thread/linux/plat_thread.c) casts
- * it straight to `struct ntlibc_linux_sync *obj` and dereferences
+ * it straight to `struct spicule_linux_sync *obj` and dereferences
  * obj->kind/obj->futex unconditionally, with no NULL check -- the NT
  * backend merely forwards h to NtWaitForSingleObject() as an opaque
  * value, but this one shared declaration's contract is set by whichever
@@ -117,7 +117,7 @@ typedef void (__PLAT_APC_CALL *__plat_apc_fn)(void *, void *, void *);
  * own __plat_realtime_get()/__plat_timer_manager_start() comments), and
  * no real caller anywhere in this tree ever passes a zero/uninitialized
  * handle -- several (src/signal/signal.c's own `if (__plat_event_set(
- * self_stop_event) < 0) ...` guard on the ntlibc_linux_sync-pointer
+ * self_stop_event) < 0) ...` guard on the spicule_linux_sync-pointer
  * domain this platform's __plat_event_set() really expects; src/signal/
  * nt/sigdelivery.c's own `if (wake_event) __plat_event_set(wake_event);`
  * on NT's own single real handle domain) explicitly skip the call instead
@@ -202,7 +202,7 @@ int __plat_semaphore_getvalue(__plat_handle_t h, int *value)
  * backend that actually uses it, the same precedent as
  * __plat_thread_stack_extent() below), and this subsystem's real call
  * sites (src/thread/semaphore.c's own `&h`) never pass NULL. */
-/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline: every
+/* tools/clang/ErrnoDisciplineChecker.cpp's spicule.ErrnoDiscipline: every
  * failure return sets errno, either through __set_errno_status() (the
  * NT backend) or through a real errno-setting call it fails through to
  * (the Linux backend's map_named_sem()) -- see both backends' own
@@ -259,7 +259,7 @@ void __plat_named_mutant_release(__plat_handle_t lock);
  * above is its own call: on NT every one of those handles IS a real
  * NtClose()-able HANDLE, so that backend's implementation just forwards to
  * __plat_close(). On Linux, though, every one of those handles is a raw
- * `struct ntlibc_linux_sync *` -- an mmap(2)'d pointer (src/thread/linux/
+ * `struct spicule_linux_sync *` -- an mmap(2)'d pointer (src/thread/linux/
  * plat_thread.c's own banner and src/internal/linux/sync.h), not a boxed
  * fd+1 -- so __plat_close() there truncates that pointer to a 32-bit "fd"
  * and issues close(2) on it: a real, confirmed bug, generalizing
@@ -450,8 +450,8 @@ ssize_t __plat_thread_file_io(__plat_handle_t h, void *buf, size_t count,
  * it, and no caller in this tree relies on it (pthread_mutex.c's own
  * recursive-mutex support is layered on TOP of this lock, in its own
  * bookkeeping, never by re-entering the lock itself). */
-void __plat_fast_lock(void) NTLIBC_ACQUIRE(__ntlibc_peb_lock_token);
-void __plat_fast_unlock(void) NTLIBC_RELEASE(__ntlibc_peb_lock_token);
+void __plat_fast_lock(void) SPICULE_ACQUIRE(__spicule_peb_lock_token);
+void __plat_fast_unlock(void) SPICULE_RELEASE(__spicule_peb_lock_token);
 
 #endif
 

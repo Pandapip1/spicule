@@ -12,8 +12,8 @@
  * src/internal/nt/conin.c for the whole implementation and the
  * reasoning behind it.
  */
-#ifndef _NTLIBC_CONIN_H
-#define _NTLIBC_CONIN_H
+#ifndef _SPICULE_CONIN_H
+#define _SPICULE_CONIN_H
 
 #include "nt.h"
 #include "plat_fd.h"

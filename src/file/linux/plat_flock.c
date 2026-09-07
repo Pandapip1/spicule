@@ -4,7 +4,7 @@
  * Linux implementation of src/internal/plat_flock.h -- see that header
  * for the contract each function makes, and src/mman/linux/plat_mem.c's
  * banner for the general discipline this file follows (raw syscall(2),
- * no host libc, -nostdinc against ntlibc's own headers, aarch64
+ * no host libc, -nostdinc against spicule's own headers, aarch64
  * syscall numbers confirmed against this host's own <sys/syscall.h> as
  * an oracle).
  *
@@ -22,14 +22,14 @@
  * around), Linux's flock(2) IS the exact whole-open-file-description
  * lock POSIX's flock() describes -- a single native syscall, no
  * emulation, no landmines to work around. LOCK_SH/LOCK_EX/LOCK_NB/
- * LOCK_UN are ntlibc's own <sys/file.h> values, unchanged: they already
+ * LOCK_UN are spicule's own <sys/file.h> values, unchanged: they already
  * match the Linux kernel ABI exactly (1/2/4/8, the same values every
  * Linux libc uses), so this needs no translation table either -- the
  * same "already matches the ABI" situation plat_mem.c's own banner
  * describes for PROT_/MAP_.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)

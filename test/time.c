@@ -21,7 +21,7 @@
 static int fails;
 #define CHECK(cond) do { if (!(cond)) { fails++; printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); } } while (0)
 
-#if defined(__linux__) && !defined(_NTLIBC_NATIVE_BUILD)
+#if defined(__linux__) && !defined(_SPICULE_NATIVE_BUILD)
 /* setitimer()/ualarm() real-repeat-delivery tests' own SIGALRM handler:
  * a signal handler must be a real, file-scope function, so the counter
  * it bumps lives here too rather than as a local in main(). */
@@ -882,7 +882,7 @@ int main(void)
 			CHECK(getrlimit(999, &rl) == -1 && errno == EINVAL);
 		}
 
-#if defined(__linux__) && !defined(_NTLIBC_NATIVE_BUILD)
+#if defined(__linux__) && !defined(_SPICULE_NATIVE_BUILD)
 		/* setrlimit()/getrlimit(): on Linux (unlike the NT build just
 		 * proved above, which stays fixed at RLIM_INFINITY), RLIMIT_
 		 * STACK/CORE/RSS/MEMLOCK are genuinely enforced by the kernel
@@ -1007,7 +1007,7 @@ int main(void)
 			CHECK(getrusage(999, &ru) == -1 && errno == EINVAL);
 		}
 
-#if defined(__linux__) && !defined(_NTLIBC_NATIVE_BUILD)
+#if defined(__linux__) && !defined(_SPICULE_NATIVE_BUILD)
 		/* sched_setscheduler()/sched_getscheduler()/sched_setparam()/
 		 * sched_getparam()/sched_rr_get_interval(): real Linux syscalls
 		 * (src/misc/sched.c, src/misc/linux/plat_misc.c) giving genuine

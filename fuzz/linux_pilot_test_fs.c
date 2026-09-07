@@ -1,11 +1,11 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Linux filesystem-subsystem pilot smoke test -- NOT part of ntlibc,
+ * Linux filesystem-subsystem pilot smoke test -- NOT part of spicule,
  * same standing as fuzz/linux_pilot_test.c (the mman/unistd fd-ops
  * pilot's own test) and fuzz/ntstubs.c's native-build scaffolding.
  *
- * Exercises the REAL ntlibc public entry points fcntl()/posix_fallocate()
+ * Exercises the REAL spicule public entry points fcntl()/posix_fallocate()
  * (src/fcntl/fcntl.c, fadvise.c), flock() (src/file/flock.c), ioctl()
  * (src/ioctl/ioctl.c), fchmod()/fstat() (src/stat/chmod.c, stat.c), and
  * fstatvfs()/futimens() (src/stat/statvfs.c, utimensat.c), statically
@@ -17,7 +17,7 @@
  * front door still calls NT-only __ntpath_at() directly -- see
  * src/internal/plat_fcntl.h's own banner), so a raw openat(2) stands in
  * for it, exactly like fuzz/linux_pilot_test.c
- * already does, and the raw fd is registered into ntlibc's own fd table
+ * already does, and the raw fd is registered into spicule's own fd table
  * via __fd_install() the identical way.
  *
  * __plat_dir_read()/__plat_dir_decode_one() (src/dirent/linux/
@@ -60,7 +60,7 @@ static int failures;
 	if (!(cond)) { printf("FAIL - %s (errno=%d)\n", msg, errno); failures++; } \
 } while (0)
 
-static const char *TESTFILE = "/tmp/ntlibc-linux-pilot-test-fs";
+static const char *TESTFILE = "/tmp/spicule-linux-pilot-test-fs";
 
 /* fork()'s raw shape: clone(SIGCHLD, 0, 0, 0, 0) is the documented
  * "behaves like fork()" idiom on architectures (aarch64 included) that
@@ -90,7 +90,7 @@ int main(void)
 	printf("ok   - raw openat() setup succeeded (raw fd=%ld)\n", rawfd);
 
 	fd = __fd_install((HANDLE)(rawfd + 1), O_RDWR, __FD_FILE);
-	CHECK(fd >= 0, "__fd_install() registered the raw fd in ntlibc's table");
+	CHECK(fd >= 0, "__fd_install() registered the raw fd in spicule's table");
 	if (fd < 0) return 1;
 
 	/* --- fcntl/linux/plat_fcntl.c: __plat_lock_probe/set/clear via

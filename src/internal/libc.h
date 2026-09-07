@@ -6,11 +6,11 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Internal interfaces shared between the parts of ntlibc.  Nothing in here
+ * Internal interfaces shared between the parts of spicule.  Nothing in here
  * is visible to programs; everything begins with a double underscore.
  */
-#ifndef _NTLIBC_LIBC_H
-#define _NTLIBC_LIBC_H
+#ifndef _SPICULE_LIBC_H
+#define _SPICULE_LIBC_H
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -23,7 +23,7 @@
 #include "plat_handle.h"
 
 /* ---- lockset (Clang Thread Safety Analysis) capability tokens ---------
- * Two internal locks get a NTLIBC_CAPABILITY token here: __sig_lock()/
+ * Two internal locks get a SPICULE_CAPABILITY token here: __sig_lock()/
  * __sig_unlock() (a real function pair, acquire/release-annotated
  * directly below) and the ntdll PEB lock, reached everywhere in this
  * tree only through the RtlAcquirePebLock()/RtlReleasePebLock() macros
@@ -33,14 +33,14 @@
  * resolves to these exact declarations, so no call site anywhere in the
  * tree needs to change for this to take effect.
  *
- * Both are gated the same way every NTLIBC_* macro is: invisible outside
+ * Both are gated the same way every SPICULE_* macro is: invisible outside
  * clang, and invisible outside tools/lint.sh's `lockset` stage even under
  * clang.  See thread_annotations.h. */
-#ifdef NTLIBC_LOCKSET_ANALYSIS
-extern __ntlibc_lock_capability __ntlibc_sig_lock_token;
-extern __ntlibc_lock_capability __ntlibc_peb_lock_token;
-void NTAPI RtlAcquirePebLock(void) NTLIBC_ACQUIRE(__ntlibc_peb_lock_token);
-void NTAPI RtlReleasePebLock(void) NTLIBC_RELEASE(__ntlibc_peb_lock_token);
+#ifdef SPICULE_LOCKSET_ANALYSIS
+extern __spicule_lock_capability __spicule_sig_lock_token;
+extern __spicule_lock_capability __spicule_peb_lock_token;
+void NTAPI RtlAcquirePebLock(void) SPICULE_ACQUIRE(__spicule_peb_lock_token);
+void NTAPI RtlReleasePebLock(void) SPICULE_RELEASE(__spicule_peb_lock_token);
 #endif
 
 /* ---- process-wide state ------------------------------------------------ */
@@ -84,7 +84,7 @@ extern void *__entry_arg1;                   /* raw arg 2 slot; the control for 
  * capability probe cannot cover.  Everything else probes.
  *
  * These report the kernel's version (PEB.OSMajorVersion/OSMinorVersion),
- * which is unrelated to, and never a statement about, ntlibc's minimum
+ * which is unrelated to, and never a statement about, spicule's minimum
  * supported Windows version, which is set by the ntdll imports in
  * tools/ntdll.def. */
 int __nt_os_version(unsigned *major, unsigned *minor); /* 1 if measured, 0 if assumed */
@@ -120,7 +120,7 @@ size_t wcslen_(const WCHAR *) __attribute__((nonnull(1)));
  * Unicode property backs each one and why). Implemented in
  * src/internal/unicode_data.c. Every function here takes/returns a plain
  * code point (as an unsigned int); every table it consults only ever holds
- * entries at or below 0xffff (ntlibc's wchar_t is one UTF-16 code unit --
+ * entries at or below 0xffff (spicule's wchar_t is one UTF-16 code unit --
  * wctype.h), so a cp above that, WEOF included, simply misses every table
  * and gets that table's "not a member" answer with no separate bounds
  * check needed anywhere except __unicode_is_print() (documented on its own
@@ -577,7 +577,7 @@ withtok(heap_allocated) __attribute__((nonnull(1)))
 char *__find_program(const char *name, int use_path);
 int __is_program(const char *path);
 /* WSL/ntfs3's four-byte little-endian $LXMOD extended attribute.  Only the
- * mode attribute is used: ntlibc must not manufacture Linux UID/GID values.
+ * mode attribute is used: spicule must not manufacture Linux UID/GID values.
  * The platform calls that read/write it are __plat_lxmod_get()/
  * __plat_lxmod_set() (src/internal/plat_stat.h); only the buffer builder,
  * which makes no platform call, is declared cross-module here. */
@@ -655,8 +655,8 @@ int __sh_last_status(void);
 withtok(internal_heap_allocated)
 withtok(writable_span(size))
 void *__malloc(size_t size);
-#ifdef NTLIBC_ARITHMETIC_ANALYSIS
-__attribute__((annotate("ntlibc_arith_scalar_noop")))
+#ifdef SPICULE_ARITHMETIC_ANALYSIS
+__attribute__((annotate("spicule_arith_scalar_noop")))
 #endif
 void __free(void * consume(internal_heap_allocated));
 
@@ -937,7 +937,7 @@ void __signal_init(void);
 /* Capture the startup floating-point environment for FE_DFL_ENV
  * (src/math/fenv.c).  Must run before anything can change it. */
 void __fenv_init(void);
-/* RLIMIT_FSIZE, enforced by ntlibc's own write paths because NT has no
+/* RLIMIT_FSIZE, enforced by spicule's own write paths because NT has no
  * per-process file-size primitive and needs none (src/misc/resource.c).
  * __fsize_limited() is the cheap predicate to test first; __fsize_clamp()
  * returns how many of `count` bytes may be written on a handle, or -1
@@ -962,9 +962,9 @@ long long __fsize_clamp(__plat_handle_t h, int append, size_t count);
 long long __fsize_room_at(long long off);
 int __fsize_allow(long long size);
 int __fsize_exceeded(void);
-int __raise_internal(int) NTLIBC_REQUIRES(__ntlibc_sig_lock_token);
+int __raise_internal(int) SPICULE_REQUIRES(__spicule_sig_lock_token);
 int __raise_internal_info(int, const void *)
-    NTLIBC_REQUIRES(__ntlibc_sig_lock_token);
+    SPICULE_REQUIRES(__spicule_sig_lock_token);
 int __sig_queue_process_info(int, const void *);
 /* How many times a signal-catching function has been entered.  Compared
  * across an alertable wait by src/unistd/sleep.c to tell a caught signal
@@ -1075,7 +1075,7 @@ void __spawn_clear_pending_dup2s(void);
 const struct __spawn_dup2_target *__spawn_pending_dup2s(int *out_n)
     __attribute__((nonnull(1)));
 
-int __raise_thread_internal(int) NTLIBC_REQUIRES(__ntlibc_sig_lock_token);
+int __raise_thread_internal(int) SPICULE_REQUIRES(__spicule_sig_lock_token);
 /* Nonzero if SIGCHLD's installed sa_flags has SA_NOCLDWAIT set -- see the
  * comment on __sigchld_nocldwait() in src/signal/signal.c. */
 int __sigchld_nocldwait(void);
@@ -1127,7 +1127,7 @@ int __sig_try_deliver_remote(int pid, int sig);
 int __sig_try_deliver_remote_info(int pid, int sig, const void *);
 int __sig_try_deliver_remote_nondefault(int pid, int sig);
 int __sig_disposition_is_default(int sig)
-    NTLIBC_REQUIRES(__ntlibc_sig_lock_token);
+    SPICULE_REQUIRES(__spicule_sig_lock_token);
 int __sig_consume_child_stop(int pid);
 void __sigchld_job_control(struct __child *, int sig);
 void __sig_pending_reset_after_fork(void);
@@ -1138,8 +1138,8 @@ int __mman_fault_is_object_error(const void *);
 int __mman_address_is_live(const void *);
 int __mman_range_is_live(const void *, size_t);
 void __aio_reset_after_fork(void);
-void __sig_lock(void) NTLIBC_ACQUIRE(__ntlibc_sig_lock_token);
-void __sig_unlock(void) NTLIBC_RELEASE(__ntlibc_sig_lock_token);
+void __sig_lock(void) SPICULE_ACQUIRE(__spicule_sig_lock_token);
+void __sig_unlock(void) SPICULE_RELEASE(__spicule_sig_lock_token);
 int __sig_unlock_for_handler(void);
 void __sig_relock_after_handler(int);
 
@@ -1163,7 +1163,7 @@ const char *__strerror_msg(int e);
  * thread are the clone's handles, still CREATE_SUSPENDED; call this
  * before ever resuming the thread.  Only meaningful, and only
  * implemented, on i386 -- WOW64 has no meaning for a native x86_64
- * ntlibc process, so this is a no-op there. */
+ * spicule process, so this is a no-op there. */
 #ifdef __i386__
 void __wow64_fixup_clone(HANDLE process, HANDLE thread);
 #else

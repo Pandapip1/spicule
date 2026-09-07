@@ -17,7 +17,7 @@
 extern "C" {
 #endif
 
-/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline reads
+/* tools/clang/ErrnoDisciplineChecker.cpp's spicule.ErrnoDiscipline reads
  * this annotation to learn which thread-scoped fact a read of errno
  * requires proof of (some prior call or assignment on this path could have
  * set it) -- the family name lives here, not hardcoded in the checker. */

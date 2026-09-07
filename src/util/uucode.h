@@ -21,8 +21,8 @@
  * stream in the wild (BSD, GNU sharutils, this one) uses this exact
  * mapping.
  */
-#ifndef _NTLIBC_UTIL_UUCODE_H
-#define _NTLIBC_UTIL_UUCODE_H
+#ifndef _SPICULE_UTIL_UUCODE_H
+#define _SPICULE_UTIL_UUCODE_H
 
 /* 0..63 -> the printable character uuencode(1p) writes for it. */
 #define UUENC(c) ((c) ? (char)(((c) & 0x3f) + ' ') : '`')

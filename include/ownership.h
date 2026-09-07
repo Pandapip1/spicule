@@ -16,7 +16,7 @@
 #define tokdef __token_type
 /* Every qualifier/relation macro below exists purely for the benefit of
  * the tools/clang checkers' AST walks (OwnershipChecker, MemoryContractChecker,
- * AllocationLifetimeChecker, and SizeCastChecker's ntlibc.ArrayIndex): none
+ * AllocationLifetimeChecker, and SizeCastChecker's spicule.ArrayIndex): none
  * of them is read by any normal compile. GCC parses annotate() but always
  * reports it "ignored" outside its own LTO-streaming consumer, and even
  * clang's own ordinary compiles never look at it -- only clang's static
@@ -31,14 +31,14 @@
  * annotations). tools/lint.sh's stage_totality builds its plugin as a
  * plain PluginASTAction under -fsyntax-only, which never defines
  * __clang_analyzer__, so that one stage also defines
- * NTLIBC_OWNERSHIP_ANALYSIS explicitly on its real-source scan; every
+ * SPICULE_OWNERSHIP_ANALYSIS explicitly on its real-source scan; every
  * other stage that reads one of these annotations always runs under
  * --analyze and needs no extra flag. Emitting the attribute for a plain
  * GCC/clang build (including the "lint (warn)" -Wall -Wextra gate, and
  * tcc, which does not understand __attribute__((annotate(...))) at all)
  * serves no purpose there and is exactly what GCC's own "annotate"
  * warning is complaining about. */
-#if defined(__clang_analyzer__) || defined(NTLIBC_OWNERSHIP_ANALYSIS)
+#if defined(__clang_analyzer__) || defined(SPICULE_OWNERSHIP_ANALYSIS)
 #define __ownership_attr(text) __attribute__((annotate(text)))
 #else
 #define __ownership_attr(text)
@@ -87,7 +87,7 @@
  * sentinel_exclude(value) already parses (a bare NULL, or a base-10 integer
  * that fits int64_t) -- see sentinelFromQualifier's own comment for why
  * that parser is shared rather than reimplemented here.
- * tools/clang/SizeCastChecker.cpp's ntlibc.IntegerSentinel checker requires
+ * tools/clang/SizeCastChecker.cpp's spicule.IntegerSentinel checker requires
  * every arithmetic (+ - * /), explicit-cast, or array/pointer-index use of
  * a value carrying one of these to be on a path that has already proven
  * the value is not that literal -- the same path-sensitive proof
@@ -173,7 +173,7 @@
 	__ownership_attr("fields_established")
 /* A bare, function-level marker: this function's return value is a real
  * result, not an advisory one, and must not be silently discarded.
- * tools/clang/FallibleResultChecker.cpp's ntlibc.FallibleResult reads this
+ * tools/clang/FallibleResultChecker.cpp's spicule.FallibleResult reads this
  * back off the callee instead of keeping its own hardcoded name list. */
 #define fallible \
 	__ownership_attr("fallible")
@@ -222,7 +222,7 @@
  * withtok(null_terminated) already asserts strlen()'s contract in
  * string.h -- not independently reverified against these functions'
  * bodies, which this project does not implement and Nature (or the host
- * libc, if this codebase's own ntlibc doesn't provide it either) does.
+ * libc, if this codebase's own spicule doesn't provide it either) does.
  *
  * TotalityChecker.cpp's own recursive-descent-parser proof reads this
  * back (see toleratedPointerReassign()) to recognize the extremely

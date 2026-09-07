@@ -1,10 +1,10 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Linux dirent pilot smoke test -- NOT part of ntlibc, same standing as
+ * Linux dirent pilot smoke test -- NOT part of spicule, same standing as
  * fuzz/linux_pilot_test_fs.c and fuzz/linux_pilot_test_open.c.
  *
- * Exercises the REAL ntlibc public entry points opendir()/readdir()/
+ * Exercises the REAL spicule public entry points opendir()/readdir()/
  * closedir() (src/dirent/{opendir,readdir,closedir}.c) and getdents()
  * (src/dirent/getdents.c), statically linked here against the real
  * open()/openat() front door (src/fcntl/open.c) and the new
@@ -18,7 +18,7 @@
  *
  * Test fixture: a real directory containing three real files of
  * distinct names and one real subdirectory, created here with raw
- * syscalls (mkdirat/openat/close -- not through ntlibc's own front
+ * syscalls (mkdirat/openat/close -- not through spicule's own front
  * doors, so this test's fixture setup does not depend on the very code
  * under test). Every one of those names is confirmed present, with the
  * correct d_type, via an order-independent set comparison (directory
@@ -84,7 +84,7 @@ static int is_sys_error(long ret)
 	return (unsigned long)ret >= (unsigned long)-4095L;
 }
 
-static const char *TESTDIR = "/tmp/ntlibc-linux-pilot-test-dirent";
+static const char *TESTDIR = "/tmp/spicule-linux-pilot-test-dirent";
 
 struct expect {
 	const char *name;

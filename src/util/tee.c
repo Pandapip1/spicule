@@ -77,7 +77,7 @@ int __util_tee_main(
 			free((void *)paths);
 			return 1;
 		}
-		/* Checker gap (ntlibc.ResourceLeak): each open() below is stored
+		/* Checker gap (spicule.ResourceLeak): each open() below is stored
 		 * into fds[nfiles], a heap array indexed at runtime -- the
 		 * checker can't correlate that store with the fds[j] loads in
 		 * the write-error and final close loops below, so every

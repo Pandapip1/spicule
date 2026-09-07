@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * malloc front-door pilot -- NOT part of ntlibc, same standing as
+ * malloc front-door pilot -- NOT part of spicule, same standing as
  * every other fuzz/linux_pilot_test_*.c file.
  *
  * Exercises the REAL src/malloc/malloc.c front door

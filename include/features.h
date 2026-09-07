@@ -48,7 +48,7 @@
  * excluded). Only clang has both the attribute and that sanitizer check;
  * gcc warns under -Wattributes on unknown sanitizer names, so the
  * __clang__ guard matters. Internal to the library only. */
-#ifdef _NTLIBC_INTERNAL
+#ifdef _SPICULE_INTERNAL
 #ifndef __has_attribute
 #define __has_attribute(x) 0
 #endif

@@ -16,7 +16,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 FIXTURES = ROOT / "tools/lint-cast-range-fixtures"
 DIAGNOSTIC = re.compile(
     r"^(.*?):(\d+):(\d+): warning: .*; origin '(.*)'; context '(.*)'; cast '(.*)'; site '(.*)' "
-    r"\[ntlibc\.SizeCast\]$"
+    r"\[spicule\.SizeCast\]$"
 )
 
 

@@ -8,7 +8,7 @@
  *
  * <wctype.h>.
  *
- * ntlibc is C/POSIX-locale-only, and wchar_t here is a 16-bit UTF-16 code
+ * spicule is C/POSIX-locale-only, and wchar_t here is a 16-bit UTF-16 code
  * unit (WCHAR_MAX == 0xffff, see wchar.h), not the 32-bit-holds-one-
  * codepoint type POSIX text elsewhere implicitly assumes.
  *
@@ -26,7 +26,7 @@
  * past 0x7f.
  *
  * A lone surrogate half (0xd800-0xdfff) is not a valid character and its
- * behavior is POSIX-undefined; ntlibc picks a defined answer anyway:
+ * behavior is POSIX-undefined; spicule picks a defined answer anyway:
  * every classification function returns false and every conversion
  * function returns the argument unchanged, since a surrogate half is
  * General_Category Cs and simply absent from every Unicode property
@@ -54,7 +54,7 @@ extern "C" {
 #undef WEOF
 #define WEOF 0xffffffffU
 
-/* ntlibc's one locale defines exactly two mappings ("tolower", "toupper"),
+/* spicule's one locale defines exactly two mappings ("tolower", "toupper"),
  * so a small dense int enum is all the opacity this type needs. */
 typedef int wctrans_t;
 

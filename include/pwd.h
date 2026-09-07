@@ -43,7 +43,7 @@ int getpwnam_r(const char *, struct passwd *, char *, size_t, struct passwd **)
 int getpwuid_r(uid_t, struct passwd *, char *, size_t, struct passwd **)
     __attribute__((nonnull(2, 5)));
 
-/* XSI; ntlibc's user database genuinely has exactly one entry, so
+/* XSI; spicule's user database genuinely has exactly one entry, so
  * enumerating it is not a fabrication. */
 struct passwd *getpwent(void);
 void setpwent(void);

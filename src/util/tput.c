@@ -75,7 +75,7 @@
  * for it.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -158,7 +158,7 @@ static int print_cup(const struct term_entry *t, const char *rowarg, const char 
 	char *end1, *end2;
 	long row, col;
 
-	/* OPEN LINT FINDING (ntlibc.ValidPointer, "*rowarg" not proven
+	/* OPEN LINT FINDING (spicule.ValidPointer, "*rowarg" not proven
 	 * nonnull): rowarg/colarg are always argv[i+1]/argv[i+2] from this
 	 * file's one call site, which checks i + 2 < argc first, so both are
 	 * always live, null-terminated argv elements. Tried adding

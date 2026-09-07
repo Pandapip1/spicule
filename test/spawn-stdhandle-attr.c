@@ -74,7 +74,7 @@
  * surprising result into a red board.
  *
  * The NT process-creation types below are not in src/internal/nt.h --
- * ntlibc itself has no NtCreateUserProcess caller -- so they are declared
+ * spicule itself has no NtCreateUserProcess caller -- so they are declared
  * here, from phnt (winsiderss/phnt, ntpsapi.h), the same way
  * test/posix-errno.c declares what it needs locally.
  */
@@ -203,9 +203,9 @@ static void type_name(HANDLE h, char *out, size_t outsz)
 static int child_report(const char *path)
 {
 	PRTL_USER_PROCESS_PARAMETERS pp = __peb->ProcessParameters;
-	/* Captured before anything else can touch them.  Nothing in ntlibc
+	/* Captured before anything else can touch them.  Nothing in spicule
 	 * writes these fields -- src/internal/fd.c's __fd_init only reads
-	 * them -- but reading them first makes that independent of ntlibc. */
+	 * them -- but reading them first makes that independent of spicule. */
 	HANDLE in = pp->StandardInput, out = pp->StandardOutput, err = pp->StandardError;
 	HANDLE con = pp->ConsoleHandle;
 	ULONG conflags = pp->ConsoleFlags, winflags = pp->WindowFlags;

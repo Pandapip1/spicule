@@ -11,7 +11,7 @@
  * comment used to say (correctly, then) that the harness was not
  * evidence about ntdll's real converter.  utf.c now carries its own
  * from-scratch, platform-independent codec (see its header for why:
- * dropping the ntdll dependency dropped ntlibc's minimum supported
+ * dropping the ntdll dependency dropped spicule's minimum supported
  * Windows version), so this native build now runs the *exact same*
  * conversion code the PE build does.  fuzz/ntstubs.c's RtlUTF8ToUnicodeN
  * / RtlUnicodeToUTF8N are unreachable from here as a result -- nothing
@@ -29,7 +29,7 @@
  * input makes the converter substitute something longer.  ASan sees any
  * overrun of the resulting heap blocks directly.
  *
- * mbrtowc/mbtowc are ntlibc's own decoders and are fuzzed for real.
+ * mbrtowc/mbtowc are spicule's own decoders and are fuzzed for real.
  */
 #include <stdlib.h>
 #include <string.h>
@@ -116,7 +116,7 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 		}
 	}
 
-	/* ---- ntlibc's own multibyte decoders ---------------------------- */
+	/* ---- spicule's own multibyte decoders ---------------------------- */
 	{
 		mbstate_t st;
 		const char *p = s;

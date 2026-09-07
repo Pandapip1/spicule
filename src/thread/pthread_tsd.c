@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -22,7 +22,7 @@ struct key_slot {
 /* Guarded by the ntdll PEB lock -- every function below takes it via the
  * __plat_fast_lock()/__plat_fast_unlock() macros (src/internal/libc.h)
  * before touching a slot. */
-static struct key_slot keys[PTHREAD_KEYS_MAX] NTLIBC_GUARDED_BY(__ntlibc_peb_lock_token);
+static struct key_slot keys[PTHREAD_KEYS_MAX] SPICULE_GUARDED_BY(__spicule_peb_lock_token);
 
 static unsigned key_index(pthread_key_t key)
 {
@@ -35,7 +35,7 @@ static pthread_key_t key_value(unsigned index, unsigned generation)
 }
 
 static int valid_key(pthread_key_t key)
-    NTLIBC_REQUIRES(__ntlibc_peb_lock_token);
+    SPICULE_REQUIRES(__spicule_peb_lock_token);
 static int valid_key(pthread_key_t key)
 {
 	unsigned index = key_index(key);
@@ -151,13 +151,13 @@ struct once_waiter {
 };
 
 /* The PEB lock protects both the once state and this waiter list. */
-static struct once_waiter *once_waiters NTLIBC_GUARDED_BY(__ntlibc_peb_lock_token);
+static struct once_waiter *once_waiters SPICULE_GUARDED_BY(__spicule_peb_lock_token);
 
 /* Giving each caller its own event makes completion a broadcast: no
  * waiter can consume a shared auto-reset wake intended for another once
  * control. */
 static void wake_once_waiters_locked(pthread_once_t *control)
-    NTLIBC_REQUIRES(__ntlibc_peb_lock_token);
+    SPICULE_REQUIRES(__spicule_peb_lock_token);
 static void wake_once_waiters_locked(pthread_once_t *control)
 {
 	struct once_waiter *waiter;
@@ -168,7 +168,7 @@ static void wake_once_waiters_locked(pthread_once_t *control)
 }
 
 static void remove_once_waiter_locked(struct once_waiter *waiter)
-    NTLIBC_REQUIRES(__ntlibc_peb_lock_token);
+    SPICULE_REQUIRES(__spicule_peb_lock_token);
 static void remove_once_waiter_locked(struct once_waiter *waiter)
 {
 	struct once_waiter **link = &once_waiters;

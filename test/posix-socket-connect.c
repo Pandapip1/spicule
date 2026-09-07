@@ -48,7 +48,7 @@
  * ConnectEndpoint.  That is what main()'s negative control reproduces
  * byte for byte and then proves these assertions reject.
  *
- * ntlibc follows phnt, for the reasons src/internal/afd.h's connect
+ * spicule follows phnt, for the reasons src/internal/afd.h's connect
  * banner sets out (chiefly: `RootEndpoint`/`ConnectEndpoint` are the
  * multipoint endpoint *handles* WSAJoinLeaf passes -- phnt shares this
  * structure between AFD_CONNECT and AFD_JOIN_LEAF -- and a handle
@@ -61,7 +61,7 @@
  * locally, exactly as its two siblings do.  That is deliberate rather
  * than merely accepted: a layout test that included the header it is
  * checking would agree with it by construction.  The numbers below
- * come from the references, not from ntlibc:
+ * come from the references, not from spicule:
  *
  *   - The request shape: phnt ntafd.h, AFD_CONNECT_JOIN_INFO, above.
  *   - TRANSPORT_ADDRESS / TA_ADDRESS at default alignment (LONG
@@ -111,7 +111,7 @@ int __afd_build_connect_request(void *buf, const struct sockaddr *addr, unsigned
 
 /* --- constants, from the references named in the banner --- */
 
-/* sizeof(HANDLE).  Not read from ntlibc: a HANDLE is a PVOID (winnt.h),
+/* sizeof(HANDLE).  Not read from spicule: a HANDLE is a PVOID (winnt.h),
  * so it is exactly a pointer, which is 4 bytes on i386 and 8 on x86_64
  * and carries the same alignment.  Everything else about this layout
  * follows from that one number, which is the entire reason the two
@@ -148,7 +148,7 @@ int __afd_build_connect_request(void *buf, const struct sockaddr *addr, unsigned
 #define ROS_ADDR         (ROS_ADDR_COUNT + 8UL)
 #define ROS_SIZE         (ROS_ADDR + TDI_ADDRESS_LENGTH_IP) /* 34, both ABIs */
 
-/* Windows'/TDI's own numbers, spelled out so that changing ntlibc's
+/* Windows'/TDI's own numbers, spelled out so that changing spicule's
  * headers cannot silently change what this test asserts. */
 #define WIN_AF_INET 2u
 #define TDI_ADDRESS_TYPE_IP 2u
@@ -292,7 +292,7 @@ static int verify_image(const unsigned char *buf, unsigned long size,
 }
 
 /* The image ReactOS's AFD_CONNECT_INFO would have produced, built here
- * by hand so the negative control does not depend on ntlibc ever having
+ * by hand so the negative control does not depend on spicule ever having
  * contained it.  BOOLEAN at +0, two ULONGs at +4 and +8, then the
  * TRANSPORT_ADDRESS at +12 -- on both ABIs. */
 static void build_reactos_image(unsigned char *buf, const struct sockaddr_in *sa)

@@ -17,8 +17,8 @@
  * implemented, and every deliberate scope narrowing; this header is
  * just the shared plumbing those decisions are built out of.
  */
-#ifndef _NTLIBC_UTIL_AWK_PRIV_H
-#define _NTLIBC_UTIL_AWK_PRIV_H
+#ifndef _SPICULE_UTIL_AWK_PRIV_H
+#define _SPICULE_UTIL_AWK_PRIV_H
 
 #include <stddef.h>
 #include <stdio.h>

@@ -120,7 +120,7 @@ bool isLocalOnlyWriteBuiltin(StringRef Name) {
 // grants any lock-family token at all (see their own include/pthread.h
 // declarations -- just a bare handle(pthread_cond)), because neither
 // acquires or releases anything LockDisciplineChecker.cpp's
-// ntlibc.LockDiscipline tracks. But a real, disqualifying-for-purity side
+// spicule.LockDiscipline tracks. But a real, disqualifying-for-purity side
 // effect remains: either call can wake another thread blocked in
 // pthread_cond_wait()/pthread_cond_timedwait(), an observable change to
 // that thread's own scheduling state no less real than a lock release, so
@@ -133,14 +133,14 @@ bool isConditionVariableSignal(StringRef Name) {
   return Name == "pthread_cond_signal" || Name == "pthread_cond_broadcast";
 }
 
-// ntlibc::lock::isLockProtocolCall() reads the real consume:/consume_any:/
+// spicule::lock::isLockProtocolCall() reads the real consume:/consume_any:/
 // grant:/withtok: token annotations off Function's own declaration --
 // exactly the annotations LockDisciplineChecker.cpp's own
-// ntlibc.LockDiscipline checker independently reads off the same
+// spicule.LockDiscipline checker independently reads off the same
 // declarations, via the same shared LockAlgebra.h -- instead of this
 // checker keeping its own separately hand-maintained name list.
 bool isLockCall(const FunctionDecl *Function, StringRef Name) {
-  return ntlibc::lock::isLockProtocolCall(Function) ||
+  return spicule::lock::isLockProtocolCall(Function) ||
         isConditionVariableSignal(Name);
 }
 
@@ -569,7 +569,7 @@ extern "C" const char clang_analyzerAPIVersionString[] =
 
 extern "C" void clang_registerCheckers(CheckerRegistry &Registry) {
   Registry.addChecker<PurityChecker>(
-      "ntlibc.Purity",
+      "spicule.Purity",
       "Proves __attribute__((pure)) eligibility and disproves false claims",
       "");
 }

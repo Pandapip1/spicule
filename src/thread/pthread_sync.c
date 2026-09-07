@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -58,9 +58,9 @@ static int compare_exchange(volatile int *address, int old_value, // NOLINT(bugp
 		: "r"(new_value), "0"(old_value) : "memory");
 	return previous;
 #elif defined(__aarch64__) && defined(_WIN32)
-	extern int __ntlibc_aarch64_cas32(volatile int *address,
+	extern int __spicule_aarch64_cas32(volatile int *address,
 		int old_value, int new_value);
-	return __ntlibc_aarch64_cas32(address, old_value, new_value);
+	return __spicule_aarch64_cas32(address, old_value, new_value);
 #else
 	__atomic_compare_exchange_n(address, &old_value, new_value, 0,
 	                            __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);

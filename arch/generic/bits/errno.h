@@ -3,7 +3,7 @@
 
 /* Values are Linux/glibc's asm-generic numbering, which is what the rest
  * of this file has always used; a value is picked from that table rather
- * than invented so a translation unit that meets ntlibc's errno numbers
+ * than invented so a translation unit that meets spicule's errno numbers
  * and a host's in the same build (a cross-compiled configure cache, a
  * captured errno replayed on the other side) reads them the same way. */
 #define EPERM            1

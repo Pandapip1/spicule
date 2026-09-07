@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -79,13 +79,13 @@ float nextafterf(float x, float y)
 	return ux.f;
 }
 
-/* ntlibc is built with three different long double bit layouts - see
+/* spicule is built with three different long double bit layouts - see
  * src/math/fabs.c's own fabsl() banner (that function found this exact
- * class of bug: NTLIBC_LDBL_EXTENDED's plain boolean conflates x87 and
+ * class of bug: SPICULE_LDBL_EXTENDED's plain boolean conflates x87 and
  * aarch64's binary128, which are both "wider than double" but have
  * completely different bit layouts) and src/internal/
  * ldbl_layout_check.c for the confirmed three-way split this function
- * now matches one for one, rather than NTLIBC_LDBL_EXTENDED's boolean.
+ * now matches one for one, rather than SPICULE_LDBL_EXTENDED's boolean.
  *
  * Under tcc, "long double" is really just "double" (8 bytes), so this
  * is the same 64-bit layout as nextafter() above.
@@ -121,7 +121,7 @@ float nextafterf(float x, float y)
  * regardless.
  *
  * On a real aarch64 build, "long double" is IEEE 754 binary128
- * ("quad"): NTLIBC_LDBL_EXTENDED is ALSO 1 there (__SIZEOF_LONG_DOUBLE__
+ * ("quad"): SPICULE_LDBL_EXTENDED is ALSO 1 there (__SIZEOF_LONG_DOUBLE__
  * == 16), but the layout is not x87's explicit-leading-bit format --
  * binary128 has an IMPLICIT leading bit, exactly like float/double
  * above, so the "step the magnitude bits by +-1, monotonic across
@@ -136,7 +136,7 @@ float nextafterf(float x, float y)
 
 long double nextafterl(long double x, long double y)
 {
-#if !NTLIBC_LDBL_EXTENDED
+#if !SPICULE_LDBL_EXTENDED
 	union { long double f; uint64_t i; } ux = { x }, uy = { y };
 	uint64_t ai;
 	unsigned oldexp, newexp;

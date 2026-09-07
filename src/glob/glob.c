@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * glob(): pattern matching against ntlibc's own working opendir/
+ * glob(): pattern matching against spicule's own working opendir/
  * readdir/stat layer (src/dirent/, src/unistd/stat.c), one '/'-
  * separated pattern component at a time, using fnmatch() (src/fnmatch/
  * fnmatch.c) to test each component against directory entries.  A

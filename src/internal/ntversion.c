@@ -58,7 +58,7 @@
  * 10.x; Wine reports whatever its winecfg version is set to, and
  * defaults to 10.0.
  *
- * *** This is not ntlibc's minimum supported Windows version. ***
+ * *** This is not spicule's minimum supported Windows version. ***
  * That floor is Windows Vista / NTDLL 6.0, set by the ntdll exports this
  * library imports (tools/ntdll.def); it is a statement about which
  * *imports* must resolve.  tools/lint-minver.sh (`make minver`) is the

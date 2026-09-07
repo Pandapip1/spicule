@@ -38,7 +38,7 @@
                       * calls these by name, but rtlib.h still declares
                       * compiler-generated-call functions like these */
 
-union ntlibc_tf128 {
+union spicule_tf128 {
 	long double f;
 	struct { uint64_t lo, hi; } u;
 };
@@ -91,7 +91,7 @@ static int tf_round_up(uint64_t mant, int guard, int sticky) // NOLINT(bugprone-
 long double __extenddftf2(double a)
 {
 	union { double f; uint64_t i; } d;
-	union ntlibc_tf128 r;
+	union spicule_tf128 r;
 	uint64_t sign, exp11, frac52, exp15, hi48, lo64, frac;
 	int shift;
 
@@ -144,7 +144,7 @@ long double __extenddftf2(double a)
 /* ---- __trunctfdf2: long double (binary128) -> double, correctly rounded */
 double __trunctfdf2(long double a)
 {
-	union ntlibc_tf128 t;
+	union spicule_tf128 t;
 	union { double f; uint64_t i; } r;
 	uint64_t sign, exp15, frac_hi48, frac_lo64, sig_hi, mant, nan_frac;
 	int live_exp, total_shift, guard, sticky;
@@ -234,7 +234,7 @@ double __trunctfdf2(long double a)
 /* ---- __trunctfsf2: long double (binary128) -> float, correctly rounded */
 float __trunctfsf2(long double a)
 {
-	union ntlibc_tf128 t;
+	union spicule_tf128 t;
 	union { float f; uint32_t i; } r;
 	uint64_t sign, exp15, frac_hi48, frac_lo64, sig_hi, nan_frac;
 	uint32_t mant;

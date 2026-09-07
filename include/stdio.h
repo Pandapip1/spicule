@@ -139,7 +139,7 @@ int fclose(FILE * consume(file_stream_open)) __attribute__((nonnull(1)));
 
 fallible
 int remove(const char *);
-/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline:
+/* tools/clang/ErrnoDisciplineChecker.cpp's spicule.ErrnoDiscipline:
  * src/stdio/misc.c's rename()/renameat() and both platforms'
  * __plat_rename() set errno on every failure return. */
 grants_thread_token(errno_grounds)
@@ -224,7 +224,7 @@ FILE *tmpfile(void);
  || defined(_BSD_SOURCE)
 /* buf is genuinely optional: a null buf gets size bytes allocated. */
 FILE *fmemopen(void *__restrict, size_t, const char *__restrict) __attribute__((nonnull(3)));
-/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline:
+/* tools/clang/ErrnoDisciplineChecker.cpp's spicule.ErrnoDiscipline:
  * src/stdio/mem.c's open_memstream() sets errno on every failure
  * return, either via malloc() (already errno-capable) or its own
  * explicit `errno = EINVAL` for a null bufp/sizep. */

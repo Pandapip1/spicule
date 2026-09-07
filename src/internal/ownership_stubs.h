@@ -6,8 +6,8 @@
 
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later */
-#ifndef _NTLIBC_OWNERSHIP_STUBS_H
-#define _NTLIBC_OWNERSHIP_STUBS_H
+#ifndef _SPICULE_OWNERSHIP_STUBS_H
+#define _SPICULE_OWNERSHIP_STUBS_H
 
 #include <stddef.h>
 #include <string_tokens.h>
@@ -59,7 +59,7 @@ void __ownership_string_invalidated(void * drop(null_terminated));
  *
  * Unlike every other axiom in this file, this one is NOT expressed as a
  * grant()/consume() token: tools/clang/OwnershipChecker.cpp's
- * ntlibc.ValidPointer (see ValidPointerChecker::isPointerNonNullAxiom
+ * spicule.ValidPointer (see ValidPointerChecker::isPointerNonNullAxiom
  * and its use in checkPostCall) recognizes this call by name and
  * directly narrows Clang's own native nonnull constraint for object's
  * underlying symbol, the same mechanism already used there for
@@ -67,9 +67,9 @@ void __ownership_string_invalidated(void * drop(null_terminated));
  * family's endptr contract (writesNonNullEndPointer) -- because
  * ValidPointer's proof is keyed off that native constraint, a different
  * state model from this project's own grant()/consume() token map, and
- * tools/lint.sh's stage_ownership never loads ntlibc.CapabilityToken (the
+ * tools/lint.sh's stage_ownership never loads spicule.CapabilityToken (the
  * checker that maintains that token map) in the same analysis pass as
- * ntlibc.ValidPointer. */
+ * spicule.ValidPointer. */
 void __ownership_pointer_nonnull(const void *object);
 void __ownership_readable_span(
 	const void *data grant(readable_span(length)), size_t length);

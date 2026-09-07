@@ -11,7 +11,7 @@
  * is dp->tell (an entry count, not a kernel offset — see dirent_internal.h).
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -85,7 +85,7 @@ static int fill(DIR *dp, struct dirent *out)
 		size_t count = f->vfs == __VFS_ROOT ? 3 : 5;
 		if ((size_t)dp->tell >= count) { dp->done = 1; return 1; }
 		/* types[dp->tell]/names[dp->tell] below are in-bounds by the check
-		 * just above; left unannotated because ntlibc.ValidPointer only
+		 * just above; left unannotated because spicule.ValidPointer only
 		 * loses that proof on the x86_64-win32 (LLP64) target, where
 		 * dp->tell (long, 32-bit) widens to size_t (64-bit) for the guard
 		 * but indexes at its own native width -- a known cast-direction

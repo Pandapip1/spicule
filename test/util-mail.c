@@ -30,7 +30,7 @@
  *   utilities/mailx.html
  */
 /* setenv()/unsetenv() below are gated behind _POSIX_SOURCE/
- * _POSIX_C_SOURCE/_XOPEN_SOURCE/_GNU_SOURCE/_BSD_SOURCE in ntlibc's own
+ * _POSIX_C_SOURCE/_XOPEN_SOURCE/_GNU_SOURCE/_BSD_SOURCE in spicule's own
  * include/stdlib.h, none of which a plain -std=c99 build defines on its
  * own. Same fix, same reasoning, as test/posix-stdlib.c's own
  * top-of-file _GNU_SOURCE define. */

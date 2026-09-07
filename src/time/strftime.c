@@ -22,7 +22,7 @@
  * overflow set.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -90,7 +90,7 @@ static size_t do_strftime(char *restrict s withtok(writable_span(max)), size_t m
 	int overflow = 0;
 
 #define PUT_CH(c) do { if (pos + 1 >= max) { overflow = 1; goto done; } s[pos++] = (char)(c); } while (0)
-/* _s is always one of __ntlibc_day_name[_abbr]/__ntlibc_month_name[_abbr]'s
+/* _s is always one of __spicule_day_name[_abbr]/__spicule_month_name[_abbr]'s
  * fixed, non-null string-literal elements (names.c) or the literal
  * "AM"/"PM"; the checker can't see into a global array's initializer. */
 #define PUT_STR(str) do { const char *_s = (str); __ownership_pointer_nonnull(_s); while (*_s) PUT_CH(*_s++); } while (0)
@@ -138,15 +138,15 @@ static size_t do_strftime(char *restrict s withtok(writable_span(max)), size_t m
 		mon = (unsigned)tm->tm_mon < 12 ? tm->tm_mon : 0;
 
 		switch (*f) {
-		case 'a': PUT_STR(__ntlibc_day_name_abbr[wday]); break;
-		case 'A': PUT_STR(__ntlibc_day_name[wday]); break;
-		case 'h': case 'b': PUT_STR(__ntlibc_month_name_abbr[mon]); break;
-		case 'B': PUT_STR(__ntlibc_month_name[mon]); break;
+		case 'a': PUT_STR(__spicule_day_name_abbr[wday]); break;
+		case 'A': PUT_STR(__spicule_day_name[wday]); break;
+		case 'h': case 'b': PUT_STR(__spicule_month_name_abbr[mon]); break;
+		case 'B': PUT_STR(__spicule_month_name[mon]); break;
 		case 'c': {
 			long long year = (long long)tm->tm_year + 1900;
 			int n;
-			PUT_STR(__ntlibc_day_name_abbr[wday]); PUT_CH(' ');
-			PUT_STR(__ntlibc_month_name_abbr[mon]); PUT_CH(' ');
+			PUT_STR(__spicule_day_name_abbr[wday]); PUT_CH(' ');
+			PUT_STR(__spicule_month_name_abbr[mon]); PUT_CH(' ');
 			PUT_NUM(tm->tm_mday, 2, ' '); PUT_CH(' ');
 			PUT_NUM(tm->tm_hour, 2, '0'); PUT_CH(':');
 			PUT_NUM(tm->tm_min, 2, '0'); PUT_CH(':');

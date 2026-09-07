@@ -143,7 +143,7 @@ struct group *getgrgid(gid_t gid)
 	return &g_gr;
 }
 
-/* getgrnam_r()/getgrgid_r() (Thread-Safe Functions option; ntlibc has
+/* getgrnam_r()/getgrgid_r() (Thread-Safe Functions option; spicule has
  * no feature-test gate for it, same as the rest of this library's _r
  * functions).  Return value is the error number itself (0 on success
  * or clean not-found), never routed through errno; *result is set to

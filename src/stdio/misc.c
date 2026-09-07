@@ -9,7 +9,7 @@
  * with src/stdlib/system.c and the util atd/crond spawners.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -89,11 +89,11 @@ FILE *tmpfile(void)
 
 	{
 		size_t tmplbytes;
-		if (n > (size_t)-1 - sizeof "/ntlibcXXXXXX") { errno = ENOMEM; return 0; }
-		tmplbytes = n + sizeof "/ntlibcXXXXXX";
+		if (n > (size_t)-1 - sizeof "/spiculeXXXXXX") { errno = ENOMEM; return 0; }
+		tmplbytes = n + sizeof "/spiculeXXXXXX";
 		tmpl = malloc(tmplbytes);
 		if (!tmpl) return 0;
-		snprintf(tmpl, tmplbytes, "%s/ntlibcXXXXXX", dir);
+		snprintf(tmpl, tmplbytes, "%s/spiculeXXXXXX", dir);
 	}
 	fd = mkstemp(tmpl);
 	if (fd < 0) { free(tmpl); return 0; }

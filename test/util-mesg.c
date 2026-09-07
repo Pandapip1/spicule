@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Black-box tests for ntlibc's Tier 6 "terminal messaging" utilities:
+ * Black-box tests for spicule's Tier 6 "terminal messaging" utilities:
  * mesg(1p) and write(1p) (src/util/mesg.c, src/util/util_write.c).
  * Same technique as test/util-timeutil.c: the standalone
  * obj/bin/<name>.exe is spawned as a real process (via
@@ -223,7 +223,7 @@ static void test_write_too_many_operands(void)
 	check_fails(run(write_path, argv), 1, "usage");
 }
 
-/* No such real account: ntlibc has exactly one (src/misc/pwd.c) --
+/* No such real account: spicule has exactly one (src/misc/pwd.c) --
  * this is write.html's own ">0 ... user not logged on" case. */
 static void test_write_unknown_user(void)
 {

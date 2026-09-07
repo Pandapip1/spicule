@@ -5,7 +5,7 @@
 
 #include <cstdio>
 
-using namespace ntlibc::algebra;
+using namespace spicule::algebra;
 
 static bool test(bool Condition, const char *Message) {
   if (!Condition)

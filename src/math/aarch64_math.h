@@ -67,12 +67,12 @@
  * result via a plain fmod-based reduction, not the bit-exact one
  * real fdlibm gives -- disclosed, not silent.
  */
-#ifndef NTLIBC_AARCH64_MATH_H
-#define NTLIBC_AARCH64_MATH_H
+#ifndef SPICULE_AARCH64_MATH_H
+#define SPICULE_AARCH64_MATH_H
 
 #include <fenv.h>
 #include <stdint.h>
-/* double_t already comes from ntlibc's own generated bits/alltypes.h
+/* double_t already comes from spicule's own generated bits/alltypes.h
  * (float.h / stdint.h's own typedef) -- no need to redefine it here. */
 
 union __aa64_bits { double f; uint64_t i; };

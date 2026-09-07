@@ -8,7 +8,7 @@
  * the caller having to remember to.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -190,7 +190,7 @@ int fclose(FILE *f consume(file_stream_open))
 	if (f->no_close) {
 		/* stdin/stdout/stderr are never freed; just reset them.
 		 *
-		 * This path is a known, accepted ntlibc.AllocationLifetime
+		 * This path is a known, accepted spicule.AllocationLifetime
 		 * finding ("consume function exits without releasing its
 		 * argument"), not a real leak: f is one of the three static
 		 * FILE objects below, never dynamic storage, so there is

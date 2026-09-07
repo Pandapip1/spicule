@@ -7,7 +7,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
 /* <sched.h>: the process-scheduling interfaces are declared here, but
- * ntlibc does not claim the _POSIX_PRIORITY_SCHEDULING option -- NT has
+ * spicule does not claim the _POSIX_PRIORITY_SCHEDULING option -- NT has
  * priorities and a round-robin quantum, but no process-visible POSIX
  * FIFO/RR policy distinction and no hard realtime guarantee.
  * src/misc/sched.c keeps the observable policy/priority state and

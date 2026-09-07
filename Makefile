@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 #
-# Makefile for ntlibc (requires GNU make)
+# Makefile for spicule (requires GNU make)
 #
 # This is the same shape as musl's Makefile: the library is a single
 # static archive built from every source file under src/, plus a crt1.o
@@ -91,13 +91,13 @@ CFLAGS_ALL = $(CFLAGS_C99FSE)
 # itself, not for programs: without it a TU implementing a GNU/BSD
 # extension never sees its own public declaration, so a mismatch between
 # the header and the definition is silent instead of a compile error.
-CFLAGS_ALL += -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_NTLIBC_INTERNAL
+CFLAGS_ALL += -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_SPICULE_INTERNAL
 CFLAGS_ALL += -I$(srcdir)/arch/$(ARCH) -I$(srcdir)/arch/generic -Iobj/include -I$(srcdir)/include -I$(srcdir)/src/internal
 CFLAGS_ALL += $(CPPFLAGS) $(CFLAGS_AUTO) $(CFLAGS)
 # KERNEL32 comes from config.mak, included below; deferred (not `ifeq`,
 # which is resolved at parse time, before that include runs) so it still
 # sees the real value.
-CFLAGS_ALL += $(if $(filter yes,$(KERNEL32)),-DNTLIBC_USE_KERNEL32)
+CFLAGS_ALL += $(if $(filter yes,$(KERNEL32)),-DSPICULE_USE_KERNEL32)
 
 AR      = $(CC) -ar
 RANLIB  = true
@@ -146,7 +146,7 @@ WRAPCC_TCC = $(CC)
 
 # ntdll.def only means anything for the NT platform (it lists ntdll's own
 # exports, for -lntdll to link against) -- a platform=linux `all` has no
-# use for it and no NT ntlibc-tcc wrapper either (ALL_TOOLS wraps a
+# use for it and no NT spicule-tcc wrapper either (ALL_TOOLS wraps a
 # win32-targeting tcc specifically).  `all`'s own recipe list below still
 # only chases $(SH_EXE)/$(BIN_EXES) on PLATFORM=nt: not because they fail
 # to link there any more (PROG_LIBS/PROG_CRT, further down, make both
@@ -164,7 +164,7 @@ WRAPCC_TCC = $(CC)
 # lib/ntdll.def's consumer, -lntdll, not by inspection.
 ifeq ($(PLATFORM),nt)
 ALL_LIBS = $(CRT_LIBS) $(STATIC_LIBS) $(EMPTY_LIBS) $(DEF_FILES)
-ALL_TOOLS = obj/ntlibc-tcc
+ALL_TOOLS = obj/spicule-tcc
 else
 # obj/test/%.exe's own generic recipe further down links -lntdll
 # unconditionally (it has exactly one shape, shared by both platforms)
@@ -179,7 +179,7 @@ else
 # has no NTDLL to import from at all, so an EMPTY archive is exactly
 # as correct an answer to `-lntdll` here as the existing EMPTY_LIBS
 # stubs (-lm/-lrt/-lpthread/...) already are for THEIR own symbols --
-# ntlibc bakes the real implementations directly into lib/libc.a on
+# spicule bakes the real implementations directly into lib/libc.a on
 # every platform; these -lX flags exist for source compatibility with
 # programs that historically link them explicitly, not because any of
 # them ever contribute real archive members here. lib/libntdll.a is
@@ -205,7 +205,7 @@ endif
 # corrupt artefact.  That is not hypothetical here: it is exactly how
 # `make check` comes to report `FAIL rpath.exe (rc=6)` on run after run
 # (rc=6 is 0xE0DE0006 truncated to a POSIX exit status -- abort() out of
-# ntlibc_rpath_fail(), i.e. the delay-loaded rpath-plugin.dll would not
+# spicule_rpath_fail(), i.e. the delay-loaded rpath-plugin.dll would not
 # map), while every other test still passes and a fresh tree passes too.
 # GNU make already removes a target whose recipe was killed by a signal;
 # .DELETE_ON_ERROR extends that to a recipe that merely exits non-zero,
@@ -309,7 +309,7 @@ $(foreach o,$(CRT_OBJS),$(eval $(call CRT_LIB_RULE,$(o))))
 lib/ntdll.def: $(srcdir)/tools/ntdll.def
 	cp $< $@
 
-obj/ntlibc-tcc: $(srcdir)/tools/ntlibc-tcc.in config.mak
+obj/spicule-tcc: $(srcdir)/tools/spicule-tcc.in config.mak
 	sed -e 's!@CC@!$(WRAPCC_TCC)!g' -e 's!@PREFIX@!$(prefix)!g' -e 's!@INCDIR@!$(includedir)!g' -e 's!@LIBDIR@!$(libdir)!g' $< > $@
 	chmod +x $@
 
@@ -410,7 +410,7 @@ generated:
 # engine it calls is already in libc.a for every caller, and this adds
 # only a main().  Built as one link straight from source (one file today)
 # rather than through obj/%.o: the generic object rule above compiles with
-# CFLAGS_ALL, i.e. -D_ALL_SOURCE -D_NTLIBC_INTERNAL -Isrc/internal, which
+# CFLAGS_ALL, i.e. -D_ALL_SOURCE -D_SPICULE_INTERNAL -Isrc/internal, which
 # is deliberately the *library's* compile environment and not a program's
 # (see CFLAGS_ALL's own comment).  sh/ is a program and must build with
 # what any other program gets.
@@ -457,7 +457,7 @@ obj/bin:
 # so this is a pattern rule, the same shape as obj/test/%.exe further
 # down -- and links the same way for the same reason (a real PE program
 # gets the *library's* consumer environment, not CFLAGS_ALL's
-# -D_NTLIBC_INTERNAL -Isrc/internal one; see that rule's own comment).
+# -D_SPICULE_INTERNAL -Isrc/internal one; see that rule's own comment).
 obj/bin/%.exe: $(srcdir)/bin/%.c $(ALL_LIBS) | obj/bin
 	$(CC) $(CFLAGS_C99FSE) $(CFLAGS_AUTO) -I$(srcdir)/arch/$(ARCH) -I$(srcdir)/arch/generic -Iobj/include -I$(srcdir)/include -nostdlib -o $@ $(PROG_CRT) $< -Llib $(PROG_LIBS)
 
@@ -634,7 +634,7 @@ obj/test/%.exe: $(srcdir)/test/%.c $(ALL_LIBS) | obj/test
 
 # test/rpath.c delay-loads this DLL from its own directory ($ORIGIN)
 # to exercise the real resolution path -- it links against nothing of
-# ntlibc's, so it is built directly with $(CC), no crt1.o/libc.a
+# spicule's, so it is built directly with $(CC), no crt1.o/libc.a
 # involved, same as any other freestanding DLL. Kept as a plain
 # prerequisite of the one test that needs it, not folded into TEST_EXES:
 # it is not itself a test (no main), so test/*.c's generic pattern rule
@@ -651,7 +651,7 @@ obj/test/%.exe: $(srcdir)/test/%.c $(ALL_LIBS) | obj/test
 # the only one consumed at *run* time, by the NT loader inside another
 # program, so a corrupt one is not caught by a link that follows.  It
 # surfaces only as `FAIL rpath.exe (rc=6)` -- abort() out of
-# ntlibc_rpath_fail() -- on every subsequent run, with make insisting
+# spicule_rpath_fail() -- on every subsequent run, with make insisting
 # the DLL is up to date the whole time.  Same for delayall-plugin.dll.
 obj/test/rpath-plugin.dll: $(srcdir)/test/rpath-plugin-src/rpath-plugin.c | obj/test
 	$(CC) -shared -o $@.tmp $< && mv -f $@.tmp $@
@@ -862,10 +862,10 @@ obj/test/nmfix.o: $(srcdir)/test/nmfix-src/nmfix.c | obj/test
 obj/test/util-nm.exe: obj/bin/nm.exe obj/test/nmfix.o $(SH_EXE)
 
 # test/delayall.c and its plugin DLL: proof that an *unmodified* program
-# (plain extern, ordinary call, no ntlibc-specific macro at the call
+# (plain extern, ordinary call, no spicule-specific macro at the call
 # site) gets $ORIGIN delay loading through -Wl,--delay-all and
 # __delayLoadHelper2 (crt/delayload2.c) rather than through
-# include/ntlibc/delayload.h's hand-authored stubs. Only defined/built
+# include/spicule/delayload.h's hand-authored stubs. Only defined/built
 # when DELAY_ALL is yes -- see the "delayall (skipped)" branch of
 # `check` below for what happens otherwise, and configure's "checking
 # whether linker accepts -Wl,--delay-all" for the probe that sets it.
@@ -877,9 +877,9 @@ obj/test/delayall-plugin.dll: $(srcdir)/test/delayall-plugin-src/delayall-plugin
 # after: tcc resolves each archive's undefined symbols in a single pass
 # as it reaches that archive on the command line, so an object placed
 # after -lc that itself needs symbols out of libc.a (delayload2.o needs
-# ntlibc_rpath_load()/_fail() and ntlibc_pe_find_export()/_dll_range())
+# spicule_rpath_load()/_fail() and spicule_pe_find_export()/_dll_range())
 # would already be too late (confirmed empirically -- swapping the
-# order is what turns "unresolved reference to ntlibc_rpath_load" etc.
+# order is what turns "unresolved reference to spicule_rpath_load" etc.
 # into a clean link).
 obj/test/delayall.exe: $(srcdir)/test/delayall.c $(ALL_LIBS) obj/test/delayall-plugin.dll | obj/test
 	$(CC) $(CFLAGS_C99FSE) $(CFLAGS_AUTO) $(TEST_DEPFLAGS) -Wl,--delay-all -I$(srcdir)/arch/$(ARCH) -I$(srcdir)/arch/generic -Iobj/include -I$(srcdir)/include -nostdlib -o $@ lib/crt1.o $< obj/test/delayall-plugin.dll lib/delayload2.o -Llib -lc -lntdll
@@ -989,7 +989,7 @@ TEST_EXES := $(patsubst $(srcdir)/test/%.c,obj/test/%.exe,$(TEST_SRCS))
 # something introduced here. Originally fixed narrowly, for these two
 # test binaries only, pending the broader project-wide question (does
 # every PLATFORM=linux program that touches fork/exec need it? does
-# `-lgcc`'s own libgcc.a interact safely with sh.exe's or ntlibc-tcc's
+# `-lgcc`'s own libgcc.a interact safely with sh.exe's or spicule-tcc's
 # other dependencies?) -- that follow-up has since landed (PROG_LIBS/
 # TESTPROG_LIBS's own PLATFORM=linux branch above now carries `-lgcc`
 # for every real-program link, sh.exe included), so these two rules no
@@ -1087,13 +1087,13 @@ check-strict: check
 # the arch config.mak currently names.
 #
 libc-test: $(ALL_LIBS)
-	@WINE="$(WINE)" NTLIBC_TEST_MODE=normal NTLIBC_TEST_PROFILE="$(TEST_PROFILE)" $(srcdir)/tools/libc-test.sh
+	@WINE="$(WINE)" SPICULE_TEST_MODE=normal SPICULE_TEST_PROFILE="$(TEST_PROFILE)" $(srcdir)/tools/libc-test.sh
 
 libc-test-pedantic: $(ALL_LIBS)
-	@WINE="$(WINE)" NTLIBC_TEST_MODE=pedantic NTLIBC_TEST_PROFILE="$(TEST_PROFILE)" $(srcdir)/tools/libc-test.sh
+	@WINE="$(WINE)" SPICULE_TEST_MODE=pedantic SPICULE_TEST_PROFILE="$(TEST_PROFILE)" $(srcdir)/tools/libc-test.sh
 
 libc-test-strict: $(ALL_LIBS)
-	@WINE="$(WINE)" NTLIBC_TEST_MODE=strict NTLIBC_TEST_PROFILE="$(TEST_PROFILE)" $(srcdir)/tools/libc-test.sh
+	@WINE="$(WINE)" SPICULE_TEST_MODE=strict SPICULE_TEST_PROFILE="$(TEST_PROFILE)" $(srcdir)/tools/libc-test.sh
 
 .PHONY: libc-test libc-test-pedantic libc-test-strict
 
@@ -1200,7 +1200,7 @@ check-kernel32: config.mak
 # -Iobj/include -Llib) can see. Configures and builds a second, throwaway
 # copy of the tree out-of-tree, installs it into a temporary prefix, and
 # builds/runs test programs against *only* that prefix through the
-# installed tools/ntlibc-tcc wrapper -- no source-tree path anywhere on
+# installed tools/spicule-tcc wrapper -- no source-tree path anywhere on
 # the compile line. See tools/install-check.sh for the full rationale and
 # what it checks. Requires config.mak (same as `check`): run it once per
 # configured arch, the same way `make check` is.
@@ -1255,8 +1255,8 @@ linkcheck: $(ALL_LIBS)
 # under -std=c99 -nostdinc with no feature-test macro set, i.e. exactly
 # what a program gets from #include <whatever.h> and nothing else. See
 # tools/hdr-hygiene.sh's header comment for the bug class this exists to
-# catch (ntlibc shipping no <pwd.h> at all, unnoticed because nothing
-# in-tree ever included a header ntlibc does not have -- this script is
+# catch (spicule shipping no <pwd.h> at all, unnoticed because nothing
+# in-tree ever included a header spicule does not have -- this script is
 # the "header exists but isn't independently usable" half of that class).
 #
 # A separate gate rather than a tools/lint.sh stage: lint.sh is
@@ -1299,7 +1299,7 @@ minver:
 # Deliberately not part of `all` or `check`: they build the real thing with
 # $(CC), and this builds something else with clang.
 #
-# NTLIBC_TEST_PROFILE carries $(TEST_PROFILE) in, the same env name
+# SPICULE_TEST_PROFILE carries $(TEST_PROFILE) in, the same env name
 # tools/libc-test.sh already reads it under.  Exit 77 from the script
 # means "unavailable in this environment", not "failed" (see
 # tools/asan-available.sh); it is translated into one plain line here
@@ -1308,7 +1308,7 @@ minver:
 # and a caller that treats that as success is the failure mode this
 # project has closed nine times.
 asan: $(GENH)
-	@NTLIBC_TEST_PROFILE="$(TEST_PROFILE)" $(srcdir)/tools/asan-build.sh; \
+	@SPICULE_TEST_PROFILE="$(TEST_PROFILE)" $(srcdir)/tools/asan-build.sh; \
 	 rc=$$?; \
 	 if [ $$rc = 77 ]; then \
 	   echo "make: 'asan' is UNAVAILABLE here (exit 77), not failed -- see above."; \
@@ -1340,7 +1340,7 @@ fuzz: $(GENH)
 # fast, always-safe-to-run loop.  Gates on zero cfi-icall traps across
 # every applicable test/*.c.
 cfi: $(GENH)
-	@NTLIBC_CFI=1 $(srcdir)/tools/asan-build.sh
+	@SPICULE_CFI=1 $(srcdir)/tools/asan-build.sh
 
 # hwasan: a native HWAddressSanitizer build, staged for a future
 # arch/aarch64 target -- see tools/hwasan-build.sh.  Its runtime requires
@@ -1350,7 +1350,7 @@ cfi: $(GENH)
 hwasan: $(GENH)
 	@$(srcdir)/tools/hwasan-build.sh
 
-# tsan: opt-in ThreadSanitizer probe (tools/tsan-probe.sh) driving ntlibc
+# tsan: opt-in ThreadSanitizer probe (tools/tsan-probe.sh) driving spicule
 # from two host pthreads.  Gated: fails on the known-open aligned_list
 # finding or anything unclassified, and treats strtok/localtime-family
 # races as suppressed (spec-permitted static storage).  See CONTRIBUTING.md.

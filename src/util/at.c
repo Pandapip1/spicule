@@ -122,7 +122,7 @@ static int do_list(const char *dir, const char *qfilter, char **ids, int nids)
 	if (nids > 0) {
 		int i;
 		for (i = 0; i < nids; i++) {
-			char path[NTLIBC_SPOOL_PATH_MAX];
+			char path[SPICULE_SPOOL_PATH_MAX];
 			time_t run_at;
 			char queue[32];
 			if (job_path(dir, ids[i], "job", path, sizeof path) < 0 ||
@@ -145,7 +145,7 @@ static int do_list(const char *dir, const char *qfilter, char **ids, int nids)
 		}
 		while ((de = readdir(dp)) != 0) {
 			size_t l;
-			char path[NTLIBC_SPOOL_PATH_MAX];
+			char path[SPICULE_SPOOL_PATH_MAX];
 			time_t run_at;
 			char queue[32];
 			char id[64];
@@ -173,7 +173,7 @@ static int do_remove(const char *dir, char **ids, int nids)
 	int i;
 
 	for (i = 0; i < nids; i++) {
-		char jpath[NTLIBC_SPOOL_PATH_MAX], opath[NTLIBC_SPOOL_PATH_MAX];
+		char jpath[SPICULE_SPOOL_PATH_MAX], opath[SPICULE_SPOOL_PATH_MAX];
 		int had = 0;
 		if (job_path(dir, ids[i], "job", jpath, sizeof jpath) == 0 && unlink(jpath) == 0)
 			had = 1;
@@ -195,7 +195,7 @@ int __util_at_main(
 	const char *opt_f = 0, *opt_q = 0, *opt_t = 0;
 	char **rest;
 	int nrest = 0;
-	char dir[NTLIBC_SPOOL_PATH_MAX];
+	char dir[SPICULE_SPOOL_PATH_MAX];
 
 	rest = __util_mallocarray((size_t)argc + 1, sizeof(char *));
 	if (!rest) { __util_diagf("at: out of memory\n"); return 1; }

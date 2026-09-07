@@ -8,7 +8,7 @@
  *
  * Minimal PE/COFF *image format* structures -- as opposed to nt.h, which
  * is the native NT *API* (ntdll calling conventions, PEB/TEB, NTSTATUS).
- * The one thing this file exists for is ntlibc_pe_find_export(): given
+ * The one thing this file exists for is spicule_pe_find_export(): given
  * the base address of an already-mapped PE image, walk its own export
  * directory by hand and return a named export's address, using nothing
  * but memory reads -- no LdrGetProcedureAddress, no any other imported
@@ -24,8 +24,8 @@
  * fields needed to reach DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT]
  * and then walk the export directory are declared.
  */
-#ifndef NTLIBC_PE_H
-#define NTLIBC_PE_H
+#ifndef SPICULE_PE_H
+#define SPICULE_PE_H
 
 #include "nt.h"
 
@@ -167,7 +167,7 @@ typedef IMAGE_TLS_DIRECTORY32 IMAGE_TLS_DIRECTORY;
  * without calling the loader. Returns NULL if `base` is not a valid PE
  * image, has no export directory, or has no export by that name --
  * never partial/garbage. No ordinal-only lookup: nothing here needs it. */
-void *ntlibc_pe_find_export(void *base, const char *name);
+void *spicule_pe_find_export(void *base, const char *name);
 
 /* Reads [base, base+SizeOfImage) out of the mapped image's own PE
  * header (OptionalHeader.SizeOfImage) and returns it as [*start, *end).
@@ -176,7 +176,7 @@ void *ntlibc_pe_find_export(void *base, const char *name);
  * thunk's own address" (not yet resolved) without needing to remember
  * the thunk's address separately. Returns 0 (leaving *start and *end
  * untouched) if `base` is not a valid PE image. */
-int ntlibc_pe_dll_range(void *base, void **start, void **end);
+int spicule_pe_dll_range(void *base, void **start, void **end);
 
 /* Returns a pointer to the mapped image's own IMAGE_TLS_DIRECTORY (still
  * inside the image -- not a copy) via *dir, or 0 (leaving *dir untouched)
@@ -184,7 +184,7 @@ int ntlibc_pe_dll_range(void *base, void **start, void **end);
  * src/thread/nt/plat_thread.c to rebuild each new thread's own TLS block
  * by hand: see that file for why the directory's own Characteristics
  * field (nominally the required alignment) cannot be trusted here. */
-int ntlibc_pe_tls_directory(void *base, IMAGE_TLS_DIRECTORY **dir);
+int spicule_pe_tls_directory(void *base, IMAGE_TLS_DIRECTORY **dir);
 
 #endif
 

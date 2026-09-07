@@ -16,7 +16,7 @@
 /* Same escaping rule as src/sh/builtin.c's write_quoted() (bi_set's
  * `set` output); not shared, see that file's header.
  *
- * ntlibc.ValidPointer: open finding on the `*v` walk (all callers are
+ * spicule.ValidPointer: open finding on the `*v` walk (all callers are
  * genuinely NUL-terminated). withtok(null_terminated) on `v` closes it
  * here but pushes new findings onto every call site instead (tried;
  * net regression) -- same shape as crontab.c's split_field() and
@@ -36,9 +36,9 @@ int __atbatch_submit(const char *queue, time_t run_at, const char *srcfile,
 	char *id_out, size_t id_out_sz)
 {
 	extern char **environ;
-	char dir[NTLIBC_SPOOL_PATH_MAX];
-	char path[NTLIBC_SPOOL_PATH_MAX];
-	char tmp[NTLIBC_SPOOL_PATH_MAX];
+	char dir[SPICULE_SPOOL_PATH_MAX];
+	char path[SPICULE_SPOOL_PATH_MAX];
+	char tmp[SPICULE_SPOOL_PATH_MAX];
 	FILE *f, *src withtok(file_stream_open);
 	char *cwd;
 	mode_t um;
@@ -63,7 +63,7 @@ int __atbatch_submit(const char *queue, time_t run_at, const char *srcfile,
 	um = umask(0);
 	umask(um);
 
-	if (fprintf(f, "#!ntlibc-at-job 1\n#run_at %lld\n#submit_time %lld\n#queue %s\n",
+	if (fprintf(f, "#!spicule-at-job 1\n#run_at %lld\n#submit_time %lld\n#queue %s\n",
 	        (long long)run_at, (long long)time(0), queue) < 0)
 		goto fail;
 	if (fputs("cd ", f) == EOF) goto fail;

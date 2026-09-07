@@ -59,8 +59,8 @@
  */
 .text
 
-.globl __ntlibc_aarch64_cas32
-__ntlibc_aarch64_cas32:
+.globl __spicule_aarch64_cas32
+__spicule_aarch64_cas32:
 	/* x0 = address, w1 = expected old value, w2 = new value.
 	 * Returns (w0) the value actually observed in memory, whether or
 	 * not the swap took place -- matching the callers' compare_
@@ -81,8 +81,8 @@ __ntlibc_aarch64_cas32:
 	mov	w0, w3
 	ret
 
-.globl __ntlibc_aarch64_xadd32
-__ntlibc_aarch64_xadd32:
+.globl __spicule_aarch64_xadd32
+__spicule_aarch64_xadd32:
 	/* x0 = address, w1 = value to add (may be negative). Returns (w0)
 	 * the value in memory BEFORE the add, matching x86 LOCK XADD /
 	 * __atomic_fetch_add() semantics. */

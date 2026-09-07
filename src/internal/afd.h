@@ -53,8 +53,8 @@
  * wearing a different sa_family at the front door, not a third wire
  * shape here.
  */
-#ifndef _NTLIBC_AFD_H
-#define _NTLIBC_AFD_H
+#ifndef _SPICULE_AFD_H
+#define _SPICULE_AFD_H
 
 #include <stdint.h>
 #include "nt.h"
@@ -95,7 +95,7 @@
  * FILE_ANY_ACCESS)) is numerically 0x1202F too.  The second has only the
  * one source: Wine's ws2_32 answers getpeername out of its own cached
  * connect()/accept() state and never issues an ioctl for it, so there is
- * no second derivation of 0x12033 to check against.  ntlibc now follows
+ * no second derivation of 0x12033 to check against.  spicule now follows
  * that cached-state design too; the peer ioctl definitions remain here
  * as documented reverse-engineering and for their structural tests, not
  * as a production dependency. */
@@ -221,7 +221,7 @@ typedef struct _TRANSPORT_ADDRESS {
 #define AFD_TDI_ADDRESS_INFO_SIZE_IP (4 + 4 + 2 + 2 + TDI_ADDRESS_LENGTH_IP)
 
 /* ---- the EA buffer NtCreateFile takes (a generic NT structure, not
- * AFD-specific, but this is the only place ntlibc needs it -- field
+ * AFD-specific, but this is the only place spicule needs it -- field
  * layout confirmed by ReactOS's WSPSocket use of EaName/EaNameLength/
  * EaValueLength, dllmain.c around line 256). ------------------------- */
 typedef struct _FILE_FULL_EA_INFORMATION {
@@ -345,7 +345,7 @@ typedef struct _FILE_FULL_EA_INFORMATION {
  * MID_TRACE at drivers/network/afd/afd/main.c:21 -- DBG was already on,
  * so AFD_DbgPrint compiles in and only the runtime level suppressed it;
  * `ninja afd` and copying the driver onto the VM is the whole cost) and
- * running an ntlibc socket() program produced, from AfdCreateSocket()'s
+ * running an spicule socket() program produced, from AfdCreateSocket()'s
  * success path:
  *
  *     (/drivers/network/afd/afd/main.c:438)(AfdCreateSocket)
@@ -782,7 +782,7 @@ typedef struct _AFD_DISCONNECT_INFO {
  *
  * which puts Handles at +24 on x86_64 (at +16 on i386, where
  * ULONG_PTR is four bytes and every source below agrees anyway).
- * ntlibc followed it.  It is wrong: the field is not pointer-sized.
+ * spicule followed it.  It is wrong: the field is not pointer-sized.
  *
  *   - The AFD driver's own source, afd.h, "Structures for
  *     IOCTL_AFD_POLL" (Copyright (c) 1992 Microsoft Corporation;

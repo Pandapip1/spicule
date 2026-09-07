@@ -3,7 +3,7 @@
  *
  * i386 sibling of src/thread/linux/aarch64/clone.S -- see that file's
  * own banner for why this trampoline has to be hand-written assembly
- * at all. Same __ntlibc_linux_clone(fn, stack_top, flags, arg, tls)
+ * at all. Same __spicule_linux_clone(fn, stack_top, flags, arg, tls)
  * contract, musl's src/thread/i386/clone.s the direct model, cdecl
  * calling convention (this build's own established i386 convention --
  * see src/signal/i386/altstack.S's own banner, "i386 SysV Linux's own
@@ -36,7 +36,7 @@
  * SYS_exit=1, both confirmed against this host's own /nix/store
  * linux-headers asm/unistd_32.h.
  *
- *   long __ntlibc_linux_clone(unsigned (*fn)(void *), void *stack_top,
+ *   long __spicule_linux_clone(unsigned (*fn)(void *), void *stack_top,
  *                             long flags, void *arg, void *tls);
  *   8(%ebp)=fn, 12(%ebp)=stack_top, 16(%ebp)=flags, 20(%ebp)=arg,
  *   24(%ebp)=tls
@@ -60,9 +60,9 @@
  * the first 8 of those 20 reserved bytes are ever written to.
  */
 	.text
-	.globl __ntlibc_linux_clone
-	.type __ntlibc_linux_clone, @function
-__ntlibc_linux_clone:
+	.globl __spicule_linux_clone
+	.type __spicule_linux_clone, @function
+__spicule_linux_clone:
 	push	%ebp
 	mov	%esp, %ebp
 	push	%ebx			# callee-saved: this function clobbers
@@ -118,4 +118,4 @@ __ntlibc_linux_clone:
 					# banner -- so a plain per-thread exit
 					# is also this process's exit)
 	int	$0x80
-	.size __ntlibc_linux_clone, . - __ntlibc_linux_clone
+	.size __spicule_linux_clone, . - __spicule_linux_clone

@@ -12,14 +12,14 @@
  * ioctl()'s FIONBIO request needs no platform call of this kind at
  * all: it only ever touches this library's own fd-table flag. Its
  * TIOCGWINSZ request is split by platform: on NT it goes through the
- * separate, out-of-scope NTLIBC_USE_KERNEL32 path
+ * separate, out-of-scope SPICULE_USE_KERNEL32 path
  * (src/internal/kernel32.h), inline in src/ioctl/ioctl.c itself, not an
  * Nt-or-Zw- call and not this header; on Linux it is
  * __plat_tiocgwinsz() below, a real, unconditional ioctl(2) -- see that
  * declaration's own comment for why NT does not implement it.
  */
-#ifndef _NTLIBC_PLAT_IOCTL_H
-#define _NTLIBC_PLAT_IOCTL_H
+#ifndef _SPICULE_PLAT_IOCTL_H
+#define _SPICULE_PLAT_IOCTL_H
 
 #include "plat_handle.h"
 #include <sys/ioctl.h> /* struct winsize */
@@ -55,7 +55,7 @@ int __plat_file_eof_and_pos(__plat_handle_t h, long long *eof, long long *pos)
 
 /* Terminal window size (TIOCGWINSZ), Linux only: a real, unconditional
  * ioctl(2) against h -- unlike NT, Linux has no console-specific
- * escape-hatch gate (NTLIBC_USE_KERNEL32) to reach this; any real
+ * escape-hatch gate (SPICULE_USE_KERNEL32) to reach this; any real
  * tty/pty fd answers it directly, the same "no kernel32-equivalent
  * gate needed" call src/ioctl/ioctl.c's own TIOCGWINSZ case makes for
  * this platform. No NT implementation exists (NT's own path stays

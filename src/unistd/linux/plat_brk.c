@@ -5,7 +5,7 @@
  * brk(2) syscall. NT has no primitive shaped like brk() at all, so that
  * reasoning stays NT-only; Linux gets real code.
  *
- * Genuinely independent of ntlibc's own malloc(): src/malloc/linux/
+ * Genuinely independent of spicule's own malloc(): src/malloc/linux/
  * plat_malloc.c's __plat_alloc() is built entirely on raw mmap(2)/
  * munmap(2) and never touches the traditional data-segment break, so a
  * caller using brk()/sbrk() directly cannot corrupt, or be corrupted by,
@@ -18,7 +18,7 @@
  * is_sys_error() at all.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)

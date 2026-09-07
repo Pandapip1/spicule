@@ -3,7 +3,7 @@
  *
  * src/internal/plat_dlfcn.h's NT backend. Built on ntdll's
  * LdrLoadDll()/LdrGetProcedureAddress()/LdrUnloadDll() through
- * include/ntlibc/rpath.h's wrappers (ntlibc_rpath_load()/_sym()/
+ * include/spicule/rpath.h's wrappers (spicule_rpath_load()/_sym()/
  * _unload()/_error()/_error_seq(), src/internal/rpath.c); NT-specific
  * decisions -- what counts as an absolute path, where $ORIGIN is, the
  * sticky-error bookkeeping -- are made there, not here.
@@ -49,30 +49,30 @@
  * image, startup DLLs, and later LdrLoadDll modules) instead of just
  * one.
  *
- * NT-only: every function here calls into ntlibc_rpath_*(), which does
+ * NT-only: every function here calls into spicule_rpath_*(), which does
  * not exist in a native build (rpath.c refuses to compile there), so
  * this needs the same #error guard rather than being left simply
  * unimplemented -- tools/asan-build.sh's native run links every
  * compiled object into every test, so a stray undefined reference here
  * would break unrelated tests' native links too. */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
 #ifndef __has_feature
 #define __has_feature(x) 0 /* not clang: never claim a clang-only feature */
 #endif
-#if !defined(_WIN32) && (defined(_NTLIBC_NATIVE_BUILD) || \
+#if !defined(_WIN32) && (defined(_SPICULE_NATIVE_BUILD) || \
                         defined(__SANITIZE_ADDRESS__) || __has_feature(address_sanitizer))
-#error "plat_dlfcn.c is NT-only (built on ntlibc_rpath_*(), which is NT-only itself); see src/internal/rpath.c's comment for why this guard exists"
+#error "plat_dlfcn.c is NT-only (built on spicule_rpath_*(), which is NT-only itself); see src/internal/rpath.c's comment for why this guard exists"
 #endif
 #include <stddef.h>
 #include <dlfcn.h>
 #include <string.h>
 #include "libc.h"
 #include "plat_dlfcn.h"
-#include "ntlibc/rpath.h"
+#include "spicule/rpath.h"
 
 /* dlclose()'s no-op special case below compares against this rather
  * than hardcoding NULL, so it reads the same way dlopen(NULL, ...)'s
@@ -87,7 +87,7 @@ void *__plat_dlopen(const char *file, int mode)
 	if (!file)
 		return MAIN_IMAGE_HANDLE;
 
-	return ntlibc_rpath_load(file);
+	return spicule_rpath_load(file);
 }
 
 /* entry->DllBase below is a disclosed, deliberately unmarked residual:
@@ -110,10 +110,10 @@ void *__plat_dlsym(void *__restrict handle,
 		size_t len = strlen(name);
 
 		/* ANSI_STRING counts bytes in a USHORT.  Let the ordinary
-		 * ntlibc_rpath_sym() path below record STATUS_NAME_TOO_LONG
+		 * spicule_rpath_sym() path below record STATUS_NAME_TOO_LONG
 		 * instead of wrapping a long name into a different symbol. */
 		if (len > 0xffffu)
-			return ntlibc_rpath_sym((ntlibc_dll_t *)handle, name);
+			return spicule_rpath_sym((spicule_dll_t *)handle, name);
 		symbol.Buffer = (char *)name;
 		symbol.Length = (USHORT)len;
 		symbol.MaximumLength = symbol.Length;
@@ -129,7 +129,7 @@ void *__plat_dlsym(void *__restrict handle,
 		/* Record the ordinary diagnosable symbol error after the global
 		 * search, without recording every module miss along the way. */
 	}
-	return ntlibc_rpath_sym((ntlibc_dll_t *)handle, name);
+	return spicule_rpath_sym((spicule_dll_t *)handle, name);
 }
 
 int __plat_dlclose(void *handle)
@@ -142,16 +142,16 @@ int __plat_dlclose(void *handle)
 	if (handle == MAIN_IMAGE_HANDLE)
 		return 0;
 
-	return ntlibc_rpath_unload((ntlibc_dll_t *)handle) == 0 ? 0 : -1;
+	return spicule_rpath_unload((spicule_dll_t *)handle) == 0 ? 0 : -1;
 }
 
 /* Thin forwards -- see plat_dlfcn.h's own banner for why sticky-backend/
  * single-shot-front-door reconciliation lives in src/dlfcn/dlfcn.c and
- * not here: ntlibc_rpath_error()/_error_seq() already ARE exactly that
+ * not here: spicule_rpath_error()/_error_seq() already ARE exactly that
  * sticky-message/monotonic-sequence pair, unchanged since before this
  * split, and other callers of rpath.c (not just dlfcn) already depend
  * on their stickiness. */
-const char *__plat_dlerror(void) { return ntlibc_rpath_error(); }
-unsigned long __plat_dlerror_seq(void) { return ntlibc_rpath_error_seq(); }
+const char *__plat_dlerror(void) { return spicule_rpath_error(); }
+unsigned long __plat_dlerror_seq(void) { return spicule_rpath_error_seq(); }
 
 // NOLINTEND(misc-include-cleaner)

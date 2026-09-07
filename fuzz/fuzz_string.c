@@ -59,8 +59,8 @@
  * strcasestr -- are guarded behind it (and _BSD_SOURCE) in
  * include/string.h.  fuzz/Makefile compiles harnesses with
  * -D_XOPEN_SOURCE=700, which hides them; the library itself is built
- * with -D_ALL_SOURCE, so these are ntlibc's own functions being fuzzed
- * from a caller that asks for them the same way ntlibc's own sources do.
+ * with -D_ALL_SOURCE, so these are spicule's own functions being fuzzed
+ * from a caller that asks for them the same way spicule's own sources do.
  * Defined here rather than in the Makefile so no other harness's view of
  * the headers changes. */
 #define _GNU_SOURCE 1

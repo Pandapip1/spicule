@@ -153,7 +153,7 @@ static void test_sched_h_defines_sched_param(void)
 /* ============= island: <ctype.h>, alone ========================== */
 #include <ctype.h>
 
-#if NTLIBC_TEST(PASS, posix_headers_ctype_h_defines_locale_t) /* Was UNIMPL: <ctype.h> did not define locale_t.
+#if SPICULE_TEST(PASS, posix_headers_ctype_h_defines_locale_t) /* Was UNIMPL: <ctype.h> did not define locale_t.
 	 * basedefs/ctype.h.html: "The <ctype.h> header shall define the
 	 * locale_t type as described in <locale.h>."  It is an
 	 * unconditional sentence about a type, and it is what lets a
@@ -197,7 +197,7 @@ static void test_ctype_h_defines_locale_t(void)
 /* ============= island: <wctype.h>, alone ========================= */
 #include <wctype.h>
 
-#if NTLIBC_TEST(PASS, posix_headers_wctype_h_defines_locale_t) /* Was UNIMPL: <wctype.h> did not define locale_t either.
+#if SPICULE_TEST(PASS, posix_headers_wctype_h_defines_locale_t) /* Was UNIMPL: <wctype.h> did not define locale_t either.
 	 * basedefs/wctype.h.html lists the types the header shall define --
 	 * wint_t, wctrans_t, wctype_t, and locale_t "As described in
 	 * <locale.h>".  include/wctype.h asked bits/alltypes.h only for

@@ -17,14 +17,14 @@
  * plat_mem.c's banner), so there is no status table to translate.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
 #include "libc.h"
 
 /* errno must be a per-thread, modifiable lvalue (C11 7.5p2, POSIX XSH 2.3).
- * ntlibc has no threads of its own, but the NT programs it links into do,
+ * spicule has no threads of its own, but the NT programs it links into do,
  * and this shape is part of the library's ABI -- getting it right now is
  * far cheaper than changing it after the fact.
  *
@@ -37,7 +37,7 @@
  * not just clang.  The NT loader always processes the TLS directory of the
  * main executable image at process start (confirmed against Wine's
  * dlls/ntdll/loader.c: build_main_module() -> alloc_tls_slot()), which is
- * the only image ntlibc programs are -- no DLL involvement required.
+ * the only image spicule programs are -- no DLL involvement required.
  *
  * Natively (the ASan/TSan builds under fuzz/ntstubs.c, where there is no
  * real TEB) a plain __thread still works: clang supports it directly on

@@ -1,6 +1,6 @@
 .\" SPDX-FileCopyrightText: (C) 2026 Gavin John
 .\" SPDX-License-Identifier: GPL-3.0-or-later
-.TH ATD 8 "2026" "ntlibc" "ntlibc System Commands"
+.TH ATD 8 "2026" "spicule" "spicule System Commands"
 .SH NAME
 atd \- run jobs queued by at and batch
 .SH SYNOPSIS
@@ -75,7 +75,7 @@ it as one, if desired, is left to an external service wrapper.
 None.
 .SH ENVIRONMENT
 .TP
-.B NTLIBC_ATD_POLL_MS
+.B SPICULE_ATD_POLL_MS
 Overrides the poll interval, in milliseconds (default 1000). Ignored
 unless it parses as a positive integer. Since
 .BR at (1p)/ batch (1p)

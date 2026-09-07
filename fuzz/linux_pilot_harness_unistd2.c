@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Test-harness scaffolding for the "rest of src/unistd" Linux pilot --
- * NOT part of ntlibc, same standing as fuzz/linux_pilot_harness.c, which
+ * NOT part of spicule, same standing as fuzz/linux_pilot_harness.c, which
  * this file mirrors (fd table, __fd_pos_save/restore, __mq_fd_closed,
  * __fsize_* copied verbatim) since src/unistd/{close,read,write,lseek,
  * dup}.c are linked again here to round-trip data through pipe()s.

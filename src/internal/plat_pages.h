@@ -27,8 +27,8 @@
  * platform needs (a page, or a multiple of one) by the caller;
  * implementations are not expected to round anything themselves.
  */
-#ifndef _NTLIBC_PLAT_PAGES_H
-#define _NTLIBC_PLAT_PAGES_H
+#ifndef _SPICULE_PLAT_PAGES_H
+#define _SPICULE_PLAT_PAGES_H
 
 #include <features.h>
 #include <ownership.h>

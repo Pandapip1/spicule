@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Black-box tests for ntlibc's nm(1p) (Software Development option
+ * Black-box tests for spicule's nm(1p) (Software Development option
  * tier, this project's own POSIX-utilities plan's final tier). Same
  * technique as test/util-archive.c: the standalone obj/bin/nm.exe is
  * spawned as a real process (via __spawn()+waitpid()), and the shell

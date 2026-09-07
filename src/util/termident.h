@@ -41,8 +41,8 @@
  *    fallback, for a path this route could not resolve.
  */
 // NOLINTBEGIN(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
-#ifndef _NTLIBC_UTIL_TERMIDENT_H
-#define _NTLIBC_UTIL_TERMIDENT_H
+#ifndef _SPICULE_UTIL_TERMIDENT_H
+#define _SPICULE_UTIL_TERMIDENT_H
 
 /* path/shortname are always NUL-terminated once __util_find_terminal()
  * returns >= 0.  shortname is the "who"/write(1p)-style short form

@@ -8,7 +8,7 @@
  *
  * <wordexp.h>: shell word expansion. See src/wordexp/wordexp.c.
  *
- * Command substitution ($(cmd)/`cmd`) runs through ntlibc's own internal
+ * Command substitution ($(cmd)/`cmd`) runs through spicule's own internal
  * POSIX shell (src/sh/) via __sh_cmdsub(): the command list is parsed and
  * executed in-process, with standard output captured and trailing
  * newlines removed. A program that never calls wordexp()/system()/

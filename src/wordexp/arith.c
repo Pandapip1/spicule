@@ -126,8 +126,8 @@
  * bits on every target this library builds for (LLP64 on x86_64, ILP32
  * on i386 -- both arches' bits/limits.h say LONG_BIT 32), but these
  * sources are also compiled natively by tools/asan-build.sh and fuzz/,
- * where the host compiler's long is 64. What a caller of ntlibc's
- * wordexp() is allowed to write must be a property of ntlibc, not of
+ * where the host compiler's long is 64. What a caller of spicule's
+ * wordexp() is allowed to write must be a property of spicule, not of
  * whichever compiler happened to translate this file, so the ceiling
  * is the target's 32 in both builds. That also makes the guard
  * strictly conservative in the native build: it refuses counts in
@@ -135,7 +135,7 @@
  * host's long could have performed them.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)

@@ -19,7 +19,7 @@
  * WHERE THE LOCALE SAYS NOTHING.  "The LC_MONETARY category of the
  * current locale affects the behavior of this function including the
  * monetary radix character ..., the grouping separator, the currency
- * symbols, and formats."  ntlibc has one locale, and the POSIX locale's
+ * symbols, and formats."  spicule has one locale, and the POSIX locale's
  * LC_MONETARY block is "not available" throughout (src/misc/locale.c's
  * __posix_lconv: every string empty, every char field {CHAR_MAX}).  A
  * formatter cannot format with nothing, so each fallback is listed here

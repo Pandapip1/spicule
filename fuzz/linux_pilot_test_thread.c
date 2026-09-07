@@ -1,11 +1,11 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Linux thread-subsystem pilot smoke test -- NOT part of ntlibc, same
+ * Linux thread-subsystem pilot smoke test -- NOT part of spicule, same
  * standing as fuzz/ntstubs.c's own native-build scaffolding and fuzz/
  * linux_pilot_test.c (mman/unistd) before it.
  *
- * Unlike that first pilot, this one does NOT link a real ntlibc front
+ * Unlike that first pilot, this one does NOT link a real spicule front
  * door (no src/thread/pthread_mutex.c here) -- see src/thread/linux/
  * plat_thread.c's own banner for exactly why that front door cannot be
  * linked against this backend without also porting RtlAcquirePebLock()

@@ -10,7 +10,7 @@
  * for its caller to interpret.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -73,7 +73,7 @@ static ULONG NTAPI manager_trampoline(PVOID unused)
 
 int __plat_timer_manager_start(void (*loop)(void), __plat_handle_t *wake_out)
 {
-#ifdef _NTLIBC_NATIVE_BUILD
+#ifdef _SPICULE_NATIVE_BUILD
 	/* The native sanitizer shim has no NT thread or signal-delivery
 	 * transport.  SIGEV_NONE timers need neither: their remaining time
 	 * is derived from the selected clock whenever it is queried. */

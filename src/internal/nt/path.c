@@ -21,7 +21,7 @@
  * native paths that win that resolution are passed through unchanged.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -332,14 +332,14 @@ static int normalize_rel(WCHAR *w, size_t *np, int *trailing)
  * FUNCTION EXISTS.
  *
  * MEASURED ON REAL WINDOWS (GitHub windows-latest / Server 2025), from a
- * working directory of "D:\a\ntlibc\ntlibc":
+ * working directory of "D:\a\spicule\spicule":
  *
  *   open("chm.d/<255 bytes>")               -> -1, [ENAMETOOLONG]  (280)
  *   open("chm.d/<254 bytes>")               -> -1, [ENAMETOOLONG]  (279)
  *   open("<255 bytes>")                     -> -1, [ENAMETOOLONG]  (274)
  *   chdir("chm.d"); open("<255 bytes>")     -> -1, [ENAMETOOLONG]  (280)
  *   openat(dirfd_of_chm.d, "<255 bytes>")   ->  ok
- *   open("\\?\D:\a\ntlibc\ntlibc\chm.d\<255 bytes>") -> ok
+ *   open("\\?\D:\a\spicule\spicule\chm.d\<255 bytes>") -> ok
  *
  * The last two identify the culprit: NTFS and NtCreateFile are both happy
  * with the *same file*, created successfully, when the NT path is handed

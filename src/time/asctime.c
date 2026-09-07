@@ -17,8 +17,8 @@ char *asctime_r(const struct tm *tm, char *buf withtok(writable_span(30)))
 	char *p = buf;
 	int n;
 	__ownership_writable_span(p, 30);
-	const char *wd = (unsigned)tm->tm_wday < 7 ? __ntlibc_day_name_abbr[tm->tm_wday] : "???";
-	const char *mo = (unsigned)tm->tm_mon < 12 ? __ntlibc_month_name_abbr[tm->tm_mon] : "???";
+	const char *wd = (unsigned)tm->tm_wday < 7 ? __spicule_day_name_abbr[tm->tm_wday] : "???";
+	const char *mo = (unsigned)tm->tm_mon < 12 ? __spicule_month_name_abbr[tm->tm_mon] : "???";
 	/* Both branches are always a real string literal (either "???" or one
 	 * of names.c's fixed tables); the checker can't see into a global
 	 * array's initializer. */

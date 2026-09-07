@@ -1,6 +1,6 @@
 .\" SPDX-FileCopyrightText: (C) 2026 Gavin John
 .\" SPDX-License-Identifier: GPL-3.0-or-later
-.TH CROND 8 "2026" "ntlibc" "ntlibc System Commands"
+.TH CROND 8 "2026" "spicule" "spicule System Commands"
 .SH NAME
 crond \- run commands scheduled in the user's crontab
 .SH SYNOPSIS
@@ -81,7 +81,7 @@ that are still running.
 None.
 .SH ENVIRONMENT
 .TP
-.B NTLIBC_CROND_POLL_MS
+.B SPICULE_CROND_POLL_MS
 Overrides the poll interval, in milliseconds (default 1000). Ignored
 unless it parses as a positive integer. This does not change how often
 a schedule is actually evaluated against the wall clock \(em that

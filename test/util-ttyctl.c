@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Black-box tests for ntlibc's terminal-control utilities: stty(1p)
+ * Black-box tests for spicule's terminal-control utilities: stty(1p)
  * and tty(1p) (src/util/stty.c, src/util/tty.c). Same technique as
  * test/util-timeutil.c: the standalone obj/bin/<name>.exe is spawned
  * as a real process (via __spawn()+waitpid()), and the shell built-in

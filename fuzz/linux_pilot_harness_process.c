@@ -2,14 +2,14 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Test-harness scaffolding for the Linux process/fork/wait pilot -- NOT
- * part of ntlibc, exactly like fuzz/ntstubs.c is "not part of ntlibc" for
+ * part of spicule, exactly like fuzz/ntstubs.c is "not part of spicule" for
  * the native ASan build, and fuzz/linux_pilot_harness.c is for the
  * mman/unistd-fd-ops pilot this one sits alongside.
  *
  * src/process/fork.c, wait.c and children.c -- the real front doors this
  * test links and exercises -- call out to a wide net of other
  * subsystems' "forget this state, it does not survive a fork" hooks and
- * job-control helpers. On real ntlibc those are each a real function
+ * job-control helpers. On real spicule those are each a real function
  * owned by a different subsystem (thread, signal, mman's own front door,
  * malloc, aio, WOW64 detection). Six OTHER sessions are porting those
  * subsystems to Linux in parallel, each in an isolated worktree this one

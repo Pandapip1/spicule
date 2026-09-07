@@ -104,14 +104,14 @@
 #define _POSIX2_RE_DUP_MAX      255
 
 /* The rest of the "Minimum Values" table: EXACT values the standard
- * prints, not floors ntlibc chooses, so defining them claims nothing
- * about ntlibc's capabilities -- unlike <unistd.h>'s _POSIX_THREADS,
+ * prints, not floors spicule chooses, so defining them claims nothing
+ * about spicule's capabilities -- unlike <unistd.h>'s _POSIX_THREADS,
  * which asserts an option group is actually present. */
 #define _POSIX_THREAD_DESTRUCTOR_ITERATIONS 4
 #define _POSIX_THREAD_KEYS_MAX  128
 #define _POSIX_THREAD_THREADS_MAX 64
 
-/* [XSI]. Defined because ntlibc compiles -D_XOPEN_SOURCE=700 and
+/* [XSI]. Defined because spicule compiles -D_XOPEN_SOURCE=700 and
  * already implements readv()/writev()/IOV_MAX. */
 #define _XOPEN_IOV_MAX          16
 #define _XOPEN_NAME_MAX         255

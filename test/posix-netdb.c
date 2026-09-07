@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * <netdb.h> coverage. ntlibc now HAS a <netdb.h>, on Linux
+ * <netdb.h> coverage. spicule now HAS a <netdb.h>, on Linux
  * (include/netdb.h; src/netdb/linux/); see that header's own banner
  * for exact scope (getaddrinfo()/freeaddrinfo()/
  * gai_strerror(), getnameinfo(), all four enumerable databases --
@@ -24,7 +24,7 @@
  * unsound the moment that file is large (this environment's own real
  * /etc/hosts is an ad-block list with tens of thousands of entries) --
  * see each test's own comment for the fix, the same
- * NTLIBC_TEST_HOSTS_PATH-shaped fixture override src/internal/
+ * SPICULE_TEST_HOSTS_PATH-shaped fixture override src/internal/
  * nss_paths.h already provides and this file's own
  * test_netdb_hosts_fixture() already uses for the identical reason.
  *
@@ -63,7 +63,7 @@
  * noted here rather than silently corrected, and getaddrinfo() is
  * fenced below alongside freeaddrinfo(), which shares its page.
  *
- * This is a live gap rather than a decline: ntlibc HAS a socket layer
+ * This is a live gap rather than a decline: spicule HAS a socket layer
  * (src/socket/, include/netinet/in.h, include/arpa/inet.h, and
  * test/posix-socket*.c's six files), so a program that can already
  * open and connect a socket here still cannot turn a name into an
@@ -118,7 +118,7 @@ static void fixture_write(const char *path, const char *content);
  * getaddrinfo too), getnameinfo.html, gai_strerror.html
  * ================================================================== */
 
-/* UNWRAPPED (was NTLIBC_TEST(UNIMPL, posix_netdb_getaddrinfo_loopback)):
+/* UNWRAPPED (was SPICULE_TEST(UNIMPL, posix_netdb_getaddrinfo_loopback)):
  * include/netdb.h now exists; see this file's own top banner.
  * <arpa/inet.h> (for htons()/htonl(), used below) was missing from
  * this fence's own original include list -- never caught while the
@@ -187,7 +187,7 @@ static void test_posix_netdb_getaddrinfo_loopback(void)
 	      == EAI_NONAME);
 }
 
-/* UNWRAPPED (was NTLIBC_TEST(UNIMPL, posix_netdb_getnameinfo_numeric)):
+/* UNWRAPPED (was SPICULE_TEST(UNIMPL, posix_netdb_getnameinfo_numeric)):
  * getnameinfo() now exists on both platforms (src/netdb/linux/
  * getnameinfo.c, src/netdb/nt/plat_netdb.c) and the NI_NUMERICHOST |
  * NI_NUMERICSERV case this test exercises needs no database on either
@@ -240,7 +240,7 @@ static void test_posix_netdb_getnameinfo_numeric(void)
 	CHECK(strcmp(serv, "80") == 0);
 }
 
-/* UNWRAPPED (was NTLIBC_TEST(UNIMPL, posix_netdb_gai_strerror_text)):
+/* UNWRAPPED (was SPICULE_TEST(UNIMPL, posix_netdb_gai_strerror_text)):
  * <netdb.h> already included above. */
 static void test_posix_netdb_gai_strerror_text(void)
 {
@@ -284,7 +284,7 @@ static void test_posix_netdb_gai_strerror_text(void)
  * specifies setservent/getservent/getservbyname/getservbyport too
  * ================================================================== */
 
-/* UNWRAPPED (was NTLIBC_TEST(UNIMPL, posix_netdb_getservbyname_wellknown)):
+/* UNWRAPPED (was SPICULE_TEST(UNIMPL, posix_netdb_getservbyname_wellknown)):
  * a real /etc/services(5) parser now backs this whole family
  * (src/netdb/linux/services.c); see that file's own banner.
  *
@@ -370,7 +370,7 @@ static void test_posix_netdb_getservbyname_wellknown(void)
  * The protocol database -- .../functions/endprotoent.html
  * ================================================================== */
 
-/* UNWRAPPED (was NTLIBC_TEST(UNIMPL, posix_netdb_getprotobyname_tcp)):
+/* UNWRAPPED (was SPICULE_TEST(UNIMPL, posix_netdb_getprotobyname_tcp)):
  * a real /etc/protocols(5) parser now backs this whole family
  * (src/netdb/linux/protocols.c); see that file's own banner.
  *
@@ -436,7 +436,7 @@ static void test_posix_netdb_getprotobyname_tcp(void)
  * .../functions/endhostent.html, endnetent.html
  * ================================================================== */
 
-/* UNWRAPPED (was NTLIBC_TEST(UNIMPL, posix_netdb_hostent_sequential_access)):
+/* UNWRAPPED (was SPICULE_TEST(UNIMPL, posix_netdb_hostent_sequential_access)):
  * a real sequential /etc/hosts(5) walk now backs sethostent()/
  * gethostent()/endhostent() (src/netdb/linux/hostent.c). Unlike
  * getservbyname_wellknown/getprotobyname_tcp just above, this one CANNOT
@@ -457,7 +457,7 @@ static void test_posix_netdb_getprotobyname_tcp(void)
  * Linux-only: sethostent()/gethostent()/endhostent() are all
  * unconditional stand-ins on NT (sethostent()/endhostent() no-op,
  * gethostent() always returns NULL -- src/netdb/nt/plat_netdb.c), so
- * NTLIBC_TEST_HOSTS_PATH has nothing on that platform to actually walk. */
+ * SPICULE_TEST_HOSTS_PATH has nothing on that platform to actually walk. */
 #include <netdb.h>
 #include <sys/socket.h>
 
@@ -472,7 +472,7 @@ static void test_posix_netdb_hostent_sequential_access(void)
 		"::1 localhost6\n" /* real IPv6 literal: must be skipped, not counted */
 		"# a comment line, must not be parsed as a record\n"
 		"10.0.0.5 seqhost.example seqalias\n");
-	CHECK(setenv("NTLIBC_TEST_HOSTS_PATH", "nd-hosts", 1) == 0);
+	CHECK(setenv("SPICULE_TEST_HOSTS_PATH", "nd-hosts", 1) == 0);
 
 	/* endhostent.html: "The sethostent() function shall open a
 	 * connection to the database and set the next entry for retrieval
@@ -512,7 +512,7 @@ static void test_posix_netdb_hostent_sequential_access(void)
 	CHECK(entries == 2);
 	endhostent();
 
-	unsetenv("NTLIBC_TEST_HOSTS_PATH");
+	unsetenv("SPICULE_TEST_HOSTS_PATH");
 }
 #else
 /* See this test's own banner above: NT's sethostent()/gethostent()/
@@ -526,7 +526,7 @@ static void test_posix_netdb_hostent_sequential_access(void)
 }
 #endif /* defined(__linux__) */
 
-/* UNWRAPPED (was NTLIBC_TEST(UNIMPL, posix_netdb_netent_lookup)):
+/* UNWRAPPED (was SPICULE_TEST(UNIMPL, posix_netdb_netent_lookup)):
  * a real /etc/networks(5) parser now backs this whole family
  * (src/netdb/linux/networks.c); see that file's own banner for why
  * /etc/networks being absent (the common case on a real machine) is
@@ -538,7 +538,7 @@ static void test_posix_netdb_hostent_sequential_access(void)
  *
  * Linux-only: setnetent()/getnetent()/endnetent()/getnetbyname()/
  * getnetbyaddr() are all unconditional stand-ins on NT (no-op or NULL --
- * src/netdb/nt/plat_netdb.c), so NTLIBC_TEST_NETWORKS_PATH has nothing on
+ * src/netdb/nt/plat_netdb.c), so SPICULE_TEST_NETWORKS_PATH has nothing on
  * that platform to actually walk. */
 #include <netdb.h>
 #include <sys/socket.h>
@@ -553,7 +553,7 @@ static void test_posix_netdb_netent_lookup(void)
 		"loopnet 127.0.0.0\n"
 		"# a comment line, must not be parsed as a record\n"
 		"seqnet 10.0\n");
-	CHECK(setenv("NTLIBC_TEST_NETWORKS_PATH", "nd-networks", 1) == 0);
+	CHECK(setenv("SPICULE_TEST_NETWORKS_PATH", "nd-networks", 1) == 0);
 
 	/* endnetent.html: "The setnetent() function shall open and rewind
 	 * the database ... The getnetent() function shall read the next
@@ -602,7 +602,7 @@ static void test_posix_netdb_netent_lookup(void)
 	if (ne != NULL) CHECK(ne->n_net == 0x7f000000UL);
 	CHECK(getnetbyaddr(0x7f000000UL, AF_INET) != NULL);
 
-	unsetenv("NTLIBC_TEST_NETWORKS_PATH");
+	unsetenv("SPICULE_TEST_NETWORKS_PATH");
 }
 #else
 /* See this test's own banner above: NT's setnetent()/getnetent()/
@@ -621,7 +621,7 @@ static void test_posix_netdb_netent_lookup(void)
  * (src/netdb/linux/) -- the /etc/hosts parser, the /etc/nsswitch.conf
  * parser, and the UDP DNS stub resolver's real wire-format round trip
  * -- against hermetic fixtures, per this file's own top banner update
- * and src/internal/nss_paths.h's disclosed NTLIBC_TEST_*_PATH seam.
+ * and src/internal/nss_paths.h's disclosed SPICULE_TEST_*_PATH seam.
  * ================================================================== */
 #include <netdb.h>
 #include <netinet/in.h>
@@ -649,7 +649,7 @@ static void fixture_write(const char *path, const char *content)
  *
  * Linux-only: getaddrinfo() with a non-numeric node name needs the real
  * /etc/hosts + /etc/nsswitch.conf-driven "hosts" NSS walk this test's own
- * NTLIBC_TEST_HOSTS_PATH/NTLIBC_TEST_NSSWITCH_PATH fixtures target
+ * SPICULE_TEST_HOSTS_PATH/SPICULE_TEST_NSSWITCH_PATH fixtures target
  * (src/netdb/linux/hosts.c, src/netdb/linux/nsswitch.c). NT's
  * getaddrinfo() only answers the AI_NUMERICHOST case (see
  * src/netdb/nt/plat_netdb.c); a non-numeric node there is EAI_FAIL
@@ -666,8 +666,8 @@ static void test_netdb_hosts_fixture(void)
 		"# a comment line, must not be parsed as a record\n"
 		"10.20.30.41 second.example\n");
 	fixture_write("nd-nsswitch.conf", "hosts: files dns\npasswd: files\ngroup: files\n");
-	CHECK(setenv("NTLIBC_TEST_HOSTS_PATH", "nd-hosts", 1) == 0);
-	CHECK(setenv("NTLIBC_TEST_NSSWITCH_PATH", "nd-nsswitch.conf", 1) == 0);
+	CHECK(setenv("SPICULE_TEST_HOSTS_PATH", "nd-hosts", 1) == 0);
+	CHECK(setenv("SPICULE_TEST_NSSWITCH_PATH", "nd-nsswitch.conf", 1) == 0);
 
 	memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_INET;
@@ -689,8 +689,8 @@ static void test_netdb_hosts_fixture(void)
 	CHECK(getaddrinfo("second.example", NULL, &hints, &res) == 0);
 	if (res) freeaddrinfo(res);
 
-	unsetenv("NTLIBC_TEST_HOSTS_PATH");
-	unsetenv("NTLIBC_TEST_NSSWITCH_PATH");
+	unsetenv("SPICULE_TEST_HOSTS_PATH");
+	unsetenv("SPICULE_TEST_NSSWITCH_PATH");
 }
 #else
 /* See this test's own banner above: NT's getaddrinfo() only answers
@@ -720,15 +720,15 @@ static void test_netdb_nsswitch_hosts_files_only(void)
 
 	fixture_write("nd-hosts", "127.0.0.1 localhost\n");
 	fixture_write("nd-nsswitch.conf", "hosts: files\n");
-	CHECK(setenv("NTLIBC_TEST_HOSTS_PATH", "nd-hosts", 1) == 0);
-	CHECK(setenv("NTLIBC_TEST_NSSWITCH_PATH", "nd-nsswitch.conf", 1) == 0);
+	CHECK(setenv("SPICULE_TEST_HOSTS_PATH", "nd-hosts", 1) == 0);
+	CHECK(setenv("SPICULE_TEST_NSSWITCH_PATH", "nd-nsswitch.conf", 1) == 0);
 
 	memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_INET;
 	CHECK(getaddrinfo("nowhere.example", NULL, &hints, &res) == EAI_NONAME);
 
-	unsetenv("NTLIBC_TEST_HOSTS_PATH");
-	unsetenv("NTLIBC_TEST_NSSWITCH_PATH");
+	unsetenv("SPICULE_TEST_HOSTS_PATH");
+	unsetenv("SPICULE_TEST_NSSWITCH_PATH");
 }
 #else
 /* See this test's own banner above: NT's getaddrinfo() cannot produce
@@ -761,8 +761,8 @@ static void test_netdb_gethostbyname_fixture(void)
 
 	fixture_write("nd-hosts", "10.1.2.3 gethost.example ghalias\n");
 	fixture_write("nd-nsswitch.conf", "hosts: files\n");
-	CHECK(setenv("NTLIBC_TEST_HOSTS_PATH", "nd-hosts", 1) == 0);
-	CHECK(setenv("NTLIBC_TEST_NSSWITCH_PATH", "nd-nsswitch.conf", 1) == 0);
+	CHECK(setenv("SPICULE_TEST_HOSTS_PATH", "nd-hosts", 1) == 0);
+	CHECK(setenv("SPICULE_TEST_NSSWITCH_PATH", "nd-nsswitch.conf", 1) == 0);
 
 	he = gethostbyname("ghalias");
 	CHECK(he != NULL);
@@ -780,8 +780,8 @@ static void test_netdb_gethostbyname_fixture(void)
 	CHECK(he == NULL);
 	CHECK(h_errno == HOST_NOT_FOUND);
 
-	unsetenv("NTLIBC_TEST_HOSTS_PATH");
-	unsetenv("NTLIBC_TEST_NSSWITCH_PATH");
+	unsetenv("SPICULE_TEST_HOSTS_PATH");
+	unsetenv("SPICULE_TEST_NSSWITCH_PATH");
 }
 #else
 /* See this test's own banner above: NT's gethostbyname() is an
@@ -1035,9 +1035,9 @@ static void test_netdb_dns_udp_roundtrip(void)
 	fixture_write("nd-resolv.conf", resolvbuf);
 	fixture_write("nd-hosts", "127.0.0.1 localhost\n"); /* deliberately no match: force the dns step */
 	fixture_write("nd-nsswitch.conf", "hosts: files dns\n");
-	CHECK(setenv("NTLIBC_TEST_HOSTS_PATH", "nd-hosts", 1) == 0);
-	CHECK(setenv("NTLIBC_TEST_NSSWITCH_PATH", "nd-nsswitch.conf", 1) == 0);
-	CHECK(setenv("NTLIBC_TEST_RESOLV_PATH", "nd-resolv.conf", 1) == 0);
+	CHECK(setenv("SPICULE_TEST_HOSTS_PATH", "nd-hosts", 1) == 0);
+	CHECK(setenv("SPICULE_TEST_NSSWITCH_PATH", "nd-nsswitch.conf", 1) == 0);
+	CHECK(setenv("SPICULE_TEST_RESOLV_PATH", "nd-resolv.conf", 1) == 0);
 
 	memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_INET;
@@ -1050,9 +1050,9 @@ static void test_netdb_dns_udp_roundtrip(void)
 		freeaddrinfo(res);
 	}
 
-	unsetenv("NTLIBC_TEST_HOSTS_PATH");
-	unsetenv("NTLIBC_TEST_NSSWITCH_PATH");
-	unsetenv("NTLIBC_TEST_RESOLV_PATH");
+	unsetenv("SPICULE_TEST_HOSTS_PATH");
+	unsetenv("SPICULE_TEST_NSSWITCH_PATH");
+	unsetenv("SPICULE_TEST_RESOLV_PATH");
 
 	CHECK(waitpid(child, &status, 0) == child);
 	CHECK(WIFEXITED(status) && WEXITSTATUS(status) == 0);

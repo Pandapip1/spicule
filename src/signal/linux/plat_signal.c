@@ -30,7 +30,7 @@
  * this convention reopens.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -110,7 +110,7 @@
 
 /* Raw syscall trampoline, not glibc's syscall(2) wrapper: glibc
  * translates a kernel failure into -1 plus its OWN errno storage,
- * distinct from ntlibc's -nostdinc <errno.h>, so `errno = (int)-ret`
+ * distinct from spicule's -nostdinc <errno.h>, so `errno = (int)-ret`
  * below needs the raw kernel [-4095,-1]-encodes-errno value directly,
  * whichever arch's raw instruction below provides it. */
 #include <stdarg.h>
@@ -310,7 +310,7 @@ void __plat_signal_wait(__plat_handle_t wake_event, int has_timeout, long long t
 }
 
 /* Both real call sites (signal.c's stop-event handling) hand this a
- * struct ntlibc_linux_sync* from __plat_stop_event_create()/
+ * struct spicule_linux_sync* from __plat_stop_event_create()/
  * __plat_stop_event_probe() -- the SAME domain __plat_event_set() uses,
  * NOT this file's own box()/unbox() eventfd domain __plat_signal_wait()
  * uses for `wake_event`. Decoding it as `fd+1` used to hand ppoll()/read()
@@ -324,7 +324,7 @@ void __plat_signal_wait(__plat_handle_t wake_event, int has_timeout, long long t
  * way ppoll()+read() gets it for free from EFD_SEMAPHORE. */
 int __plat_event_peek(__plat_handle_t ev)
 {
-	struct ntlibc_linux_sync *obj = (struct ntlibc_linux_sync *)ev;
+	struct spicule_linux_sync *obj = (struct spicule_linux_sync *)ev;
 	int expected = 1;
 
 	return __atomic_compare_exchange_n(&obj->futex, &expected, 0, 0,
@@ -558,8 +558,8 @@ void __plat_sig_default_terminate(int sig)
 
 /* arch/aarch64/src/sigreturn_trampoline.S has the real SA_RESTORER ABI
  * contract. Declared as a plain function so `act.k_restorer =
- * __ntlibc_sigreturn_trampoline` below needs no cast. */
-void __ntlibc_sigreturn_trampoline(void); // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- libc-internal name is intentionally reserved against application collision
+ * __spicule_sigreturn_trampoline` below needs no cast. */
+void __spicule_sigreturn_trampoline(void); // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- libc-internal name is intentionally reserved against application collision
 
 /* The one real kernel-level entry point installed below, for both real
  * hardware faults (the fixed five __plat_sig_install_fault_handlers()
@@ -606,7 +606,7 @@ void __plat_sig_install_real_handler(int sig)
 
 	act.k_handler = (void (*)(int))(void *)real_dispatch; // NOLINT(bugprone-casting-through-void) -- same sigaction union-slot recovery signal.c's own SA_SIGINFO cast documents
 	act.k_flags = SA_SIGINFO | SA_RESTORER;
-	act.k_restorer = __ntlibc_sigreturn_trampoline;
+	act.k_restorer = __spicule_sigreturn_trampoline;
 	kernel_sigaction_zero_mask(&act);
 	syscall(SYS_rt_sigaction, (long)sig, &act, 0L, (long)RT_SIGSETSIZE);
 }
@@ -656,7 +656,7 @@ static void stop_event_path(const struct _UNICODE_STRING *name, char *buf, size_
     __attribute__((nonnull(1)));
 static void stop_event_path(const struct _UNICODE_STRING *name, char *buf, size_t bufsz)
 {
-	static const char prefix[] = "/tmp/.ntlibc-stopev.";
+	static const char prefix[] = "/tmp/.spicule-stopev.";
 	size_t plen = sizeof(prefix) - 1, i, j = 0;
 	size_t n = name->Length / sizeof(unsigned short);
 	for (i = 0; i < plen && j < bufsz - 1; i++) buf[j++] = prefix[i];
@@ -670,7 +670,7 @@ static void stop_event_path(const struct _UNICODE_STRING *name, char *buf, size_
 /* Opens-or-creates the backing file for `name` and hands back its
  * MAP_SHARED mapping plus whether THIS call created it. */
 static int open_shared_stop_event(const struct _UNICODE_STRING *name, int *created,
-                                  struct ntlibc_linux_sync **out)
+                                  struct spicule_linux_sync **out)
 {
 	char path[128];
 	long fd, r;
@@ -684,23 +684,23 @@ static int open_shared_stop_event(const struct _UNICODE_STRING *name, int *creat
 		if (is_sys_error(fd)) { errno = (int)-fd; return -1; }
 	} else {
 		*created = 1;
-		syscall(SYS_ftruncate_ps, fd, (long)sizeof(struct ntlibc_linux_sync), 0L, 0L, 0L, 0L);
+		syscall(SYS_ftruncate_ps, fd, (long)sizeof(struct spicule_linux_sync), 0L, 0L, 0L, 0L);
 	}
-	r = syscall(SYS_mmap_ps, 0L, (long)sizeof(struct ntlibc_linux_sync),
+	r = syscall(SYS_mmap_ps, 0L, (long)sizeof(struct spicule_linux_sync),
 	           (long)(PROT_READ_PS | PROT_WRITE_PS), (long)MAP_SHARED_PS, fd, 0L);
 	syscall(SYS_close, fd, 0L, 0L, 0L, 0L, 0L);
 	if (is_sys_error(r)) { errno = (int)-r; return -1; }
 	/* mmap(2) returns the mapped address in a signed machine-word
 	 * syscall register; this backing store's whole point is being
-	 * reinterpreted as struct ntlibc_linux_sync. */
-	*out = unsafe_assume_valid_pointer((struct ntlibc_linux_sync *)r);
-	if (*created) { (*out)->futex = 0; (*out)->max = 0; (*out)->kind = 2 /* NTLIBC_LX_SYNC_EVENT */; }
+	 * reinterpreted as struct spicule_linux_sync. */
+	*out = unsafe_assume_valid_pointer((struct spicule_linux_sync *)r);
+	if (*created) { (*out)->futex = 0; (*out)->max = 0; (*out)->kind = 2 /* SPICULE_LX_SYNC_EVENT */; }
 	return 0;
 }
 
 __plat_handle_t __plat_stop_event_create(const struct _UNICODE_STRING *name)
 {
-	struct ntlibc_linux_sync *obj;
+	struct spicule_linux_sync *obj;
 	int created;
 	if (open_shared_stop_event(name, &created, &obj) < 0) return __PLAT_HANDLE_NULL;
 	return (__plat_handle_t)obj;
@@ -709,7 +709,7 @@ __plat_handle_t __plat_stop_event_create(const struct _UNICODE_STRING *name)
 int __plat_stop_event_probe(const struct _UNICODE_STRING *name, __plat_handle_t *out,
                             int *already_existed)
 {
-	struct ntlibc_linux_sync *obj;
+	struct spicule_linux_sync *obj;
 	int created;
 	if (open_shared_stop_event(name, &created, &obj) < 0) return -1;
 	*out = (__plat_handle_t)obj;

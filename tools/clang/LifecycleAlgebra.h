@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: (C) 2026 Gavin John
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef NTLIBC_LIFECYCLE_ALGEBRA_H
-#define NTLIBC_LIFECYCLE_ALGEBRA_H
+#ifndef SPICULE_LIFECYCLE_ALGEBRA_H
+#define SPICULE_LIFECYCLE_ALGEBRA_H
 
 #include <cstdint>
 
-namespace ntlibc::algebra {
+namespace spicule::algebra {
 
 /* An equality-only nominal atom.  Values have no numeric meaning; the
  * integer representation merely keeps this pure table independent of Clang
@@ -362,6 +362,6 @@ constexpr LifecycleObservation requireNotLive(LifecycleFact Fact) {
  *   and pointee extent tracked by the object algebra rather than this table.
  */
 
-} // namespace ntlibc::algebra
+} // namespace spicule::algebra
 
 #endif

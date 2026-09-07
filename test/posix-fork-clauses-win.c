@@ -470,7 +470,7 @@ int main(void)
 	 * fuzz/ntstubs.c.  That file's RtlCloneUserProcess is a real host
 	 * fork(2) -- which is why fork tests are no longer on its
 	 * not_native() list -- but the clauses below are about NT's clone
-	 * and about ntlibc's own descriptor model on top of it, and the
+	 * and about spicule's own descriptor model on top of it, and the
 	 * stub reproduces neither faithfully enough to hold them to.
 	 *
 	 * Measured there, with a standalone probe against the same

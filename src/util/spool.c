@@ -49,10 +49,10 @@ int __spool_dir(const char *sub, char *buf, size_t bufsz)
 
 	if (__spool_home(buf, bufsz) < 0) { errno = ENOENT; return -1; }
 	homelen = strlen(buf);
-	need = homelen + strlen("/.ntlibc/") + strlen(sub) + 1;
+	need = homelen + strlen("/.spicule/") + strlen(sub) + 1;
 	if (need > bufsz) { errno = ENAMETOOLONG; return -1; }
 
-	strcpy(buf + homelen, "/.ntlibc");
+	strcpy(buf + homelen, "/.spicule");
 	if (mkdir_tolerant(buf) < 0) return -1;
 
 	strcat(buf, "/");
@@ -79,7 +79,7 @@ FILE *__spool_new_job(const char *dir, char *id_out, size_t id_out_sz,
 
 	for (attempt = 0; attempt < MAX_ID_ATTEMPTS; attempt++, id++) {
 		int n = snprintf(path_out, path_out_sz, "%s/%ld.job", dir, id);
-		char tmp[NTLIBC_SPOOL_PATH_MAX];
+		char tmp[SPICULE_SPOOL_PATH_MAX];
 
 		if (n < 0 || (size_t)n >= path_out_sz) { errno = ENAMETOOLONG; return 0; }
 		n = snprintf(tmp, sizeof tmp, "%s.tmp", path_out);
@@ -105,7 +105,7 @@ FILE *__spool_new_job(const char *dir, char *id_out, size_t id_out_sz,
 
 int __spool_publish_job(const char *path)
 {
-	char tmp[NTLIBC_SPOOL_PATH_MAX];
+	char tmp[SPICULE_SPOOL_PATH_MAX];
 	int n = snprintf(tmp, sizeof tmp, "%s.tmp", path);
 
 	if (n < 0 || (size_t)n >= sizeof tmp) { errno = ENAMETOOLONG; return -1; }
@@ -142,7 +142,7 @@ int __spool_job_header(const char *path, time_t *run_at, char *queue, size_t que
 
 const char *__spool_crontab_path(char *buf, size_t bufsz)
 {
-	char dir[NTLIBC_SPOOL_PATH_MAX];
+	char dir[SPICULE_SPOOL_PATH_MAX];
 	int n;
 
 	if (__spool_dir("crontabs", dir, sizeof dir) < 0) return 0;

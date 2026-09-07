@@ -21,7 +21,7 @@
  *     being silently dropped.
  *
  * struct sched_param is defined here, not in <sched.h>, because
- * ntlibc's <sched.h> deliberately declares nothing from the
+ * spicule's <sched.h> deliberately declares nothing from the
  * _POSIX_PRIORITY_SCHEDULING option group (a configure probe that
  * finds sched_setscheduler() would conclude it's present, which NT
  * can't honestly support) -- but posix_spawnattr_setschedparam() still

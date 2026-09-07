@@ -72,7 +72,7 @@ for h in "$@"; do
 	rm -rf "$dir"; mkdir -p "$dir"
 
 	echo "== fuzz_$h (${COV_TIME}s)"
-	NTLIBC_FUZZ_MIRROR=$dir \
+	SPICULE_FUZZ_MIRROR=$dir \
 	LD_PRELOAD=$SAN_SO ASAN_OPTIONS=detect_leaks=1:handle_abort=1 \
 	UBSAN_OPTIONS=print_stacktrace=1 \
 	"$exe" -max_total_time="$COV_TIME" -max_len=256 \

@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Test-harness scaffolding for the pthread_cond_t front-door pilot
- * (fuzz/linux_pilot_test_pthread_cond.c) -- NOT part of ntlibc, same
+ * (fuzz/linux_pilot_test_pthread_cond.c) -- NOT part of spicule, same
  * standing as every other fuzz/linux_pilot_harness_*.c file. Mirrors
  * fuzz/linux_pilot_harness_pthread_mutex.c's own stub set almost
  * verbatim (see that file's banner for the rationale behind each

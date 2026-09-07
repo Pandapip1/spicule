@@ -21,7 +21,7 @@
  * before anything else, including __fd_init().
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -232,7 +232,7 @@ static struct elf_phdr *find_tls_phdr(long *auxv, unsigned long *load_bias_out)
  *
  * The dtv slot is real: src/dlfcn/linux/plat_dlfcn.c builds per-
  * dlopen()'d-object TLS on top of it, with module 1 reserved for the
- * main image (dtv[1] = tp, set inside __ntlibc_linux_tls_block_create()
+ * main image (dtv[1] = tp, set inside __spicule_linux_tls_block_create()
  * below).
  *
  * A TCB (with real DTV) is ALWAYS installed, even with no PT_TLS
@@ -243,13 +243,13 @@ static struct elf_phdr *find_tls_phdr(long *auxv, unsigned long *load_bias_out)
  *
  * The actual block construction (raw mmap() of the TCB+DTV, copying
  * PT_TLS's data in) lives in src/internal/linux/tls_setup.c's
- * __ntlibc_linux_tls_block_create(), not here: src/thread/linux/
+ * __spicule_linux_tls_block_create(), not here: src/thread/linux/
  * plat_thread.c's __plat_thread_spawn() needs to build the exact same
  * shape for every pthread_create()'d thread's own CLONE_SETTLS block,
  * and sharing the one real implementation rules out the two ever
  * silently drifting apart. This function's own job narrows to finding
  * PT_TLS (auxv is only ever available here, at process startup) and
- * publishing it through __ntlibc_linux_tls_layout for that shared
+ * publishing it through __spicule_linux_tls_layout for that shared
  * builder to read -- including from a later pthread_create() call, long
  * after auxv has gone out of scope. */
 static void linux_setup_tls(long *auxv)
@@ -258,12 +258,12 @@ static void linux_setup_tls(long *auxv)
 	struct elf_phdr *tls = find_tls_phdr(auxv, &load_bias);
 	void *tp;
 
-	__ntlibc_linux_tls_layout.vaddr = tls ? tls->p_vaddr + load_bias : 0;
-	__ntlibc_linux_tls_layout.filesz = tls ? tls->p_filesz : 0;
-	__ntlibc_linux_tls_layout.memsz = tls ? tls->p_memsz : 0;
-	__ntlibc_linux_tls_layout.align = tls ? tls->p_align : 0;
+	__spicule_linux_tls_layout.vaddr = tls ? tls->p_vaddr + load_bias : 0;
+	__spicule_linux_tls_layout.filesz = tls ? tls->p_filesz : 0;
+	__spicule_linux_tls_layout.memsz = tls ? tls->p_memsz : 0;
+	__spicule_linux_tls_layout.align = tls ? tls->p_align : 0;
 
-	tp = __ntlibc_linux_tls_block_create();
+	tp = __spicule_linux_tls_block_create();
 	if (!tp) return; /* bootstrap alloc failed -- leave TPIDR_EL0 unset */
 
 	__asm__ volatile("msr tpidr_el0, %0" : : "r"(tp) : "memory");
@@ -452,7 +452,7 @@ _Noreturn void __linux_start_main(long *sp)
 	 * real exit(3) value or a signal-death encoding (128+n). */
 	if (!__verify_ldbl_layout()) {
 		static const char msg[] =
-			"ntlibc: long double bit-layout assumption failed at startup\n";
+			"spicule: long double bit-layout assumption failed at startup\n";
 		raw_syscall(SYS_write, 2, (long)msg, sizeof msg - 1, 0, 0, 0);
 		__plat_terminate(111);
 	}
@@ -470,7 +470,7 @@ _Noreturn void __linux_start_main(long *sp)
 	environ = linux_build_environ(envp, envc);
 	if (!environ) {
 		static const char msg[] =
-			"ntlibc: out of memory building environ at startup\n";
+			"spicule: out of memory building environ at startup\n";
 		raw_syscall(SYS_write, 2, (long)msg, sizeof msg - 1, 0, 0, 0);
 		__plat_terminate(111);
 	}

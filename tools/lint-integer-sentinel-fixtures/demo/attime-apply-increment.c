@@ -4,7 +4,7 @@
  * NOT a wired-in regression fixture (lint.sh's fixture loop only globs
  * tools/lint-integer-sentinel-fixtures/*.c directly, not this demo/
  * subdirectory) -- this is a one-off, isolated demonstration that
- * ntlibc.IntegerSentinel has real teeth against a real bug SHAPE, requested
+ * spicule.IntegerSentinel has real teeth against a real bug SHAPE, requested
  * by the mechanism's own design task. It is a byte-for-byte structural copy
  * of src/util/attime.c's own static apply_increment()/maybe_increment()
  * (as they exist in this tree today, unmodified), with exactly one line
@@ -76,7 +76,7 @@ static time_t apply_increment(time_t base, long n, enum period p)
  * statement alone. The point of keeping the wrapper (rather than calling
  * apply_increment() directly from seconds_until below) is to prove the
  * tracked value survives being forwarded through an ordinary, unmarked
- * helper -- ntlibc.IntegerSentinel's checkPostCall only tags a value at the
+ * helper -- spicule.IntegerSentinel's checkPostCall only tags a value at the
  * exact call to a marked function, so this only stays flagged downstream
  * because Clang's own inliner substitutes maybe_increment_plus()'s body at
  * its call site, carrying the identical tracked symbol through; a helper
@@ -99,7 +99,7 @@ static time_t maybe_increment_plus(long v, enum period p, time_t base)
  * hazard, not a harmless pass-through: the real caller chain (attime.c's
  * __attime_parse -> its own arithmetic against "now") eventually casts or
  * compares this exact value the same way. This is the one line this demo
- * actually expects ntlibc.IntegerSentinel to flag. */
+ * actually expects spicule.IntegerSentinel to flag. */
 int seconds_until(time_t deadline, time_t now)
 {
 	time_t incremented = maybe_increment_plus(3, P_DAY, deadline);

@@ -3,7 +3,7 @@
  *
  * Linux implementation of src/internal/plat_time.h -- see src/mman/linux/
  * plat_mem.c's own banner for the general discipline every Linux backend
- * file keeps (raw syscall(2), no host libc, -nostdinc against ntlibc's
+ * file keeps (raw syscall(2), no host libc, -nostdinc against spicule's
  * OWN generated headers, aarch64 syscall numbers confirmed against this
  * host's real glibc rather than assumed).
  *
@@ -21,14 +21,14 @@
  * values on both backends (see plat_mem.c's own banner) rather than
  * each backend picking its own vocabulary.
  *
- * ntlibc's own CLOCK_REALTIME (0) and CLOCK_MONOTONIC (1)
+ * spicule's own CLOCK_REALTIME (0) and CLOCK_MONOTONIC (1)
  * (include/time.h) are confirmed, not assumed, to already match the
  * Linux kernel's own clockid_t values for clock_gettime(2)/
  * clock_settime(2) -- verified against this build host's real
  * <time.h> (POSIX/Linux both fix these at 0 and 1) -- so
  * this file passes them straight through with no translation table,
  * unlike a backend for a platform whose clock IDs did not already
- * line up. ntlibc's own struct timespec (include/alltypes.h.in:
+ * line up. spicule's own struct timespec (include/alltypes.h.in:
  * "STRUCT timespec { time_t tv_sec; long tv_nsec; }", both 8-byte
  * fields, no padding) was likewise confirmed field-order- and width-
  * compatible with the raw 16-byte structure the Linux clock_gettime(2)
@@ -41,7 +41,7 @@
  * from "it's just seconds and nanoseconds".
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -55,7 +55,7 @@
  * <sys/syscall.h>/<time.h>/<sys/resource.h> via a throwaway host-glibc
  * oracle program (see src/mman/linux/plat_mem.c's banner for why they
  * cannot come from a host header in this file itself: this build is
- * -nostdinc against ntlibc's own generated headers, never glibc's).
+ * -nostdinc against spicule's own generated headers, never glibc's).
  * Oracle output on this host: SYS_clock_gettime=113, SYS_clock_settime=112,
  * SYS_getrusage=165, CLOCK_REALTIME=0, CLOCK_MONOTONIC=1,
  * sizeof(struct timespec)=16, sizeof(time_t)=sizeof(long)=8,
@@ -67,19 +67,19 @@
  * i386 is genuinely different, not just a number swap: its plain
  * SYS_clock_gettime/_settime (265/264) are the LEGACY Y2038-unsafe
  * 32-bit-time_t syscalls, writing an 8-byte kernel struct, while
- * ntlibc's own struct timespec always carries a 64-bit time_t
+ * spicule's own struct timespec always carries a 64-bit time_t
  * (include/alltypes.h.in's own `TYPEDEF _Int64 time_t`, the same
  * Y2038-safe choice as off_t) -- handing that wider struct's address
  * to the narrow legacy syscall would only let the kernel fill the
  * first 8 of its 12 bytes, leaving stale/uninitialized high bits and a
  * garbage tv_nsec. This file instead uses the real Y2038-safe *64
- * syscalls on i386 (403/404), matching ntlibc's own 64-bit time_t
+ * syscalls on i386 (403/404), matching spicule's own 64-bit time_t
  * choice, decoded through the __lx_timespec64/__lx_rusage32 kernel-ABI
- * mirrors below rather than ntlibc's own wider structs. i386's
+ * mirrors below rather than spicule's own wider structs. i386's
  * SYS_getrusage (77) has no such split -- getrusage(2)'s own struct
  * rusage was never widened for Y2038 on ANY arch (its timeval fields
  * stay the kernel's native `long` width, 32-bit on i386 to this day),
- * so it is ntlibc's own struct rusage (always 64-bit `time_t
+ * so it is spicule's own struct rusage (always 64-bit `time_t
  * tv_sec`/`suseconds_t tv_usec` in its embedded timevals) that
  * mismatches the raw i386 ABI here, the same shape of gap as
  * clock_gettime's, addressed the same way (see __lx_rusage32 below). */
@@ -101,7 +101,7 @@
 
 #if defined(__i386__)
 /* Raw i386 kernel ABI mirrors -- see this file's own banner above for
- * why ntlibc's own struct timespec/struct rusage cannot be used
+ * why spicule's own struct timespec/struct rusage cannot be used
  * directly here the way they can on the two LP64 arches. Sizes
  * confirmed against the real kernel uapi shapes (struct
  * __kernel_timespec: two 8-byte fields, no gap regardless of i386's
@@ -139,7 +139,7 @@ _Static_assert(sizeof(struct __lx_rusage32) == 72,
  * -nostdlib -- only compiling avoids the host headers, the final link
  * step still pulls in host libc), and glibc's syscall() performs its
  * own error translation: on failure it returns exactly -1 and sets
- * glibc's OWN errno (a different memory location than ntlibc's own
+ * glibc's OWN errno (a different memory location than spicule's own
  * errno global, src/internal/errno.c) to the real code -- it does NOT
  * hand back the raw kernel -errno in [-4095,-1] this file's
  * is_sys_error()/`errno = (int)-ret` translation requires. Confirmed
@@ -298,8 +298,8 @@ int __plat_process_cpu_ticks(long long *kernel, long long *user) // NOLINT(bugpr
 	 * there for the native-build symbol-preemption reason its comment
 	 * describes) -- so on the two LP64 arches (unlike plat_fd.c's
 	 * SEEK_END comment, which had to hand-roll a local struct because
-	 * ntlibc's own headers had nothing to reuse), this backend can and
-	 * does use ntlibc's own sys/resource.h struct rusage/getrusage()
+	 * spicule's own headers had nothing to reuse), this backend can and
+	 * does use spicule's own sys/resource.h struct rusage/getrusage()
 	 * prototype directly. Its 144-byte size was confirmed to match this
 	 * host's raw SYS_getrusage output exactly via the same oracle
 	 * program. i386 is the one arch where that no longer holds -- see
@@ -381,7 +381,7 @@ int __plat_process_cpu_ticks(long long *kernel, long long *user) // NOLINT(bugpr
  * correctly above. Only SIGEV_SIGNAL notification -- the manager thread
  * actually firing a signal on a deadline -- is unavailable here, exactly
  * mirroring the native (non-NT) sanitizer shim's own EAGAIN path in
- * src/time/nt/plat_time.c's #ifdef _NTLIBC_NATIVE_BUILD branch, which
+ * src/time/nt/plat_time.c's #ifdef _SPICULE_NATIVE_BUILD branch, which
  * has the identical "no thread/signal-delivery transport" limitation
  * for a different reason. */
 int __plat_timer_manager_start(void (*loop)(void), __plat_handle_t *wake_out)

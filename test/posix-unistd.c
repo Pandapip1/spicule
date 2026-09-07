@@ -87,7 +87,7 @@ static void test_open_umask_bug(void)
  * so chmod() on a 0444 file was permanently EACCES.  This is what
 	 * broke GNU tar extraction downstream: tar creates most files 0444,
 	 * then chmod()s/utimensat()s them. */
-#if NTLIBC_TEST(PASS, posix_unistd_chmod_readonly_roundtrip) /* Wine's
+#if SPICULE_TEST(PASS, posix_unistd_chmod_readonly_roundtrip) /* Wine's
  * read-only reopen fallback accepts NtSetInformationFile but reports that
  * the attribute flags are unsupported and leaves the file writable. Real
  * NT takes the primary FILE_WRITE_ATTRIBUTES handle instead. */
@@ -514,7 +514,7 @@ static void test_pipe_ends_independent(void)
 }
 
 /* ttyname_r.html ERRORS ERANGE: "The buffer supplied is too small."
- * ntlibc's only tty type is CON (src/unistd/ttyname.c), so this can only
+ * spicule's only tty type is CON (src/unistd/ttyname.c), so this can only
  * be reached from an fd that isatty() accepts; whether stdin is such a
  * descriptor depends on how the test runner launched us (Wine's runner
  * and `make asan`'s native run both may or may not attach a console), so
@@ -536,9 +536,9 @@ static void test_ttyname_r_erange(void)
  * use of this field is unspecified" -- a directory falls under "other
  * file types", so POSIX leaves st_size for one entirely up to the
  * implementation.  src/stat/stat.c's mode_from_attrs()/__fstat_handle()
- * document ntlibc's choice: "st_size = S_ISDIR(...) ? 0 : ...".  Since
+ * document spicule's choice: "st_size = S_ISDIR(...) ? 0 : ...".  Since
  * any value is spec-legal, this is a real, always-passing assertion of
- * ntlibc's own documented design, not a fence -- confirm it holds
+ * spicule's own documented design, not a fence -- confirm it holds
  * regardless of what the directory contains. */
 static volatile int got_sig;
 static void mark_got_sig(int s) { (void)s; got_sig = 1; }
@@ -580,7 +580,7 @@ static void test_stat_dir_size_is_zero(void)
  *   - There is per-identity granularity.  A DACL holds one ACE per SID,
  *     so "group may write but other may not" has somewhere to live;
  *     "one aggregate FILE_ATTRIBUTE_READONLY bit" is a property of the
- *     mapping ntlibc chose, not of NTFS.
+ *     mapping spicule chose, not of NTFS.
  *   - There is a deny.  RtlAddAccessDeniedAce builds exactly the DENY
  *     ACE the read-bits fence says would be needed.
  *   - And the calls exist: NtQuerySecurityObject and NtSetSecurityObject
@@ -590,11 +590,11 @@ static void test_stat_dir_size_is_zero(void)
  *     1024 and 496).
  *
  * None of them is declared in src/internal/nt.h.  That is the real
- * blocker, and it is a choice: ntlibc does no ACL work anywhere, so
+ * blocker, and it is a choice: spicule does no ACL work anywhere, so
  * chmod() has nothing but FILE_ATTRIBUTE_READONLY to write and stat()
  * has nothing but the attribute word to read back.  Two of the three
  * fences below already half-admitted this -- one said DENY ACEs are
- * "which ntlibc's chmod() does not attempt", the other said observing
+ * "which spicule's chmod() does not attempt", the other said observing
  * it needs "real NT DACL storage, which no code in this tree has".  A
  * fence that names the alternative and says we did not do it is
  * describing UNIMPL, whatever tag it wears.
@@ -615,19 +615,19 @@ static void test_stat_dir_size_is_zero(void)
  * owner/group/other. src/stat/chmod.c's chmod_handle() comment: "chmod
  * can only express one thing on NTFS: whether the file is read-only" --
  * it tests "mode & 0222" and flips FILE_ATTRIBUTE_READONLY, the only
- * readability-adjacent bit NTFS exposes without ACL surgery ntlibc does
+ * readability-adjacent bit NTFS exposes without ACL surgery spicule does
  * not do.  There is no NTFS attribute for "unreadable but not
  * read-only", so the read bits src/stat/stat.c's mode_from_attrs()
  * synthesizes (0444, always set) cannot be cleared by chmod() at all --
  * confirmed live below rather than asserted from the source comment. */
-#if NTLIBC_TEST(BUG, posix_unistd_chmod_cannot_clear_read_bits) /* BUG (compiles and links; formerly UNIMPL):: chmod.html DESCRIPTION "set the file permission bits
+#if SPICULE_TEST(BUG, posix_unistd_chmod_cannot_clear_read_bits) /* BUG (compiles and links; formerly UNIMPL):: chmod.html DESCRIPTION "set the file permission bits
        * ... to the value contained in mode" -- but chmod(path, 0) here
        * leaves S_IRUSR|S_IRGRP|S_IROTH set anyway.  Was N/A on "there
        * is no 'deny read' attribute a chmod-only implementation can
        * flip".  True of the attribute word; but the DENY ACE the same
        * sentence goes on to name is exactly what NT provides for this
        * (RtlAddAccessDeniedAce), and the sentence's own conclusion --
-       * "which ntlibc's chmod() does not attempt" -- is a choice, not a
+       * "which spicule's chmod() does not attempt" -- is a choice, not a
        * platform limit.  See the banner above this group.
        *
        * Still a BUG, not closed by $LXMOD: src/stat/lxmod.c, wired into
@@ -699,7 +699,7 @@ static void test_chmod_cannot_clear_read_bits(void)
  * documented in test_open_umask_bug where the server's
  * FileWriteAttributes-as-Unix-O_WRONLY mapping refuses a chmod back
  * from read-only by path -- see that comment for the citation.) */
-#if NTLIBC_TEST(BUG, posix_unistd_chmod_group_other_write_aliases_owner) /* BUG (compiles and links; formerly UNIMPL):: chmod.html says the individual mode bits requested
+#if SPICULE_TEST(BUG, posix_unistd_chmod_group_other_write_aliases_owner) /* BUG (compiles and links; formerly UNIMPL):: chmod.html says the individual mode bits requested
        * become the new mode; here S_IWGRP/S_IWOTH alone have the
        * identical, all-or-nothing effect as S_IWUSR|S_IWGRP|S_IWOTH
        * together.  The proximate mechanism is right -- chmod_handle()
@@ -709,7 +709,7 @@ static void test_chmod_cannot_clear_read_bits(void)
        * group- or other-write distinct from owner-write to store the
        * difference in" is false.  A DACL holds one ACE per SID, which
        * is per-identity granularity POSIX's three classes do not even
-       * need all of.  The aggregate is a property of the mapping ntlibc
+       * need all of.  The aggregate is a property of the mapping spicule
        * chose, not of NTFS.  See the banner above this group.
        *
        * This is the case that proves $LXMOD alone (src/stat/lxmod.c)
@@ -1072,7 +1072,7 @@ static void test_unlinkat(void)
 	      (errno == ENOTEMPTY || errno == EEXIST));
 
 	/* Without AT_REMOVEDIR, a directory is not removable.  POSIX lists
-	 * [EPERM] for this; ntlibc reports [EISDIR], as Linux does.  Both
+	 * [EPERM] for this; spicule reports [EISDIR], as Linux does.  Both
 	 * are refusals that leave the directory in place, which is the part
 	 * the spec's DESCRIPTION actually requires ("The path argument shall
 	 * not name a directory unless ... the implementation supports using
@@ -1224,7 +1224,7 @@ static void test_mkdirat(void)
  * it, mknod.html's own "[EPERM] The invoking process does not have
  * appropriate privileges and the file type is not FIFO-special" and no
  * file if it did not. */
-#if defined(__linux__) && !defined(_NTLIBC_NATIVE_BUILD)
+#if defined(__linux__) && !defined(_SPICULE_NATIVE_BUILD)
 static void test_mkfifo_mknod_stubs(void)
 {
 	struct stat st;
@@ -1460,7 +1460,7 @@ static void test_sync(void)
 	CHECK(unlink("sy.txt") == 0);
 }
 
-#if defined(__linux__) && !defined(_NTLIBC_NATIVE_BUILD)
+#if defined(__linux__) && !defined(_SPICULE_NATIVE_BUILD)
 /* ============================================================
  * syncfs / acct / brk / sbrk / setusershell family (Linux backends)
  *
@@ -1468,7 +1468,7 @@ static void test_sync(void)
  * plat_unistd.c, plat_brk.c, plat_shells.c) -- NT's own "undefined-ok"
  * reasoning for each (see include/unistd.h's updated comments) stays
  * genuine there. Guarded out of the NT/Wine build (no __linux__) and
- * the native-ASan harness (_NTLIBC_NATIVE_BUILD links only the NT
+ * the native-ASan harness (_SPICULE_NATIVE_BUILD links only the NT
  * backend against fuzz/ntstubs.c, which defines none of these) the
  * same way test_res_ids()/test_euidaccess() are in
  * test/posix-unistd-ids.c.
@@ -1503,7 +1503,7 @@ static void test_acct_linux(void)
 }
 
 /* brk()/sbrk(): a real, independent program break -- see include/
- * unistd.h's own updated comment on why this cannot alias ntlibc's own
+ * unistd.h's own updated comment on why this cannot alias spicule's own
  * mmap-based malloc() (src/malloc/linux/plat_malloc.c). */
 static void test_brk_sbrk_linux(void)
 {
@@ -1530,17 +1530,17 @@ static void test_brk_sbrk_linux(void)
  * rows, so this is independent data, not a shared macro this file
  * would otherwise have to import from a test it does not include. */
 #if defined(__aarch64__)
-#define NTLIBC_TEST_SYS_getpid 172
+#define SPICULE_TEST_SYS_getpid 172
 #elif defined(__x86_64__)
-#define NTLIBC_TEST_SYS_getpid 39
+#define SPICULE_TEST_SYS_getpid 39
 #elif defined(__i386__)
-#define NTLIBC_TEST_SYS_getpid 20
+#define SPICULE_TEST_SYS_getpid 20
 #endif
 
 static void test_syscall_linux(void)
 {
-#ifdef NTLIBC_TEST_SYS_getpid
-	long r = syscall(NTLIBC_TEST_SYS_getpid);
+#ifdef SPICULE_TEST_SYS_getpid
+	long r = syscall(SPICULE_TEST_SYS_getpid);
 	CHECK(r == (long)getpid());
 #else
 	printf("note: no known getpid syscall number for this architecture; "
@@ -1705,7 +1705,7 @@ static void test_crypt(void)
 	CHECK(h && h[0] == 'a' && h[1] == 'b' && strlen(h) == 13);
 
 	/* Only the first 8 password bytes matter -- a POSIX-documented
-	 * DES-crypt property, not an ntlibc-specific choice. */
+	 * DES-crypt property, not an spicule-specific choice. */
 	{
 		char *h1 = crypt("12345678tail-one", "ab");
 		char h1copy[14];
@@ -1812,13 +1812,13 @@ static void test_lockf(void)
 /* getentropy(3) (not a POSIX page -- OpenBSD/glibc/Linux extension):
  * "fills the buffer ... with up to 256 bytes of high quality random
  * data... If the buflen argument is greater than 256, ... error EIO."
- * Real via NTLIBC_USE_KERNEL32 (BCryptGenRandom) or on Linux
+ * Real via SPICULE_USE_KERNEL32 (BCryptGenRandom) or on Linux
  * (getrandom(2)) -- see src/unistd/getentropy.c's banner -- and ENOSYS
  * in the default ntdll-only NT build, which has no fallback to reach.
  *
  * Detected at runtime from getentropy()'s own return, not from
- * NTLIBC_USE_KERNEL32 itself: unlike the library build (where
- * CFLAGS_ALL adds -DNTLIBC_USE_KERNEL32), the Makefile's test recipe
+ * SPICULE_USE_KERNEL32 itself: unlike the library build (where
+ * CFLAGS_ALL adds -DSPICULE_USE_KERNEL32), the Makefile's test recipe
  * does not define that macro for this directory's own sources, so an
  * #ifdef on it here would always take the same branch regardless of
  * --enable-kernel32.
@@ -1849,7 +1849,7 @@ static void test_getentropy(void)
 		CHECK(memcmp(buf, buf2, sizeof buf2) != 0);
 	} else {
 		CHECK(errno == ENOSYS);
-		printf("note: getentropy() reports ENOSYS -- this NT build has no NTLIBC_USE_KERNEL32 fallback\n");
+		printf("note: getentropy() reports ENOSYS -- this NT build has no SPICULE_USE_KERNEL32 fallback\n");
 	}
 }
 
@@ -2305,7 +2305,7 @@ static void test_unistd_confstr_names(void)
 	CHECK(sizeof names / sizeof names[0] == 31);
 }
 
-#if NTLIBC_TEST(PASS, posix_unistd_unistd_mandatory_option_constants) /*
+#if SPICULE_TEST(PASS, posix_unistd_unistd_mandatory_option_constants) /*
 	The thread, mapping, memory-protection, clock-selection and timeout
 	option groups now have implementations behind their mandatory 200809L
 	compile-time promises.  This checks both the value and #if usability. */
@@ -2466,7 +2466,7 @@ int main(void)
 	CHECK(chdir(dir) == 0);
 
 	test_open_umask_bug();
-#if NTLIBC_TEST(PASS, posix_unistd_chmod_readonly_roundtrip)
+#if SPICULE_TEST(PASS, posix_unistd_chmod_readonly_roundtrip)
 	test_chmod_owner_can_always_chmod_readonly();
 #endif
 	test_utimensat_owner_can_touch_readonly();
@@ -2507,7 +2507,7 @@ int main(void)
 	test_lockf();
 	test_getentropy();
 	test_sync();
-#if defined(__linux__) && !defined(_NTLIBC_NATIVE_BUILD)
+#if defined(__linux__) && !defined(_SPICULE_NATIVE_BUILD)
 	test_syncfs_linux();
 	test_acct_linux();
 	test_brk_sbrk_linux();

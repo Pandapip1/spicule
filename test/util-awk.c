@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Black-box tests for ntlibc's awk(1p) -- Tier 4's whole scope in one
+ * Black-box tests for spicule's awk(1p) -- Tier 4's whole scope in one
  * utility (see src/util/awk.c's own header for the full XCU citations
  * and every deliberate narrowing). Same technique as test/util-
  * sortset.c and test/util-trivial.c: the standalone obj/bin/awk.exe is

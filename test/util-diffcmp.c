@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Black-box tests for ntlibc's "bigger engines" POSIX standard
+ * Black-box tests for spicule's "bigger engines" POSIX standard
  * utilities: `diff`, `cmp` (XCU diff(1p), cmp(1p)).  Same technique as
  * test/util-sortset.c: the standalone obj/bin/<name>.exe is spawned as
  * a real process (via __spawn()+waitpid()), and the shell built-in is

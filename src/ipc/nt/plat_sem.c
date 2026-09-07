@@ -41,7 +41,7 @@
  * per-process undo table is out of scope here.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -90,7 +90,7 @@ withtok(heap_allocated)
 static char *dir_path(void)
 {
 	const char *dir = sem_tmpdir();
-	const char suffix[] = "/ntlibc-sysvsem";
+	const char suffix[] = "/spicule-sysvsem";
 	size_t dirlen = strnlen(dir, PATH_MAX);
 	size_t total;
 	char *path;
@@ -153,7 +153,7 @@ static int registry_lock(__plat_handle_t *out)
 	if (!dir) return -1;
 	hash = path_hash(dir);
 	free(dir);
-	n = snprintf(name, sizeof name, "\\BaseNamedObjects\\ntlibc.sysvsem.%08x%08x",
+	n = snprintf(name, sizeof name, "\\BaseNamedObjects\\spicule.sysvsem.%08x%08x",
 	         (unsigned)(hash >> 32), (unsigned)hash);
 	if (n < 0 || (size_t)n >= sizeof name) {
 		if (n >= 0) errno = ENAMETOOLONG;

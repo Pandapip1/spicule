@@ -32,7 +32,7 @@
  * below.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -134,7 +134,7 @@ int __util_touch_main(
 	struct timespec want[2] = {{0, 0}, {0, 0}};
 	int have_explicit = 0;
 
-	/* ntlibc.ValidPointer cannot prove argv[i][0] nonnull here: the
+	/* spicule.ValidPointer cannot prove argv[i][0] nonnull here: the
 	 * dereference sits directly inside this loop's compound condition
 	 * (see src/util/rmdir.c's identical, already-documented case for the
 	 * same known checker gap, not a real bug -- argv[i] for i < argc is

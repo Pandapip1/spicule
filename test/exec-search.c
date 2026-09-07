@@ -109,7 +109,7 @@ static int test_mode_bits(const char *self)
 {
 	struct stat st;
 
-	/* A linker-created PE has no ntlibc $LXMOD stream.  Its image header,
+	/* A linker-created PE has no spicule $LXMOD stream.  Its image header,
 	 * not its .exe suffix, supplies the default execute bits; the same file
 	 * remains executable through a hard-link name with no suffix at all. */
 	CHECK(stat(self, &st) == 0 && S_ISREG(st.st_mode));

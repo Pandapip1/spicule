@@ -19,9 +19,9 @@
 // (see tools/linkcheck.sh), e.g.:
 //
 //   clang-18 -std=c99 -fsyntax-only $CFLAGS \
-//     -Xclang -load -Xclang ntlibc-declscan.so \
-//     -Xclang -add-plugin -Xclang ntlibc-declscan \
-//     -Xclang -plugin-arg-ntlibc-declscan -Xclang "$header" \
+//     -Xclang -load -Xclang spicule-declscan.so \
+//     -Xclang -add-plugin -Xclang spicule-declscan \
+//     -Xclang -plugin-arg-spicule-declscan -Xclang "$header" \
 //     "$header"
 //
 // Output: one line per declared function, tab-separated, to stdout:
@@ -91,7 +91,7 @@ public:
     bool Invalid = false;
     StringRef Buffer = SM.getBufferData(SM.getMainFileID(), &Invalid);
     if (Invalid) {
-      llvm::errs() << "ntlibc-declscan: could not read the main file's source "
+      llvm::errs() << "spicule-declscan: could not read the main file's source "
                       "buffer for '"
                    << HeaderPath << "'\n";
       return;
@@ -144,7 +144,7 @@ protected:
   bool ParseArgs(const CompilerInstance &,
                  const std::vector<std::string> &Args) override {
     if (Args.size() != 1) {
-      llvm::errs() << "ntlibc-declscan: expected exactly one plugin "
+      llvm::errs() << "spicule-declscan: expected exactly one plugin "
                       "argument (the header path to report), got "
                    << Args.size() << "\n";
       return false;
@@ -159,4 +159,4 @@ protected:
 } // namespace
 
 static FrontendPluginRegistry::Add<DeclScanAction>
-    X("ntlibc-declscan", "list top-level function declarations for linkcheck.sh");
+    X("spicule-declscan", "list top-level function declarations for linkcheck.sh");

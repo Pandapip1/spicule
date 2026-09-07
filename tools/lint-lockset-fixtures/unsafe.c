@@ -3,7 +3,7 @@
  *
  * A clear violation for tools/lint.sh's `lockset` stage: the guarded
  * global is touched with the lock that guards it never acquired at all.
- * Self-contained -- its own local attribute macros, no ntlibc headers --
+ * Self-contained -- its own local attribute macros, no spicule headers --
  * so this is a fixture on Clang's -Wthread-safety feature itself, not on
  * src/internal/thread_annotations.h.
  */

@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * The four AddressSanitizer entry points fuzz/ntstubs.c calls, supplied
- * for the build that has no AddressSanitizer in it (NTLIBC_SAN_MODE=ubsan,
+ * for the build that has no AddressSanitizer in it (SPICULE_SAN_MODE=ubsan,
  * where those four names are simply undefined otherwise).
  *
  * A name-resolution shim, not a replacement allocator: each function
@@ -11,14 +11,14 @@
  * here can put those back.
  *
  * dlsym, not a direct call to malloc(): `malloc` in this link is
- * *ntlibc's* (src/malloc/malloc.o is in the link and the static linker
+ * *spicule's* (src/malloc/malloc.o is in the link and the static linker
  * binds to the definition it can already see), so calling it here would
  * route RtlAllocateHeap back into the allocator implemented in terms of
  * RtlAllocateHeap. An explicit libc.so.6 handle reaches glibc's instead.
  *
  * Compiled against the HOST headers, like host_oracle.c and unlike
  * everything else in this directory -- it has to agree with glibc about
- * size_t and malloc_usable_size, not with ntlibc.
+ * size_t and malloc_usable_size, not with spicule.
  */
 #define _GNU_SOURCE
 #include <dlfcn.h>
@@ -67,7 +67,7 @@ void *__interceptor_realloc(void *p, size_t n)
 /* RtlSizeHeap's answer. malloc_usable_size() returns the size of the
  * BUCKET (>= the requested size), where __sanitizer_get_allocated_size()
  * under ASan returns exactly what was asked for -- a real difference,
- * though harmless for its one caller today, ntlibc's own
+ * though harmless for its one caller today, spicule's own
  * malloc_usable_size(), whose documented answer IS the bucket size. */
 size_t __sanitizer_get_allocated_size(const void *p)
 {

@@ -264,9 +264,9 @@ static void test_posix_memalign_boundary(void)
 
 /* Neither Wine nor the native asan build (tools/asan-build.sh, see its
  * not_native() list and comment) can be relied on to hand back a wait
- * status carrying ntlibc's full 0xE0DE00xx signal-death encoding
+ * status carrying spicule's full 0xE0DE00xx signal-death encoding
  * unmodified -- the native build's child is a real host process, and a
- * real host wait4() truncates the exit code to 8 bits before ntlibc's
+ * real host wait4() truncates the exit code to 8 bits before spicule's
  * own waitpid()/__wait_encode_status ever sees it (the same reason
  * test/waitpid-overflow.c and test/posix-signal.c are excluded there
  * wholesale).  So: check for "died abnormally, not a clean exit()"
@@ -440,14 +440,14 @@ static void test_assert_calls_abort(const char *self)
  * overwrite==0 against an *existing* variable). ---- */
 static void test_setenv_overwrite_new(void)
 {
-	unsetenv("NTLIBC_ALLOC_NEWVAR");
-	CHECK(getenv("NTLIBC_ALLOC_NEWVAR") == 0);
+	unsetenv("SPICULE_ALLOC_NEWVAR");
+	CHECK(getenv("SPICULE_ALLOC_NEWVAR") == 0);
 	/* setenv.html: overwrite==0 only suppresses replacing an *existing*
 	 * value; for a variable that does not exist yet, it must still be
 	 * created. */
-	CHECK(setenv("NTLIBC_ALLOC_NEWVAR", "first", 0) == 0);
-	CHECK(getenv("NTLIBC_ALLOC_NEWVAR") && !strcmp(getenv("NTLIBC_ALLOC_NEWVAR"), "first"));
-	unsetenv("NTLIBC_ALLOC_NEWVAR");
+	CHECK(setenv("SPICULE_ALLOC_NEWVAR", "first", 0) == 0);
+	CHECK(getenv("SPICULE_ALLOC_NEWVAR") && !strcmp(getenv("SPICULE_ALLOC_NEWVAR"), "first"));
+	unsetenv("SPICULE_ALLOC_NEWVAR");
 }
 
 /* ---- putenv.html DESCRIPTION: "the string pointed to by string shall
@@ -459,18 +459,18 @@ static void test_setenv_overwrite_new(void)
  * environment, unlike putenv(). ---- */
 static void test_setenv_copies_putenv_aliases(void)
 {
-	char buf[] = "NTLIBC_ALLOC_SRC=orig";
+	char buf[] = "SPICULE_ALLOC_SRC=orig";
 	char *val = strchr(buf, '=') + 1; /* -> "orig", 4 bytes incl. NUL */
 
-	CHECK(setenv("NTLIBC_ALLOC_COPY", val, 1) == 0); /* copies "orig" */
+	CHECK(setenv("SPICULE_ALLOC_COPY", val, 1) == 0); /* copies "orig" */
 	strcpy(val, "XXXX");
-	CHECK(getenv("NTLIBC_ALLOC_COPY") && !strcmp(getenv("NTLIBC_ALLOC_COPY"), "orig"));
-	unsetenv("NTLIBC_ALLOC_COPY");
+	CHECK(getenv("SPICULE_ALLOC_COPY") && !strcmp(getenv("SPICULE_ALLOC_COPY"), "orig"));
+	unsetenv("SPICULE_ALLOC_COPY");
 
-	CHECK(putenv(buf) == 0); /* NTLIBC_ALLOC_SRC=XXXX, string aliased */
+	CHECK(putenv(buf) == 0); /* SPICULE_ALLOC_SRC=XXXX, string aliased */
 	strcpy(val, "YYYY");
-	CHECK(getenv("NTLIBC_ALLOC_SRC") && !strcmp(getenv("NTLIBC_ALLOC_SRC"), "YYYY"));
-	unsetenv("NTLIBC_ALLOC_SRC");
+	CHECK(getenv("SPICULE_ALLOC_SRC") && !strcmp(getenv("SPICULE_ALLOC_SRC"), "YYYY"));
+	unsetenv("SPICULE_ALLOC_SRC");
 }
 
 /* ---- environ.html: "the array of pointers ... is named environ ...
@@ -483,14 +483,14 @@ static void test_environ_reflects_state(void)
 	char **e;
 	int seen;
 
-	CHECK(setenv("NTLIBC_ALLOC_ENVWALK", "v", 1) == 0);
+	CHECK(setenv("SPICULE_ALLOC_ENVWALK", "v", 1) == 0);
 	seen = 0;
-	for (e = environ; e && *e; e++) if (!strncmp(*e, "NTLIBC_ALLOC_ENVWALK=", 21)) seen = 1;
+	for (e = environ; e && *e; e++) if (!strncmp(*e, "SPICULE_ALLOC_ENVWALK=", 21)) seen = 1;
 	CHECK(seen);
 
-	CHECK(unsetenv("NTLIBC_ALLOC_ENVWALK") == 0);
+	CHECK(unsetenv("SPICULE_ALLOC_ENVWALK") == 0);
 	seen = 0;
-	for (e = environ; e && *e; e++) if (!strncmp(*e, "NTLIBC_ALLOC_ENVWALK=", 21)) seen = 1;
+	for (e = environ; e && *e; e++) if (!strncmp(*e, "SPICULE_ALLOC_ENVWALK=", 21)) seen = 1;
 	CHECK(!seen);
 }
 
@@ -505,10 +505,10 @@ static void test_setenv_inherited_by_child(const char *self)
 {
 	int status;
 
-	CHECK(setenv("NTLIBC_ALLOC_INHERIT", "childsees", 1) == 0);
+	CHECK(setenv("SPICULE_ALLOC_INHERIT", "childsees", 1) == 0);
 	if (spawn_self(self, "--posix-alloc-envcheck", &status) < 0) {
 		printf("note: cannot spawn \"%s\"; setenv-inheritance child test skipped\n", self);
-		unsetenv("NTLIBC_ALLOC_INHERIT");
+		unsetenv("SPICULE_ALLOC_INHERIT");
 		return;
 	}
 	CHECK(WIFEXITED(status));
@@ -517,7 +517,7 @@ static void test_setenv_inherited_by_child(const char *self)
 		       WEXITSTATUS(status) == 44 ? "yes" : "no");
 		CHECK(WEXITSTATUS(status) == 44 || WEXITSTATUS(status) == 45);
 	}
-	unsetenv("NTLIBC_ALLOC_INHERIT");
+	unsetenv("SPICULE_ALLOC_INHERIT");
 }
 
 /* ================================== main ================================== */
@@ -551,7 +551,7 @@ int main(int argc, char **argv)
 		return 0; /* did not fire -> parent's check_died_abnormally() fails, reported */
 	}
 	if (argc > 1 && !strcmp(argv[1], "--posix-alloc-envcheck")) {
-		char *v = getenv("NTLIBC_ALLOC_INHERIT");
+		char *v = getenv("SPICULE_ALLOC_INHERIT");
 		return (v && !strcmp(v, "childsees")) ? 44 : 45;
 	}
 

@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * open()/openat() front-door smoke test -- NOT part of ntlibc, same
+ * open()/openat() front-door smoke test -- NOT part of spicule, same
  * standing as every other fuzz/linux_pilot_test_*.c file.
  *
  * Unlike every earlier Linux-pilot test, this one calls the REAL
@@ -37,9 +37,9 @@ static int failures;
 int main(void)
 {
 	int fd, fd2, dfd;
-	const char path[] = "/tmp/ntlibc-linux-open-test-file";
-	const char dirpath[] = "/tmp/ntlibc-linux-open-test-dir";
-	const char nested[] = "/tmp/ntlibc-linux-open-test-dir/inner";
+	const char path[] = "/tmp/spicule-linux-open-test-file";
+	const char dirpath[] = "/tmp/spicule-linux-open-test-dir";
+	const char nested[] = "/tmp/spicule-linux-open-test-dir/inner";
 	const char msg[] = "real open() front door on linux";
 	char buf[64];
 
@@ -102,13 +102,13 @@ int main(void)
 
 	/* --- open() on a nonexistent path without O_CREAT: ENOENT --- */
 	{
-		int fd5 = open("/tmp/ntlibc-linux-open-test-does-not-exist", O_RDONLY);
+		int fd5 = open("/tmp/spicule-linux-open-test-does-not-exist", O_RDONLY);
 		CHECK(fd5 == -1 && errno == ENOENT, "open() on a missing path fails ENOENT");
 	}
 
 	/* --- creat() --- */
 	{
-		const char creatpath[] = "/tmp/ntlibc-linux-open-test-creat";
+		const char creatpath[] = "/tmp/spicule-linux-open-test-creat";
 		syscall(SYS_unlinkat, (long)AT_FDCWD_LX, (long)creatpath, 0L);
 		int fd6 = creat(creatpath, 0600);
 		CHECK(fd6 >= 0, "creat() succeeded");

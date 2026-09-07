@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * NTLIBC_LDBL_EXTENDED: the one macro every piece of `long double`
+ * SPICULE_LDBL_EXTENDED: the one macro every piece of `long double`
  * bit-layout code in this tree -- src/math/ldbl_math.h, src/math/
  * fpclassify.c, src/math/frexp.c, src/math/copysign.c, src/math/
  * fabs.c, and (as of the startup canary this header now also serves)
@@ -37,13 +37,13 @@
  * assuming a target-name-based answer, is what makes this macro
  * reliable across both toolchains.
  */
-#ifndef NTLIBC_LDBL_FORMAT_H
-#define NTLIBC_LDBL_FORMAT_H
+#ifndef SPICULE_LDBL_FORMAT_H
+#define SPICULE_LDBL_FORMAT_H
 
 #if defined(__SIZEOF_LONG_DOUBLE__) && __SIZEOF_LONG_DOUBLE__ > 8
-#define NTLIBC_LDBL_EXTENDED 1
+#define SPICULE_LDBL_EXTENDED 1
 #else
-#define NTLIBC_LDBL_EXTENDED 0
+#define SPICULE_LDBL_EXTENDED 0
 #endif
 
 #endif

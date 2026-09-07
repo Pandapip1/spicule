@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Test-harness scaffolding for the Linux dirent pilot -- NOT part of
- * ntlibc. A separate file rather than a reuse of
+ * spicule. A separate file rather than a reuse of
  * linux_pilot_harness_fs.c: this pilot's link set is much smaller (no
  * fcntl()/flock()/ioctl()/stat() front doors at all), and needs one
  * symbol none of the existing harnesses provide: __fd_handle()

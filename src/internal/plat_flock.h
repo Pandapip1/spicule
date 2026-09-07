@@ -18,8 +18,8 @@
  * only the raw lock/unlock call and the Wine-specific IoStatusBlock
  * quirk it works around (see flock.c's own banner) live here.
  */
-#ifndef _NTLIBC_PLAT_FLOCK_H
-#define _NTLIBC_PLAT_FLOCK_H
+#ifndef _SPICULE_PLAT_FLOCK_H
+#define _SPICULE_PLAT_FLOCK_H
 
 #include "plat_handle.h"
 

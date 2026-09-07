@@ -29,7 +29,7 @@ FIXTURES = ROOT / "tools/lint-loopcond-fixtures"
 DIAGNOSTIC = re.compile(
     r"^(.*?):(\d+):(\d+): warning: .*; kind 'compound-header'; loop_kind '(.*?)'; "
     r"origin '(.*)'; context '(.*)'; bound '(.*)'; flag '(.*)'; expression '(.*)' "
-    r"\[ntlibc\.LoopCondition\]$"
+    r"\[spicule\.LoopCondition\]$"
 )
 
 

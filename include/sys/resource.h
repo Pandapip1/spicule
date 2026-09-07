@@ -68,7 +68,7 @@ int getrusage (int, struct rusage *);
  * 32-bit process under WOW64 on at least the Wine build this project
  * tests against).
  *
- * PRIO_PGRP/PRIO_USER: ntlibc models a process group and user this process
+ * PRIO_PGRP/PRIO_USER: spicule models a process group and user this process
  * is always the sole member of, so who==0, who==getpgrp(), or
  * who==geteuid() all behave exactly like PRIO_PROCESS on self; any other
  * who is ESRCH.

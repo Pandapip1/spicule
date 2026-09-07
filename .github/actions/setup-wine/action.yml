@@ -11,10 +11,10 @@
 # made every fork-dependent expectation (sigaction/17-*, the fork clauses,
 # ...) unfalsifiable in CI: a row could be right on a developer's patched
 # build and wrong here for no reason but which binary ran it.  The patched
-# build is what actually implements the syscalls ntlibc's tests exercise.
+# build is what actually implements the syscalls spicule's tests exercise.
 
 name: Set up Wine
-description: Build ntlibc's patched Wine fork via flake.nix's `wine-fork` package, restoring it from cache on a hit
+description: Build spicule's patched Wine fork via flake.nix's `wine-fork` package, restoring it from cache on a hit
 
 runs:
   using: composite
@@ -42,7 +42,7 @@ runs:
     # forced to match this action's own downstream needs.
     # --out-link result-wine, not the default `./result`: see
     # setup-tinycc/action.yml's comment on the same choice there. Jobs
-    # that use both actions (posix-optsrun, ntlibc-suite, libc-test) run
+    # that use both actions (posix-optsrun, spicule-suite, libc-test) run
     # both `nix build` invocations in this same checkout directory, so a
     # shared default link name means whichever action runs second
     # clobbers the first's symlink -- silently repointing the PATH entry

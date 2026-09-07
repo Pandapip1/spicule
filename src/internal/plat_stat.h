@@ -66,8 +66,8 @@
  * (NtQueryEaFile/NtSetEaFile) are platform calls and are declared
  * below.
  */
-#ifndef _NTLIBC_PLAT_STAT_H
-#define _NTLIBC_PLAT_STAT_H
+#ifndef _SPICULE_PLAT_STAT_H
+#define _SPICULE_PLAT_STAT_H
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -85,7 +85,7 @@ int __plat_lxmod_set(__plat_handle_t h, unsigned mode);
  * match the aggregate write bits and writes $LXMOD -- see chmod.c's own
  * banner. 0/-1(errno). */
 int __plat_chmod(__plat_handle_t h, mode_t mode);
-/* fchmodat(): resolves `path` (relative to `dirfd`, ntlibc's own
+/* fchmodat(): resolves `path` (relative to `dirfd`, spicule's own
  * AT_FDCWD sentinel or an already-open dirfd) to a handle (with the
  * FILE_WRITE_ATTRIBUTES-denied-on-a-read-only-file Wine fallback
  * chmod.c's own comment documents on the NT side), calls

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: (C) 2026 Gavin John
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Inventory and independently probe ntlibc's source-level test fences.
+"""Inventory and independently probe spicule's source-level test fences.
 
 The executable suites report what happened.  This tool validates why a
 test is fenced out.  Normal mode only inventories fences.  Pedantic mode
@@ -31,7 +31,7 @@ TEST_DIR = ROOT / "test"
 PROFILE_MANIFEST = TEST_DIR / "test-profiles.tsv"
 OPEN_RE = re.compile(r"^\s*#\s*if\s+0\b")
 MARKER_RE = re.compile(
-    r"^\s*#\s*if\s+NTLIBC_TEST\(\s*(PASS|BUG|UNIMPL|NA|FLAKY)\s*,\s*"
+    r"^\s*#\s*if\s+SPICULE_TEST\(\s*(PASS|BUG|UNIMPL|NA|FLAKY)\s*,\s*"
     r"([A-Za-z_][A-Za-z0-9_]*)\s*\)"
 )
 IF_RE = re.compile(r"^\s*#\s*(?:if|ifdef|ifndef)\b")
@@ -187,7 +187,7 @@ def transformed_source(group: list[Fence], destination: Path) -> None:
             lines[start] = re.sub(r"^(\s*#\s*if\s+)0\b", r"\g<1>1", lines[start])
         else:
             lines[start] = re.sub(
-                r"^(\s*#\s*if\s+)NTLIBC_TEST\([^)]*\)", r"\g<1>1", lines[start]
+                r"^(\s*#\s*if\s+)SPICULE_TEST\([^)]*\)", r"\g<1>1", lines[start]
             )
 
     # A fenced static test function is absent from the normal main() call
@@ -235,7 +235,7 @@ def compile_probe(source: Path, output: Path, cfg: dict[str, str]) -> subprocess
     command.extend(shlex.split(cfg.get("CFLAGS_C99FSE", "")))
     command.extend(shlex.split(cfg.get("CFLAGS_AUTO", "")))
     command.extend([
-        "-DNTLIBC_TEST_POLICY_PROBE=1",
+        "-DSPICULE_TEST_POLICY_PROBE=1",
         f"-I{ROOT / 'arch' / arch}",
         f"-I{ROOT / 'arch' / 'generic'}",
         f"-I{ROOT / 'obj' / 'include'}",
@@ -340,7 +340,7 @@ def probe(mode: str, fences: list[Fence]) -> int:
         disposition = group[0].disposition
         counts[disposition] = counts.get(disposition, 0) + 1
 
-    with tempfile.TemporaryDirectory(prefix="ntlibc-test-policy.") as tmp_name:
+    with tempfile.TemporaryDirectory(prefix="spicule-test-policy.") as tmp_name:
         tmp = Path(tmp_name)
         (tmp / "test").mkdir()
         (tmp / "test" / "test-policy.h").write_bytes(
@@ -493,7 +493,7 @@ def execution_profile(command: str, explicit: list[str]) -> dict[str, str]:
         host = "i386"
     profile["host_arch"] = host
     if command in {"pedantic", "strict"}:
-        profile["runtime"] = os.environ.get("NTLIBC_TEST_RUNTIME", "wine")
+        profile["runtime"] = os.environ.get("SPICULE_TEST_RUNTIME", "wine")
     supplied = parse_profile(explicit)
     profile.update(supplied)
     if "target_arch" in profile and "host_arch" in profile:
@@ -656,10 +656,10 @@ def main() -> int:
         profile = {}
     known = {fence.case_name for fence in fences if fence.case_name}
     for rule in rules:
-        if rule.suite == "ntlibc" and rule.case not in known:
+        if rule.suite == "spicule" and rule.case not in known:
             errors.append(
                 f"{PROFILE_MANIFEST.relative_to(ROOT)}:{rule.line}: "
-                f"override names unknown ntlibc case {rule.case}"
+                f"override names unknown spicule case {rule.case}"
             )
     missing = unset_capabilities(rules, profile)
     if missing:
@@ -677,7 +677,7 @@ def main() -> int:
             resolved.append(fence)
             continue
         try:
-            rule = resolve(rules, "ntlibc", fence.case_name, profile,
+            rule = resolve(rules, "spicule", fence.case_name, profile,
                            default=fence.disposition, default_reason=fence.ident)
             resolved.append(dataclasses.replace(fence, disposition=rule.disposition))
         except ValueError as error:

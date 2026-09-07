@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: (C) 2026 Gavin John
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# cppcheck suppressions for ntlibc, used by tools/lint.sh (`make lint`).
+# cppcheck suppressions for spicule, used by tools/lint.sh (`make lint`).
 #
 # Only categorical false positives belong here -- things cppcheck cannot
 # model about a freestanding libc built with -nostdinc on top of ntdll.

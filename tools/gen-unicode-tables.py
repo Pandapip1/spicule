@@ -4,7 +4,7 @@
 """Generate src/internal/unicode_tables.c from the real Unicode Character
 Database (UCD).
 
-ntlibc's wchar_t is one 16-bit UTF-16 code unit (arch/*/bits/alltypes.h.in:
+spicule's wchar_t is one 16-bit UTF-16 code unit (arch/*/bits/alltypes.h.in:
 "TYPEDEF unsigned short wchar_t;" -- see include/wctype.h's banner comment),
 so every classification/case-mapping/width table this script emits only
 ever needs entries for U+0000..U+FFFF (the Basic Multilingual Plane): a
@@ -87,7 +87,7 @@ wcwidth combining (0-width) set -> General_Category Mn (Nonspacing_Mark)
              NOT included: Cf (Format) code points such as ZERO WIDTH
              JOINER/NON-JOINER (U+200C/200D) or the BOM (U+FEFF), which
              the widely-used Markus Kuhn reference wcwidth.c also treats
-             as zero-width. ntlibc's wcwidth() reports width 1 for those
+             as zero-width. spicule's wcwidth() reports width 1 for those
              instead -- a deliberate, documented simplification (they are
              a much smaller, more irregular set than Mn/Me, and getting
              them right needs the same kind of curated exception list
@@ -309,8 +309,8 @@ def emit_pair_table(out: list[str], c_name: str,
 
 
 def main() -> None:
-    cache_dir = Path(os.environ.get("NTLIBC_UCD_CACHE",
-                                     tempfile.gettempdir() + "/ntlibc-ucd-" + UCD_VERSION))
+    cache_dir = Path(os.environ.get("SPICULE_UCD_CACHE",
+                                     tempfile.gettempdir() + "/spicule-ucd-" + UCD_VERSION))
     cache_dir.mkdir(parents=True, exist_ok=True)
     paths = fetch(cache_dir)
 
@@ -353,7 +353,7 @@ def main() -> None:
     lines.append(" * Unicode property backs each table below and why.")
     lines.append(" *")
     lines.append(" * Every table is restricted to U+0000..U+FFFF (the Basic")
-    lines.append(" * Multilingual Plane) because ntlibc's wchar_t is a single")
+    lines.append(" * Multilingual Plane) because spicule's wchar_t is a single")
     lines.append(" * 16-bit UTF-16 code unit -- see include/wctype.h.")
     lines.append(" */")
     lines.append("")

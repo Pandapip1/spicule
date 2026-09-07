@@ -39,7 +39,7 @@
  * declared locally, the same way test/posix-socket-ea.c does.  That is
  * deliberate rather than merely accepted: a layout test that included
  * the header it is checking would agree with it by construction.  The
- * numbers below come from the references, not from ntlibc:
+ * numbers below come from the references, not from spicule:
  *
  *   - The request shape (ULONG ShareAccess, then a TRANSPORT_ADDRESS):
  *     System Informer phnt, ntafd.h, `AFD_BIND_INFO`; ReactOS
@@ -115,7 +115,7 @@ int __afd_build_bind_request(void *buf, unsigned long share_type,
 
 #define REQ_SIZE (REQ_ADDR + TDI_ADDRESS_LENGTH_IP) /* 26 */
 
-/* Windows'/TDI's own numbers, spelled out so that changing ntlibc's
+/* Windows'/TDI's own numbers, spelled out so that changing spicule's
  * headers cannot silently change what this test asserts.  AF_INET and
  * TDI_ADDRESS_TYPE_IP are both 2, which is exactly why AddressType can
  * overlay sa_family. */

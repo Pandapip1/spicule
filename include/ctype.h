@@ -24,7 +24,7 @@ extern "C" {
 /* Pure arithmetic on `(unsigned)c`: no locale read, errno, or state, hence
  * __attribute__((__pure__)).
  *
- * Deliberately ASCII-only for c in 0x80-0xff. ntlibc's char* strings are
+ * Deliberately ASCII-only for c in 0x80-0xff. spicule's char* strings are
  * UTF-8, where a lone byte in that range is always a continuation or lead
  * byte, never a complete character -- so "false" is the correct answer, not
  * a limitation. A decoded code point (e.g. "é") is what iswalpha() is for. */
@@ -43,7 +43,7 @@ int   isxdigit(int) __attribute__((__pure__));
 int   tolower(int) __attribute__((__pure__));
 int   toupper(int) __attribute__((__pure__));
 
-/* ntlibc's locale.c accepts only "C"/"POSIX", so each _l function is
+/* spicule's locale.c accepts only "C"/"POSIX", so each _l function is
  * equivalent to its non-_l sibling and ignores its locale_t argument
  * (same precedent as strcasecmp_l() in strings.h). Still __pure__ since
  * the ignored argument is never dereferenced. */

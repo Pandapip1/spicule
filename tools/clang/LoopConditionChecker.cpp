@@ -377,7 +377,7 @@ extern "C" const char clang_analyzerAPIVersionString[] = CLANG_ANALYZER_API_VERS
 
 extern "C" void clang_registerCheckers(CheckerRegistry &Registry) {
   Registry.addChecker<LoopConditionChecker>(
-      "ntlibc.LoopCondition",
+      "spicule.LoopCondition",
       "Flags a for/while/do header whose condition compounds a structural "
       "bound with an incidental data-dependent bail-out via &&/||",
       "");

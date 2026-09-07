@@ -16,7 +16,7 @@
  * but not implemented: refused loudly (a diagnostic, nonzero exit)
  * rather than silently misinterpreted.  Multi-byte units are decoded in
  * this platform's own native byte order (little-endian on every
- * architecture ntlibc targets -- x86, x86_64, arm64), matching what a
+ * architecture spicule targets -- x86, x86_64, arm64), matching what a
  * real od reading a real binary on this platform is for.
  *
  * -A address_base: d/o/x/n (n: "no offsets shall be output"). od(1p):

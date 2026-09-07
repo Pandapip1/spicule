@@ -17,7 +17,7 @@ FIXTURES = ROOT / "tools/lint-initialization-fixtures"
 DIAGNOSTIC = re.compile(
     r"^(.*?):(\d+):(\d+): warning: "
     r"(memory read is not proven initialized); origin '(.*)'; context '(.*)'; "
-    r"expression '(.*)'; site '(.*)' \[ntlibc\.InitializedRead\]$"
+    r"expression '(.*)'; site '(.*)' \[spicule\.InitializedRead\]$"
 )
 
 

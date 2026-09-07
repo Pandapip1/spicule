@@ -8,7 +8,7 @@
  * syscall(long, ...)`, which resolves to the host's real glibc at link
  * time in a non-freestanding build and silently discards the real
  * -errno on failure; see plat_mem.c's fix for the full account -- no
- * host libc, -nostdinc against ntlibc's own headers,
+ * host libc, -nostdinc against spicule's own headers,
  * aarch64 syscall numbers confirmed against this host's own
  * <sys/syscall.h> as an oracle).
  *
@@ -31,7 +31,7 @@
  * Linux needs no equivalent check at all.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -137,7 +137,7 @@ static int unbox(__plat_handle_t h)
 
 /* Matches src/unistd/linux/plat_unistd.c's/src/fcntl/linux/
  * plat_fcntl.c's own resolve_dirfd() exactly, duplicated here per this
- * tree's own-syscall-table-per-file discipline: turns ntlibc's own
+ * tree's own-syscall-table-per-file discipline: turns spicule's own
  * AT_FDCWD sentinel or fd-table index into what the raw *at() syscalls
  * need. Returns -1 with errno already set (by __fd_get()) only on a
  * bad table index -- never a legitimate result otherwise, since

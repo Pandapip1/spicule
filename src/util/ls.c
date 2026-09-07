@@ -64,7 +64,7 @@ static const struct ls_opts *g_time_opts;
 
 /* g_time_opts/g_sort_opts are always set to &o in __util_ls_main before
  * any sorting or printing runs -- never read while still NULL.
- * ntlibc.ValidPointer can't close this for a file-scope static set once
+ * spicule.ValidPointer can't close this for a file-scope static set once
  * by a separately-analyzed function; __ownership_pointer_nonnull only
  * narrows up to the next opaque call, and asserting it here invalidates
  * other nearby proofs instead of net-fixing anything. Left open, same
@@ -85,7 +85,7 @@ static int cmp_entries(const void *pa, const void *pb)
 	 * read_directory(), or an argv element carried through unchanged) --
 	 * never a bare uninitialized pointer. Left as an open CapabilityToken
 	 * finding at each strcmp() below: restating it by hand only made
-	 * ntlibc.ValidPointer's separate proof of a/b or of time_field()'s e
+	 * spicule.ValidPointer's separate proof of a/b or of time_field()'s e
 	 * worse. */
 	if (g_sort_opts->S) {
 		off_t sa = a->stat_ok ? a->st.st_size : 0, sb = b->stat_ok ? b->st.st_size : 0;

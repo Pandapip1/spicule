@@ -3,15 +3,15 @@ SPDX-FileCopyrightText: (C) 2026 Gavin John
 SPDX-License-Identifier: GPL-3.0-or-later
 -->
 
-# Contributing to ntlibc
+# Contributing to spicule
 
 ## Platform rules
 
-ntlibc talks to Windows NT through ntdll's `Nt*` and `Rtl*` interfaces.
+spicule talks to Windows NT through ntdll's `Nt*` and `Rtl*` interfaces.
 Use ntdll whenever it can provide the behavior. Calls into kernel32 or any
 other higher-level DLL require both:
 
-- an `#ifdef NTLIBC_USE_KERNEL32` guard; and
+- an `#ifdef SPICULE_USE_KERNEL32` guard; and
 - a usable ntdll-only fallback.
 
 The default configuration is `--disable-kernel32`. The guarded build exists
@@ -28,10 +28,10 @@ The shell under `src/sh/` is part of libc because `system()`, `popen()` and
 
 ## Adding an ntdll import raises the minimum Windows version
 
-`tools/ntdll.def` is the complete list of what ntlibc asks of the
+`tools/ntdll.def` is the complete list of what spicule asks of the
 operating system — ntdll is the only DLL a default build imports from at
 all (see the section above). It is therefore also the complete statement
-of which Windows versions ntlibc can run on, and adding a line to it is
+of which Windows versions spicule can run on, and adding a line to it is
 not a free action.
 
 The reason is that these are *static* imports. A static import of a name
@@ -142,7 +142,7 @@ Pedantic mode is a ratchet: it fails when a disposition has gone stale, not
 merely because a known bug exists. Strict mode includes every pedantic check
 and additionally requires that no `BUG` or `UNIMPL` disposition remain and
 that every `FLAKY` case pass. Source-level cases use
-`NTLIBC_TEST(DISPOSITION, stable_case_name)` and are generated as independent
+`SPICULE_TEST(DISPOSITION, stable_case_name)` and are generated as independent
 translation units when probed, so one case cannot hide another compile result.
 
 ```sh
@@ -335,7 +335,7 @@ independent fuzzing engine (`ENGINE=afl` in `fuzz/Makefile`, driven by
 `tools/afl-fuzz.sh`) -- no harness source changes needed, since every one
 already defines only `LLVMFuzzerTestOneInput()`. Requires `afl++`
 (`apt-get install afl++` on Debian/Ubuntu; CI installs it the same way).
-AFL++'s own runtime collides with several of ntlibc's own strong symbols
+AFL++'s own runtime collides with several of spicule's own strong symbols
 the same way `stat()` used to for libFuzzer -- see `fuzz/aflshim.c` for
 which ones and why. Common commands mirror the libFuzzer ones above:
 
@@ -410,12 +410,12 @@ git diff -- 'arch/*/bits/*.h.gen' 'include/*.h.gen' boot/kaem/
 
 `./configure` installs `.githooks/pre-commit`, which checks both generated
 families plus staged conflict markers. It also registers the
-`ntlibc-kaem` merge driver for every kaem file. If configure has not run
+`spicule-kaem` merge driver for every kaem file. If configure has not run
 in a checkout, install these manually:
 
 ```sh
 git config core.hooksPath .githooks
-git config merge.ntlibc-kaem.driver 'tools/merge-kaem.sh %O %A %B %P'
+git config merge.spicule-kaem.driver 'tools/merge-kaem.sh %O %A %B %P'
 ```
 
 The merge driver handles independent source-list insertions and archive

@@ -116,11 +116,11 @@ public:
                               DiagnosticsEngine::Warning,
                               "signal handler call is not proven "
                               "async-signal-safe; context '%0'; "
-                              "expression '%1' [ntlibc.SignalSafety]")),
+                              "expression '%1' [spicule.SignalSafety]")),
         GlobalWriteDiagnostic(Diagnostics.getCustomDiagID(
             DiagnosticsEngine::Warning,
             "signal handler writes non-atomic global state; context '%0'; "
-            "expression '%1' [ntlibc.SignalSafety]")) {}
+            "expression '%1' [spicule.SignalSafety]")) {}
 
   bool VisitCallExpr(CallExpr *Call) {
     const FunctionDecl *Callee = Call->getDirectCallee();
@@ -184,4 +184,4 @@ protected:
 } // namespace
 
 static FrontendPluginRegistry::Add<SignalSafetyAction>
-    X("ntlibc-signal-safety", "prove registered signal-handler safety");
+    X("spicule-signal-safety", "prove registered signal-handler safety");

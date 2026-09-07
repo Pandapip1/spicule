@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: (C) 2026 Gavin John
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// ntlibc.Reentrancy -- catches the classic "returns a pointer into internal
+// spicule.Reentrancy -- catches the classic "returns a pointer into internal
 // static storage" hazard: a caller holds onto the pointer a family member
 // returned, then makes a second call to the same (or a sibling) family
 // member on the same path, which silently invalidates the first result, and
@@ -31,7 +31,7 @@
 //   shape a future shared-buffer implementation would need. Two
 //   synthetic fixture-only names (fake_gmtime/fake_localtime,
 //   FixtureShared below) exist purely to exercise that sibling-
-//   invalidation path in tools/lint-reentrancy-fixtures/; no real ntlibc
+//   invalidation path in tools/lint-reentrancy-fixtures/; no real spicule
 //   symbol uses them.
 
 #include "clang/AST/Expr.h"
@@ -261,7 +261,7 @@ extern "C" const char clang_analyzerAPIVersionString[] =
 
 extern "C" void clang_registerCheckers(CheckerRegistry &Registry) {
   Registry.addChecker<ReentrancyChecker>(
-      "ntlibc.Reentrancy",
+      "spicule.Reentrancy",
       "Proves a family member's returned static-storage pointer is not read "
       "after a later call to the same or a sibling member invalidates it",
       "");

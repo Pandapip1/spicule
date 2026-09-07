@@ -109,9 +109,9 @@ long indirect_cursor_origin(cursor_fn fn, const char *p) {
 }
 
 #define returns_element_of(registry) \
-  __attribute__((annotate("ntlibc_relation_returns_element_of:" #registry)))
+  __attribute__((annotate("spicule_relation_returns_element_of:" #registry)))
 #define parameter_element_of(index, registry) \
-  __attribute__((annotate("ntlibc_relation_parameter_element_of:" #index ":" #registry)))
+  __attribute__((annotate("spicule_relation_parameter_element_of:" #index ":" #registry)))
 
 static int *contract_registry;
 static int *other_registry;
@@ -183,10 +183,10 @@ long exercise_address_taken_consumer(unsigned i) {
 #ifdef __clang_analyzer__
 #define unsafe_assume_valid_pointer(expr) \
   (__extension__({ \
-    __typeof__(expr) __ntlibc_unsafe_ptr__ \
-      __attribute__((annotate("ntlibc_unsafe_assume_valid_pointer"))) \
+    __typeof__(expr) __spicule_unsafe_ptr__ \
+      __attribute__((annotate("spicule_unsafe_assume_valid_pointer"))) \
       = (expr); \
-    __ntlibc_unsafe_ptr__; \
+    __spicule_unsafe_ptr__; \
   }))
 #else
 #define unsafe_assume_valid_pointer(expr) (expr)
@@ -222,10 +222,10 @@ void *redundant_marker_constant_sentinel(void) {
 #ifdef __clang_analyzer__
 #define unsafe_assume_shared_provenance(expr) \
   (__extension__({ \
-    __typeof__(expr) __ntlibc_unsafe_shared_prov__ \
-      __attribute__((annotate("ntlibc_unsafe_assume_shared_provenance"))) \
+    __typeof__(expr) __spicule_unsafe_shared_prov__ \
+      __attribute__((annotate("spicule_unsafe_assume_shared_provenance"))) \
       = (expr); \
-    __ntlibc_unsafe_shared_prov__; \
+    __spicule_unsafe_shared_prov__; \
   }))
 #else
 #define unsafe_assume_shared_provenance(expr) (expr)

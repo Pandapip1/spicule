@@ -26,10 +26,10 @@
 // compile would use, e.g.:
 //
 //   clang-18 -std=c99 -fsyntax-only $CFLAGS \
-//     -Xclang -load -Xclang ntlibc-lintdecls.so \
-//     -Xclang -add-plugin -Xclang ntlibc-lintdecls \
-//     -Xclang -plugin-arg-ntlibc-lintdecls -Xclang decl \
-//     -Xclang -plugin-arg-ntlibc-lintdecls -Xclang "$file" \
+//     -Xclang -load -Xclang spicule-lintdecls.so \
+//     -Xclang -add-plugin -Xclang spicule-lintdecls \
+//     -Xclang -plugin-arg-spicule-lintdecls -Xclang decl \
+//     -Xclang -plugin-arg-spicule-lintdecls -Xclang "$file" \
 //     "$file"
 //
 // Plugin arguments are MODE ("decl"/"def") and PATH, in that order; PATH
@@ -100,7 +100,7 @@ public:
     bool Invalid = false;
     StringRef Buffer = SM.getBufferData(SM.getMainFileID(), &Invalid);
     if (Invalid) {
-      llvm::errs() << "ntlibc-lintdecls: could not read the main file's "
+      llvm::errs() << "spicule-lintdecls: could not read the main file's "
                       "source buffer\n";
       return;
     }
@@ -165,7 +165,7 @@ protected:
   bool ParseArgs(const CompilerInstance &,
                  const std::vector<std::string> &Args) override {
     if (Args.size() != 2 || (Args[0] != "decl" && Args[0] != "def")) {
-      llvm::errs() << "ntlibc-lintdecls: expected exactly two plugin "
+      llvm::errs() << "spicule-lintdecls: expected exactly two plugin "
                       "arguments, ('decl'|'def') then a path to echo back, "
                       "got "
                    << Args.size() << " argument(s)\n";
@@ -182,6 +182,6 @@ protected:
 } // namespace
 
 static FrontendPluginRegistry::Add<LintDeclScanAction>
-    X("ntlibc-lintdecls",
+    X("spicule-lintdecls",
       "list top-level function declarators/definitions for "
       "lint-undefined.sh and lint-unreferenced.sh");

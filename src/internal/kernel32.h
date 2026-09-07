@@ -4,15 +4,15 @@
  * Declarations for the handful of kernel32 (and csrss-via-kernel32) APIs
  * that have no ntdll equivalent at all.  Kept out of nt.h on purpose: nt.h
  * is the ntdll-only surface this library is built on, and every symbol
- * declared here is only ever used inside an `#ifdef NTLIBC_USE_KERNEL32`
+ * declared here is only ever used inside an `#ifdef SPICULE_USE_KERNEL32`
  * block (see CONTRIBUTING.md).  A file that only ever gets included from
  * behind that guard makes "does this build depend on kernel32" a single
  * grep away, instead of a needle hidden in nt.h.
  *
- * Only ever include this from within an NTLIBC_USE_KERNEL32 guard.
+ * Only ever include this from within an SPICULE_USE_KERNEL32 guard.
  */
-#ifndef _NTLIBC_KERNEL32_H
-#define _NTLIBC_KERNEL32_H
+#ifndef _SPICULE_KERNEL32_H
+#define _SPICULE_KERNEL32_H
 
 #include "nt.h"
 

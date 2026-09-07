@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -23,11 +23,11 @@ float copysignf(float x, float y) // NOLINT(bugprone-easily-swappable-parameters
 	return ux.f;
 }
 
-/* ntlibc is built with three different `long double` bit layouts - see
+/* spicule is built with three different `long double` bit layouts - see
  * src/math/fabs.c's own fabsl() banner (the sign-flip bug it describes
  * finding applies identically to this function, and the fix below is
  * the same three-way split, reusing src/internal/ldbl_layout_check.c's
- * already-confirmed layouts rather than NTLIBC_LDBL_EXTENDED's plain
+ * already-confirmed layouts rather than SPICULE_LDBL_EXTENDED's plain
  * boolean, which conflates x87 and aarch64's binary128).
  *
  * Under tcc, "long double" is really just "double" (8 bytes, no 80-bit
@@ -44,7 +44,7 @@ float copysignf(float x, float y) // NOLINT(bugprone-easily-swappable-parameters
  * split (arch/aarch64/src/ld128_convert.c's own layout, reused here). */
 long double copysignl(long double x, long double y) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
-#if !NTLIBC_LDBL_EXTENDED
+#if !SPICULE_LDBL_EXTENDED
 	union { long double f; uint64_t i; } ux = { x }, uy = { y };
 	ux.i = (ux.i & ((uint64_t)-1 >> 1)) | (uy.i & (uint64_t)1 << 63);
 	return ux.f;

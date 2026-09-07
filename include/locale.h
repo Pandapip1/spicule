@@ -82,7 +82,7 @@ struct lconv *localeconv(void) __attribute__((returns_nonnull));
 
 /* locale_t tracked the same way DIR* is (dirent.h): a real acquire/
  * release token pair, not a bespoke special case. locale_opened has no
- * implemented_by(...) because ntlibc's own locale implementation hands
+ * implemented_by(...) because spicule's own locale implementation hands
  * out one immutable static object for every request (src/misc/locale.c,
  * test/posix-locale.c's own audit) -- there is no further, more-primitive
  * family for freelocale() to route a release through today. That is a

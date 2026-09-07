@@ -45,7 +45,7 @@
  *
  * MEASURED.  On a ReactOS boot with afd.sys instrumented
  * (DebugTraceLevel MIN_TRACE -> MID_TRACE, drivers/network/afd/afd/
- * main.c:21), an ntlibc socket() program made AfdCreateSocket()'s
+ * main.c:21), an spicule socket() program made AfdCreateSocket()'s
  * success path print
  *
  *     (/drivers/network/afd/afd/main.c:438)(AfdCreateSocket)
@@ -68,7 +68,7 @@
  * captured on that boot: the test program reported over COM2, which had
  * no driver.
  *
- * VERIFIED.  A corrected ntlibc build was then run against that same
+ * VERIFIED.  A corrected spicule build was then run against that same
  * instrumented driver.  This test reported NT 5.2 from the PEB, selected
  * the nt4 shape, passed all 31 checks (including socket(), bind(),
  * listen() and close()), and afd.sys printed `Success: AfdOpenPacketXX

@@ -72,7 +72,7 @@
  * left to be discovered: "if NLSPATH exists in the environment when the
  * process starts, then if the process has appropriate privileges, the
  * behavior of catopen() is undefined."  Implementations use that
- * licence to ignore NLSPATH in a set-user-ID process.  ntlibc has no
+ * licence to ignore NLSPATH in a set-user-ID process.  spicule has no
  * set-user-ID and no notion of a process that started with more
  * privilege than its caller, so there is no flag to test; NLSPATH is
  * honoured unconditionally.  If such a notion is ever added, this is
@@ -324,7 +324,7 @@ nl_catd catopen(const char *name withtok(null_terminated), int oflag)
 	/* "If NLSPATH does not exist in the environment, or if a message
 	 * catalog cannot be found in any of the components specified by
 	 * NLSPATH, then an implementation-defined default path shall be
-	 * used."  ntlibc's default is "%N:%N.cat": the name as given,
+	 * used."  spicule's default is "%N:%N.cat": the name as given,
 	 * then the name with the .cat suffix XBD's own example uses.
 	 * There is no system message-catalogue directory on this platform
 	 * to name, and inventing one would send every lookup somewhere

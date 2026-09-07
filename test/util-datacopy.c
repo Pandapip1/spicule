@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Black-box tests for ntlibc's data-copying/reporting POSIX standard
+ * Black-box tests for spicule's data-copying/reporting POSIX standard
  * utilities: `dd`, `df`, `du`, `cksum`, `uuencode`, `uudecode` (XCU
  * dd(1p), df(1p), du(1p), cksum(1p), uuencode(1p), uudecode(1p)).  Same
  * technique as test/util-fsops.c: the standalone obj/bin/<name>.exe is

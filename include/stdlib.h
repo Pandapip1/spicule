@@ -47,7 +47,7 @@ unsigned long long strtoull (const char *__restrict, char **__restrict endptr_ad
 int rand (void);
 void srand (unsigned);
 
-/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline:
+/* tools/clang/ErrnoDisciplineChecker.cpp's spicule.ErrnoDiscipline:
  * src/malloc/malloc.c sets errno = ENOMEM on every failure return of
  * malloc/calloc/realloc/reallocarray alike, unconditionally. */
 grants_thread_token(errno_grounds)
@@ -84,7 +84,7 @@ _Noreturn void quick_exit (int);
 withtok(null_terminated)
 char *getenv (const char * withtok(null_terminated)) __attribute__((nonnull(1)));
 
-/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline:
+/* tools/clang/ErrnoDisciplineChecker.cpp's spicule.ErrnoDiscipline:
  * src/stdlib/system.c's system() sets errno on its only two failure
  * (-1) returns -- via __find_program()'s own errno (already
  * errno-capable) when no shell is found, or by saving/restoring errno
@@ -138,7 +138,7 @@ size_t __ctype_get_mb_cur_max(void);
 int posix_memalign (void **, size_t, size_t);
 int setenv (const char *, const char *, int);
 int unsetenv (const char *);
-/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline:
+/* tools/clang/ErrnoDisciplineChecker.cpp's spicule.ErrnoDiscipline:
  * src/stdlib/mktemp.c's mkstemp()/mkostemp() (both mkostemps()
  * wrappers) set errno on every failure return, via fill()'s own
  * explicit EINVAL or open()'s (already errno-capable). */

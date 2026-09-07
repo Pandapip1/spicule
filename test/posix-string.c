@@ -115,7 +115,7 @@ static void test_strcasecmp_ordering(void)
 
 /* strcoll.html: "strcoll_l() ... shall be equivalent to strcoll(),
  * except that the locale data used is from the locale represented by
- * locale."  ntlibc supports only the POSIX locale, in which collation
+ * locale."  spicule supports only the POSIX locale, in which collation
  * order is byte order (strcoll.html APPLICATION USAGE), so strcoll_l()
  * through both LC_GLOBAL_LOCALE and a freshly created "C" locale must
  * agree with strcoll() and with the sign of strcmp().  Asserted here

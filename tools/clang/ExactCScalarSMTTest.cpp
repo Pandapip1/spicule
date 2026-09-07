@@ -6,9 +6,9 @@
 #include <cstdlib>
 #include <iostream>
 
-using ntlibc::algebra::CType;
-using ntlibc::algebra::provesUnsatisfiable;
-using ntlibc::algebra::ScalarSMT;
+using spicule::algebra::CType;
+using spicule::algebra::provesUnsatisfiable;
+using spicule::algebra::ScalarSMT;
 
 static bool always(z3::context &Z, const z3::expr &Property) {
   z3::solver Solver(Z);

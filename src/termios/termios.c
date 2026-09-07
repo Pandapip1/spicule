@@ -9,7 +9,7 @@
  * wrapped in `#ifndef __linux__` below, compiling to nothing on Linux.
  * Linux has a genuine tty/pty layer instead, where every one of these
  * eleven functions is real (real ioctl(2) against the underlying fd,
- * no console-shadow, no NTLIBC_USE_KERNEL32 gate) -- see
+ * no console-shadow, no SPICULE_USE_KERNEL32 gate) -- see
  * src/termios/linux/plat_termios.c, which implements the identical
  * public symbols this file does. The two never coexist in one build
  * (the Makefile's own PLATFORM axis selects exactly one of NT or
@@ -29,7 +29,7 @@
  *     driver directly (ConsolepGetMode/ConsolepSetMode over
  *     NtDeviceIoControlFile, src/internal/condrv.h), with kernel32's
  *     GetConsoleMode()/SetConsoleMode() kept only as the
- *     NTLIBC_USE_KERNEL32 fallback for a host that does not speak that
+ *     SPICULE_USE_KERNEL32 fallback for a host that does not speak that
  *     protocol.
  *   - tcflush()'s input side (TCIFLUSH/TCIOFLUSH): real, via the same
  *     transport's ConsolepFlushInputBuffer (kernel32's
@@ -101,7 +101,7 @@
  *     Legal, spec-permitted no-op.
  *
  * Storage for the accepted-but-not-applied fields is a single
- * process-global shadow, not per-fd: ntlibc has exactly one console
+ * process-global shadow, not per-fd: spicule has exactly one console
  * session reachable at a time in practice (no multi-console support
  * anywhere else in this library either -- see src/unistd/ttyname.c's
  * fixed "CON" answer), so a global is the honest amount of state to
@@ -116,7 +116,7 @@
 #include "condrv.h"
 #include "conin.h"
 #endif
-#ifdef NTLIBC_USE_KERNEL32
+#ifdef SPICULE_USE_KERNEL32
 #include "kernel32.h"
 #endif
 
@@ -176,7 +176,7 @@ static struct __fd *get_console(int fd)
 	return f;
 }
 
-#ifdef NTLIBC_USE_KERNEL32
+#ifdef SPICULE_USE_KERNEL32
 /* Same LdrLoadDll()/LdrGetProcedureAddress() dance as
  * src/signal/signal.c's install_ctrl_handler(), generalised to more
  * than one proc and cached across calls (a console-heavy program may
@@ -235,7 +235,7 @@ static int console_mode_get(HANDLE h, ULONG *mode)
 		*mode = body.Mode;
 		return 0;
 	}
-#ifdef NTLIBC_USE_KERNEL32
+#ifdef SPICULE_USE_KERNEL32
 	{
 		fn_GetConsoleMode fn = (fn_GetConsoleMode)k32_proc("GetConsoleMode");
 		if (fn && fn(h, mode)) return 0;
@@ -250,7 +250,7 @@ static int console_mode_set(HANDLE h, ULONG mode)
 
 	body.Mode = mode;
 	if (__condrv_call(h, ConsolepSetMode, &body, sizeof body) == 0) return 0;
-#ifdef NTLIBC_USE_KERNEL32
+#ifdef SPICULE_USE_KERNEL32
 	{
 		fn_SetConsoleMode fn = (fn_SetConsoleMode)k32_proc("SetConsoleMode");
 		if (fn && fn(h, mode)) return 0;
@@ -265,7 +265,7 @@ static int console_mode_set(HANDLE h, ULONG mode)
 static int console_flush_input(HANDLE h)
 {
 	if (__condrv_call(h, ConsolepFlushInputBuffer, 0, 0) == 0) return 0;
-#ifdef NTLIBC_USE_KERNEL32
+#ifdef SPICULE_USE_KERNEL32
 	{
 		fn_FlushConsoleInputBuffer fn = (fn_FlushConsoleInputBuffer)k32_proc("FlushConsoleInputBuffer");
 		if (fn && fn(h)) return 0;

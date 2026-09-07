@@ -57,11 +57,11 @@
 #
 # What counts as "declared": a top-level FunctionDecl with no body, in a
 # header preprocessed the same way a real consumer's #include would see
-# it (-D_XOPEN_SOURCE=700 -D_ALL_SOURCE, no -D_NTLIBC_INTERNAL -- a
+# it (-D_XOPEN_SOURCE=700 -D_ALL_SOURCE, no -D_SPICULE_INTERNAL -- a
 # public header is not library-internal code).  What counts as
 # "defined": a top-level FunctionDecl WITH a body, in a .c file
 # preprocessed the way this library's own build compiles it
-# (-D_NTLIBC_INTERNAL -Isrc/internal, matching the Makefile's
+# (-D_SPICULE_INTERNAL -Isrc/internal, matching the Makefile's
 # CFLAGS_ALL).  Neither distinguishes a function's storage class (a
 # `static` definition satisfies "defined" exactly like an external one),
 # matching the old awk scanner, which never looked at linkage either.
@@ -175,7 +175,7 @@ if [ -z "$lintdecls_clang_cpp" ]; then
 	echo "lint-undefined: (libclang-18-dev)." >&2
 	exit 1
 fi
-lintdecls_plugin="$workdir/ntlibc-lintdecls.so"
+lintdecls_plugin="$workdir/spicule-lintdecls.so"
 # llvm-config deliberately returns shell words, not one argument.
 # shellcheck disable=SC2046
 clang++-18 -fPIC -shared $(llvm-config-18 --cxxflags) \
@@ -197,9 +197,9 @@ scan_one() {
 	# shellcheck disable=SC2086
 	clang-18 -std=c99 -fsyntax-only $lintdecls_flags \
 		-Xclang -load -Xclang "$lintdecls_plugin" \
-		-Xclang -add-plugin -Xclang ntlibc-lintdecls \
-		-Xclang -plugin-arg-ntlibc-lintdecls -Xclang "$1" \
-		-Xclang -plugin-arg-ntlibc-lintdecls -Xclang "$2" \
+		-Xclang -add-plugin -Xclang spicule-lintdecls \
+		-Xclang -plugin-arg-spicule-lintdecls -Xclang "$1" \
+		-Xclang -plugin-arg-spicule-lintdecls -Xclang "$2" \
 		"$2" 2>> "$workdir/scan.err"
 }
 
@@ -212,7 +212,7 @@ scan_one() {
 # separate regex-based markednames pass into one real parse.
 #
 # Headers are preprocessed the way a real consumer's #include sees them:
-# -D_XOPEN_SOURCE=700 -D_ALL_SOURCE, no -D_NTLIBC_INTERNAL. ARCH=x86_64
+# -D_XOPEN_SOURCE=700 -D_ALL_SOURCE, no -D_SPICULE_INTERNAL. ARCH=x86_64
 # for bits/alltypes.h's shape -- a public header's declared function set
 # does not vary by arch in this tree (checked: no header is arch-gated),
 # so any one arch's types answer "what does this header declare" the
@@ -298,7 +298,7 @@ for arch in i386 x86_64 aarch64; do
 	mkdir -p "$agendir/include/bits" || exit 1
 	cat "arch/$arch/bits/alltypes.h.gen" include/alltypes.h.gen > "$agendir/include/bits/alltypes.h" || exit 1
 	t=$(triple_for "$arch")
-	lintdecls_flags="-nostdinc -fno-builtin -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_NTLIBC_INTERNAL -Iarch/$arch -Iarch/generic -I$agendir/include -Iinclude -Isrc/internal ${t:+--target=$t}"
+	lintdecls_flags="-nostdinc -fno-builtin -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_SPICULE_INTERNAL -Iarch/$arch -Iarch/generic -I$agendir/include -Iinclude -Isrc/internal ${t:+--target=$t}"
 	for f in $(sources_for "$arch"); do
 		scan_one def "$f" || def_rc=1
 	done >> "$workdir/def.raw"

@@ -9,6 +9,9 @@
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
+#ifndef __has_feature
+#define __has_feature(x) 0 /* not clang: never claim a clang-only feature */
+#endif
 #include <signal.h>
 #include <string.h>
 #include <errno.h>
@@ -290,6 +293,30 @@ int __plat_thread_spawn(__plat_thread_entry_t entry, void *arg,
  * loader work, no race. */
 void __plat_thread_tls_fixup(void)
 {
+#if !defined(_WIN32) && (defined(_SPICULE_NATIVE_BUILD) || \
+                        defined(__SANITIZE_ADDRESS__) || __has_feature(address_sanitizer))
+	/* A no-op in tools/asan-build.sh's native ELF build, for the same
+	 * reason the Linux backend's own copy of this function is one: there
+	 * is no PE image in that process to read an IMAGE_TLS_DIRECTORY out
+	 * of, and fuzz/ntstubs.c's stand-in __teb() hands back a plain zeroed
+	 * block with no loader-managed TLS array behind it.
+	 *
+	 * The condition above is deliberately character-for-character the one
+	 * src/internal/pe.c uses to refuse to compile natively (see that file,
+	 * and src/internal/rpath.c for why the ASan terms are spelled out
+	 * alongside _SPICULE_NATIVE_BUILD instead of either standing in for
+	 * the other). It has to be: that script compiles every src/*.c and
+	 * keeps whichever compiles, so where pe.c refuses,
+	 * spicule_pe_tls_directory() has no definition in the link at all --
+	 * and the script links every kept object into every test binary, so
+	 * one undefined reference from this file breaks every native test's
+	 * link, not just this facility's own.
+	 *
+	 * The rest of this file has no such problem and stays in that build
+	 * on purpose: it supplies every other __plat_thread_* the native
+	 * harness needs, which is why this is a branch around one function
+	 * rather than a whole-file #error like src/dlfcn/nt/plat_dlfcn.c's. */
+#else
 	IMAGE_TLS_DIRECTORY *dir;
 	PTEB teb;
 	PVOID *slots;
@@ -366,6 +393,7 @@ void __plat_thread_tls_fixup(void)
 	 * when the process exits -- a bounded, one-time leak per spawned
 	 * thread, not an accumulating one. */
 	slots[index] = block;
+#endif
 }
 
 /* See plat_thread.h's own __plat_thread_close() banner for why this call

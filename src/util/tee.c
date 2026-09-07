@@ -97,6 +97,12 @@ int __util_tee_main(
 			free((void *)paths);
 			return 1;
 		}
+		/* Checker gap (ntlibc.ResourceLeak): each open() below is stored
+		 * into fds[nfiles], a heap array indexed by a runtime loop
+		 * variable -- the checker can't correlate that store with the
+		 * fds[j] loads in the write-error and final close loops further
+		 * down, so every descriptor here is reported as never released
+		 * even on paths where those loops do close it. */
 		for (; i < argc; i++) {
 			int flags = O_WRONLY | O_CREAT | (opt_a ? O_APPEND : O_TRUNC);
 			int fd = open(argv[i], flags, 0666);

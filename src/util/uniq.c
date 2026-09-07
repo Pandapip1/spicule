@@ -75,6 +75,7 @@ int __util_uniq_main(
 	int i;
 	const char *infile = 0, *outfile = 0;
 	FILE *in = stdin, *out = stdout;
+	int use_stdin = 1, use_stdout = 1;
 	char *cur = 0, *next = 0;
 	size_t curcap = 0, nextcap = 0;
 	ssize_t curlen = -1, nextlen;
@@ -124,16 +125,23 @@ int __util_uniq_main(
 		return 1;
 	}
 
+	/* use_stdin/use_stdout, not `in != stdin`/`out != stdout`, decide the
+	 * fclose()s below -- the checker can't prove opaque pointers
+	 * unequal, so a direct comparison makes these fopen() allocations
+	 * look conditionally leaked (same idiom as src/util/join.c's
+	 * read_all()). */
 	if (infile && strcmp(infile, "-") != 0) {
+		use_stdin = 0;
 		in = fopen(infile, "r");
 		if (!in) { __util_diagf("uniq: %s: %s\n", infile, strerror(errno)); return 1; }
 	}
 	if (outfile && strcmp(outfile, "-") != 0) {
+		use_stdout = 0;
 		out = fopen(outfile, "w");
 		if (!out) {
 			__util_diagf("uniq: %s: %s\n", outfile, strerror(errno));
 			/* Output-open failure is primary; input close is cleanup only. */
-			if (in != stdin) (void)fclose(in);
+			if (!use_stdin) (void)fclose(in);
 			return 1;
 		}
 	}
@@ -179,8 +187,8 @@ int __util_uniq_main(
 	free(cur);
 	free(next);
 done:
-	if (in != stdin && fclose(in) != 0) status = 1;
-	if (out != stdout) {
+	if (!use_stdin && fclose(in) != 0) status = 1;
+	if (!use_stdout) {
 		if (fclose(out) != 0) status = 1;
 	} else if (fflush(out) != 0) status = 1;
 	return status;

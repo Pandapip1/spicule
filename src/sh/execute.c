@@ -673,6 +673,10 @@ static int apply_one_redir(const struct sh_redir *r, int fd, int *unsupported)
 		if (dup2(newfd, fd) < 0) { (void)close(newfd); return 1; }
 		(void)close(newfd);
 	}
+	/* Checker gap (ntlibc.ResourceLeak): when newfd == fd already, it IS
+	 * the redirection target from here on (no dup2/close needed or
+	 * wanted) -- the checker can't see that aliasing, so it reports
+	 * newfd as never released. */
 	return 0;
 }
 

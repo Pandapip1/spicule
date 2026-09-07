@@ -43,6 +43,7 @@ int __util_comm_main(
 	const char *paths[2];
 	int npaths = 0;
 	FILE *f1, *f2;
+	int use_stdin1, use_stdin2;
 	char *l1 = 0, *l2 = 0;
 	size_t c1 = 0, c2 = 0, n1 = 0, n2 = 0;
 	int have1, have2;
@@ -78,17 +79,24 @@ int __util_comm_main(
 		return 1;
 	}
 
-	f1 = !strcmp(paths[0], "-") ? stdin : fopen(paths[0], "r");
+	/* use_stdin1/use_stdin2, not `f1/f2 != stdin`, decide the fclose()s
+	 * below -- the checker can't prove opaque pointers unequal, so a
+	 * direct comparison makes these fopen() allocations look
+	 * conditionally leaked (same idiom as src/util/join.c's
+	 * read_all()). */
+	use_stdin1 = !strcmp(paths[0], "-");
+	f1 = use_stdin1 ? stdin : fopen(paths[0], "r");
 	if (!f1) {
 		int saved = errno;
 		__util_diagf("comm: %s: %s\n", paths[0], strerror(saved));
 		return 1;
 	}
-	f2 = !strcmp(paths[1], "-") ? stdin : fopen(paths[1], "r");
+	use_stdin2 = !strcmp(paths[1], "-");
+	f2 = use_stdin2 ? stdin : fopen(paths[1], "r");
 	if (!f2) {
 		__util_diagf("comm: %s: %s\n", paths[1], strerror(errno));
 		/* Cleanup cannot supersede the primary failure to open file2. */
-		if (f1 != stdin) (void)fclose(f1);
+		if (!use_stdin1) (void)fclose(f1);
 		return 1;
 	}
 
@@ -130,8 +138,8 @@ int __util_comm_main(
 
 	free(l1);
 	free(l2);
-	if (f1 != stdin && fclose(f1) != 0) status = 1;
-	if (f2 != stdin && fclose(f2) != 0) status = 1;
+	if (!use_stdin1 && fclose(f1) != 0) status = 1;
+	if (!use_stdin2 && fclose(f2) != 0) status = 1;
 	if (fflush(stdout) != 0) status = 1;
 	return status;
 }

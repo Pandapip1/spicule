@@ -1533,6 +1533,112 @@ stage_resourceleak() {
 	return $any
 }
 
+# Opt-in (not in requested_stages' default list, not in the CI matrix --
+# the same landing pattern resourceleak above and totality/sizearith/
+# loopcond before it each used while their own tree-wide backlog was being
+# triaged down to zero, and only then promoted).
+# RedundantPointerAxiomChecker (spicule.RedundantPointerAxiom, tools/clang/
+# OwnershipChecker.cpp) audits src/internal/ownership_stubs.h's manual
+# __ownership_pointer_nonnull()/__ownership_string_terminated() leaf axioms
+# the way spicule.MemoryContract already audits the span axioms: an axiom
+# whose fact the analysis can now prove without it is dead scaffolding left
+# behind by a later checker improvement that closed the gap at its point of
+# origin.  Those restatements have only ever been findable by grepping all
+# 400-odd call sites and reading each one, which is exactly the work this
+# stage exists to stop having to do by hand.  It starts with an untriaged
+# backlog, so it must not gate the always-on ownership stage until that
+# backlog is closed.
+#
+# spicule.ValidPointer must be enabled alongside it (it reads only the
+# nonnull constraints that checker's own callbacks narrow), and the whole
+# checker set below is deliberately the exact set stage_ownership's own
+# pointer invocation uses: a redundancy verdict is only trustworthy if it
+# was reached under the same facts the gating pass would have.
+stage_pointeraxiom() {
+	hdr "manual pointer proof axiom is proven still needed (opt-in)"
+	any=0
+	require_tool clang-18 || return $missing
+	require_tool clang++-18 || return $missing
+	require_tool llvm-config-18 || return $missing
+	require_tool pkg-config || return $missing
+	if ! pkg-config --exists z3; then
+		report_missing "Z3 development headers and library are not installed, so spicule.ValidPointer's extent-bounds fallback (compiled into the same translation unit) cannot be built."
+		return $missing
+	fi
+	if ! z3_flags=$(pkg-config --cflags --libs z3); then
+		report_missing "pkg-config could not resolve Z3 compiler and linker flags."
+		return $missing
+	fi
+	libdir=$(llvm-config-18 --libdir)
+	clang_cpp=$(find "$libdir" -maxdepth 1 -name 'libclang-cpp.so.18*' \
+		-print 2>/dev/null | sort | head -n 1)
+	if [ -z "$clang_cpp" ]; then
+		report_missing "Clang 18 development libraries are not installed, so pointer proof axioms cannot be audited."
+		return $missing
+	fi
+	# RedundantPointerAxiomChecker lives in OwnershipChecker.cpp itself (it
+	# reuses ValidPointerChecker's own axiom recognizers and nonnull proof
+	# rather than duplicating them), so this stage rebuilds the identical
+	# three-file bundle stage_ownership does, to its own plugin path -- the
+	# two stages' builds are otherwise unrelated and safe to run
+	# concurrently.
+	plugin=$builddir/spicule-pointeraxiom-checker.so
+	# shellcheck disable=SC2046,SC2086
+	clang++-18 -fPIC -shared -DOWNERSHIP_CHECKER_BUNDLE -DSPICULE_OWNERSHIP_Z3 \
+		$(llvm-config-18 --cxxflags) -DSPICULE_MEMORY_CONTRACT_Z3 -fexceptions \
+		tools/clang/OwnershipChecker.cpp \
+		tools/clang/AllocationLifetimeChecker.cpp \
+		tools/clang/MemoryContractChecker.cpp \
+		-o "$plugin" "$clang_cpp" \
+		$(llvm-config-18 --ldflags --libs --system-libs) $z3_flags || return 1
+
+	fixture_log=$builddir/pointeraxiom-fixtures.log
+	: > "$fixture_log"
+	for fixture in tools/lint-ownership-fixtures/*.c; do
+		clang-18 --analyze -Xclang -load -Xclang "$plugin" \
+			-Xclang -analyzer-checker=spicule.Ownership,spicule.ValidPointer,spicule.MemoryContract,spicule.RedundantPointerAxiom \
+			-DSPICULE_OWNERSHIP_ANALYSIS \
+			-Xclang -analyzer-output=text "$fixture" -o /dev/null \
+			>> "$fixture_log" 2>&1 || any=1
+	done
+	tools/lint-pointer-axiom.py --fixtures "$fixture_log" || any=1
+
+	analyzed=0
+	for arch in $LINT_ARCHS; do
+		gen_alltypes "$arch" || { any=1; continue; }
+		flags="$(cppflags_for "$arch")"
+		target=$(pick_target "$arch")
+		nsrc=$(sources_for "$arch" | grep -c . || true)
+		out=$builddir/$arch.pointeraxiom.log
+		report=$builddir/$arch.pointeraxiom.report
+		pardir=$(mktemp -d "$builddir/pointeraxiom.XXXXXX") || return 1
+		# shellcheck disable=SC2086,SC2016
+		sources_for "$arch" | xargs -P "$LINT_JOBS" -I{} sh -c '
+			f=$1; clang=$2; plugin=$3; target=$4; shift 4
+			id=$(printf %s "$f" | tr / _)
+			# shellcheck disable=SC2086
+			"$clang" $target --analyze -Xclang -load -Xclang "$plugin" \
+				-Xclang -analyzer-checker=spicule.Ownership,spicule.ValidPointer,spicule.MemoryContract,spicule.RedundantPointerAxiom \
+				-Xclang -analyzer-output=text "$@" "$f" -o /dev/null \
+				> "'"$pardir"'/$id.log" 2>&1
+		' _ {} clang-18 "$plugin" "$target" $flags
+		runrc=$?; nlog=$(find "$pardir" -name '*.log' | grep -c . || true)
+		: > "$out"; ls "$pardir"/*.log >/dev/null 2>&1 && cat "$pardir"/*.log > "$out"; rm -rf "$pardir"
+		if [ "$runrc" -ne 0 ] || [ "$nsrc" -eq 0 ] || [ "$nlog" -ne "$nsrc" ]; then
+			note "pointer axiom analyzer [$arch]: FAILED -- $nlog of $nsrc source file(s) completed."
+			show_findings "$out"; any=1; continue
+		fi
+		analyzed=$((analyzed + 1))
+		if tools/lint-pointer-axiom.py --fixtures "$fixture_log" "$out" > "$report" 2>&1; then
+			note "pointer axiom proofs [$arch]: proved -> $report"
+		else
+			note "pointer axiom proofs [$arch]: findings -> $report"; show_findings "$report"; any=1
+		fi
+	done
+	[ "$analyzed" -gt 0 ] || return 1
+	return $any
+}
+
 stage_initproof() {
 	hdr "definite-initialization proof obligations"
 	any=0
@@ -2270,6 +2376,7 @@ for s in $stages; do
 		purity)     stage_purity ;;
 		loopcond)   stage_loopcond ;;
 		resourceleak) stage_resourceleak ;;
+		pointeraxiom) stage_pointeraxiom ;;
 		widthmod)  tools/lint-widthmod.sh ;;
 		unreferenced) tools/lint-unreferenced.sh ;;
 		undefined) tools/lint-undefined.sh ;;

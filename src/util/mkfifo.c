@@ -35,7 +35,6 @@
 #include "libc.h"
 #include "util.h"
 #include "modeparse.h"
-#include "ownership_stubs.h" /* __ownership_pointer_nonnull(): restates argv[i]'s nonnull-ness where AggregateElementToken proves only its NUL-termination */
 
 int __util_mkfifo_main(
 	int argc, char **argv elements_withtok(null_terminated, argc))
@@ -46,10 +45,6 @@ int __util_mkfifo_main(
 
 	i = 1;
 	while (i < argc) {
-		/* elements_withtok(null_terminated, argc) proves NUL-termination
-		 * but not nonnull-ness of argv[i] itself (true in practice, but
-		 * not provable from an array-element read). */
-		__ownership_pointer_nonnull(argv[i]);
 		if (argv[i][0] != '-' || !argv[i][1]) break;
 		if (!strcmp(argv[i], "--")) { i++; break; }
 		if (!strcmp(argv[i], "-m")) {

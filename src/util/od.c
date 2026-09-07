@@ -409,12 +409,6 @@ int __util_od_main(
 
 	for (; i < argc; i++) {
 		char *a = argv[i];
-		/* a is one of argv's own elements (i < argc), genuinely never
-		 * NULL by this function's own elements_withtok(null_terminated,
-		 * argc) contract on argv -- restated here the same way
-		 * src/util/test.c's t_expr() restates t->v's own analogous
-		 * argv-slice fact. */
-		__ownership_pointer_nonnull(a);
 		if (a[0] != '-' || a[1] == 0) break;
 		if (!strcmp(a, "--")) { i++; break; }
 		if (!strcmp(a, "-v")) { o.verbose = 1; continue; }

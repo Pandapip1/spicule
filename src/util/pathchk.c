@@ -43,7 +43,7 @@
 #include <limits.h>
 #include <unistd.h>
 #include "util.h"
-#include "ownership_stubs.h" /* __ownership_pointer_nonnull(): restates argv[i]'s nonnull-ness where AggregateElementToken proves only its NUL-termination */
+#include "ownership_stubs.h" /* __ownership_string_terminated(): restates argv[i]'s NUL-termination across the check_one() call boundary */
 
 #define ISSEP(c) ((c) == '/' || (c) == '\\')
 
@@ -164,10 +164,6 @@ int __util_pathchk_main(
 	int i, status = 0;
 
 	for (i = 1; i < argc; i++) {
-		/* elements_withtok(null_terminated, argc) proves NUL-termination
-		 * but not nonnull-ness of argv[i] itself (true in practice, but
-		 * not provable from an array-element read). */
-		__ownership_pointer_nonnull(argv[i]);
 		/* A lone "-" is a conventional pathname (often "read from
 		 * stdin" elsewhere), not an option -- getopt(3) draws the same
 		 * line. */

@@ -29,7 +29,6 @@
 #include "libc.h"
 #include "plat_socket.h"
 #include "plat_fd.h"
-#include "ownership_stubs.h"
 
 /* Installs an already-connected __plat_socketpair() handle, mirroring
  * socket()'s __fd_install()/pad bookkeeping and connect()'s
@@ -48,9 +47,6 @@ static int install_pair_handle(__plat_handle_t h, int dgram, int cloexec, int no
 
 	if (fd < 0) { __plat_close(h); return -1; }
 	f = __fd_get(fd);
-	/* Can't be NULL here: fd just came back from a successful
-	 * __fd_install(). */
-	__ownership_pointer_nonnull(f);
 	f->pad = __SOCK_ST_BOUND | __SOCK_ST_CONNECTED | (dgram ? __SOCK_ST_DGRAM : 0);
 	memset(&peer, 0, sizeof peer);
 	peer.sa_family = AF_UNIX;

@@ -684,12 +684,6 @@ int __util_ar_main(
 
 	{
 		char *p = argv[1];
-		/* argc >= 3 (checked above), so argv[1] is genuinely one of
-		 * argv's own elements, never NULL by this function's own
-		 * elements_withtok(null_terminated, argc) contract on argv --
-		 * restated here the same way src/util/od.c's __util_od_main()
-		 * restates its own analogous argv-slice fact. */
-		__ownership_pointer_nonnull(p);
 		if (*p == '-') p++;
 		for (; *p; p++) {
 			switch (*p) {

@@ -3,51 +3,30 @@
  *
  * tail(1p): `tail [-f] [-c number|-n number] [file...]`
  *
- * DESCRIPTION: "The tail utility shall copy its input file to standard
- * output beginning at a designated place."  "number" (for either -c or
- * -n) is a decimal integer, optionally signed:
- *  - "+": relative to the beginning of the file -- number must be
- *    non-zero, and counts from 1 ("-c +1" is the first byte, "-n +1"
- *    the first line).
- *  - "-" or no sign: relative to the end of the file -- the number of
- *    trailing bytes/lines to copy.
- * "If neither -c nor -n is specified, -n 10 shall be assumed."
+ * "number" (for -c or -n) is a decimal integer, optionally signed:
+ *  - "+": relative to the start of the file, 1-based, must be nonzero
+ *    ("-c +1" is the first byte, "-n +1" the first line).
+ *  - "-" or no sign: relative to the end -- trailing bytes/lines to copy.
+ * Default is -n 10.
  *
- * ---- Reading the whole input before writing anything ------------------
+ * "Relative to the end" needs to know where the end is, and a pathname
+ * operand can still be a non-seekable pipe/FIFO, so read_all() always
+ * reads the whole input into one growable buffer first; both -c and -n
+ * (both signs) are then answered as an index into that buffer (see the
+ * offset arithmetic in __util_tail_main()). Cost is memory proportional
+ * to the whole input rather than `number` -- simpler and correct over a
+ * seek-and-scan-backward optimization this file doesn't attempt.
  *
- * "Relative to the end of the file" cannot be answered without knowing
- * where the end is, and unlike head(1p) there is no way to stream this
- * and still support the from-end form for input that is not seekable --
- * a real pathname operand could still be a pipe or a FIFO on this
- * platform.  Rather than special-case seekable-vs-not, read_all() below
- * always reads the whole input into one growable buffer first, then
- * both -c and -n (and both signs of each) are answered as an index into
- * that buffer -- see the byte-offset arithmetic in __util_tail_main()
- * below.  The cost is memory proportional to the whole input rather
- * than to `number`; for the sizes this project handles that trade is
- * simpler and correct, over a seek-and-scan-backward optimization this
- * file does not attempt.
- *
- * -f ("do not terminate after the last line ... read the appended data")
- * has no natural exit, so after the initial tail is written it hands
- * off to tail_follow() below, which polls fstat()'s st_size rather than
- * blocking a single read() forever: this platform has no filesystem-
- * change-notification primitive (no inotify equivalent; see src/select/,
- * src/thread/).  fstat() never blocks, which is what makes size-polling
- * safe to round-robin across several regular-file operands at once (see
- * tail_follow()); a single non-regular operand (a pipe/FIFO, or "-"/
- * no-operand stdin fed from one) instead gets a plain blocking read()
- * loop, since a true EOF there (writer closed) really is the end, unlike
- * a regular file which can always grow again.  SIGINT (Ctrl-C) ends the
- * loop the normal way -- its default disposition is process termination,
- * so nothing here installs a handler.
- *
- * The multi-operand `==> file <==` banner extends past XCU's own
- * single-`[file]` SYNOPSIS the same way multiple operands are, for
- * symmetry with every other utility in this tier.
- *
- * EXIT STATUS: "0 Successful completion." ">0 An error occurred." --
- * diagnose-and-continue across operands.
+ * -f has no natural exit, so after the initial tail is written it hands
+ * off to tail_follow(), which polls fstat()'s st_size rather than
+ * blocking on read(): this platform has no filesystem-change
+ * notification (no inotify equivalent). fstat() never blocks, which is
+ * what lets size-polling round-robin across several regular-file
+ * operands; a single non-regular operand (pipe/FIFO, or stdin) instead
+ * gets a plain blocking read() loop, since EOF there really is the end
+ * (unlike a regular file, which can always grow again). SIGINT's
+ * default disposition (process termination) ends the loop; no handler
+ * is installed.
  *
  * Spec consulted: https://pubs.opengroup.org/onlinepubs/9699919799/utilities/tail.html
  */
@@ -250,27 +229,21 @@ static int tail_follow_drain(struct tail_follow_target *t, off_t new_size)
 }
 
 /* -f's main loop, entered once every operand has printed its initial
- * tail.  Runs until a read/write failure (diagnostic already printed,
- * -1 returned) or -- the common case -- until SIGINT/Ctrl-C kills the
- * process outright (see this file's header comment); there is no other
- * exit for a regular-file target, since a regular file can always grow
- * again no matter how long it has sat still. */
+ * tail. Runs until a read/write failure or SIGINT kills the process
+ * outright (default disposition, no handler installed) -- a regular
+ * file can always grow again, so there's no other exit for one. */
 static int tail_follow(struct tail_follow_target *targets, int ntargets)
 {
-	/* Not 0: the caller's own initial-dump loop over the operands (in
-	 * argv order, same order targets[] was built in) always finishes on
-	 * the last one, so that is the last banner a multi-operand run has
-	 * actually shown -- starting this loop's own idea of "last shown"
-	 * from scratch would reprint that same file's banner the moment it
-	 * is also the first one to grow, even though nothing has switched
-	 * files from the reader's point of view yet. */
+	/* Not 0: the caller's initial-dump loop always finishes on the last
+	 * operand, so that file's banner is the last one actually shown --
+	 * starting "last shown" over here would reprint it the moment that
+	 * same file is also first to grow, even though nothing switched. */
 	const char *last_label = ntargets > 1 ? targets[ntargets - 1].label : 0;
 
-	/* Exactly one target, and it is not a regular file: a pipe/FIFO (or
-	 * character-device stdin) has no "size" to poll, and read() already
-	 * blocks until either more data arrives or the writer closes --
-	 * which, unlike a regular file, really is the end, since nothing
-	 * will ever make a closed pipe grow again. */
+	/* A lone non-regular target (pipe/FIFO/character-device stdin) has
+	 * no size to poll, and read() already blocks until data arrives or
+	 * the writer closes -- which really is the end, unlike a regular
+	 * file. */
 	if (ntargets == 1 && !targets[0].is_regular) {
 		char buf[65536];
 		for (;;) {
@@ -289,11 +262,11 @@ static int tail_follow(struct tail_follow_target *targets, int ntargets)
 		}
 	}
 
-	/* One or more regular-file targets (a lone non-regular target took
-	 * the branch above; a non-regular target mixed in among several
-	 * operands is skipped below -- fstat()'s st_size means nothing for
-	 * a pipe, and blocking read() on one would stall every other
-	 * target's polling, so it only ever gets its initial tail). */
+	/* One or more regular-file targets (a lone non-regular one took the
+	 * branch above). A non-regular target mixed in among several is
+	 * skipped below and never gets more than its initial tail: st_size
+	 * means nothing for a pipe, and a blocking read() on one would
+	 * stall every other target's polling. */
 	for (;;) {
 		int i;
 
@@ -372,11 +345,9 @@ int __util_tail_main(
 				return 1;
 			}
 			numstr = argv[++i];
-			/* numstr is one of argv's own elements (i < argc), genuinely
-			 * never NULL by this function's own
-			 * elements_withtok(null_terminated, argc) contract on argv --
-			 * restated here the same way src/util/od.c's own argv-slice
-			 * reads already do. */
+			/* Restate the argv elements_withtok(null_terminated, argc)
+			 * contract on numstr (i < argc), same as od.c's argv-slice
+			 * reads. */
 			__ownership_pointer_nonnull(numstr);
 			if (parse_signed_number(numstr, &fe, &num) < 0) {
 				__util_diagf("tail: %s: invalid number\n", numstr);
@@ -433,12 +404,9 @@ int __util_tail_main(
 			int fd;
 			int rc;
 
-			/* path is one of argv's own elements, genuinely
-			 * null-terminated by this function's own
-			 * elements_withtok(null_terminated, argc) contract on argv --
-			 * restated here since that token does not survive the
-			 * argv[i] -> const char * read this checker can trace on its
-			 * own. */
+			/* Restate the null-terminated contract on argv[i]: it
+			 * doesn't survive the argv[i] -> const char * read this
+			 * checker can trace on its own. */
 			__ownership_string_terminated(path);
 			is_stdin = !strcmp(path, "-");
 

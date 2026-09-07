@@ -184,6 +184,12 @@ int __util_paste_main(
 	files = calloc((size_t)nfiles, sizeof *files); // NOLINT(bugprone-sizeof-expression) -- files is FILE**, *files is FILE*, the array holds pointers
 	if (!files) { fprintf(stderr, "paste: %s\n", strerror(ENOMEM)); if (delims != default_delim) free(delims); return 1; }
 
+	/* Checker gap (ntlibc.ResourceLeak): each fopen() below is stored
+	 * into files[j], a heap array indexed by a runtime loop variable --
+	 * the checker can't correlate that store with the files[j] load in
+	 * the close loop further down, so every entry here is reported as
+	 * never released even though the close loop closes each one
+	 * (guarded exactly the same way, `files[j] && files[j] != stdin`). */
 	{
 		int j;
 		for (j = 0; j < nfiles; j++) {

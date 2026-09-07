@@ -1,46 +1,25 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * uuencode(1p): "The uuencode utility shall read source_file (or by
- * default, its standard input) and shall write an encoded version to
- * standard output.  The encoding uses only printing ASCII characters
- * and includes the mode of the file and the operand decode_pathname for
- * use by uudecode when re-creating the binary file."
+ * uuencode(1p): reads source_file (or stdin) and writes a uuencoded
+ * version to stdout, for uudecode to reverse.
  *
  * SYNOPSIS: `uuencode [-m] [source_file] decode_pathname`.
  *
- * ---- format, straight off the OPERANDS/DESCRIPTION text -----------------
+ * Format: "begin mode decode_pathname\n" header (mode as three octal
+ * digits), then the input in 45-byte chunks, each becoming one line: a
+ * length character (src/util/uucode.h's UUENC(n)) followed by
+ * ceil(n/3)*4 encoded characters. A short final chunk is zero-padded
+ * before encoding, but the length prefix -- not the full group -- is
+ * what tells uudecode.c's decoder how many bytes are real. A
+ * zero-length line ends the data, followed by a literal "end\n".
  *
- *  - Header line: "begin mode decode_pathname\n" -- mode written as
- *    three octal digits (the traditional, universally-produced width;
- *    the standard itself just says "the file permission bits of
- *    source_file", not a field width, but every real uuencode and
- *    uudecode in the wild agrees on three digits, and uudecode.c's own
- *    parser here accepts more digits regardless via strtoul()).
- *  - Body: input consumed 45 bytes at a time; each chunk becomes one
- *    line: a length character (src/util/uucode.h's UUENC(n)) followed by
- *    ceil(n/3)*4 encoded characters, four per 3-input-byte group (the
- *    last group of a short final chunk is zero-padded before encoding,
- *    but only the length prefix says how many of the decoded bytes are
- *    real -- uudecode.c's own decoder trusts exactly that count, never
- *    the group's own full 3 bytes).
- *  - A zero-length line (UUENC(0), i.e. a lone '`') marks the end of the
- *    data, followed by a literal "end\n" line.
+ * With no source_file there's no real file to fstat() a mode from, so
+ * 0644 is used -- the conventional default every historical uuencode
+ * falls back to in that case.
  *
- * mode: "the file permission bits of source_file" -- read via fstat()
- * on the real opened source_file when one was given.  With no
- * source_file (reading standard input instead), there is no real file
- * whose permission bits this could honestly report; 0644 is used as the
- * conventional default every historical uuencode falls back to in that
- * case, documented here as a real, deliberate choice rather than a
- * fstat(stdin)-derived value that would usually just describe a pipe or
- * terminal, not a file mode meant to survive a round trip.
- *
- * -m ("Base64 encoding ... instead of the historical UU encoding
- * algorithm") is a real, distinct algorithm this build does not
- * implement -- refused loudly with a diagnostic and a nonzero exit,
- * per this project's "refuse rather than silently ignore" rule (see
- * src/util/touch.c's -d for the same shape), rather than silently
+ * -m (Base64) is a distinct algorithm this build doesn't implement;
+ * refused with a diagnostic and nonzero exit rather than silently
  * falling back to the historical encoding under a flag that promised
  * something else.
  */
@@ -84,7 +63,8 @@ int __util_uuencode_main(
 	int noperands;
 	int status = 0;
 
-	for (; i < argc && argv[i][0] == '-' && argv[i][1]; i++) {
+	for (; i < argc; i++) {
+		if (argv[i][0] != '-' || !argv[i][1]) break;
 		if (!strcmp(argv[i], "--")) { i++; break; }
 		if (!strcmp(argv[i], "-m")) {
 			__util_diagf("uuencode: -m: Base64 encoding is not supported "
@@ -100,6 +80,12 @@ int __util_uuencode_main(
 		decode_name = argv[i];
 		in = stdin;
 	} else if (noperands == 2) {
+		/* Checker gap (ntlibc.ResourceLeak): the fclose()s below are
+		 * already gated on this same `src_path` (set right here, never
+		 * reassigned) rather than on `in != stdin` -- but the checker
+		 * can't prove argv[i], i < argc, is non-null, so it still
+		 * explores a (real-world impossible) path where src_path reads
+		 * back null and reports the fopen() below as never released. */
 		src_path = argv[i];
 		decode_name = argv[i + 1];
 		in = fopen(src_path, "rb");

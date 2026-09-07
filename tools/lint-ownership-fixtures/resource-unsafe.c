@@ -52,3 +52,23 @@ void release_twice_mkstemp(void)
 	close(fd);
 	close(fd); /* ownership-expect: resource-released */
 }
+
+typedef struct file FILE;
+FILE *fopen(const char *, const char *);
+int fclose(FILE *);
+int write_body(FILE *, int);
+
+/* The short-circuit-past-cleanup shape src/util/get.c's get_one() used to
+ * have (fixed by 906692a9): `||` short-circuits, so fclose(g) never runs
+ * on the branch where write_body() itself already failed, leaking the
+ * FILE* on exactly that path. */
+int short_circuit_leak(const char *path, int lines)
+{
+	int rc = 0;
+	FILE *g = fopen(path, "wb");
+	if (!g)
+		return 1;
+	if (write_body(g, lines) != 0 || fclose(g) != 0)
+		rc = 1;
+	return rc; /* ownership-expect: resource-leak */
+}

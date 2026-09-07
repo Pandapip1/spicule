@@ -187,14 +187,20 @@ int __util_fold_main(
 		fold_stream(stdin, width, opt_b, opt_s);
 	} else {
 		for (; i < argc; i++) {
-			FILE *f = !strcmp(argv[i], "-") ? stdin : fopen(argv[i], "r");
+			/* use_stdin, not `f != stdin`, decides the fclose() below --
+			 * the checker can't prove opaque pointers unequal, so a
+			 * direct comparison makes the fopen() allocation look
+			 * conditionally leaked (same idiom as src/util/join.c's
+			 * read_all()). */
+			int use_stdin = !strcmp(argv[i], "-");
+			FILE *f = use_stdin ? stdin : fopen(argv[i], "r");
 			if (!f) {
 				fprintf(stderr, "fold: %s: %s\n", argv[i], strerror(errno));
 				had_error = 1;
 				continue;
 			}
 			fold_stream(f, width, opt_b, opt_s);
-			if (f != stdin) (void)fclose(f);
+			if (!use_stdin) (void)fclose(f);
 		}
 	}
 

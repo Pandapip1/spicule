@@ -42,7 +42,8 @@ DIAGNOSTIC = re.compile(
     r"dereference alignment is not proven valid|"
     r"dereference accesses consumed storage|resource is not proven live|"
     r"resource is already released|operation uses a released resource|"
-    r"resource family does not match operation); origin '(.*)'; context '(.*)'; "
+    r"resource family does not match operation); "
+    r"origin '(.*)'; context '(.*)'; "
     r"expression '(.*)'; site '(.*)' "
     r"\[ntlibc\.(Ownership|OwnedConstruct|CapabilityToken|OwnershipType|ValidPointer|Resource)\]$"
 )
@@ -133,7 +134,12 @@ def fixture_test(path: pathlib.Path) -> None:
     expected = set()
     for source in FIXTURES.glob("*.c"):
         for number, line in enumerate(source.read_text(encoding="utf-8").splitlines(), 1):
-            if "ownership-expect" in line:
+            # "ownership-expect: resource-leak" belongs to the opt-in
+            # ntlibc.ResourceLeak checker's own tools/lint-resourceleak.py
+            # gate (tools/lint.sh's resourceleak stage) -- ntlibc.Resource
+            # alone (this script's own DIAGNOSTIC) no longer emits that
+            # message, so it must not be in this gate's expected set.
+            if "ownership-expect" in line and "ownership-expect: resource-leak" not in line:
                 expected.add((source.relative_to(ROOT).as_posix(), number))
     actual = {(finding.path, finding.line) for finding in parse_log(path)}
     errors = validate_contracts(parse_contracts(path))

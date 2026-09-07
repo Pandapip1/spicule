@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include "tablist.h"
 #include "util.h"
+#include "ownership_stubs.h" /* __ownership_pointer_nonnull() */
 
 int __util_tablist_parse(const char *spec, struct tablist *out)
 {
@@ -80,6 +81,11 @@ long __util_tablist_next_stop(const struct tablist *tl, long col)
 	}
 	{
 		size_t k;
+		/* interval == 0 here, so this is the explicit-list case, where
+		 * __util_tablist_parse always paired a live stops[] allocation
+		 * with nstops > 0 (see struct tablist's own comment) -- a fact
+		 * this checker can't trace across the two functions. */
+		__ownership_pointer_nonnull(tl->stops);
 		for (k = 0; k < tl->nstops; k++)
 			if (tl->stops[k] > col) return tl->stops[k];
 		return 0;

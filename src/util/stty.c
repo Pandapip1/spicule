@@ -110,6 +110,7 @@
 #include <unistd.h>	/* _POSIX_VDISABLE */
 #include <termios.h>
 #include "util.h"
+#include "ownership_stubs.h" /* __ownership_string_terminated() */
 
 /* ---- accumulated, not-yet-applied operand state -------------------
  *
@@ -244,6 +245,9 @@ static const struct ccname ccnames[] = {
 };
 #define NCCNAMES (int)(sizeof ccnames / sizeof *ccnames)
 
+/* p is always &p in __util_stty_main's own local -- never NULL along any
+ * of this file's call chains. */
+__attribute__((nonnull(1)))
 static void mark_group(struct pending *p, int group, tcflag_t bit, int enable)
 {
 	tcflag_t *setm, *clrm;
@@ -257,6 +261,9 @@ static void mark_group(struct pending *p, int group, tcflag_t bit, int enable)
 	else        { *clrm |= bit; *setm &= ~bit; }
 }
 
+/* p is always &p in __util_stty_main's own local -- see mark_group's
+ * identical note. */
+__attribute__((nonnull(1)))
 static void set_delay(struct pending *p, tcflag_t mask, tcflag_t val)
 {
 	switch (mask) {
@@ -292,6 +299,9 @@ static void apply_sane(struct pending *p)
 	for (i = 0; i < NCCS; i++) { p->cc_have[i] = 1; p->cc_val[i] = cc_defaults[i]; }
 }
 
+/* p is always &p in __util_stty_main's own local -- see mark_group's
+ * identical note. */
+__attribute__((nonnull(1)))
 static void apply_ek(struct pending *p)
 {
 	p->cc_have[VERASE] = 1; p->cc_val[VERASE] = cc_defaults[VERASE];
@@ -301,6 +311,9 @@ static void apply_ek(struct pending *p)
 /* Raw mode's defining line (stty.html, quoted and explained in this
  * file's own header comment): cs8, six control characters disabled,
  * output post-processing off, input parity checking off. */
+/* p is always &p in __util_stty_main's own local -- see mark_group's
+ * identical note. */
+__attribute__((nonnull(1)))
 static void apply_raw(struct pending *p)
 {
 	static const int disabled[] = { VERASE, VKILL, VINTR, VQUIT, VEOF, VEOL };
@@ -329,7 +342,10 @@ static void apply_cooked(struct pending *p)
  * punctuation specials), so this computes it rather than transcribing
  * stty.html's own three-column table by hand. Returns 1 and sets *out
  * on success, 0 on a string this file does not recognize. */
-static int parse_ctrl_char(const char *s, unsigned char *out)
+/* Both call sites pass an argv element (already null-terminated) and the
+ * address of a stack local for out. */
+__attribute__((nonnull(1, 2)))
+static int parse_ctrl_char(const char *s withtok(null_terminated), unsigned char *out)
 {
 	if (!strcmp(s, "undef") || !strcmp(s, "^-")) {
 		*out = (unsigned char)_POSIX_VDISABLE;
@@ -358,9 +374,15 @@ static int parse_ctrl_char(const char *s, unsigned char *out)
  * Rejects empty strings, leading '-'/'+', hex/octal forms, and any
  * trailing garbage -- stty.html's "number" is a plain decimal integer,
  * never one of those. */
-static int parse_uint(const char *s, unsigned long *out)
+static int parse_uint(const char *s withtok(null_terminated), unsigned long *out)
 {
 	char *end;
+	/* OPEN LINT FINDING (ntlibc.ValidPointer, "s[0]" not proven
+	 * nonnull): withtok(null_terminated) above establishes s at
+	 * function entry, but a raw subscript directly inside this
+	 * compound `if` condition is the same shape src/util/rmdir.c's
+	 * argv[i][0] gap documents -- the fact does not reach a bare
+	 * subscript in a condition, only a subscript in a body statement. */
 	if (!s[0] || !isdigit((unsigned char)s[0])) return 0;
 	*out = strtoul(s, &end, 10);
 	return *end == 0;
@@ -443,6 +465,16 @@ static void print_cc(const struct termios *t, int all)
 	int i;
 	for (i = 0; i < NCCNAMES; i++) {
 		int idx = ccnames[i].idx;
+		/* OPEN LINT FINDING (ntlibc.ValidPointer, "dereference extent is
+		 * not proven sufficient"): every ccnames[].idx value is one of
+		 * the VINTR..VSUSP constants, all < NCCS, so t->c_cc[idx] and
+		 * cc_defaults[idx] below are always in bounds. The checker
+		 * can't correlate an index loaded from one const table's field
+		 * against the fixed size of an unrelated array; no existing
+		 * ownership.h annotation expresses that relation (same shape as
+		 * src/util/sort.c's key_start_off()/key_end_off() open findings
+		 * on fields[f-1].end), so this is left open rather than papered
+		 * over. */
 		unsigned char v = t->c_cc[idx];
 		if (!all && v == cc_defaults[idx]) continue;
 		printf("%s = %s; ", ccnames[i].name, caret_repr(v, buf));
@@ -512,6 +544,13 @@ static int parse_operand(int argc, char **argv, int *ip, struct pending *p)
 	int i;
 
 	if (a[0] == '-' && a[1]) { enable = 0; name = a + 1; }
+	/* name is either a itself (an argv element, already null-terminated
+	 * via __util_stty_main's own elements_withtok(null_terminated, argc))
+	 * or a + 1 (a[1] was just proven non-NUL above, so a + 1 is still a
+	 * null-terminated suffix of the same buffer) -- the pointer
+	 * arithmetic loses the token this checker tracks even though the
+	 * fact stays true, so restated here. */
+	__ownership_string_terminated(name);
 
 	for (i = 0; i < NBOOLFLAGS; i++) {
 		if (!strcmp(name, boolflags[i].name)) {

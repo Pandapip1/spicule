@@ -17,14 +17,11 @@
  * shape as src/util/mkdir_util.c and src/util/rmdir.c.
  *
  * This tree's mkfifo() (src/stat/chmod.c) is a real ENOSYS stub: NT has
- * no native named-pipe object that maps onto POSIX FIFO semantics the
- * way NTFS reparse points map onto symlinks, so every operand here fails
- * with a real "Function not implemented" diagnostic rather than a
- * silent, fake success -- exactly the "propagate the stub honestly"
- * requirement this utility exists to prove, not an oversight.  -m's
- * mode string is still parsed and validated before that call, so a
- * malformed -m argument is reported as such (a usage error) rather than
- * being swallowed by the ENOSYS from mkfifo() itself.
+ * no native named-pipe object mapping onto POSIX FIFO semantics (unlike
+ * NTFS reparse points for symlinks), so every operand fails with a real
+ * "Function not implemented" rather than a fake success. -m's mode
+ * string is still parsed and validated first, so a malformed argument
+ * is reported as a usage error, not swallowed by mkfifo()'s ENOSYS.
  */
 
 /* This translation unit implements ntlibc's freestanding -nostdinc
@@ -49,11 +46,9 @@ int __util_mkfifo_main(
 
 	i = 1;
 	while (i < argc) {
-		/* argv's own elements_withtok(null_terminated, argc) proves
-		 * every element up to argc has a reachable NUL, but not that
-		 * the element pointer itself is nonnull -- genuinely true
-		 * (main()'s argv[0..argc-1] are never NULL), just not a fact
-		 * an array-element read can carry across to ValidPointer. */
+		/* elements_withtok(null_terminated, argc) proves NUL-termination
+		 * but not nonnull-ness of argv[i] itself (true in practice, but
+		 * not provable from an array-element read). */
 		__ownership_pointer_nonnull(argv[i]);
 		if (argv[i][0] != '-' || !argv[i][1]) break;
 		if (!strcmp(argv[i], "--")) { i++; break; }

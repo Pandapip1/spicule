@@ -191,3 +191,42 @@ int snprintf_with_unproven_size_is_still_flagged(char *buf, size_t n)
 	snprintf(buf, n, "%s", "hi");
 	return buf[0] == 'h'; /* ownership-expect: pointer-null */
 }
+
+/* The adversarial twins of pointer-safe.c's fd_get_after_successful_
+ * install_needs_no_restatement: the same __fd_install()/__fd_get() names
+ * and arities, but each missing one piece the real proof requires --
+ * confirming fdGetArgProvenLive is a real proof, not a blanket grant for
+ * any __fd_get() call reachable after any __fd_install() call. */
+struct __fd { int state; };
+int __fd_install(void *handle, unsigned flags, int type);
+struct __fd *__fd_get(int fd);
+void __plat_close(void *handle);
+void unrelated_call(void);
+
+/* No `if (fd < 0)` guard at all: fd is never proven nonnegative, so
+ * __fd_get()'s "NULL with errno=EBADF" failure return is a real,
+ * unexcluded possibility on this path. */
+int fd_get_without_checking_install_result_is_still_flagged(void *handle)
+{
+	int fd = __fd_install(handle, 0, 0);
+	struct __fd *f = __fd_get(fd);
+	f->state = 1; /* ownership-expect: pointer-null */
+	return fd;
+}
+
+/* The `if (fd < 0)` guard IS present, but an unrelated call happens
+ * between __fd_install() and __fd_get() -- exactly the shape a real
+ * close()/another __fd_install() reusing the slot would take.
+ * PendingInstalledFd must be cleared by that intervening call, the same
+ * way checkPostCall's own fallthrough treats every call it does not
+ * itself recognize, so this __fd_get() is still flagged rather than
+ * silently trusted through the unrelated call. */
+int fd_get_after_intervening_call_is_still_flagged(void *handle)
+{
+	int fd = __fd_install(handle, 0, 0);
+	if (fd < 0) { __plat_close(handle); return -1; }
+	unrelated_call();
+	struct __fd *f = __fd_get(fd);
+	f->state = 2; /* ownership-expect: pointer-null */
+	return fd;
+}

@@ -85,6 +85,16 @@ REGISTER_MAP_WITH_PROGRAMSTATE(ResourceOrigin, SymbolRef, const Stmt *)
 REGISTER_MAP_WITH_PROGRAMSTATE(ResourceFrame, SymbolRef,
                                const StackFrameContext *)
 
+// src/internal/fd.c's __fd_install() returns either a negative failure or
+// a fd index it has just filled into __fds[]; __fd_get() with that exact
+// value, called before anything else could touch the table, is guaranteed
+// to find it -- the cross-function fact ValidPointerChecker's own
+// isFdInstall/isFdGet/fdGetArgProvenLive close (see fdGetArgProvenLive's
+// own comment). A plain scalar trait rather than a map: only ever compared
+// against the very next call on this path, so there is nothing to key on
+// besides "the current path" itself.
+REGISTER_TRAIT_WITH_PROGRAMSTATE(PendingInstalledFd, SymbolRef)
+
 namespace {
 
 using ntlibc::algebra::excludedSentinel;
@@ -3588,6 +3598,60 @@ class ValidPointerChecker
     return Function->getName() == "__ownership_string_terminated";
   }
 
+  // src/internal/fd.c's __fd_install(handle, flags, type) either returns a
+  // negative failure or a fd index it has just filled into __fds[].
+  // Recognized by name and arity, the same way isPointerNonNullAxiom
+  // recognizes ownership_stubs.h's own leaf axioms -- __fd_install() is
+  // one specific, reserved-namespace internal runtime entry point, not a
+  // shape any unrelated declaration could plausibly share.
+  static bool isFdInstall(const CallEvent &Call) {
+    const auto *Function = dyn_cast_or_null<FunctionDecl>(Call.getDecl());
+    return Function && Function->getIdentifier() &&
+           Function->getName() == "__fd_install" && Call.getNumArgs() == 3;
+  }
+
+  // src/internal/fd.c's struct __fd *__fd_get(int fd): "NULL with
+  // errno=EBADF" per its own libc.h declaration comment -- ordinarily
+  // exactly as unprovable as any other opaque cross-TU call, closed only
+  // by fdGetArgProvenLive below.
+  static bool isFdGet(const CallEvent &Call) {
+    const auto *Function = dyn_cast_or_null<FunctionDecl>(Call.getDecl());
+    return Function && Function->getIdentifier() &&
+           Function->getName() == "__fd_get" && Call.getNumArgs() == 1;
+  }
+
+  // True when Call's own fd argument is provably the exact symbol
+  // __fd_install() most recently returned on this path (PendingInstalledFd,
+  // cleared by checkPostCall's own fallthrough below the instant any other
+  // call happens), AND that same path has already ruled out the failure
+  // branch (fd < 0) -- every real call site (src/socket/{socket,accept,
+  // socketpair}.c, commit 3dd52b7a) already guards with exactly
+  // `if (fd < 0) { ...; return -1; }` before ever reaching __fd_get(), so
+  // ordinary branch-constraint propagation from that guard has already
+  // narrowed this path's State by the time control gets here -- nothing
+  // further needs asserting beyond the equality itself. "Prove the
+  // negation infeasible" is the same idiom trackScanExtent's own strlen()
+  // nonzero-size proof and aggregateIndexProven's in-bounds proof already
+  // use: fd < 0 must be UNREACHABLE on this path, not merely unproven,
+  // before __fd_get()'s return is asserted nonnull -- a caller that skips
+  // the guard (or checks it insufficiently) is still, correctly, flagged.
+  static bool fdGetArgProvenLive(const CallEvent &Call, CheckerContext &C) {
+    if (Call.getNumArgs() == 0)
+      return false;
+    ProgramStateRef State = C.getState();
+    SymbolRef Pending = State->get<PendingInstalledFd>();
+    SymbolRef Argument = Call.getArgSVal(0).getAsSymbol(true);
+    if (!Pending || !Argument || Argument != Pending)
+      return false;
+    SValBuilder &Builder = C.getSValBuilder();
+    SVal Negative = Builder.evalBinOp(
+        State, BO_LT, nonloc::SymbolVal(Argument),
+        Builder.makeZeroVal(Argument->getType()), Builder.getConditionType());
+    std::optional<DefinedOrUnknownSVal> Condition =
+        Negative.getAs<DefinedOrUnknownSVal>();
+    return Condition && !State->assume(*Condition, true);
+  }
+
   // Mirrors CapabilityTokenChecker::protocolsFor's own "withtok:family"
   // parsing for the Require case, but reads the annotation straight off
   // the ParmVarDecl instead of through that checker's CapabilityMap (see
@@ -4170,6 +4234,34 @@ public:
   void checkPostCall(const CallEvent &Call, CheckerContext &C) const {
     ProgramStateRef State = C.getState();
     bool Changed = false;
+
+    // __fd_install()/__fd_get(): see isFdInstall's and fdGetArgProvenLive's
+    // own comments. An exhaustive if/else-if/else, deliberately NOT nested
+    // among the specific-purpose axioms below: the "else" arm has to fire
+    // for every call this function does not itself recognize as one of
+    // these two, since ANY other call in between (close(), another
+    // __fd_install() reusing the slot, ...) could invalidate it -- rather
+    // than enumerate which real functions actually do that and risk
+    // missing one, every other call is treated as potentially
+    // invalidating.
+    if (isFdInstall(Call)) {
+      State = State->set<PendingInstalledFd>(
+          Call.getReturnValue().getAsSymbol(true));
+      Changed = true;
+    } else if (isFdGet(Call)) {
+      if (fdGetArgProvenLive(Call, C)) {
+        if (std::optional<DefinedOrUnknownSVal> Defined =
+                Call.getReturnValue().getAs<DefinedOrUnknownSVal>()) {
+          if (ProgramStateRef NonNull = State->assume(*Defined, true)) {
+            State = NonNull;
+            Changed = true;
+          }
+        }
+      }
+    } else if (State->get<PendingInstalledFd>()) {
+      State = State->set<PendingInstalledFd>(nullptr);
+      Changed = true;
+    }
 
     // A successful getline/getdelim call returns the number of bytes read,
     // stores a nonnull buffer through lineptr, and places a terminating NUL

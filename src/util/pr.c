@@ -205,9 +205,14 @@ static int process_file(const struct pr_opts *o, const char *path)
 {
 	FILE *f;
 	int rc;
+	/* use_stdin, not `f != stdin`, decides the fclose() below -- the
+	 * checker can't prove opaque pointers unequal, so a direct
+	 * comparison makes the fopen() allocation look conditionally leaked
+	 * (same idiom as src/util/join.c's read_all()). */
+	int use_stdin = !strcmp(path, "-");
 	const char *fname = o->header ? o->header : path;
 
-	if (!strcmp(path, "-")) {
+	if (use_stdin) {
 		f = stdin;
 		fname = o->header ? o->header : "";
 	} else {
@@ -218,7 +223,7 @@ static int process_file(const struct pr_opts *o, const char *path)
 		}
 	}
 	rc = process_stream(o, f, fname);
-	if (f != stdin && fclose(f) != 0) rc = -1;
+	if (!use_stdin && fclose(f) != 0) rc = -1;
 	if (pr_output_failed || fflush(stdout) != 0) rc = -1;
 	return rc;
 }

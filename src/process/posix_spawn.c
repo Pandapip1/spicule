@@ -259,6 +259,10 @@ static int do_action(const struct __spawn_action *a, struct saved_slot *sv, int 
 			if (dup2(t, a->u.open.fd) < 0) { int e = errno; (void)close(t); return e; }
 			(void)close(t);
 		}
+		/* Checker gap (ntlibc.ResourceLeak): when t == a->u.open.fd
+		 * already, it IS the requested slot from here on (no dup2/close
+		 * needed or wanted) -- the checker can't see that aliasing, so
+		 * it reports t as never released. */
 		return 0;
 	}
 	default:

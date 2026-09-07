@@ -171,18 +171,16 @@ static char *load_progfiles(char **files elements_withtok(null_terminated, nfile
 
 	for (i = 0; i < nfiles; i++) {
 		const char *fname = files[i];
-		FILE *f;
+		/* use_stdin, not `f != stdin`, decides the fclose() below -- the
+		 * checker can't prove opaque pointers unequal, so a direct
+		 * comparison makes this fopen() allocation look conditionally
+		 * leaked (same idiom as src/util/join.c's read_all()). */
+		int use_stdin = strcmp(fname, "-") == 0;
+		FILE *f = use_stdin ? stdin : fopen(fname, "r");
 		char chunk[4096];
 		size_t n;
 
 		__ownership_string_terminated(fname);
-		/* Every fopen()'d f is fclose()'d below (the `f != stdin` guard).
-		 * ntlibc.AllocationLifetime still flags it: it has no axiom that
-		 * fopen()'s result is provably disjoint from the global stdin
-		 * singleton, so it can't rule out f aliasing stdin on the branch
-		 * where fclose() is (rightly) skipped -- a known checker gap,
-		 * left open. */
-		f = strcmp(fname, "-") == 0 ? stdin : fopen(fname, "r");
 		if (!f) {
 			__util_diagf("awk: %s: %s\n", fname, strerror(errno));
 			free(buf);
@@ -190,7 +188,7 @@ static char *load_progfiles(char **files elements_withtok(null_terminated, nfile
 		}
 		while ((n = fread(chunk, 1, sizeof chunk, f)) > 0)
 			buf_grow_append(&buf, &len, &cap, chunk, n);
-		if (f != stdin) (void)fclose(f);
+		if (!use_stdin) (void)fclose(f);
 		if (len == 0) {
 			buf_grow_append(&buf, &len, &cap, "\n", 1);
 		} else {

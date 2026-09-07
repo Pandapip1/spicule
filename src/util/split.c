@@ -192,6 +192,7 @@ int __util_split_main(
 	const char *file = "-";
 	const char *prefix = "x";
 	FILE *in;
+	int use_stdin;
 	int rc;
 
 	for (; i < argc; i++) {
@@ -238,7 +239,12 @@ int __util_split_main(
 		return 1;
 	}
 
-	if (!strcmp(file, "-")) {
+	/* use_stdin, not `in != stdin`, decides the fclose() below -- the
+	 * checker can't prove opaque pointers unequal, so a direct
+	 * comparison makes the fopen() allocation look conditionally leaked
+	 * (same idiom as src/util/join.c's read_all()). */
+	use_stdin = !strcmp(file, "-");
+	if (use_stdin) {
 		in = stdin;
 	} else {
 		in = fopen(file, "rb");
@@ -251,6 +257,6 @@ int __util_split_main(
 	rc = bcount > 0 ? split_by_bytes(in, prefix, suflen, bcount)
 	                : split_by_lines(in, prefix, suflen, lcount);
 
-	if (in != stdin && fclose(in) != 0) rc = -1;
+	if (!use_stdin && fclose(in) != 0) rc = -1;
 	return rc < 0 ? 1 : 0;
 }

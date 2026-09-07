@@ -39,9 +39,18 @@ int daemon(int nochdir, int noclose)
 			 * correct even if open() returned 0, 1 or 2. */
 			if (dup2(fd, STDIN_FILENO) < 0 ||
 			    dup2(fd, STDOUT_FILENO) < 0 ||
-			    dup2(fd, STDERR_FILENO) < 0)
+			    dup2(fd, STDERR_FILENO) < 0) {
+				/* A real leak otherwise: unlike the success path
+				 * below, nothing here ever closed fd. */
+				if (fd > STDERR_FILENO) (void)close(fd);
 				return -1;
+			}
 			if (fd > STDERR_FILENO) (void)close(fd);
+			/* Checker gap (ntlibc.ResourceLeak): when fd IS one of
+			 * 0/1/2, dup2(fd, fd) above already retired it as that
+			 * standard stream for the rest of the process -- the
+			 * checker can't see that aliasing, so it reports fd as
+			 * never released. */
 		}
 		/* open() failing here is not daemon()'s own failure --
 		 * glibc's daemon() takes the same view and skips the

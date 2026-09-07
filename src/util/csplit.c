@@ -276,6 +276,7 @@ int __util_csplit_main(
 	int ndigits = 2;
 	const char *filename;
 	FILE *f;
+	int use_stdin;
 	struct lines L;
 	struct created created;
 	int cur = 0, piece = 0;
@@ -315,7 +316,12 @@ int __util_csplit_main(
 	filename = argv[i++];
 	if (i >= argc) { __util_diagf("csplit: missing arg operand\n"); return 1; }
 
-	f = strcmp(filename, "-") == 0 ? stdin : fopen(filename, "rb");
+	/* use_stdin, not `f != stdin`, decides the fclose()s below -- the
+	 * checker can't prove opaque pointers unequal, so a direct
+	 * comparison makes the fopen() allocation look conditionally leaked
+	 * (same idiom as src/util/join.c's read_all()). */
+	use_stdin = strcmp(filename, "-") == 0;
+	f = use_stdin ? stdin : fopen(filename, "rb");
 	if (!f) {
 		int saved = errno;
 		__util_diagf("csplit: %s: %s\n", filename, strerror(saved));
@@ -323,12 +329,12 @@ int __util_csplit_main(
 	}
 	if (read_all_lines(f, &L) < 0) {
 		/* The allocation/read failure is primary; close is cleanup only. */
-		if (f != stdin) (void)fclose(f);
+		if (!use_stdin) (void)fclose(f);
 		free_lines(&L); /* frees whatever lines were read before the allocation failure */
 		__util_diagf("csplit: %s: out of memory reading file\n", filename);
 		return 1;
 	}
-	if (f != stdin && fclose(f) != 0) {
+	if (!use_stdin && fclose(f) != 0) {
 		free_lines(&L);
 		__util_diagf("csplit: %s: %s\n", filename, strerror(errno));
 		return 1;

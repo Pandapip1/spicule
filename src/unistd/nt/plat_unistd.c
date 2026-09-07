@@ -1052,7 +1052,43 @@ int __plat_fchown(__plat_handle_t h, uid_t uid, gid_t gid)
  * binary built with this flag still only *links* against ntdll and only
  * pulls bcrypt.dll into its address space if it actually runs on a build
  * where this was requested. Without the flag, __plat_getentropy() is not
- * compiled in and the front door reports ENOSYS itself. */
+ * compiled in and the front door reports ENOSYS itself.
+ *
+ * Driving the kernel's RNG device directly, the way src/internal/afd.h
+ * drives \Device\Afd, was investigated and does not clear afd.h's
+ * two-independent-agreeing-sources bar:
+ *
+ *   - \Device\CNG is what bcryptprimitives.dll opens to seed its
+ *     user-mode DRBG (BoringSSL e79649ba, "Use ProcessPrng"), but its
+ *     function codes live in the >= 0x100 range ntddksec.h reserves and
+ *     declines to document, and Project Zero's CVE-2020-17087 writeup
+ *     describes them as taking "non-trivial input structures". No open
+ *     source implements them.
+ *   - \Device\KsecDD's IOCTL_KSEC_RNG is named in Microsoft's own
+ *     ntddksec.h -- CTL_CODE(FILE_DEVICE_KSEC = 0x39, 1, METHOD_BUFFERED,
+ *     FILE_ANY_ACCESS) = 0x390004 -- but the two sources disagree about
+ *     which code actually returns bytes. ntddksec.h names 0x390008
+ *     IOCTL_KSEC_RNG_REKEY; ReactOS's driver (drivers/crypto/ksecdd/
+ *     {dispatch,random}.c) implements 0x390008 as the random fill,
+ *     annotated "called from SystemFunction036", and does not implement
+ *     0x390004 at all. Nothing breaks the tie: no client-side caller
+ *     exists in any open source. ReactOS's own advapi32
+ *     SystemFunction036 and its bcryptprimitives ProcessPrng both
+ *     generate in user mode rather than calling the device, and Wine's
+ *     dlls/{ksecdd,cng}.sys are DriverEntry-only stubs that never reach
+ *     IoCreateDevice, so no device exists there to carry an ioctl (Wine's
+ *     BCryptGenRandom goes to the host RNG instead). ReactOS's driver-side
+ *     generator is RtlRandomEx, so it is not evidence about what Windows
+ *     returns even where it is reachable.
+ *
+ * The codes user-mode bcrypt is actually observed sending are the
+ * undocumented ones: exploit-db 42211 has BCryptOpenAlgorithmProvider()
+ * driving \Device\KsecDD with 0x390400 (function 0x100), and the bug it
+ * reports is that ioctl returning uninitialized pool memory in the output
+ * buffer. That is the failure mode that makes guessing unacceptable here:
+ * a wrong code or buffer layout does not fail loudly, it hands back
+ * plausible-looking bytes that are not random. This stays on bcrypt.dll
+ * until a client-side source turns up to corroborate a code and layout. */
 #ifdef NTLIBC_USE_KERNEL32
 typedef NTSTATUS (NTAPI *bcrypt_gen_random_fn)(PVOID, unsigned char *, ULONG, ULONG);
 

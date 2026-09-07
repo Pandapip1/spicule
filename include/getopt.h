@@ -9,11 +9,14 @@
 #ifndef _GETOPT_H
 #define _GETOPT_H
 
+#include <string_tokens.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-int getopt(int, char * const [], const char *) __attribute__((nonnull(2, 3)));
+int getopt(int argc, char *const argv[] elements_withtok(null_terminated, argc), const char *)
+    __attribute__((nonnull(2, 3)));
 extern char *optarg;
 extern int optind, opterr, optopt, optreset;
 
@@ -26,9 +29,11 @@ struct option {
 
 /* longopts is deliberately not marked nonnull: getopt_long_only()'s
  * single-character fallback runs fine without one. */
-int getopt_long(int, char *const *, const char *, const struct option *, int *)
+int getopt_long(int argc, char *const *argv elements_withtok(null_terminated, argc),
+    const char *, const struct option *, int *)
     __attribute__((nonnull(2, 3)));
-int getopt_long_only(int, char *const *, const char *, const struct option *, int *)
+int getopt_long_only(int argc, char *const *argv elements_withtok(null_terminated, argc),
+    const char *, const struct option *, int *)
     __attribute__((nonnull(2, 3)));
 
 #define no_argument        0

@@ -4,12 +4,17 @@
 #include <string.h>
 #include <getopt.h>
 #include "libc.h"
+#include "ownership_stubs.h"
 
 extern int __optpos; // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- libc-internal name is intentionally reserved against application collision
 
 /* argv required: `av[src]` is dereferenced unconditionally at entry
  * with no guard; its one real call site (__getopt_long() below) always
- * passes its own now-required argv. */
+ * passes its own now-required argv. dest/src are real, in-bounds indices
+ * there (0 <= dest <= src < argc), but permute() has no argc parameter
+ * of its own to state that against -- checker gap (spicule.ValidPointer),
+ * left open rather than adding an unused parameter just to carry a
+ * bound. */
 static void permute(char *const *argv, int dest, int src) __attribute__((nonnull(1)));
 static void permute(char *const *argv, int dest, int src) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
@@ -26,10 +31,12 @@ static void permute(char *const *argv, int dest, int src) // NOLINT(bugprone-eas
  * path) or forwarded, unguarded, into the now-required getopt() at
  * the fallthrough return. longopts/idx are deliberately NOT marked --
  * see include/getopt.h's own comment on getopt_long()/
- * getopt_long_only() for why. */
-static int __getopt_long_core(int argc, char *const *argv, const char *optstring, const struct option *longopts, int *idx, int longonly) // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- libc-internal name is intentionally reserved against application collision
+ * getopt_long_only() for why. Every argv[optind]/argv[i] access below
+ * carries the same open checker gap as src/misc/getopt.c's own
+ * getopt() -- see that function's comment. */
+static int __getopt_long_core(int argc, char *const *argv elements_withtok(null_terminated, argc), const char *optstring, const struct option *longopts, int *idx, int longonly) // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- libc-internal name is intentionally reserved against application collision
     __attribute__((nonnull(2, 3)));
-static int __getopt_long_core(int argc, char *const *argv, const char *optstring, const struct option *longopts, int *idx, int longonly)
+static int __getopt_long_core(int argc, char *const *argv elements_withtok(null_terminated, argc), const char *optstring, const struct option *longopts, int *idx, int longonly)
 {
 	optarg = 0;
 	if (longopts && argv[optind][0] == '-' &&
@@ -97,8 +104,15 @@ static int __getopt_long_core(int argc, char *const *argv, const char *optstring
 		}
 		if (argv[optind][1] == '-') {
 			optopt = 0;
-			if (!colon && opterr)
-				__getopt_msg(cnt ? "option is ambiguous" : "unrecognized option", argv[optind], strlen(argv[optind]));
+			if (!colon && opterr) {
+				const char *reason = cnt ? "option is ambiguous" : "unrecognized option";
+				/* Both arms are string literals; the checker's literal
+				 * recognition doesn't reach through the ternary when it
+				 * feeds a call argument directly (same shape src/unistd/
+				 * getcwd.c's own ternary-into-assignment uses). */
+				unsafe_assume_string_terminated(reason);
+				__getopt_msg(reason, argv[optind], strlen(argv[optind]));
+			}
 			optind++;
 			return '?';
 		}
@@ -110,9 +124,9 @@ static int __getopt_long_core(int argc, char *const *argv, const char *optstring
  * above: `argv[optind]`/`optstring[0]` are both dereferenced
  * unconditionally past the `optind >= argc` bound check, which says
  * nothing about either pointer's own nullness. */
-static int __getopt_long(int argc, char *const *argv, const char *optstring, const struct option *longopts, int *idx, int longonly) // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- libc-internal name is intentionally reserved against application collision
+static int __getopt_long(int argc, char *const *argv elements_withtok(null_terminated, argc), const char *optstring, const struct option *longopts, int *idx, int longonly) // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- libc-internal name is intentionally reserved against application collision
     __attribute__((nonnull(2, 3)));
-static int __getopt_long(int argc, char *const *argv, const char *optstring, const struct option *longopts, int *idx, int longonly)
+static int __getopt_long(int argc, char *const *argv elements_withtok(null_terminated, argc), const char *optstring, const struct option *longopts, int *idx, int longonly)
 {
 	int ret, skipped, resumed;
 	if (!optind || optreset) {
@@ -142,12 +156,12 @@ static int __getopt_long(int argc, char *const *argv, const char *optstring, con
 	return ret;
 }
 
-int getopt_long(int argc, char *const *argv, const char *optstring, const struct option *longopts, int *idx)
+int getopt_long(int argc, char *const *argv elements_withtok(null_terminated, argc), const char *optstring, const struct option *longopts, int *idx)
 {
 	return __getopt_long(argc, argv, optstring, longopts, idx, 0);
 }
 
-int getopt_long_only(int argc, char *const *argv, const char *optstring, const struct option *longopts, int *idx)
+int getopt_long_only(int argc, char *const *argv elements_withtok(null_terminated, argc), const char *optstring, const struct option *longopts, int *idx)
 {
 	return __getopt_long(argc, argv, optstring, longopts, idx, 1);
 }

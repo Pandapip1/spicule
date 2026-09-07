@@ -72,6 +72,7 @@
 #include "spool.h"
 #include "crontime.h"
 #include "libc.h" /* __find_program()/__spawn() */
+#include "ownership_stubs.h"
 
 /* True if `line` (already past any leading <blank>s) is a real
  * crontab(5) environment-variable-assignment line: an identifier
@@ -93,6 +94,12 @@ static int split_field(const char **pp, char *out, size_t outsz)
 {
 	const char *p = *pp;
 	size_t n;
+	/* ntlibc.ValidPointer: "dereference extent is not proven sufficient"
+	 * on this walk -- left open. Every caller passes a cursor into a
+	 * genuinely NUL-terminated fgets() line buffer, but restating that
+	 * with __ownership_string_terminated() does not close this
+	 * particular finding (tried); src/util/crond.c's byte-identical
+	 * split_field() has the same open finding. */
 	while (*p == ' ' || *p == '\t') p++;
 	n = strcspn(p, " \t\n");
 	if (n == 0 || n >= outsz || n > INT_MAX) return -1;
@@ -141,10 +148,11 @@ static int validate_crontab(FILE *f, long *bad_line)
 static int do_list(void)
 {
 	char path[NTLIBC_SPOOL_PATH_MAX];
-	FILE *f;
+	FILE *f withtok(file_stream_open);
 	int c;
 
 	if (!__spool_crontab_path(path, sizeof path)) { __util_diagf("crontab: cannot access crontab spool\n"); return 1; }
+	__ownership_string_terminated(path); /* __spool_crontab_path()'s own snprintf() contract */
 	f = fopen(path, "r");
 	if (!f) {
 		__util_diagf("crontab: no crontab for current user\n");
@@ -175,13 +183,14 @@ static int do_remove(void)
 static int install_crontab(FILE *src, long *bad_line)
 {
 	char path[NTLIBC_SPOOL_PATH_MAX], tmp[NTLIBC_SPOOL_PATH_MAX];
-	FILE *out;
+	FILE *out withtok(file_stream_open);
 	int c;
 
 	if (validate_crontab(src, bad_line) < 0) return -1;
 	if (!__spool_crontab_path(path, sizeof path)) { errno = ENOENT; return -1; }
 	if (snprintf(tmp, sizeof tmp, "%s.tmp", path) >= (int)sizeof tmp) { errno = ENAMETOOLONG; return -1; }
 
+	__ownership_string_terminated(tmp); /* the snprintf() length check above */
 	out = fopen(tmp, "w");
 	if (!out) return -1;
 	while ((c = fgetc(src)) != EOF) {
@@ -235,7 +244,7 @@ static int do_edit(void)
 	char tmpl[NTLIBC_SPOOL_PATH_MAX];
 	char dir[NTLIBC_SPOOL_PATH_MAX];
 	int fd;
-	FILE *cur, *tf;
+	FILE *cur withtok(file_stream_open), *tf withtok(file_stream_open);
 	const char *editor;
 	char *resolved;
 	char *argv2[3];
@@ -254,6 +263,7 @@ static int do_edit(void)
 
 	tf = fdopen(fd, "w");
 	if (!tf) { (void)close(fd); (void)unlink(tmpl); return 1; }
+	__ownership_string_terminated(path); /* __spool_crontab_path()'s own snprintf() contract */
 	cur = fopen(path, "r");
 	if (cur) {
 		int c;
@@ -296,6 +306,7 @@ static int do_edit(void)
 		return 1;
 	}
 
+	__ownership_string_terminated(tmpl); /* mkstemp() fills the XXXXXX suffix in place, keeping the snprintf() length check above valid */
 	tf = fopen(tmpl, "r");
 	if (!tf) { __util_diagf("crontab: cannot reopen %s: %s\n", tmpl, strerror(errno)); return 1; }
 	if (install_crontab(tf, &bad_line) < 0) {

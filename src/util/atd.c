@@ -101,6 +101,7 @@
 #include "util.h"
 #include "spool.h"
 #include "libc.h" /* __find_program() */
+#include "ownership_stubs.h"
 
 /* batch(1p) jobs defer while the 1-minute load average is at or above
  * this many runnable processes per core-equivalent -- the same
@@ -162,6 +163,10 @@ static void reap_finished(void)
 			if (unlink(g_running[i].running_path) < 0)
 				fprintf(stderr, "atd: cannot clean up %s: %s\n",
 				        g_running[i].running_path, strerror(errno));
+			/* ntlibc.ValidPointer: "dereference extent is not proven
+			 * sufficient" on this swap-with-last compaction -- left
+			 * open; src/util/crond.c's identical g_running[] idiom has
+			 * the same open finding. */
 			g_running[i] = g_running[g_nrunning - 1];
 			g_nrunning--;
 			continue;
@@ -190,6 +195,7 @@ static pid_t spawn_job(const char *dir, const char *id, const char *running_path
 		errno = ENAMETOOLONG;
 		return -1;
 	}
+	__ownership_string_terminated(outpath); /* the snprintf() length check above */
 	sh_path = __find_program("sh", 1);
 	if (!sh_path) { errno = ENOENT; return -1; }
 
@@ -217,7 +223,7 @@ static void poll_once(const char *dir)
 
 	if (!dp) return;
 	while ((de = readdir(dp)) != 0) {
-		size_t l = strlen(de->d_name);
+		size_t l;
 		char path[NTLIBC_SPOOL_PATH_MAX];
 		char running[NTLIBC_SPOOL_PATH_MAX];
 		char id[64];
@@ -225,6 +231,8 @@ static void poll_once(const char *dir)
 		char queue[32];
 		pid_t pid;
 
+		__ownership_string_terminated(de->d_name); /* POSIX dirent contract */
+		l = strlen(de->d_name);
 		if (l <= 4 || strcmp(de->d_name + l - 4, ".job")) continue;
 		if (l - 4 >= sizeof id) continue;
 		memcpy(id, de->d_name, l - 4);
@@ -232,6 +240,7 @@ static void poll_once(const char *dir)
 
 		if (snprintf(path, sizeof path, "%s/%s.job", dir, id) >= (int)sizeof path) continue;
 		if (__spool_job_header(path, &run_at, queue, sizeof queue) < 0) continue;
+		__ownership_string_terminated(queue); /* __spool_job_header()'s own documented NUL-terminated contract */
 		if (run_at > now) continue;
 
 		if (!strcmp(queue, "b")) {
@@ -242,6 +251,7 @@ static void poll_once(const char *dir)
 
 		if (snprintf(running, sizeof running, "%s/%s.job.running", dir, id) >= (int)sizeof running)
 			continue;
+		__ownership_string_terminated(running); /* the snprintf() length check above */
 		if (rename(path, running) < 0) continue; /* another instance claimed it first */
 
 		if (g_nrunning >= MAX_RUNNING) {

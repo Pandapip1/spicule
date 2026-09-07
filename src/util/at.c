@@ -55,6 +55,7 @@
 #include "spool.h"
 #include "attime.h"
 #include "atbatch.h"
+#include "ownership_stubs.h"
 
 static int read2(const char *s, int *out)
 {
@@ -167,11 +168,13 @@ static int do_list(const char *dir, const char *qfilter, char **ids, int nids)
 			return errno == ENOENT ? 0 : 1;
 		}
 		while ((de = readdir(dp)) != 0) {
-			size_t l = strlen(de->d_name);
+			size_t l;
 			char path[NTLIBC_SPOOL_PATH_MAX];
 			time_t run_at;
 			char queue[32];
 			char id[64];
+			__ownership_string_terminated(de->d_name); /* POSIX dirent contract */
+			l = strlen(de->d_name);
 			if (l <= 4 || strcmp(de->d_name + l - 4, ".job")) continue;
 			if (l - 4 >= sizeof id) continue;
 			memcpy(id, de->d_name, l - 4);
@@ -179,6 +182,7 @@ static int do_list(const char *dir, const char *qfilter, char **ids, int nids)
 			if (job_path(dir, id, "job", path, sizeof path) < 0 ||
 			    __spool_job_header(path, &run_at, queue, sizeof queue) < 0)
 				continue;
+			__ownership_string_terminated(queue); /* __spool_job_header()'s own documented NUL-terminated contract */
 			if (qfilter && strcmp(queue, qfilter)) continue;
 			print_job_line(stdout, id, run_at, queue);
 		}

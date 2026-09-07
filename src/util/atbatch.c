@@ -15,7 +15,15 @@
 
 /* Identical escaping rule to src/sh/builtin.c's own write_quoted()
  * (bi_set's `set` output) -- see this header's own comment on why the
- * export lines below reuse it rather than a second implementation. */
+ * export lines below reuse it rather than a second implementation.
+ *
+ * ntlibc.ValidPointer: the `*v` walk below has an open "dereference
+ * extent is not proven sufficient" finding at every caller (a cwd, an
+ * environ entry, or a job command byte -- all genuinely NUL-terminated).
+ * Declaring `v withtok(null_terminated)` closes it here but pushes new
+ * findings onto every call site instead (tried; net regression), the
+ * same open shape src/util/crontab.c's split_field() and
+ * src/util/crond.c's identical one already document. */
 static int write_quoted(FILE *f, const char *v)
 {
 	if (fputc('\'', f) == EOF) return -1;
@@ -34,7 +42,7 @@ int __atbatch_submit(const char *queue, time_t run_at, const char *srcfile,
 	char dir[NTLIBC_SPOOL_PATH_MAX];
 	char path[NTLIBC_SPOOL_PATH_MAX];
 	char tmp[NTLIBC_SPOOL_PATH_MAX];
-	FILE *f, *src = NULL;
+	FILE *f, *src withtok(file_stream_open);
 	char *cwd;
 	mode_t um;
 	char **e;
@@ -42,6 +50,7 @@ int __atbatch_submit(const char *queue, time_t run_at, const char *srcfile,
 	size_t nrd;
 	int saved_errno;
 
+	src = NULL;
 	if (__spool_dir("atjobs", dir, sizeof dir) < 0) return -1;
 	f = __spool_new_job(dir, id_out, id_out_sz, path, sizeof path);
 	if (!f) return -1;
@@ -79,6 +88,7 @@ int __atbatch_submit(const char *queue, time_t run_at, const char *srcfile,
 	}
 
 	if (srcfile) {
+		__ownership_string_terminated(srcfile); /* an argv element (src/util/at.c's opt_f) */
 		src = fopen(srcfile, "r");
 		if (!src) goto fail;
 	}

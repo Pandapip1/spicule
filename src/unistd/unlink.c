@@ -13,6 +13,15 @@
 #include "libc.h"
 #include "plat_unistd.h"
 
+/* Checker gap (ntlibc.CapabilityToken/ntlibc.OwnershipType): strlen(path)
+ * below needs path to carry null_terminated, which is concretely true
+ * (every POSIX path argument is a C string) -- but stating it here via
+ * withtok(null_terminated) cascades that same requirement up through
+ * __unlink_at()/unlink()/rmdir()/unlinkat()'s own top-level analysis, and
+ * from there into every caller of unlink()/rmdir() tree-wide (shm.c,
+ * mqueue.c, semaphore.c, several src/util utilities), none of which
+ * currently grant it either. That net-regresses the whole-tree lint far
+ * more than it fixes here, so left open rather than propagated. */
 static int final_component_is_dot(const char *path)
 {
 	size_t start, end, n;

@@ -47,6 +47,7 @@
 #include <string.h>
 #include "libc.h"
 #include "plat_unistd.h"
+#include "ownership_stubs.h"
 
 static uid_t cached_uid = (uid_t)-1;
 static gid_t cached_gid = (gid_t)-1;
@@ -122,11 +123,15 @@ int setregid(gid_t r, gid_t e) { return set_two_ids((uid_t)r, (uid_t)e, (uid_t)g
  * one identity there's nothing else to put in it. gidsetsize 0 asks for
  * the count alone without touching grouplist; any other value less than
  * 1 is a shall-fail EINVAL. */
-int getgroups(int n, gid_t *g)
+int getgroups(int n, gid_t *g withtok(writable_elements(n)))
 {
 	const int held = 1;
 	if (n != 0 && n < held) { errno = EINVAL; return -1; }
-	if (n != 0) g[0] = getegid();
+	/* n != 0 is a POSIX caller obligation that g itself is a real,
+	 * non-NULL array (gidsetsize 0 is the only NULL-g case); the
+	 * writable_elements(n) token above proves the extent once g is
+	 * known live, but not liveness itself. */
+	if (n != 0) { __ownership_pointer_nonnull(g); g[0] = getegid(); }
 	return held;
 }
 /* The group and session this process is in; see the banner for why they

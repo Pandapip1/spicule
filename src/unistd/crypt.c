@@ -42,6 +42,7 @@
 #include <stdint.h>
 #include <errno.h>
 #include "libc.h"
+#include "ownership_stubs.h"
 
 /* Every permutation/selection table below lists 1-indexed bit positions,
  * bit 1 being the most significant bit of its input -- the standard
@@ -127,6 +128,10 @@ static void key_schedule(uint64_t key, uint64_t subkeys[16])
 	uint32_t c = (uint32_t)(cd >> 28) & 0x0FFFFFFFu;
 	uint32_t d = (uint32_t)cd & 0x0FFFFFFFu;
 	int i;
+	/* Both callers pass a real 16-element array (crypt()'s local subkeys
+	 * or setkey()'s despriv_subkeys), never NULL; the checker has no
+	 * caller-side facts when analyzing this static helper on its own. */
+	__ownership_pointer_nonnull(subkeys);
 	for (i = 0; i < 16; i++) {
 		c = rotl28(c, SHIFTS[i]);
 		d = rotl28(d, SHIFTS[i]);
@@ -144,6 +149,9 @@ static uint64_t des_block(uint64_t block, const uint64_t subkeys[16], unsigned s
 	uint32_t L = (uint32_t)(ip >> 32);
 	uint32_t R = (uint32_t)ip;
 	int round;
+	/* Both callers pass a real 16-element array; see key_schedule()'s
+	 * matching note above. */
+	__ownership_pointer_nonnull(subkeys);
 	for (round = 0; round < 16; round++) {
 		uint64_t E = permute(R, Etab, 48, 32);
 		uint64_t subkey = subkeys[decrypt ? 15 - round : round];
@@ -166,8 +174,12 @@ static uint64_t des_block(uint64_t block, const uint64_t subkeys[16], unsigned s
 		f = 0;
 		for (j = 0; j < 8; j++) {
 			unsigned six = (unsigned)((E >> (42 - 6 * j)) & 0x3Fu);
-			unsigned row = ((six & 0x20u) >> 4) | (six & 1u);
-			unsigned col = (six >> 1) & 0xFu;
+			unsigned row = ((six & 0x20u) >> 4) | (six & 1u); /* 0..3 */
+			unsigned col = (six >> 1) & 0xFu; /* 0..15 */
+			/* row*16+col is 0..63 by the masks above, in range for
+			 * Sbox[j]'s 64 entries; checker gap (ntlibc.ValidPointer) --
+			 * it does not carry that bound through three chained
+			 * bitwise ops and a multiply. */
 			f = (f << 4) | Sbox[j][row * 16 + col];
 		}
 		f = (uint32_t)permute(f, Ptab, 32, 32);

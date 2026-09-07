@@ -10,9 +10,8 @@
  *  bs=expr              Sets both ibs and obs, and changes copy strategy:
  *                       with bs=, each block read is written out as-is
  *                       (dd_copy_direct()); with ibs=/obs=, reads are
- *                       recombined into obs-sized writes (dd_copy_blocked()).
- *                       This split is a real behavioral difference dd(1p)
- *                       itself specifies, not an implementation shortcut.
+ *                       recombined into obs-sized writes (dd_copy_blocked()),
+ *                       per dd(1p)'s own specified behavior.
  *  count=n              Copy only n input blocks, then stop.
  *  skip=n / seek=n      Skip n ibs-/obs-sized blocks before copying starts.
  *                       skip= falls back to read-and-discard when the input
@@ -34,10 +33,9 @@
  * multiplier, parsed recursively so "2x3x4" reads left-to-right.
  *
  * On SIGINT or ordinary completion, prints "N+P records in/out" to stderr.
- * The SIGINT handler only sets a flag (no work inside it), and the previous
- * disposition is restored before returning, since __util_dd_main() can run
- * in-process as a shell builtin (src/sh/builtin.c) rather than its own
- * process -- a handler left installed, or an exit() called from inside it,
+ * The SIGINT handler only sets a flag and the previous disposition is
+ * restored before returning, since __util_dd_main() can run in-process as
+ * a shell builtin (src/sh/builtin.c) -- a handler or exit() left behind
  * would otherwise outlive this command or tear down the whole shell.
  */
 
@@ -81,15 +79,10 @@ static int parse_dd_num(const char *s withtok(null_terminated), uintmax_t *out)
 	uintmax_t v;
 
 	/* OPEN LINT FINDING (ntlibc.ValidPointer, "dereference extent is not
-	 * proven sufficient"): every real caller passes a pointer into a
-	 * NUL-terminated argv string (some via `val = eq + 1` after
-	 * confirming a[klen] is non-NUL, so val is always at least the
-	 * terminator itself), but that fact reaches here through symbolic
-	 * pointer arithmetic on an opaque, unsized argv element -- no
-	 * existing ownership.h annotation expresses "offset klen+1 into a
-	 * null-terminated string of unknown static extent is in bounds",
-	 * the same class of gap already accepted in src/util/sort.c and
-	 * src/util/join.c. Left open rather than papered over. */
+	 * proven sufficient"): callers pass a pointer into a NUL-terminated
+	 * argv string, but no ownership.h annotation expresses "offset into
+	 * a string of unknown static extent is in bounds" -- same gap
+	 * accepted in sort.c and join.c. Left open rather than papered over. */
 	if (!*s) return -1;
 	errno = 0;
 	v = strtoumax(s, &end, 10);
@@ -98,9 +91,8 @@ static int parse_dd_num(const char *s withtok(null_terminated), uintmax_t *out)
 	 * ERANGE instead of failing outright; without this check the clamped
 	 * value would silently stand in for whatever was actually typed. */
 	if (v == UINTMAX_MAX && errno == ERANGE) return -1;
-	/* end still points within (or at the terminating NUL of) the same
-	 * string s did on entry -- strtoumax()'s endptr contract -- but that
-	 * fact does not survive the plain char * variable's own type. */
+	/* end is within (or at the NUL of) s per strtoumax()'s endptr
+	 * contract, but the plain char * type doesn't carry that fact. */
 	__ownership_string_terminated(end);
 	s = end;
 
@@ -110,9 +102,8 @@ static int parse_dd_num(const char *s withtok(null_terminated), uintmax_t *out)
 
 	if (*s == 'x') {
 		uintmax_t rhs;
-		/* s+1 is still inside the same NUL-terminated string s is, but
-		 * the pointer-arithmetic expression itself doesn't carry the
-		 * token this checker can trace. */
+		/* s+1 stays inside the same NUL-terminated string, but the
+		 * checker can't trace that through the pointer arithmetic. */
 		__ownership_string_terminated(s + 1);
 		if (parse_dd_num(s + 1, &rhs) < 0) return -1;
 		if (dd_mul_overflows(v, rhs, &v) < 0) return -1;
@@ -149,9 +140,8 @@ static int parse_conv(const char *val, int *notrunc, int *sync, int *noerror)
 
 	*notrunc = *sync = *noerror = 0;
 	for (tok = strtok(buf, ","); tok; tok = strtok(0, ",")) {
-		/* strtok() always returns either NULL or a NUL-terminated token
-		 * carved out of buf (itself NUL-terminated above); that fact
-		 * does not survive strtok()'s own unannotated declaration. */
+		/* strtok() returns NULL or a NUL-terminated token carved out
+		 * of buf; strtok()'s own declaration doesn't say so. */
 		__ownership_string_terminated(tok);
 		if (!strcmp(tok, "notrunc")) *notrunc = 1;
 		else if (!strcmp(tok, "sync")) *sync = 1;
@@ -397,12 +387,10 @@ int __util_dd_main(
 #undef KEYIS
 	}
 
-	/* have_if/have_of, not `ifd > 0`/`ofd > 1`, decide the close()s below
-	 * -- the checker can't prove a freshly open()'d descriptor unequal
-	 * to the literal default (0/1) it stands in for when the path is
-	 * omitted, so a direct comparison makes these open() allocations
-	 * look conditionally leaked (same idiom as src/util/join.c's
-	 * read_all() uses for FILE* vs. stdin/stdout). */
+	/* have_if/have_of, not `ifd > 0`/`ofd > 1`, decide the close()s below:
+	 * the checker can't prove an open()'d fd unequal to the stdin/stdout
+	 * default, so a direct comparison reads as a conditional leak (same
+	 * idiom as join.c's read_all() for FILE* vs. stdin/stdout). */
 	have_if = o.if_path != 0;
 	ifd = have_if ? open(o.if_path, O_RDONLY) : 0;
 	if (ifd < 0) { __util_diagf("dd: %s: %s\n", o.if_path, strerror(errno)); return 1; }

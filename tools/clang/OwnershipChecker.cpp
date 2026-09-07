@@ -71,6 +71,19 @@ REGISTER_MAP_WITH_PROGRAMSTATE(StrictLoanMap, StrictLoanKey, const MemRegion *)
 REGISTER_SET_WITH_PROGRAMSTATE(ExpiredStrictLoanSet, const MemRegion *)
 
 REGISTER_MAP_WITH_PROGRAMSTATE(ResourceMap, SymbolRef, unsigned)
+// Origin/frame side tables for ResourceLeakChecker's (opt-in, ntlibc.
+// ResourceLeak) leak-at-exit scan, the same two facts AllocationLifetime
+// Checker's own AllocationOrigin/AllocationFrame record for the identical
+// reason: a diagnostic needs the acquisition site, and the scan needs to
+// skip a resource this function merely inherited (a borrowed parameter,
+// or one still live in a caller's frame) rather than acquired itself.
+// Populated by ResourceLifecycleChecker's (ntlibc.Resource, always-on)
+// own track()/checkPostCall -- ResourceLeakChecker only ever reads them,
+// so both checkers must run in the same clang -analyzer-checker= pass for
+// the leak scan to see anything.
+REGISTER_MAP_WITH_PROGRAMSTATE(ResourceOrigin, SymbolRef, const Stmt *)
+REGISTER_MAP_WITH_PROGRAMSTATE(ResourceFrame, SymbolRef,
+                               const StackFrameContext *)
 
 namespace {
 
@@ -4257,9 +4270,20 @@ class ResourceLifecycleChecker
     if (!Function || !Function->getIdentifier())
       return std::nullopt;
     StringRef Name = Function->getName();
+    // dup2(oldfd, newfd) deliberately excluded: unlike every other name
+    // here (each of which allocates a genuinely fresh descriptor number
+    // only the caller has ever seen), dup2's return is just newfd, the
+    // caller's own second argument -- an existing number whose own
+    // lifecycle already belongs to wherever that number came from (often
+    // exactly because the caller is about to replace or already manages
+    // it, e.g. this codebase's own src/unistd/daemon.c and src/sh/
+    // execute.c redirection handling). Tracking dup2's return as one
+    // more independent must-be-closed acquisition would demand a second,
+    // spurious close() of a descriptor number this analysis never saw
+    // opened as fresh in the first place.
     if (Name == "open" || Name == "openat" || Name == "creat" ||
         Name == "socket" || Name == "accept" || Name == "dup" ||
-        Name == "dup2" || Name == "mkstemp" || Name == "mkostemp")
+        Name == "mkstemp" || Name == "mkostemp")
       return Descriptor;
     if (Name == "fopen" || Name == "fdopen" || Name == "tmpfile" ||
         Name == "popen")
@@ -4366,9 +4390,45 @@ class ResourceLifecycleChecker
     return std::nullopt;
   }
 
-  void report(StringRef Reason, const CallEvent &Call,
+  // fdopen()/__file_new() absorb the fd they are given into the FILE*
+  // they return instead of ever calling close() on it (src/stdio/file.c's
+  // __file_new(): `f->fd = fd;`; from here on fclose() on that FILE* is
+  // what closes the fd) -- but, unlike close(), only on SUCCESS: a failed
+  // fdopen() leaves the fd exactly as live as before, and the real caller
+  // still closes it itself (src/stdio/misc.c's tmpfile():
+  // `f = __file_new(fd, O_RDWR); if (!f) { ...close(fd)...}`). This is
+  // why the consumption cannot simply live in release()'s table above --
+  // release() fires unconditionally in checkPreCall, before the outcome
+  // is known, which would mark the fd released even on the failure path
+  // and turn tmpfile()'s own real close(fd) into a false double-release.
+  // Returns the argument index whose Descriptor obligation is retired
+  // when this call succeeds.
+  static std::optional<unsigned>
+  consumedDescriptorArgument(const CallEvent &Call) {
+    const FunctionDecl *Function = function(Call);
+    if (!Function || !Function->getIdentifier())
+      return std::nullopt;
+    StringRef Name = Function->getName();
+    if (Name == "fdopen" || Name == "__file_new")
+      return 0u;
+    return std::nullopt;
+  }
+
+  // Marks consumedDescriptorArgument()'s fd released(Descriptor) on
+  // State, if Call has one and it resolves to a tracked symbol.
+  static ProgramStateRef retireConsumedDescriptor(ProgramStateRef State,
+                                                  const CallEvent &Call) {
+    std::optional<unsigned> Argument = consumedDescriptorArgument(Call);
+    if (!Argument || *Argument >= Call.getNumArgs())
+      return State;
+    SymbolRef FdSymbol = Call.getArgSVal(*Argument).getAsSymbol(true);
+    if (!FdSymbol)
+      return State;
+    return State->set<ResourceMap>(FdSymbol, released(Descriptor));
+  }
+
+  void report(StringRef Reason, const Stmt *Statement,
               CheckerContext &C) const {
-    const Stmt *Statement = Call.getOriginExpr();
     if (!Statement)
       return;
     ExplodedNode *Node = C.generateNonFatalErrorNode();
@@ -4381,6 +4441,57 @@ class ResourceLifecycleChecker
         *BT, diagnosticMessage(Reason, Statement, C), Node);
     Report->addRange(Statement->getSourceRange());
     C.emitReport(std::move(Report));
+  }
+
+  void report(StringRef Reason, const CallEvent &Call,
+              CheckerContext &C) const {
+    report(Reason, Call.getOriginExpr(), C);
+  }
+
+  // Records an acquisition's family, origin, and owning frame together --
+  // the three facts ResourceLeakChecker's (opt-in) leak scan needs,
+  // mirroring AllocationLifetimeChecker::track()'s identical three-map
+  // bookkeeping for AllocationLifecycle/AllocationOrigin/AllocationFrame.
+  static ProgramStateRef track(ProgramStateRef State, SymbolRef Symbol,
+                               Family Value, const Stmt *Origin,
+                               const StackFrameContext *Frame) {
+    State = State->set<ResourceMap>(Symbol, live(Value));
+    State = State->set<ResourceOrigin>(Symbol, Origin);
+    return State->set<ResourceFrame>(Symbol, Frame);
+  }
+
+  // The POSIX acquire functions in acquiredFamily() signal failure with a
+  // specific, well-known value instead of ever leaving the resource
+  // unacquired-but-tracked: a negative fd (open/socket/accept/dup/dup2),
+  // or a null/-1 pointer (fopen-family/opendir-family/sem_open/mmap).
+  // Splitting on that value right here, the same place
+  // AllocationLifetimeChecker's own checkPostCall splits a malloc-family
+  // return on null, is what lets the ordinary "if (fd < 0) return;"/
+  // "if (!f) return;" failure check below stay unflagged by
+  // ResourceLeakChecker's leak scan: the failure branch never gains a
+  // live ResourceMap entry in the first place, so there is nothing there
+  // to require releasing. Returns {failed-state, succeeded-state}; either
+  // half may be null if that branch is infeasible under existing
+  // constraints.
+  static std::pair<ProgramStateRef, ProgramStateRef>
+  splitOnAcquireFailure(Family Value, ProgramStateRef State,
+                        DefinedOrUnknownSVal Result, QualType Type,
+                        CheckerContext &C) {
+    SValBuilder &Builder = C.getSValBuilder();
+    if (Value == Descriptor) {
+      SVal Failed = Builder.evalBinOp(State, BO_LT, Result,
+                                      Builder.makeIntVal(0, Type),
+                                      Builder.getConditionType());
+      std::optional<DefinedOrUnknownSVal> Condition =
+          Failed.getAs<DefinedOrUnknownSVal>();
+      if (!Condition)
+        return {nullptr, State};
+      return State->assume(*Condition);
+    }
+    int64_t Sentinel = Value == Semaphore || Value == Mapping ? -1 : 0;
+    SentinelSplit Split =
+        splitOnExcludedSentinel(State, Result, Type, Sentinel, Builder);
+    return {Split.Sentinel, Split.NonSentinel};
   }
 
   // POSIX guarantees file descriptors 0/1/2 (STDIN_FILENO/STDOUT_FILENO/
@@ -4504,6 +4615,28 @@ class ResourceLifecycleChecker
     return hasSymbolicArrayIndex(Subscript->getBase(), C);
   }
 
+  // `&alarm_timer`/`&pgid_event`-style out-arguments (src/unistd/nt/
+  // plat_unistd.c) write straight into a static/global variable's own
+  // storage, which by construction outlives this function exactly the
+  // same way a caller's out-parameter does -- see
+  // isTrustedResourceDestination's identical reasoning for the plain
+  // `pgid_event = h;` assignment shape.
+  static bool isGlobalStorageArgument(const CallEvent &Call,
+                                      unsigned Argument) {
+    const Expr *ArgExpr = Call.getArgExpr(Argument);
+    if (!ArgExpr)
+      return false;
+    ArgExpr = ArgExpr->IgnoreParenCasts();
+    const auto *Unary = dyn_cast<UnaryOperator>(ArgExpr);
+    if (!Unary || Unary->getOpcode() != UO_AddrOf)
+      return false;
+    const auto *Reference =
+        dyn_cast<DeclRefExpr>(Unary->getSubExpr()->IgnoreParenCasts());
+    const auto *Variable =
+        Reference ? dyn_cast<VarDecl>(Reference->getDecl()) : nullptr;
+    return Variable && Variable->hasGlobalStorage();
+  }
+
   // A resource passed directly as a function parameter was acquired by
   // the caller, outside this per-function analysis.  Most scalar resource
   // parameters retain a SymbolRef and are handled by the absent-ResourceMap
@@ -4621,14 +4754,47 @@ class ResourceLifecycleChecker
 
 public:
   void checkPostCall(const CallEvent &Call, CheckerContext &C) const {
-    if (std::optional<Family> Family = acquiredFamily(Call)) {
-      SymbolRef Symbol = Call.getReturnValue().getAsSymbol(true);
-      if (Symbol)
-        C.addTransition(C.getState()->set<ResourceMap>(Symbol, live(*Family)));
+    if (std::optional<Family> Acquired = acquiredFamily(Call)) {
+      SVal ReturnValue = Call.getReturnValue();
+      SymbolRef Symbol = ReturnValue.getAsSymbol(true);
+      if (!Symbol)
+        return;
+      ProgramStateRef State = C.getState();
+      const FunctionDecl *Function = function(Call);
+      QualType ReturnType = Function ? Function->getReturnType() : QualType();
+      std::optional<DefinedOrUnknownSVal> Defined =
+          ReturnValue.getAs<DefinedOrUnknownSVal>();
+      if (!Defined || ReturnType.isNull()) {
+        C.addTransition(track(retireConsumedDescriptor(State, Call), Symbol,
+                              *Acquired, Call.getOriginExpr(),
+                              C.getStackFrame()));
+        return;
+      }
+      auto [FailedState, SucceededState] = splitOnAcquireFailure(
+          *Acquired, State, *Defined, ReturnType, C);
+      if (FailedState)
+        C.addTransition(FailedState);
+      if (SucceededState)
+        C.addTransition(track(retireConsumedDescriptor(SucceededState, Call),
+                              Symbol, *Acquired, Call.getOriginExpr(),
+                              C.getStackFrame()));
       return;
     }
     if (std::optional<unsigned> Argument = handleOutParamArgument(Call)) {
       if (*Argument >= Call.getNumArgs())
+        return;
+      // `out` used directly as the acquiring call's own out-argument (this
+      // codebase's dominant NT-backend shape, e.g. src/thread/nt/
+      // plat_thread.c's __plat_semaphore_create(..., HANDLE *out) calling
+      // NtCreateSemaphore(out, ...)) writes straight into the CALLER's
+      // storage in this same statement -- the handle has already escaped
+      // this frame at the moment of acquisition, the out-parameter analogue
+      // of destinationDeclaration()'s UO_Deref+ParmVarDecl case in
+      // AllocationLifetimeChecker.cpp. Tracking it as this frame's own
+      // obligation would be flagging the very functions whose entire job is
+      // to hand the handle to their caller.
+      if (isDirectParameterArgument(Call, *Argument) ||
+          isGlobalStorageArgument(Call, *Argument))
         return;
       const MemRegion *Out = Call.getArgSVal(*Argument).getAsRegion();
       if (!Out)
@@ -4639,9 +4805,75 @@ public:
       // (every non-const pointer argument to an unmodeled call gets this
       // treatment) -- reading it back here is exactly how MallocChecker-
       // style checkers recover an out-parameter's acquired value.
-      SymbolRef Symbol = C.getState()->getSVal(Out).getAsSymbol(true);
-      if (Symbol)
-        C.addTransition(C.getState()->set<ResourceMap>(Symbol, live(Handle)));
+      ProgramStateRef State = C.getState();
+      SymbolRef Symbol = State->getSVal(Out).getAsSymbol(true);
+      if (!Symbol)
+        return;
+      // NT_SUCCESS(status) -- status >= 0 -- is this codebase's own
+      // universal convention (src/internal/nt.h) for whether the syscall
+      // actually wrote a live handle through its out-parameter; splitting
+      // on it here is the Handle-family analogue of splitOnAcquireFailure
+      // above, needed for the same reason: real call sites (e.g.
+      // src/signal/nt/plat_signal.c) branch on NT_SUCCESS and skip
+      // NtClose() on the failure path precisely because nothing was
+      // acquired there.
+      const FunctionDecl *Function = function(Call);
+      QualType StatusType = Function ? Function->getReturnType() : QualType();
+      std::optional<DefinedOrUnknownSVal> Status =
+          Call.getReturnValue().getAs<DefinedOrUnknownSVal>();
+      if (!Status || StatusType.isNull()) {
+        C.addTransition(
+            track(State, Symbol, Handle, Call.getOriginExpr(), C.getStackFrame()));
+        return;
+      }
+      SValBuilder &Builder = C.getSValBuilder();
+      SVal Failed = Builder.evalBinOp(State, BO_LT, *Status,
+                                      Builder.makeIntVal(0, StatusType),
+                                      Builder.getConditionType());
+      std::optional<DefinedOrUnknownSVal> Condition =
+          Failed.getAs<DefinedOrUnknownSVal>();
+      if (!Condition) {
+        C.addTransition(
+            track(State, Symbol, Handle, Call.getOriginExpr(), C.getStackFrame()));
+        return;
+      }
+      auto [FailedState, SucceededState] = State->assume(*Condition);
+      if (FailedState)
+        C.addTransition(FailedState);
+      if (SucceededState)
+        C.addTransition(track(SucceededState, Symbol, Handle,
+                              Call.getOriginExpr(), C.getStackFrame()));
+      return;
+    }
+    // __file_new()'s own return is not itself an acquiredFamily() hit (it
+    // is an internal helper, not one of this codebase's public acquiring
+    // functions), so retireConsumedDescriptor() above never runs for it --
+    // only fdopen() reaches that path, by also being an acquiredFamily()
+    // acquisition in its own right. This is the same success-gated
+    // retirement, standing alone, for a consuming call that is not.
+    if (std::optional<unsigned> Argument = consumedDescriptorArgument(Call)) {
+      if (*Argument >= Call.getNumArgs())
+        return;
+      SymbolRef FdSymbol = Call.getArgSVal(*Argument).getAsSymbol(true);
+      if (!FdSymbol)
+        return;
+      ProgramStateRef State = C.getState();
+      const FunctionDecl *Function = function(Call);
+      QualType ReturnType = Function ? Function->getReturnType() : QualType();
+      std::optional<DefinedOrUnknownSVal> Defined =
+          Call.getReturnValue().getAs<DefinedOrUnknownSVal>();
+      if (!Defined || ReturnType.isNull()) {
+        C.addTransition(
+            State->set<ResourceMap>(FdSymbol, released(Descriptor)));
+        return;
+      }
+      auto [FailedState, SucceededState] =
+          splitOnAcquireFailure(Stream, State, *Defined, ReturnType, C);
+      if (FailedState)
+        C.addTransition(FailedState);
+      if (SucceededState)
+        C.addTransition(
+            SucceededState->set<ResourceMap>(FdSymbol, released(Descriptor)));
     }
   }
 
@@ -4650,6 +4882,141 @@ public:
       checkResource(Call, Release->first, Release->second, true, C);
     else if (auto Use = use(Call))
       checkResource(Call, Use->first, Use->second, false, C);
+  }
+};
+
+// Opt-in (ntlibc.ResourceLeak; see tools/lint.sh's resourceleak stage): the
+// missing half of ResourceLifecycleChecker's acquire/use/release proof --
+// checkResource there only ever validates a release call's own legitimacy
+// at the moment one is reached, so nothing notices a live resource that no
+// path released at all. This is the ResourceMap analogue of
+// AllocationLifetimeChecker::checkEndFunction's leak-at-exit scan -- same
+// frame-scoping (a resource belongs to whichever frame acquired it, see
+// belongsToFrame), same "return transfers it to the caller" trust boundary
+// -- applied to ResourceMap's simpler live/released facts instead of
+// AllocationLifecycle's token algebra, which ResourceMap's families have
+// no withtok/consume contract of their own to drive.
+//
+// A separate checker class, not more callbacks on ResourceLifecycleChecker
+// itself, so this can be landed opt-in and its own tree-wide backlog
+// triaged independently, the same way totality/sizearith/loopcond each
+// landed as their own checker before earning a place in requested_stages'
+// default list. It reads ResourceMap/ResourceOrigin/ResourceFrame -- the
+// same three program-state tables ResourceLifecycleChecker's track()
+// writes -- rather than duplicating them, so ntlibc.Resource must also be
+// enabled in the same clang -analyzer-checker= invocation for this
+// checker to see anything.
+class ResourceLeakChecker
+    : public Checker<check::PostStmt<BinaryOperator>, check::EndFunction> {
+  mutable std::unique_ptr<BugType> BT;
+
+  static ProgramStateRef forget(ProgramStateRef State, SymbolRef Symbol) {
+    return State->remove<ResourceMap>(Symbol)
+        ->remove<ResourceOrigin>(Symbol)
+        ->remove<ResourceFrame>(Symbol);
+  }
+
+  static bool belongsToFrame(ProgramStateRef State, SymbolRef Symbol,
+                             const StackFrameContext *Frame) {
+    const StackFrameContext *const *Owner = State->get<ResourceFrame>(Symbol);
+    return Owner && *Owner == Frame;
+  }
+
+  // `x->fd = fd;`/`f->f = fopen(...);` (a struct field), `*out = h;` (a
+  // parameter's own pointee, AllocationLifetimeChecker.cpp's own
+  // destinationDeclaration() UO_Deref+ParmVarDecl case), `pair[i] = fd;`
+  // (that same out-parameter shape spelled with subscript sugar instead
+  // of a deref, e.g. src/socket/socketpair.c's `pair[0] = client;`), and
+  // a direct store into a static/global variable (src/misc/linux/grp.c's
+  // getgrent() `g_grent_f = fopen(...)`, the same getXXXent()/setXXXent()
+  // cache shape 906692a9 already gave a withtok(file_stream_open)
+  // contract for on AllocationLifetimeChecker) are the real shapes this
+  // codebase stores an acquired resource through on its way to outliving
+  // this function. ResourceMap's families have no withtok-annotated-field
+  // contract of their own to gate this the way AllocationLifetimeChecker's
+  // composite owners are gated, so this trusts each shape unconditionally,
+  // the same "real, checkable AST evidence this analysis cannot see past"
+  // trust boundary ResourceLifecycleChecker's own isDirectParameterArgument()/
+  // handleOutParamArgument() already give a borrowed argument or
+  // out-parameter.
+  static bool isTrustedResourceDestination(const Expr *LHS) {
+    LHS = LHS->IgnoreParenCasts();
+    if (isa<MemberExpr>(LHS))
+      return true;
+    if (const auto *Subscript = dyn_cast<ArraySubscriptExpr>(LHS)) {
+      const auto *Reference = dyn_cast<DeclRefExpr>(
+          Subscript->getBase()->IgnoreParenCasts());
+      return Reference && isa<ParmVarDecl>(Reference->getDecl());
+    }
+    if (const auto *Reference = dyn_cast<DeclRefExpr>(LHS))
+      if (const auto *Variable = dyn_cast<VarDecl>(Reference->getDecl()))
+        return Variable->hasGlobalStorage();
+    if (const auto *Unary = dyn_cast<UnaryOperator>(LHS))
+      if (Unary->getOpcode() == UO_Deref) {
+        const Expr *Pointer = Unary->getSubExpr()->IgnoreParenImpCasts();
+        if (const auto *Reference = dyn_cast<DeclRefExpr>(Pointer))
+          return isa<ParmVarDecl>(Reference->getDecl());
+      }
+    return false;
+  }
+
+  void report(StringRef Reason, const Stmt *Statement,
+              CheckerContext &C) const {
+    if (!Statement)
+      return;
+    ExplodedNode *Node = C.generateNonFatalErrorNode();
+    if (!Node)
+      return;
+    if (!BT)
+      BT = std::make_unique<BugType>(this, "Unproven resource lifecycle",
+                                     categories::MemoryError);
+    auto Report = std::make_unique<PathSensitiveBugReport>(
+        *BT, diagnosticMessage(Reason, Statement, C), Node);
+    Report->addRange(Statement->getSourceRange());
+    C.emitReport(std::move(Report));
+  }
+
+public:
+  // Deliberately not frame-gated, unlike checkEndFunction's use of
+  // belongsToFrame below: a resource acquired in one frame and handed by
+  // value into a small same-TU helper the analyzer inlines (src/dirent/
+  // opendir.c's alloc_dir(fd), called from opendir(); src/stdio/file.c's
+  // __file_new(fd, ...), called from fopen()) has this trusted-store
+  // happen in the CALLEE's frame, not the acquiring frame -- requiring
+  // frame equality here just made checkEndFunction blind to exactly the
+  // transfer isTrustedResourceDestination() means to trust. Ownership
+  // transfer is a fact about the value, not about which frame the store
+  // instruction happens to run in.
+  void checkPostStmt(const BinaryOperator *Statement, CheckerContext &C) const {
+    if (!Statement->isAssignmentOp())
+      return;
+    if (!isTrustedResourceDestination(Statement->getLHS()))
+      return;
+    SymbolRef Source = C.getSVal(Statement->getRHS()).getAsSymbol(true);
+    if (!Source)
+      return;
+    C.addTransition(forget(C.getState(), Source));
+  }
+
+  void checkEndFunction(const ReturnStmt *Return, CheckerContext &C) const {
+    ProgramStateRef State = C.getState();
+    SymbolRef Returned =
+        Return && Return->getRetValue()
+            ? C.getSVal(Return->getRetValue()).getAsSymbol(true)
+            : nullptr;
+    if (Returned && belongsToFrame(State, Returned, C.getStackFrame()))
+      State = forget(State, Returned);
+    for (const auto &Entry : State->get<ResourceMap>()) {
+      SymbolRef Symbol = Entry.first;
+      if (Entry.second & 1u)
+        continue; // already released
+      if (!belongsToFrame(State, Symbol, C.getStackFrame()))
+        continue;
+      const Stmt *const *Origin = State->get<ResourceOrigin>(Symbol);
+      report("resource is not proven released before function exit",
+             Origin ? *Origin : static_cast<const Stmt *>(Return), C);
+      return;
+    }
   }
 };
 
@@ -4688,6 +5055,12 @@ extern "C" void clang_registerCheckers(CheckerRegistry &Registry) {
       "pointer",
       "");
   Registry.addChecker<ResourceLifecycleChecker>(
-      "ntlibc.Resource", "Proves acquire, use, and release resource lifecycles",
+      "ntlibc.Resource", "Proves acquire, use, and release resource "
+      "lifecycles",
+      "");
+  Registry.addChecker<ResourceLeakChecker>(
+      "ntlibc.ResourceLeak",
+      "Proves a tracked resource is released before function exit "
+      "(opt-in, ntlibc.Resource must also be enabled)",
       "");
 }

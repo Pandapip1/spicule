@@ -17,15 +17,12 @@
  *  -k  "Write the information using a 1024-byte block ..." -- the one
  *      concrete unit df(1p) itself names.
  *
- * Without -k, df(1p)'s DESCRIPTION only ever says block counts are
- * written "in units of 512-byte blocks" *for -k's absence to be
- * contrasted against*; the base utility text does not fix a default unit
- * at all (unlike e.g. -k, which is explicit).  512 is picked here as the
- * default because it is the traditional, portable default block size
- * this project's own test.c/pathchk.c precedent of "state a real
- * ambiguity rather than hide it" calls for spelling out plainly: this is
- * a deliberate choice among conforming ones, not the one true unimplied
- * default.
+ * Without -k, df(1p)'s DESCRIPTION only mentions "512-byte blocks" as
+ * the contrast case for -k, without fixing a default unit itself. 512 is
+ * used here as the traditional, portable default -- a deliberate choice
+ * among conforming ones, spelled out rather than left implicit, per this
+ * project's test.c/pathchk.c precedent of stating a real ambiguity
+ * rather than hiding it.
  *
  * ---- file/directory operands --------------------------------------------
  *
@@ -122,8 +119,7 @@ int __util_df_main(
 	for (; i < argc; i++) {
 		char *a = argv[i];
 		/* a[0]: "pointer dereference is not proven nonnull" -- left
-		 * open, same accepted class as the identical argv[i][0] access
-		 * in src/util/du.c and friends (see that file's own comment). */
+		 * open, same accepted class as argv[i][0] in src/util/du.c. */
 		if (a[0] != '-' || a[1] == 0) break;
 		if (!strcmp(a, "--")) { i++; break; }
 		if (!strcmp(a, "-k")) { blocksize = 1024; continue; }

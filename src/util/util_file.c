@@ -224,10 +224,8 @@ static int file_one(const char *path, const struct file_opts *o)
 	char linkbuf[PATH_MAX];
 	ssize_t linklen;
 
-	/* path is one of __util_file_main's own argv elements, null-terminated
-	 * by its elements_withtok(null_terminated, argc) contract on argv --
-	 * restated here since that token does not survive the argv[i] -> const
-	 * char * parameter read this checker can trace on its own. */
+	/* path = one of argv's elements; null-terminated per argv's own
+	 * contract, but that token doesn't survive the parameter read -- restated. */
 	__ownership_string_terminated(path);
 
 	if (strcmp(path, "-") == 0) {
@@ -258,13 +256,11 @@ static int file_one(const char *path, const struct file_opts *o)
 			printf("%s: %s\n", path, "cannot open");
 			return -1;
 		}
-		/* linklen <= sizeof linkbuf - 1 is readlink()'s own POSIX
-		 * contract on its own third argument ("return value <=
-		 * bufsiz"); this vocabulary has no annotation for a return
-		 * value bounded by a parameter, so linkbuf[linklen] is left
-		 * open as an ntlibc.ValidPointer finding -- a real
-		 * checker/vocabulary gap, not a bug here (same gap documented
-		 * in src/util/readlink.c's own identical use). */
+		/* readlink()'s own contract bounds linklen <= sizeof linkbuf - 1,
+		 * but this vocabulary has no annotation for a return value bounded
+		 * by a parameter, so linkbuf[linklen] is left open as an
+		 * ntlibc.ValidPointer finding -- a real checker gap, not a bug
+		 * (same gap documented in src/util/readlink.c). */
 		linkbuf[linklen] = 0;
 		printf("%s: %s %s\n", path, "symbolic link to", linkbuf);
 		return 0;

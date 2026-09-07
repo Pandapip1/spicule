@@ -2,74 +2,45 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Named util_write.c, not write.c: the same tcc-`ar` member-name
- * collision src/util/util_basename.c's header explains in full, this
- * time against src/unistd/write.c (the real write(2) syscall front
- * door) -- confirmed with `find src -name write.c` before choosing the
- * name, per src/internal/util.h's own instruction to check.  The
+ * collision src/util/util_basename.c's header explains, this time
+ * against src/unistd/write.c (the write(2) syscall front door). The
  * util_ prefix is the whole fix; the exported symbol is still
  * __util_write_main().
  *
  * write(1p): "write user [tty]" -- reads lines from standard input and
  * writes them to another user's terminal.
  *
- * ---- the reality check -------------------------------------------------
+ * ---- what this actually implements --------------------------------------
  *
- * Real write(1p) sends to a *different* logged-in user's terminal.
- * src/misc/pwd.c's header comment already establishes that ntlibc has
- * exactly one real user identity it can ever honestly report, and this
- * file does not invent a second one to pretend otherwise. What is real
- * and left standing once that is accepted:
+ * Real write(1p) sends to a *different* logged-in user's terminal, but
+ * ntlibc has exactly one real user identity (src/misc/pwd.c), so there
+ * is no second account to invent:
  *
- *   - `user` must name the one real user this process actually is
- *     (getpwnam(user) -- src/misc/pwd.c -- succeeds only for that
- *     name).  Any other name is not "logged in" here, honestly,
- *     because there genuinely is no second account: write(1p)'s own
- *     EXIT STATUS ">0 ... user not logged on" is the real, specified
- *     answer for exactly this case, not a cop-out.
+ *   - `user` must name this process's own user (getpwnam(user) --
+ *     src/misc/pwd.c). Any other name gets write(1p)'s own specified
+ *     ">0 user not logged on" exit status, not a fabricated success.
  *
- *   - The one real "session" this process can ever honestly claim is
- *     open is its own controlling terminal, resolved by
- *     __util_find_terminal() (src/util/termident.h/.c -- see that
- *     header's own banner for what is real, per platform, and why
- *     isatty() alone is not enough on Linux yet).  So `write
- *     $(whoami)` -- optionally with the matching tty operand -- writes
- *     the message straight into that same real terminal: a genuine,
- *     verifiable "write directly to the target tty device", not a
- *     fabrication, just degenerately with sender and recipient being
- *     the same real session.  Any *other* tty operand is, again
- *     honestly, not a session this process can find -- ">0 user not
- *     logged on" once more, per write.html's own ERRORS wording,
- *     rather than a silent, fake success.
+ *   - The only session this process can find is its own controlling
+ *     terminal, resolved by __util_find_terminal() (src/util/
+ *     termident.h/.c). So `write $(whoami)` writes straight into that
+ *     same terminal -- sender and recipient degenerately the same
+ *     session. Any other tty operand likewise gets "not logged on".
  *
- *   - This is deliberately forward-compatible, not a permanent ceiling:
- *     if this tree later grows a real multi-session registry (a
- *     utmp-equivalent -- none exists anywhere in this tree today,
- *     confirmed via `git log --all --grep=utmp` and a full-tree
- *     `grep -ri utmp` before writing this file), the only change
- *     __util_write_main() would need is a second, wider search before
- *     falling back to "is this my own terminal" -- the core mechanism
- *     (resolve a real target tty, open it, write straight into it)
- *     does not change at all.  Building that registry is explicitly
- *     out of scope for this pass: the self-write case above is the
- *     only session this system can honestly claim exists today, and
- *     write(1p)'s own contract already specifies the correct behaviour
- *     (a real, diagnosed failure) for every other case.
+ *   - Forward-compatible, not a permanent ceiling: if this tree ever
+ *     grows a real multi-session registry (none exists today), only
+ *     __util_write_main()'s target-resolution step would need to widen;
+ *     the core mechanism (open the real tty, write into it) stays the
+ *     same.
  *
- * mesg(1p) (src/util/mesg.c) is deliberately NOT consulted for the
- * self-write case: mesg gates *other* users' ability to reach a
- * terminal, and the only real recipient here is this same session, so
- * there is no one for it to gate against.
+ * mesg(1p) is deliberately not consulted here: it gates *other* users
+ * reaching a terminal, and the only recipient here is this same session.
  *
- * Interrupt handling (write.html: "an interrupt character shall cause
- * write to send... EOT... and exit") is out of scope here: this
- * function is a shared __util_write_main() called both as a standalone
- * process and as a shell builtin running in-process (src/internal/
- * util.h's own contract -- never exit()/_exit() from here, see
- * src/util/dd.c's header comment), so it does not install any signal
- * handler of its own either way; an interrupt during the read loop
- * below behaves the same way it would in any other blocking read here
- * (cat(1p) included), and EOF alone -- the common, real way to end an
- * interactive write session -- gets the real "EOT\n" trailer.
+ * Interrupt handling (write.html: an interrupt sends EOT and exits) is
+ * out of scope: __util_write_main() is shared between a standalone
+ * process and an in-process shell builtin (src/internal/util.h's
+ * never-exit() contract, see src/util/dd.c), so it installs no signal
+ * handler; EOF alone -- the normal way to end a session -- gets the
+ * real "EOT\n" trailer.
  */
 #include "util.h"
 #include "termident.h"
@@ -92,11 +63,8 @@ static int send_all(int fd, const char *buf, size_t len)
 			if (errno == EINTR) continue;
 			return -1;
 		}
-		/* write() returning 0 here (distinct from n < 0 above, already
-		 * errno-set by write() itself) is not documented to touch
-		 * errno at all; every caller of send_all() below trusts errno
-		 * unconditionally after a -1 return, so this path needs its
-		 * own explicit reason. */
+		/* write() returning 0 isn't documented to touch errno; every
+		 * caller here trusts errno after a -1 return, so set it explicitly. */
 		if (n == 0) { errno = EIO; return -1; }
 		off += (size_t)n;
 	}
@@ -141,11 +109,9 @@ int __util_write_main(
 		return 1;
 	}
 
-	/* ttyop: an argv element read through a const char * (the
-	 * AggregateElementToken propagation gap this idiom already works
-	 * around in tail.c/head.c/cksum.c). t.shortname: a struct field
-	 * __util_find_terminal() always NUL-terminates on success (see
-	 * termident.h's own comment). */
+	/* ttyop: argv element read through const char * (AggregateElementToken
+	 * gap, same idiom as tail.c/head.c/cksum.c). t.shortname: struct field
+	 * __util_find_terminal() always NUL-terminates on success. */
 	if (ttyop) __ownership_string_terminated(ttyop);
 	__ownership_string_terminated(t.shortname);
 	if (ttyop && strcmp(ttyop, t.shortname) != 0) {
@@ -175,18 +141,15 @@ int __util_write_main(
 		 * is what actually NUL-terminates tbuf. */
 		__ownership_string_terminated(tbuf);
 		tlen = strlen(tbuf);
-		/* KNOWN CHECKER GAP (ntlibc.ValidPointer, "dereference extent is
-		 * not proven sufficient" on tbuf[tlen-1]/tbuf[--tlen] below):
-		 * tlen <= sizeof tbuf - 1 (63) always holds here, by construction,
-		 * from the fixed NUL written to tbuf[sizeof tbuf - 1] just above
-		 * -- but the checker's strlen-return-to-extent correlation
-		 * (OwnershipChecker.cpp's trackScanExtent) deliberately declines
-		 * to run against a fixed local array, which already has a real,
-		 * stronger extent (64) than anything derivable from strlen()'s
-		 * return; a manual __ownership_writable_span/readable_span
-		 * restatement here is rejected by ntlibc.MemoryContract itself as
-		 * narrowing an already-proven-stronger fact ("manual memory proof
-		 * axiom can be narrowed"). Left open rather than worked around. */
+		/* KNOWN CHECKER GAP (ntlibc.ValidPointer on tbuf[tlen-1]/
+		 * tbuf[--tlen] below): tlen <= sizeof tbuf - 1 always holds, from
+		 * the fixed NUL just written above, but OwnershipChecker.cpp's
+		 * trackScanExtent declines to correlate strlen()'s return with a
+		 * fixed local array's already-stronger extent, and a manual
+		 * __ownership_writable_span/readable_span restatement here is
+		 * rejected by ntlibc.MemoryContract as narrowing an
+		 * already-proven-stronger fact. Left open rather than worked
+		 * around. */
 		while (tlen && (tbuf[tlen - 1] == '\n' || tbuf[tlen - 1] == '\r')) tbuf[--tlen] = 0;
 	}
 	snprintf(banner, sizeof banner, "Message from %s (%s) [%s]...\n",

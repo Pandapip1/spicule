@@ -1,64 +1,26 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * crontab(1p): `crontab [file]` | `crontab [-e|-l|-r]` -- fetched and
- * checked directly against
+ * crontab(1p): `crontab [file]` | `crontab [-e|-l|-r]`
  * https://pubs.opengroup.org/onlinepubs/9699919799/utilities/crontab.html
- * before writing this file.
  *
- * ONE USER, ONE CRONTAB, NO -u
- * --------------------------------
- * src/misc/pwd.c's own header comment already settled this project's
- * whole "who is the current user" question: there is exactly one,
- * genuinely knowable, and there is no second entry any database here
- * could honestly enumerate. Real crontab(1p) implementations add a
- * privileged `-u user` (an XSI/System-V extension crontab.html itself
- * does not define -- checked directly, it is not in the base
- * SYNOPSIS above) to let root edit someone else's crontab; this
- * implementation has no second user to name, so there is nothing for
- * `-u` to mean here, and it is not implemented -- an unrecognized
- * option, refused with a diagnostic, rather than silently accepted
- * and ignored (see src/util/touch.c's own header for the same
- * "refuse rather than silently narrow" rule applied to -d). Every
- * crontab this file touches is $HOME/.ntlibc/crontabs/crontab
- * (src/util/spool.h) -- "the invoking user's crontab entry", exactly
- * as crontab.html's own OPTIONS describes -e/-l/-r, with no other
- * crontab reachable at all.
+ * No -u: this system has exactly one user (see pwd.c), so the
+ * privileged `-u user` XSI extension (not in the base SYNOPSIS) has
+ * no second user to name. Refused as an unrecognized option rather
+ * than silently ignored (same rule as touch.c's -d). Every crontab
+ * here is $HOME/.ntlibc/crontabs/crontab (spool.h).
  *
- * INPUT VALIDATION
- * -------------------
- * Every non-blank, non-comment ('#'-led) line is required to parse as
- * five crontab(5) time fields (src/util/crontime.c) followed by a
- * command -- checked eagerly, at `crontab file`/`crontab -e` time,
- * not deferred to whenever crond happens to reach that line. A line
- * that looks like an environment-variable assignment ("MAILTO=...",
- * a real crontab(5) feature) is refused with its own specific
- * diagnostic rather than folded into the generic "bad line" case --
- * src/util/crontime.h's own header explains why MAILTO can't be
- * honoured (no mail transport) and why accepting the syntax anyway
- * would misrepresent what actually happens.
+ * Every non-blank, non-comment line must parse as five crontab(5)
+ * time fields (crontime.c) plus a command, validated eagerly at
+ * install/edit time. A MAILTO=-style assignment line gets its own
+ * diagnostic rather than the generic "bad line" one, since crontime.h
+ * explains there's no mail transport to honour it with.
  *
- * `-e`'s EDITOR
- * ---------------
- * "$VISUAL" then "$EDITOR" (the real, universal precedence every
- * `crontab -e`, `sh`, `git commit` etc. agree on), falling back to
- * `ed` -- this library's own POSIX line editor (src/util/ed.c) is
- * the one honest default that does not assume an external program
- * (`vi`, historically) exists on a from-scratch bootstrap system,
- * which is exactly the situation this whole POSIX-utilities effort
- * exists for (see [[project_posix_utils_bootstrap_value]]).
- *
- * On an editor exit status of 0, the edited file is validated (as
- * above) before being installed; a bad line aborts the install with
- * a diagnostic naming the line number, leaving both the previous
- * crontab AND the editor's edits untouched (the edited temp file's
- * path is printed, matching real crontab's own "edits left in ..."
- * recovery message) -- this implementation does not loop back into
- * the editor automatically the way some real implementations do,
- * a deliberate, small scope narrowing: re-running `crontab -e` is
- * one extra step, and looping would need this file to hold an
- * interactive retry/abandon prompt no other utility in this tree
- * has today.
+ * -e picks $VISUAL then $EDITOR, falling back to this library's own
+ * ed(1) (src/util/ed.c) rather than assuming vi exists. A bad edited
+ * file aborts the install with the line number and leaves the edits
+ * in the temp file (path printed) rather than looping back into the
+ * editor automatically -- re-running `crontab -e` is one extra step.
  */
 #include <stdio.h>
 #include <limits.h>
@@ -74,13 +36,10 @@
 #include "libc.h" /* __find_program()/__spawn() */
 #include "ownership_stubs.h"
 
-/* True if `line` (already past any leading <blank>s) is a real
- * crontab(5) environment-variable-assignment line: an identifier
- * immediately (optionally through more <blank>s) followed by '='.
- * A genuine time field never starts this way -- it is always a
- * digit, '*', or (month/day-of-week name) a bare three-letter word
- * with no '=' anywhere near it -- so this cannot misfire on a real
- * schedule line. */
+/* True if `line` (past leading blanks) is a crontab(5) env-assignment:
+ * an identifier then optional blanks then '='. A real time field
+ * never looks like this (digit, '*', or a bare month/dow name), so
+ * this can't misfire on a schedule line. */
 static int looks_like_assignment(const char *line)
 {
 	const char *p = line;
@@ -94,12 +53,9 @@ static int split_field(const char **pp, char *out, size_t outsz)
 {
 	const char *p = *pp;
 	size_t n;
-	/* ntlibc.ValidPointer: "dereference extent is not proven sufficient"
-	 * on this walk -- left open. Every caller passes a cursor into a
-	 * genuinely NUL-terminated fgets() line buffer, but restating that
-	 * with __ownership_string_terminated() does not close this
-	 * particular finding (tried); src/util/crond.c's byte-identical
-	 * split_field() has the same open finding. */
+	/* ntlibc.ValidPointer: open finding on this walk (cursor into a
+	 * NUL-terminated fgets() buffer); __ownership_string_terminated()
+	 * doesn't close it (tried) -- crond.c's identical split_field() too. */
 	while (*p == ' ' || *p == '\t') p++;
 	n = strcspn(p, " \t\n");
 	if (n == 0 || n >= outsz || n > INT_MAX) return -1;
@@ -306,7 +262,7 @@ static int do_edit(void)
 		return 1;
 	}
 
-	__ownership_string_terminated(tmpl); /* mkstemp() fills the XXXXXX suffix in place, keeping the snprintf() length check above valid */
+	__ownership_string_terminated(tmpl); /* mkstemp() fills XXXXXX in place, length check above still holds */
 	tf = fopen(tmpl, "r");
 	if (!tf) { __util_diagf("crontab: cannot reopen %s: %s\n", tmpl, strerror(errno)); return 1; }
 	if (install_crontab(tf, &bad_line) < 0) {

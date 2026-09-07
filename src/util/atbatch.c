@@ -13,17 +13,14 @@
 #include "atbatch.h"
 #include "ownership_stubs.h"
 
-/* Identical escaping rule to src/sh/builtin.c's own write_quoted()
- * (bi_set's `set` output) -- see this header's own comment on why the
- * export lines below reuse it rather than a second implementation.
+/* Same escaping rule as src/sh/builtin.c's write_quoted() (bi_set's
+ * `set` output); not shared, see that file's header.
  *
- * ntlibc.ValidPointer: the `*v` walk below has an open "dereference
- * extent is not proven sufficient" finding at every caller (a cwd, an
- * environ entry, or a job command byte -- all genuinely NUL-terminated).
- * Declaring `v withtok(null_terminated)` closes it here but pushes new
- * findings onto every call site instead (tried; net regression), the
- * same open shape src/util/crontab.c's split_field() and
- * src/util/crond.c's identical one already document. */
+ * ntlibc.ValidPointer: open finding on the `*v` walk (all callers are
+ * genuinely NUL-terminated). withtok(null_terminated) on `v` closes it
+ * here but pushes new findings onto every call site instead (tried;
+ * net regression) -- same shape as crontab.c's split_field() and
+ * crond.c's identical case. */
 static int write_quoted(FILE *f, const char *v)
 {
 	if (fputc('\'', f) == EOF) return -1;
@@ -61,11 +58,8 @@ int __atbatch_submit(const char *queue, time_t run_at, const char *srcfile,
 	}
 
 	cwd = getcwd(0, 0);
-	/* umask() has no "peek without changing" form -- set it to 0 and
-	 * immediately restore the real value, the standard technique
-	 * (there is no window where another thread could observe the
-	 * temporary 0: this library has no threads, per every other
-	 * "no threads" note elsewhere in this tree). */
+	/* umask() has no peek-only form; set to 0 and restore immediately
+	 * (safe here -- this library has no threads). */
 	um = umask(0);
 	umask(um);
 

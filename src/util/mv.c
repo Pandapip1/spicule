@@ -5,45 +5,34 @@
  *   mv [-f] source target
  *   mv [-f] source... target_dir
  *
- * mv(1p)'s DESCRIPTION describes the effect ("rename" when possible),
- * not a mechanism, so the mechanism here is: try rename() first --
- * atomic, and POSIX's own preferred primitive whenever it applies (it
- * already carries all of mv(1p)'s "existing dest_file is unlinked
- * first"/"existing empty dest directory is replaced" behaviour, because
- * that behaviour comes from the platform's rename semantics, which
- * src/stdio/misc.c's rename() documents).  Only when rename() fails
- * specifically because the two paths are on different volumes --
- * reported as EXDEV; src/stdio/misc.c's renameat() sets exactly that
- * errno from NT's STATUS_NOT_SAME_DEVICE, so this is a real, observed
- * mapping, not a guess -- does this fall back to a copy of the source
- * followed by removing it, reusing src/util/cp.c's file/tree copy and
- * src/util/rm.c's tree removal rather than duplicating either.  Any
- * other rename() failure is a real diagnostic and a nonzero exit, with
- * no fallback attempted: guessing that some other errno also means
- * "try copying instead" risks silently doing something very different
- * from what the user asked for.
+ * Mechanism: try rename() first -- atomic, and already gives mv(1p)'s
+ * "existing dest_file unlinked first"/"existing empty dest dir replaced"
+ * behavior for free, since that comes from the platform's own rename
+ * semantics (src/stdio/misc.c's rename()). Only on EXDEV (different
+ * volumes -- src/stdio/misc.c's renameat() maps this from NT's
+ * STATUS_NOT_SAME_DEVICE) does this fall back to copy-then-remove,
+ * reusing src/util/cp.c's copy and src/util/rm.c's tree removal. Any
+ * other rename() failure is a diagnostic and nonzero exit, no fallback:
+ * guessing that some other errno also means "try copying" risks doing
+ * something different from what the user asked for.
  *
- * target_dir form: identical "target/basename(source)" construction as
- * cp(1p)'s, via the same __util_join_basename() (src/util/cp.c).
+ * target_dir form: same "target/basename(source)" construction as
+ * cp(1p), via the same __util_join_basename() (src/util/cp.c).
  *
  * Deliberately out of scope, refused loudly rather than silently
- * ignored -- same reasoning as src/util/rm.c's and src/util/cp.c's:
+ * ignored -- same reasoning as src/util/rm.c and src/util/cp.c:
  *   -i  interactive overwrite confirmation.
- * `-f` is accepted, but is a genuine no-op here rather than a silently
- * *different* no-op: mv(1p)'s -f means "do not prompt", and this build
- * never prompts (no -i), so there is nothing left for -f to change --
- * unlike a refused option, accepting -f does not misrepresent what the
- * utility does.
+ * -f is accepted but a genuine no-op: mv(1p)'s -f means "do not
+ * prompt", and this build never prompts (no -i), so there's nothing
+ * left for -f to change.
  *
- * The EXDEV fallback does not attempt to move a symbolic link across
- * volumes: doing so correctly means recreating the link itself
- * (readlink() + symlink()) rather than copying file *contents*, which
- * is not implemented here, and copying the link's *referent* instead
- * would silently change what the moved entry means. Refused with a
- * diagnostic instead -- the same policy src/util/cp.c applies to a
- * symlink found inside a -R tree, for the same reason. Within one
- * volume this limitation does not apply at all: rename() moves a
- * symbolic link correctly and is always tried first.
+ * The EXDEV fallback does not move a symbolic link across volumes:
+ * doing so correctly means recreating the link (readlink()+symlink()),
+ * not copying file contents, and copying the link's referent instead
+ * would silently change what the moved entry means -- refused with a
+ * diagnostic, same policy as a symlink found inside a cp -R tree.
+ * Within one volume this doesn't apply: rename() moves a symlink
+ * correctly and is always tried first.
  */
 #include <string.h>
 #include <stdio.h>
@@ -112,16 +101,13 @@ int __util_mv_main(
 		char *a = argv[i];
 		char *p;
 
-		/* a is one of argv's own elements (i < nargs <= argc);
-		 * restate the argv-wide null-terminated guarantee here, the
-		 * same way src/util/cp.c's identical loop shape already does
-		 * -- a plain local like `a` is not something the checker can
-		 * trace back to argv on its own. The raw a[0] read just below
-		 * stays open (same as cp.c's own identical loop): closing it
-		 * needs __ownership_pointer_nonnull() instead, which was
-		 * tried and reverted -- it reopened the strcmp() finding below
-		 * and broke the unrelated target = argv[nargs - 1] read
-		 * further down. */
+		/* a is argv[i], i < nargs <= argc; restated since a plain local
+		 * isn't traceable back to argv on its own (same as
+		 * src/util/cp.c's identical loop). The raw a[0] read below
+		 * stays open: __ownership_pointer_nonnull() instead was tried
+		 * and reverted -- it reopened the strcmp() finding below and
+		 * broke the unrelated target = argv[nargs - 1] read further
+		 * down. */
 		__ownership_string_terminated(a);
 
 		if (a[0] != '-' || a[1] == 0) break;
@@ -148,8 +134,7 @@ int __util_mv_main(
 	}
 
 	target = argv[nargs - 1];
-	/* Restated for the same reason as `a` above: the loop bound this
-	 * function uses is `nargs`, not `argc`. */
+	/* Restated for the same reason as `a` above (`nargs`, not `argc`). */
 	__ownership_string_terminated(target);
 	target_is_dir = stat(target, &tst) == 0 && S_ISDIR(tst.st_mode);
 
@@ -161,8 +146,7 @@ int __util_mv_main(
 	for (; i < nargs - 1; i++) {
 		const char *src = argv[i];
 
-		/* Same restatement as above, again because of the `nargs`
-		 * loop bound. */
+		/* Same restatement as above (`nargs` loop bound). */
 		__ownership_string_terminated(src);
 
 		if (target_is_dir) {
@@ -173,10 +157,9 @@ int __util_mv_main(
 				continue;
 			}
 			/* Left open: dst's null_terminated token from
-			 * __util_join_basename()'s dual (heap_allocated +
-			 * null_terminated) return does not survive to this call
-			 * -- the same open finding src/util/cp.c's byte-for-byte
-			 * identical cp_one(src, dst, ...) call has. */
+			 * __util_join_basename()'s dual return doesn't survive to
+			 * this call -- same open finding as cp.c's identical
+			 * cp_one(src, dst, ...) call. */
 			if (mv_one(src, dst) < 0) had_error = 1;
 			free(dst);
 		} else {

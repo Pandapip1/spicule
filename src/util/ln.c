@@ -11,32 +11,26 @@
  *  -s  "Create symbolic links instead of hard links.  If the -s option
  *       is specified, the -L and -P options shall be silently ignored."
  *
- * DESCRIPTION (no -f, destination exists): "the utility writes a
- * diagnostic message to standard error and proceeds to any remaining
- * source files without creating the link" -- which is exactly what
- * link()/symlink() failing EEXIST and this file's usual diagnose-and-
- * continue loop already produce, so -f's absence needs no special-casing
- * beyond "don't unlink the target first".
+ * DESCRIPTION (no -f, destination exists): a diagnostic and continuing
+ * to the remaining source files is exactly what link()/symlink() failing
+ * EEXIST plus this file's usual diagnose-and-continue loop already
+ * produce, so -f's absence needs no special-casing beyond "don't unlink
+ * the target first".
  *
- * Second SYNOPSIS form: "applies when the final operand names an
- * existing directory" -- every source_file is linked into that
- * directory under its own basename.
- *
- * EXIT STATUS: "0 All the specified files were linked successfully."
- * ">0 An error occurred."
+ * Second SYNOPSIS form applies when the final operand names an existing
+ * directory -- every source_file is linked into it under its own
+ * basename.
  *
  * ---- What is deliberately not implemented ------------------------------
  *
  * -L / -P: which of a symlink source's two identities (the link itself,
- * or the file it resolves to) a *hard* link should be made to.  Not
+ * or the file it resolves to) a *hard* link should be made to. Not
  * implemented -- refused with a diagnostic, per this project's "refuse
- * rather than silently guess" rule (see bi_set's own comment on exactly
- * this point) -- because this tree's link() (src/unistd/link.c) always
- * hard-links the named entry as given with no way to ask it to resolve
- * through a symlink first, so honouring -L specifically would need new
- * plumbing in link() itself, out of scope for this utility. The default
- * (neither flag given) already matches -P's behaviour, which is the
- * common case.
+ * rather than silently guess" rule -- because this tree's link()
+ * (src/unistd/link.c) always hard-links the named entry as given with no
+ * way to resolve through a symlink first; honoring -L would need new
+ * plumbing in link() itself, out of scope here. The default (neither
+ * flag given) already matches -P's behavior, the common case.
  */
 #include <string.h>
 #include <stdio.h>
@@ -69,17 +63,13 @@ int __util_ln_main(
 	struct stat dst_st;
 	int dir_form;
 
-	/* ntlibc.ValidPointer cannot prove argv[i][0] nonnull here: the
-	 * dereference sits directly inside this loop's compound condition,
-	 * and the elements_withtok(null_terminated, argc) fact this checker
-	 * successfully uses elsewhere only when a loop body first binds
-	 * argv[i] to a local before dereferencing it does not reach a raw
-	 * subscript inside the header itself. Left open -- restructuring
-	 * this loop only to relocate the dereference into a body statement
-	 * would be a checker-driven code change with no other justification
-	 * (tools/lint.sh's loopcond stage does not flag this condition
-	 * shape). Known checker gap, not a real bug: argv[i] for i < argc
-	 * is always live. */
+	/* OPEN LINT FINDING: ntlibc.ValidPointer can't prove argv[i][0]
+	 * nonnull here -- the elements_withtok(null_terminated, argc) fact
+	 * it uses elsewhere only reaches a local bound to argv[i] before
+	 * dereference, not a raw subscript inside the loop header itself.
+	 * Left open rather than restructured purely to dodge the checker
+	 * (loopcond does not flag this condition shape). Known checker gap:
+	 * argv[i] for i < argc is always live. */
 	for (i = 1; i < argc && argv[i][0] == '-' && argv[i][1]; i++) {
 		const char *a = argv[i];
 		if (!strcmp(a, "--")) { i++; break; }
@@ -107,11 +97,8 @@ int __util_ln_main(
 	}
 
 	di = argc - 1; /* index of the final operand, the candidate target_dir */
-	/* "applies when the final operand names an existing directory" --
-	 * with exactly two operands, the two-operand form is still used
-	 * even if the target happens to exist as a directory only when
-	 * there is genuinely one source; here nsrc>2 already forces the
-	 * directory form, and nsrc==2 checks the final operand for real. */
+	/* nsrc > 2 already forces the directory form; with exactly two
+	 * operands, whether it's the dir form depends on the target. */
 	dir_form = nsrc > 2;
 	if (!dir_form && stat(argv[di], &dst_st) == 0 && S_ISDIR(dst_st.st_mode))
 		dir_form = 1;
@@ -131,10 +118,9 @@ int __util_ln_main(
 		size_t sn;
 		int n;
 
-		/* argv[i] is genuinely null-terminated by this function's own
-		 * elements_withtok(null_terminated, argc) contract on argv --
-		 * restated here since that token does not survive the direct
-		 * argv[i] read this checker can trace on its own. */
+		/* argv[i] is NUL-terminated per argv's own
+		 * elements_withtok(null_terminated, argc) contract -- restated
+		 * since that token doesn't survive a direct argv[i] read. */
 		__ownership_string_terminated(argv[i]);
 		sn = strlen(argv[i]);
 

@@ -3,29 +3,17 @@
  *
  * rmdir(1p): `rmdir [-p] dir...`
  *
- * DESCRIPTION: "The rmdir utility shall remove the directory entry
- * specified by each dir operand ... equivalent to the rmdir() function
- * called with the dir operand as its only argument."
+ * OPTIONS -p: "Remove all directories in a pathname" -- after removing
+ * `dir` itself, repeat with `dirname dir` (recursive by construction:
+ * dirname of a multi-component path is itself a path -p can be
+ * re-applied to). The standard doesn't say what happens when an
+ * ancestor's rmdir() fails because it's not empty; every real
+ * implementation treats that as the expected silent stop and reserves
+ * the diagnostic for any other failure, which is the distinction
+ * rmdir_ascend() implements below.
  *
- * OPTIONS -p: "Remove all directories in a pathname.  For each dir
- * operand: 1. The directory entry it names shall be removed.  2. If the
- * dir operand includes more than one pathname component, effects
- * equivalent to the following command shall occur:
- * `rmdir -p $(dirname dir)`"
- *
- * That second step is recursive by construction (dirname of a multi-
- * component path is itself a path rmdir -p can be re-applied to), and
- * the standard does not say what happens when an ancestor's rmdir() in
- * that chain fails because it is not empty -- every real implementation
- * treats "an ancestor is not empty" as the expected, silent stopping
- * condition (of course /home is not empty just because `rmdir -p
- * /home/me/tmp` emptied /home/me) and reserves the diagnostic for any
- * *other* failure (permission denied, and so on), which is the
- * distinction implemented below.
- *
- * EXIT STATUS: "0 Each directory entry specified by a dir operand was
- * removed successfully." ">0 An error occurred." -- same diagnose-and-
- * continue loop shape as src/util/mkdir_util.c.
+ * EXIT STATUS: diagnose-and-continue loop, same shape as
+ * src/util/mkdir_util.c.
  */
 
 /* This translation unit implements ntlibc's freestanding -nostdinc
@@ -42,11 +30,9 @@
 #include "ownership_stubs.h"
 
 /* Ascends from `dir` (already removed by the caller) via dirname(),
- * rmdir()-ing each ancestor until one is not empty (quiet stop, not an
- * error), the root is reached (dirname() stops shortening -- also a
- * quiet stop), or a real error occurs (diagnosed, and reported to the
- * caller via a nonzero return so the overall exit status reflects it).
- */
+ * rmdir()-ing each ancestor until one is not empty (quiet stop), the
+ * root is reached (dirname() stops shortening -- also a quiet stop), or
+ * a real error occurs (diagnosed, nonzero return). */
 static int rmdir_ascend(const char *dir)
 {
 	char buf[PATH_MAX];
@@ -62,20 +48,17 @@ static int rmdir_ascend(const char *dir)
 		size_t pn = strnlen(buf, sizeof buf);
 		if (pn == sizeof buf) return 0;
 		memcpy(prev, buf, pn + 1);
-		/* prev is pn+1 bytes copied from buf up to and including
-		 * buf's own NUL (strnlen already proved buf[pn] == 0 here,
-		 * since the pn == sizeof buf case returned above) --
-		 * genuinely null-terminated, restated since include/libgen.h
-		 * declares neither dirname() nor this memcpy() as producing
-		 * that token. */
+		/* pn+1 bytes through buf's own NUL (strnlen proved buf[pn]
+		 * == 0, since pn == sizeof buf returned above already) --
+		 * restated since include/libgen.h declares neither dirname()
+		 * nor memcpy() as producing this token. */
 		__ownership_string_terminated(prev);
 
 		parent = dirname(buf); /* mutates buf in place; parent aliases it */
-		/* dirname() returns a pointer to a null-terminated string by
-		 * its own POSIX contract; include/libgen.h does not carry a
-		 * withtok(null_terminated) annotation for it, so restated
-		 * here rather than risk a header-wide change other callers
-		 * were not audited against. */
+		/* dirname()'s POSIX contract guarantees null-termination, but
+		 * include/libgen.h carries no withtok() for it -- restated
+		 * here rather than annotate the header for other, unaudited
+		 * callers. */
 		__ownership_string_terminated(parent);
 		if (!strcmp(parent, ".") || !strcmp(parent, prev)) return 0;
 
@@ -94,17 +77,14 @@ int __util_rmdir_main(
 {
 	int i, opt_p = 0, fail = 0;
 
-	/* ntlibc.ValidPointer cannot prove argv[i][0] nonnull here: the
-	 * dereference sits directly inside this loop's compound condition,
-	 * where the elements_withtok(null_terminated, argc) fact this
-	 * checker successfully uses elsewhere (once a loop body first binds
-	 * argv[i] to a local before dereferencing it) does not reach a raw
-	 * subscript inside the header itself. Left open -- restructuring
-	 * this loop only to relocate the dereference into a body statement
-	 * would be a checker-driven code change with no other justification
-	 * (tools/lint.sh's loopcond stage does not flag this condition
-	 * shape). Known checker gap, not a real bug: argv[i] for i < argc
-	 * is always live. */
+	/* ntlibc.ValidPointer can't prove argv[i][0] nonnull here: the
+	 * dereference is directly in the loop header, where the
+	 * elements_withtok(null_terminated, argc) fact only reaches a
+	 * checker-visible local, not a raw subscript. Left open: a known
+	 * checker gap (argv[i] for i < argc is always live), not a bug, and
+	 * tools/lint.sh's loopcond stage doesn't flag this condition shape
+	 * -- restructuring just to dodge the checker has no other
+	 * justification. */
 	for (i = 1; i < argc && argv[i][0] == '-' && argv[i][1]; i++) {
 		if (!strcmp(argv[i], "--")) { i++; break; }
 		if (!strcmp(argv[i], "-p")) { opt_p = 1; continue; }

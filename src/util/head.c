@@ -7,23 +7,16 @@
  * standard output, ending the output for each file at a designated
  * point."
  *
- * OPTIONS: -n number -- "The first number lines of each input file shall
- * be copied to standard output."  "The number option-argument shall be
- * counted as a positive decimal integer" -- 0 and anything signed or
- * non-numeric is a usage error here, not a silent "print nothing"/
- * "print everything" extension; default is 10 when -n is not given.
- * "If a file contains fewer than number lines, it shall be copied to
- * standard output in its entirety" -- head_one() below stops naturally
- * at end-of-file with no separate short-file check needed for that.
+ * OPTIONS: -n number -- "The number option-argument shall be counted as
+ * a positive decimal integer": 0 and anything signed or non-numeric is
+ * a usage error here, not a silent "print nothing"/"everything"
+ * extension; default is 10. A short file is copied in its entirety --
+ * head_one() stops naturally at EOF, no separate check needed.
  *
- * The multi-operand `==> file <==` banner is not specified by XCU's own
- * wording at all (head(1p) says nothing about multiple files needing any
- * separator beyond concatenation) -- this follows the GNU/BSD
- * convention every head this project has to interoperate with actually
- * uses: a banner line before each file's output, and (this file's own
- * choice, matching GNU coreutils rather than the sparser historical BSD
- * form) a blank line before every banner after the first, so
- * concatenated outputs are visually separated rather than run together.
+ * The multi-operand `==> file <==` banner isn't specified by XCU at all;
+ * this follows the GNU/BSD convention instead: a banner before each
+ * file's output, plus (matching GNU, not the sparser historical BSD
+ * form) a blank line before every banner after the first.
  *
  * OPERANDS: "If no file operands are specified, the standard input shall
  * be used."
@@ -132,12 +125,9 @@ int __util_head_main(
 			const char *path = argv[i];
 			int fd;
 
-			/* path is one of argv's own elements, genuinely
-			 * null-terminated by this function's own
-			 * elements_withtok(null_terminated, argc) contract on argv --
-			 * restated here since that token does not survive the
-			 * argv[i] -> const char * read this checker can trace on its
-			 * own. */
+			/* Restate the null-terminated contract on argv[i]: it
+			 * doesn't survive the argv[i] -> const char * read this
+			 * checker can trace on its own. */
 			__ownership_string_terminated(path);
 
 			if (noperands > 1) {

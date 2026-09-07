@@ -1,58 +1,36 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * rm(1p): "The rm utility shall remove the directory entry specified by
- * each file argument."
+ * rm(1p): remove file hierarchies. Implements -f, -r/-R, multiple
+ * operands, `--`.
  *
- * Implements: -f, -r/-R (XCU rm(1p) OPTIONS: "Remove file hierarchies"),
- * multiple operands, `--` to end option parsing.  `-R`/`-r` walk the
- * tree with nftw() (src/ftw/ftw.c, a real, already-tested recursion
- * driver over opendir()/readdir()/lstat() -- there is no need to write
- * a second one here), FTW_DEPTH so every descendant is removed before
- * its parent directory and FTW_PHYS so a symbolic link inside the tree
- * is never followed -- rm(1p): "The rm utility shall not traverse
- * directories by following symbolic links into other parts of the
- * hierarchy, but shall remove the links themselves."
+ * -r/-R walk the tree with nftw() (src/ftw/ftw.c) using FTW_DEPTH
+ * (every descendant reported before its parent directory) and FTW_PHYS
+ * (never follow a symlink into the tree -- rm(1p) requires removing the
+ * link itself instead).
  *
- * Deliberately out of scope, refused loudly rather than silently
- * ignored or silently treated as a no-op: `-i` (interactive
- * confirmation).  No real terminal-interaction story exists at this
- * layer yet -- see src/sh/builtin.c's bi_set() comment for the same
- * "refuse unsupported options" reasoning applied there.  A silently
- * accepted `-i` that never actually prompted would be strictly worse
- * than refusing it: a script or a human relying on the prompt would get
- * silent, unconfirmed deletion instead.
+ * -i (interactive confirmation) is deliberately unsupported and refused
+ * loudly rather than silently no-op'd: no terminal-interaction layer
+ * exists at this level yet, and a script or human relying on the prompt
+ * would otherwise get silent, unconfirmed deletion (see src/sh/builtin.c's
+ * bi_set() for the same reasoning).
  *
- * What -f suppresses, read literally off rm(1p) OPTIONS, and no more:
- * "Do not prompt for confirmation. Do not write diagnostic messages or
- * modify the exit status in the case of no file operands, or in the
- * case of operands that do not exist."  That is the whole list -- it
- * does not cover a file operand that names an existing directory
- * without -R/-r (DESCRIPTION's directory clause is unconditional, not
- * gated on -f), and it does not cover a real removal failure
- * (permission denied, a non-empty directory rmdir() refuses, etc.).
- * rm_one() below suppresses exactly ENOENT on the initial lstat() under
- * -f and nothing else; __util_remove_tree()'s callback never consults
- * `force` at all, on purpose.
+ * -f suppresses exactly what rm(1p) OPTIONS says and no more: the
+ * confirmation prompt, and diagnostics/exit status for operands that do
+ * not exist. It does NOT cover an existing directory operand without
+ * -R/-r, a real removal failure, or "missing operand" (no operand at
+ * all is a different case than an operand that doesn't exist). rm_one()
+ * suppresses only ENOENT on the initial lstat() under -f;
+ * __util_remove_tree()'s callback never consults `force`.
  *
- * "Missing operand" (no file argument at all) is reported and counted
- * as an error even under -f: -f's suppression list is about operands
- * that do not exist, not about there being no operand to begin with.
- *
- * rm(1p) DESCRIPTION: "It is an error to attempt to remove the files
- * dot or dot-dot, or a file with a name that names the root directory
- * alone."  names_dot_or_dotdot() below refuses the first two,
- * explicitly, before ever touching the filesystem, because a directory
- * operand of "." with -r would otherwise walk into (and empty out) the
- * process's own current directory -- exactly the "single easiest place
- * in this whole POSIX-utilities effort to write something that deletes
- * the wrong thing" the task that produced this file called out by name.
- * Recognising "a path that names the filesystem root" in general is not
- * attempted: this platform's roots are drive letters and UNC shares
- * rather than one fixed string, and a heuristic that gets that wrong is
- * worse than not trying -- a real attempt to rmdir() an actual root
- * will fail on its own (busy/access denied) and be diagnosed like any
- * other removal failure.
+ * names_dot_or_dotdot() refuses "." and ".." explicitly before touching
+ * the filesystem, per rm(1p) DESCRIPTION -- without it, `rm -r .` would
+ * walk into and empty out the process's own current directory.
+ * Recognising "names the filesystem root" in general is not attempted:
+ * roots here are drive letters/UNC shares, not one fixed string, and a
+ * wrong heuristic is worse than none -- an actual root will fail its
+ * own rmdir() (busy/access denied) and get diagnosed like any other
+ * failure.
  */
 
 /* This translation unit implements ntlibc's freestanding -nostdinc
@@ -69,15 +47,11 @@
 #include "util.h"
 #include "ownership_stubs.h"
 
-/* nftw()'s callback takes no user-data parameter -- a well-known wart of
- * the historical ftw()/nftw() interface, inherited as-is from POSIX
- * (see src/ftw/ftw.c's own header) -- so the one thing __remove_cb()
- * needs across a whole walk (whether anything in it has failed so far)
- * has to live at file scope.  Safe here: __util_remove_tree() runs one
- * synchronous nftw() call to completion (nftw() never returns to its
- * caller mid-walk) before this state could be read by anything else,
- * and nothing in this single-threaded, one-utility-invocation-per-
- * process file ever starts a second walk while one is in progress. */
+/* nftw()'s callback takes no user-data parameter, so the one thing it
+ * needs across a whole walk (whether anything has failed so far) has to
+ * live at file scope. Safe here: one synchronous nftw() call always
+ * runs to completion before this could be read by anything else, and
+ * this file never starts a second walk while one is in progress. */
 static int rm_tree_failed;
 
 static int rm_diag(const char *path, int error)
@@ -87,10 +61,9 @@ static int rm_diag(const char *path, int error)
 	return 0;
 }
 
-/* FTW_DEPTH means every non-directory is reported once, and every
- * directory is reported exactly once more, as FTW_DP, after all of its
- * entries -- so the two cases below are the whole of "make the tree
- * empty, then remove it, from the leaves up". */
+/* FTW_DEPTH reports every non-directory once, and every directory once
+ * more as FTW_DP after all of its entries -- the two cases below are
+ * the whole of "empty the tree, then remove it, leaves first". */
 static int rm_walk_cb(const char *path, const struct stat *st, int type, struct FTW *ftwbuf)
 {
 	int saved_errno = errno;
@@ -107,11 +80,9 @@ static int rm_walk_cb(const char *path, const struct stat *st, int type, struct 
 	case FTW_NS:
 		return rm_diag(path, saved_errno);
 	default:
-		/* FTW_F (regular file) and FTW_SL (symbolic link, not
-		 * followed -- FTW_PHYS below): both go through unlink(),
-		 * which is rm(1p)'s own "if the current file is not a
-		 * directory, rm shall perform actions equivalent to the
-		 * unlink() function" for a link exactly as for a file. */
+		/* FTW_F and FTW_SL (never followed, FTW_PHYS above) both go
+		 * through unlink(): rm(1p) treats a non-directory, including
+		 * a link, the same as a plain file. */
 		if (unlink(path) < 0) return rm_diag(path, errno);
 		return 0;
 	}
@@ -119,8 +90,8 @@ static int rm_walk_cb(const char *path, const struct stat *st, int type, struct 
 
 /* Removes the whole tree rooted at `path`: rm -r's per-operand work,
  * and also src/util/mv.c's cross-filesystem fallback for a directory
- * source.  Returns 0 if every entry was removed, -1 (with diagnostics
- * already written to stderr) if any part of the tree could not be. */
+ * source. Returns 0 if every entry was removed, -1 (diagnostics already
+ * written) if any part of the tree could not be. */
 int __util_remove_tree(const char *path)
 {
 	rm_tree_failed = 0;
@@ -163,10 +134,7 @@ static int rm_one(const char *path withtok(null_terminated), int recursive, int 
 
 	if (S_ISDIR(lst.st_mode)) {
 		if (!recursive) {
-			/* rm(1p): "the rm utility shall write a diagnostic
-			 * message to standard error, do nothing more with
-			 * file" -- unconditional, not one of -f's two
-			 * suppressions. */
+			/* Unconditional per rm(1p) -- not one of -f's two suppressions. */
 			__util_diagf("rm: cannot remove '%s': Is a directory\n", path);
 			return -1;
 		}
@@ -191,12 +159,9 @@ int __util_rm_main(
 		char *a = argv[i];
 		char *p;
 
-		/* a is one of argv's own elements; restate the argv-wide
-		 * null-terminated guarantee here, the same way
-		 * src/util/cp.c's identical loop shape already does -- a
-		 * plain local like `a` is not something the checker can trace
-		 * back to argv on its own. The raw a[0] read just below stays
-		 * open regardless (same as cp.c's own identical loop). */
+		/* a is one of argv's own elements; restate the null-terminated
+		 * guarantee since the checker can't trace a plain local back
+		 * to argv on its own (same as cp.c's identical loop). */
 		__ownership_string_terminated(a);
 
 		if (a[0] != '-' || a[1] == 0) break;   /* not an option; a bare "-" is an operand */
@@ -225,10 +190,9 @@ int __util_rm_main(
 	}
 
 	for (; i < argc; i++) {
-		/* argv[i] is genuinely null-terminated by this function's own
-		 * elements_withtok(null_terminated, argc) contract on argv --
-		 * restated here since that token does not survive the direct
-		 * argv[i] read this checker can trace on its own. */
+		/* Restate the null-terminated contract on argv[i]: it does not
+		 * survive the direct argv[i] read this checker can trace on
+		 * its own. */
 		__ownership_string_terminated(argv[i]);
 		if (rm_one(argv[i], recursive, force) < 0) had_error = 1;
 	}

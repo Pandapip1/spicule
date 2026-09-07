@@ -47,7 +47,13 @@ int __util_readlink_main(
 		}
 		/* readlink() "shall not append a NUL character": buf[n] is the
 		 * first byte past what it wrote, always in bounds since n is
-		 * bounded by "sizeof buf - 1" above. */
+		 * bounded by "sizeof buf - 1" above. Left open as an
+		 * ntlibc.ValidPointer finding: that bound is readlink()'s own
+		 * POSIX contract on its own third argument ("return value <=
+		 * bufsiz"), and this vocabulary has no annotation for a
+		 * return value bounded by a parameter (unlike, say,
+		 * endptr_advances for strtol()'s different contract shape) --
+		 * a real checker/vocabulary gap, not a bug here. */
 		buf[n] = 0;
 		if (fputs(buf, stdout) < 0 || fputc('\n', stdout) == EOF) status = 1;
 	}

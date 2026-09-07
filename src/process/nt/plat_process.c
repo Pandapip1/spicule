@@ -5,7 +5,7 @@
  * the contract each function makes.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -54,7 +54,7 @@ int __plat_is_program(const char *path)
 	NtClose(h);
 	if (!NT_SUCCESS(s) || io.Information < 2) return 0;
 	if ((b[0] == 'M' && b[1] == 'Z') || (b[0] == '#' && b[1] == '!')) return 1;
-#ifdef _NTLIBC_NATIVE_BUILD
+#ifdef _SPICULE_NATIVE_BUILD
 	/* The sanitizer shim starts copied test images as their native ELF
 	 * host binary.  Treat that native image signature exactly as the NT
 	 * build treats MZ; this branch cannot enter a PE build. */

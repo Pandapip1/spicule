@@ -41,7 +41,7 @@ int destroy_held(mutex_t *mutex) {
 }
 
 #define lock_requires_held_on_entry(argument) \
-  __attribute__((annotate("ntlibc_lock_requires_held_on_entry:" #argument)))
+  __attribute__((annotate("spicule_lock_requires_held_on_entry:" #argument)))
 
 /* Proves the hand-off exemption safe.c's cond_wait/cond_wait_cleanup
  * fixtures rely on is scoped to the one designated argument

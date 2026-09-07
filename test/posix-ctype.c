@@ -75,7 +75,7 @@
  * out-of-domain argument indexes outside it -- a silent
  * heap/global-buffer-overflow that no return-value check can see.  Under
  * `make asan` (tools/asan-build.sh builds every test that links) that
- * probe is what would catch it.  ntlibc's src/ctype/ sources are pure
+ * probe is what would catch it.  spicule's src/ctype/ sources are pure
  * arithmetic on `(unsigned)c` with no table at all, so the probe passes
  * by construction today; it exists so that it would stop being true the
  * moment someone "optimizes" this family into a lookup table.
@@ -410,7 +410,7 @@ static void test_no_errors_defined(void)
  *     static int isalpha_tbl(int c) { return tbl[c + 1]; }
  *
  * handed the `probes[]` array below dies with "AddressSanitizer: SEGV"
- * inside isalpha_tbl on the first out-of-domain value.  ntlibc's
+ * inside isalpha_tbl on the first out-of-domain value.  spicule's
  * src/ctype/ sources are pure arithmetic on `(unsigned)c` with no table at
  * all, so this passes by construction today -- and that is exactly why
  * it must stay: it exists to stop being true the moment someone

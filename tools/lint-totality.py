@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: (C) 2026 Gavin John
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Prove ntlibc loops and recursive call-graph components terminating."""
+"""Prove spicule loops and recursive call-graph components terminating."""
 
 from __future__ import annotations
 

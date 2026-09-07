@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Black-box tests for ntlibc's filesystem-mutating POSIX standard
+ * Black-box tests for spicule's filesystem-mutating POSIX standard
  * utilities: `mkdir`, `rmdir`, `mkfifo`, `ln`, `chmod`, `touch` (XCU
  * mkdir(1p), rmdir(1p), mkfifo(1p), ln(1p), chmod(1p), touch(1p)).  Same
  * technique as test/util-trivial.c: the standalone obj/bin/<name>.exe is
@@ -239,7 +239,7 @@ static void test_rmdir_dash_p(void)
 
 /* ==== mkfifo(1p) ========================================================= */
 
-#if defined(__linux__) && !defined(_NTLIBC_NATIVE_BUILD)
+#if defined(__linux__) && !defined(_SPICULE_NATIVE_BUILD)
 /* This tree's mkfifo() (src/stat/chmod.c) is real on Linux -- a genuine
  * mknodat(2) FIFO, src/stat/linux/plat_stat.c's own __plat_mknod() --
  * so the utility must report the real success and leave a real FIFO
@@ -492,7 +492,7 @@ static void test_builtins_match_standalone(void)
 	CHECK(run_sh_c("rmdir scratch/shd1") == 0);
 	CHECK(access("scratch/shd1", F_OK) != 0);
 
-#if defined(__linux__) && !defined(_NTLIBC_NATIVE_BUILD)
+#if defined(__linux__) && !defined(_SPICULE_NATIVE_BUILD)
 	CHECK(run_sh_c("mkfifo scratch/shfifo") == 0); /* real FIFO, see above */
 	{
 		struct stat st;

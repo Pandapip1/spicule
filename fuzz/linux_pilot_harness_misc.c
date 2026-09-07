@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Test-harness scaffolding for the Linux platform pilot's exit/misc/
- * select/signal extension -- NOT part of ntlibc; see
+ * select/signal extension -- NOT part of spicule; see
  * fuzz/linux_pilot_harness.c's banner for the general shape.
  *
  * src/misc/sched.c and src/misc/resource.c reference a handful of
@@ -25,7 +25,7 @@
 
 extern long syscall(long number, ...);
 
-/* This test only ever asks about a real, but untracked-by-ntlibc,
+/* This test only ever asks about a real, but untracked-by-spicule,
  * foreign pid (its own parent), so "never a known child" is honest. */
 struct __child *__child_find(int pid) { (void)pid; return 0; }
 

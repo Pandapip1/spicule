@@ -16,25 +16,25 @@
  * lock itself is acquired, released, waited on, and destroyed correctly;
  * it has no notion of which data a lock protects at all).
  *
- * This is internal-only: ntlibc's public pthread_mutex_t/pthread_rwlock_t
+ * This is internal-only: spicule's public pthread_mutex_t/pthread_rwlock_t
  * are opaque (include/pthread.h), so there is little to say about them at
- * the public API surface.  The payoff here is ntlibc's own internal
+ * the public API surface.  The payoff here is spicule's own internal
  * globals and the internal locks (src/internal/libc.h's __sig_lock() and
  * the ntdll PEB lock) that are supposed to guard them -- see the
- * NTLIBC_GUARDED_BY() call sites for the specific globals.
+ * SPICULE_GUARDED_BY() call sites for the specific globals.
  *
  * Every macro below expands to nothing UNLESS BOTH of these hold:
  *
  *   1. the compiler is Clang (tcc and gcc have no such attributes, and
  *      would either choke on or silently ignore them -- this project
  *      does not gamble on "silently ignore"); and
- *   2. NTLIBC_LOCKSET_ANALYSIS is defined, which nothing in a real build
+ *   2. SPICULE_LOCKSET_ANALYSIS is defined, which nothing in a real build
  *      ever does -- only tools/lint.sh's `lockset` stage passes
- *      -DNTLIBC_LOCKSET_ANALYSIS, alongside -Wthread-safety itself.
+ *      -DSPICULE_LOCKSET_ANALYSIS, alongside -Wthread-safety itself.
  *
  * So a plain `clang -c` build of this tree -- including every other
  * clang-based lint.sh stage, none of which defines
- * NTLIBC_LOCKSET_ANALYSIS -- sees precisely the same AST it saw before
+ * SPICULE_LOCKSET_ANALYSIS -- sees precisely the same AST it saw before
  * this file existed: these macros do not merely fail to warn, they fail
  * to emit any attribute at all outside the one stage that asked for them.
  * tcc and gcc never see anything other than empty expansions, ever.
@@ -43,65 +43,65 @@
  * macros built on top of it) is the well-known pattern several projects
  * with clang+gcc/MSVC portability constraints use for this same feature
  * (Abseil's thread_annotations.h is the best-known example) -- written
- * here from scratch against ntlibc's own naming and gating conventions,
+ * here from scratch against spicule's own naming and gating conventions,
  * not copied from any of them.
  */
-#ifndef _NTLIBC_THREAD_ANNOTATIONS_H
-#define _NTLIBC_THREAD_ANNOTATIONS_H
+#ifndef _SPICULE_THREAD_ANNOTATIONS_H
+#define _SPICULE_THREAD_ANNOTATIONS_H
 
-#if defined(__clang__) && defined(NTLIBC_LOCKSET_ANALYSIS)
-#define NTLIBC_THREAD_ANNOTATION_ATTRIBUTE__(x) __attribute__((x))
+#if defined(__clang__) && defined(SPICULE_LOCKSET_ANALYSIS)
+#define SPICULE_THREAD_ANNOTATION_ATTRIBUTE__(x) __attribute__((x))
 #else
-#define NTLIBC_THREAD_ANNOTATION_ATTRIBUTE__(x)
+#define SPICULE_THREAD_ANNOTATION_ATTRIBUTE__(x)
 #endif
 
-/* Marks a type as a lock: something NTLIBC_ACQUIRE()/NTLIBC_RELEASE() can
- * be acquired/released on, and NTLIBC_GUARDED_BY() can name.  `name` is
+/* Marks a type as a lock: something SPICULE_ACQUIRE()/SPICULE_RELEASE() can
+ * be acquired/released on, and SPICULE_GUARDED_BY() can name.  `name` is
  * the capability kind clang's diagnostics print ("mutex" for anything
  * exclusive-only, "role" for shared/reader-writer capabilities). */
-#define NTLIBC_CAPABILITY(name) \
-	NTLIBC_THREAD_ANNOTATION_ATTRIBUTE__(capability(name))
+#define SPICULE_CAPABILITY(name) \
+	SPICULE_THREAD_ANNOTATION_ATTRIBUTE__(capability(name))
 
 /* The data a lock protects.  `lock` must be a capability -- one of the
- * NTLIBC_CAPABILITY() tokens below, or a real lock object of such a
+ * SPICULE_CAPABILITY() tokens below, or a real lock object of such a
  * type. */
-#define NTLIBC_GUARDED_BY(lock) \
-	NTLIBC_THREAD_ANNOTATION_ATTRIBUTE__(guarded_by(lock))
-#define NTLIBC_PT_GUARDED_BY(lock) \
-	NTLIBC_THREAD_ANNOTATION_ATTRIBUTE__(pt_guarded_by(lock))
+#define SPICULE_GUARDED_BY(lock) \
+	SPICULE_THREAD_ANNOTATION_ATTRIBUTE__(guarded_by(lock))
+#define SPICULE_PT_GUARDED_BY(lock) \
+	SPICULE_THREAD_ANNOTATION_ATTRIBUTE__(pt_guarded_by(lock))
 
 /* Applied to the function that acquires/releases `lock` (or, for a
  * try-lock, that reports success/failure of acquiring it). */
-#define NTLIBC_ACQUIRE(...) \
-	NTLIBC_THREAD_ANNOTATION_ATTRIBUTE__(acquire_capability(__VA_ARGS__))
-#define NTLIBC_RELEASE(...) \
-	NTLIBC_THREAD_ANNOTATION_ATTRIBUTE__(release_capability(__VA_ARGS__))
-#define NTLIBC_TRY_ACQUIRE(success, ...) \
-	NTLIBC_THREAD_ANNOTATION_ATTRIBUTE__(try_acquire_capability(success, __VA_ARGS__))
+#define SPICULE_ACQUIRE(...) \
+	SPICULE_THREAD_ANNOTATION_ATTRIBUTE__(acquire_capability(__VA_ARGS__))
+#define SPICULE_RELEASE(...) \
+	SPICULE_THREAD_ANNOTATION_ATTRIBUTE__(release_capability(__VA_ARGS__))
+#define SPICULE_TRY_ACQUIRE(success, ...) \
+	SPICULE_THREAD_ANNOTATION_ATTRIBUTE__(try_acquire_capability(success, __VA_ARGS__))
 
 /* Applied to a function that may only be called while `lock` is already
- * held by the caller (as opposed to NTLIBC_ACQUIRE(), which is the
+ * held by the caller (as opposed to SPICULE_ACQUIRE(), which is the
  * function that takes the lock in the first place). */
-#define NTLIBC_REQUIRES(...) \
-	NTLIBC_THREAD_ANNOTATION_ATTRIBUTE__(requires_capability(__VA_ARGS__))
+#define SPICULE_REQUIRES(...) \
+	SPICULE_THREAD_ANNOTATION_ATTRIBUTE__(requires_capability(__VA_ARGS__))
 
 /* Opts a function's body out of lockset checking entirely -- for the rare
  * function whose locking discipline this analysis cannot express (a
  * fork()-child-side reset that runs single-threaded and so needs no lock
  * at all, say), rather than living with a permanent false positive. */
-#define NTLIBC_NO_THREAD_SAFETY_ANALYSIS \
-	NTLIBC_THREAD_ANNOTATION_ATTRIBUTE__(no_thread_safety_analysis)
+#define SPICULE_NO_THREAD_SAFETY_ANALYSIS \
+	SPICULE_THREAD_ANNOTATION_ATTRIBUTE__(no_thread_safety_analysis)
 
-#if defined(__clang__) && defined(NTLIBC_LOCKSET_ANALYSIS)
+#if defined(__clang__) && defined(SPICULE_LOCKSET_ANALYSIS)
 /* A capability token: an otherwise-inert type that exists only so a
- * NTLIBC_GUARDED_BY()/NTLIBC_ACQUIRE()/NTLIBC_RELEASE() call has an
+ * SPICULE_GUARDED_BY()/SPICULE_ACQUIRE()/SPICULE_RELEASE() call has an
  * object to name.  One extern object of this type per real internal
  * lock -- see src/internal/libc.h for the tokens this tree declares
- * (__ntlibc_sig_lock_token, __ntlibc_peb_lock_token) and the functions
+ * (__spicule_sig_lock_token, __spicule_peb_lock_token) and the functions
  * that acquire/release each one. */
-typedef struct NTLIBC_CAPABILITY("mutex") __ntlibc_lock_capability {
+typedef struct SPICULE_CAPABILITY("mutex") __spicule_lock_capability {
 	char __opaque;
-} __ntlibc_lock_capability;
+} __spicule_lock_capability;
 #endif
 
 #endif

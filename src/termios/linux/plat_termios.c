@@ -9,14 +9,14 @@
  * is wrapped in `#ifndef __linux__` specifically so this one can define
  * them for real here without a link-time collision (see its own banner)
  * -- Linux has a genuine tty/pty layer under any real terminal fd, so
- * unlike NT there is no console-shadow, no NTLIBC_USE_KERNEL32 gate, and
+ * unlike NT there is no console-shadow, no SPICULE_USE_KERNEL32 gate, and
  * no "accepted and stored, never applied" bucket at all: every clause
  * this header describes is backed by a real ioctl(2) on the underlying
  * fd, the same raw-syscall discipline every other src/<module>/linux/
  * plat_<name>.c backend in this tree already follows (see src/mman/linux/plat_mem.c's
  * banner for the fuller rationale, and src/stdlib/linux/plat_pty.c for
  * the closest sibling: same fd+1 unboxing, same "go straight to the
- * kernel rather than widen ntlibc's own curated ioctl() front door"
+ * kernel rather than widen spicule's own curated ioctl() front door"
  * choice src/ioctl/ioctl.c's own banner already makes explicit -- TCGETS2
  * and friends below are exactly as tty-specific and out of scope for
  * that front door as TIOCGPTN/TIOCSPTLCK already were for plat_pty.c).
@@ -34,7 +34,7 @@
  * termios.html's own ERRORS clause requires, sourced from the real
  * device instead of guessed from fd metadata. __fd_get() below still
  * supplies [[EBADF]] for an fd this process never opened, the one check
- * a real ioctl(2) call cannot make on ntlibc's own behalf (an unboxed,
+ * a real ioctl(2) call cannot make on spicule's own behalf (an unboxed,
  * never-issued fd number does not name a live kernel object at all).
  *
  * THE STRUCT MISMATCH (why this is real translation, not a memcpy):
@@ -166,7 +166,7 @@
  * accessor) discipline documented throughout this tree.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -278,7 +278,7 @@ static int unbox(__plat_handle_t h)
 
 /* ioctl(2) request numbers -- confirmed against this host's own
  * <asm-generic/ioctls.h>, not assumed (see this file's own banner). Not
- * in ntlibc's own public <sys/ioctl.h>: these are all tty-specific
+ * in spicule's own public <sys/ioctl.h>: these are all tty-specific
  * (TCGETS2 et al) or the wrong shape for that curated front door
  * (TCSBRKP), exactly the "go straight to the kernel" call
  * src/stdlib/linux/plat_pty.c's own banner already makes for

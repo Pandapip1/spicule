@@ -157,7 +157,7 @@ static void test_readv(void)
 	 * one area comes back short is unobservable for the same reasons it
 	 * always was: for a regular file the next read() at end-of-file
 	 * returns 0 and the total is identical either way, and for a pipe
-	 * ntlibc's read() answers EAGAIN on empty, which the loop also
+	 * spicule's read() answers EAGAIN on empty, which the loop also
 	 * treats as "stop and report what moved".  No assertion pretends to
 	 * cover it.
 	 *
@@ -185,7 +185,7 @@ static void test_readv_writev_iovcnt(void)
 	iov[1].iov_base = buf; iov[1].iov_len = 0;
 
 	/* *may fail* "[EINVAL] The iovcnt argument was less than or equal
-	 * to 0, or greater than {IOV_MAX}" -- ntlibc does implement it, so
+	 * to 0, or greater than {IOV_MAX}" -- spicule does implement it, so
 	 * it is asserted */
 	errno = 0; CHECK(readv(fd, iov, 0) == -1);  CHECK(errno == EINVAL);
 	errno = 0; CHECK(readv(fd, iov, -1) == -1); CHECK(errno == EINVAL);
@@ -1450,7 +1450,7 @@ static void test_uname(void)
 
 	/* nodename is "the name of this node within an
 	 * implementation-defined communications network" -- the same thing
-	 * gethostname() reports, and ntlibc builds one from the other */
+	 * gethostname() reports, and spicule builds one from the other */
 	{
 		char host[256];
 		if (gethostname(host, sizeof host) == 0)

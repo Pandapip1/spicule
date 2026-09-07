@@ -69,8 +69,8 @@
  * which already rejects all of these as WRDE_BADCHAR when unquoted, so
  * the two layers agree on what a "word" is.
  */
-#ifndef NTLIBC_SH_H
-#define NTLIBC_SH_H
+#ifndef SPICULE_SH_H
+#define SPICULE_SH_H
 
 #include <stddef.h>
 #include <stdio.h>

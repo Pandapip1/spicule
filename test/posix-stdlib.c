@@ -146,7 +146,7 @@ static void test_rand48_ranges(void)
 	int i;
 	unsigned short s[3] = { 0x1234, 0x5678, 0x9abc };
 
-	/* long is 32 bits on both ntlibc arches (established by
+	/* long is 32 bits on both spicule arches (established by
 	 * test/strto.c's `sizeof(long) == 4` check), so every long value
 	 * already lies in [LONG_MIN,LONG_MAX] = [-2**31,2**31-1], which is
 	 * inside the required [-2**31,2**31) -- the upper bound can never
@@ -208,7 +208,7 @@ static void test_rand48_ranges(void)
 	}
 }
 
-#if NTLIBC_TEST(PASS, posix_stdlib_rand_default_seed_is_srand_1) /* The un-seeded rand() stream is the srand(1) stream.
+#if SPICULE_TEST(PASS, posix_stdlib_rand_default_seed_is_srand_1) /* The un-seeded rand() stream is the srand(1) stream.
 	 * rand.html DESCRIPTION: "If rand() is called before any calls to
 	 * srand() are made, the same sequence shall be generated as when
 	 * srand() is first called with a seed value of 1."  (ISO C99
@@ -334,23 +334,23 @@ static void test_env(void)
 
 	/* basic set + getenv.html: "a pointer to the value ... or a null
 	 * pointer if ... not found" */
-	CHECK(unsetenv("NTLIBC_TEST_VAR") == 0); /* start clean; unsetenv on a missing var still succeeds */
-	CHECK(getenv("NTLIBC_TEST_VAR") == 0);
-	CHECK(setenv("NTLIBC_TEST_VAR", "one", 1) == 0);
-	CHECK(getenv("NTLIBC_TEST_VAR") && !strcmp(getenv("NTLIBC_TEST_VAR"), "one"));
+	CHECK(unsetenv("SPICULE_TEST_VAR") == 0); /* start clean; unsetenv on a missing var still succeeds */
+	CHECK(getenv("SPICULE_TEST_VAR") == 0);
+	CHECK(setenv("SPICULE_TEST_VAR", "one", 1) == 0);
+	CHECK(getenv("SPICULE_TEST_VAR") && !strcmp(getenv("SPICULE_TEST_VAR"), "one"));
 
 	/* setenv.html DESCRIPTION: overwrite==0 with an existing variable
 	 * leaves the environment unchanged and still returns success. */
-	CHECK(setenv("NTLIBC_TEST_VAR", "two", 0) == 0);
-	CHECK(!strcmp(getenv("NTLIBC_TEST_VAR"), "one"));
-	CHECK(setenv("NTLIBC_TEST_VAR", "two", 1) == 0);
-	CHECK(!strcmp(getenv("NTLIBC_TEST_VAR"), "two"));
+	CHECK(setenv("SPICULE_TEST_VAR", "two", 0) == 0);
+	CHECK(!strcmp(getenv("SPICULE_TEST_VAR"), "one"));
+	CHECK(setenv("SPICULE_TEST_VAR", "two", 1) == 0);
+	CHECK(!strcmp(getenv("SPICULE_TEST_VAR"), "two"));
 
 	/* unsetenv.html: "Upon successful completion, zero shall be
 	 * returned" and the variable is gone afterwards; EINVAL for an
 	 * empty name or one containing '='. */
-	CHECK(unsetenv("NTLIBC_TEST_VAR") == 0);
-	CHECK(getenv("NTLIBC_TEST_VAR") == 0);
+	CHECK(unsetenv("SPICULE_TEST_VAR") == 0);
+	CHECK(getenv("SPICULE_TEST_VAR") == 0);
 	errno = 0;
 	CHECK(unsetenv("") == -1 && errno == EINVAL);
 	errno = 0;
@@ -360,23 +360,23 @@ static void test_env(void)
 	 * become part of the environment, so altering the string shall
 	 * change the environment" -- the string is not copied. */
 	{
-		static char buf[] = "NTLIBC_PUTENV_VAR=abc";
+		static char buf[] = "SPICULE_PUTENV_VAR=abc";
 		CHECK(putenv(buf) == 0);
-		CHECK(!strcmp(getenv("NTLIBC_PUTENV_VAR"), "abc"));
+		CHECK(!strcmp(getenv("SPICULE_PUTENV_VAR"), "abc"));
 		/* mutate the very string handed to putenv(), in place ("xyz" is
 		 * the same length as "abc" so no NUL bookkeeping needed) */
-		strcpy(buf + strlen("NTLIBC_PUTENV_VAR="), "xyz");
-		CHECK(!strcmp(getenv("NTLIBC_PUTENV_VAR"), "xyz"));
-		unsetenv("NTLIBC_PUTENV_VAR");
+		strcpy(buf + strlen("SPICULE_PUTENV_VAR="), "xyz");
+		CHECK(!strcmp(getenv("SPICULE_PUTENV_VAR"), "xyz"));
+		unsetenv("SPICULE_PUTENV_VAR");
 	}
 
 	/* putenv.html RETURN VALUE: "Upon successful completion, putenv()
 	 * shall return 0; otherwise, it shall return a non-zero value." */
 	{
-		static char buf2[] = "NTLIBC_PUTENV_VAR2=v";
+		static char buf2[] = "SPICULE_PUTENV_VAR2=v";
 		CHECK(putenv(buf2) == 0);
-		CHECK(!strcmp(getenv("NTLIBC_PUTENV_VAR2"), "v"));
-		unsetenv("NTLIBC_PUTENV_VAR2");
+		CHECK(!strcmp(getenv("SPICULE_PUTENV_VAR2"), "v"));
+		unsetenv("SPICULE_PUTENV_VAR2");
 	}
 
 	/* environ.html / getenv.html: environ reflects the live list, and
@@ -384,11 +384,11 @@ static void test_env(void)
 	{
 		char **e;
 		int found = 0;
-		CHECK(setenv("NTLIBC_ENVIRON_CHECK", "z", 1) == 0);
+		CHECK(setenv("SPICULE_ENVIRON_CHECK", "z", 1) == 0);
 		for (e = environ; e && *e; e++)
-			if (!strncmp(*e, "NTLIBC_ENVIRON_CHECK=", 21)) found = 1;
+			if (!strncmp(*e, "SPICULE_ENVIRON_CHECK=", 21)) found = 1;
 		CHECK(found);
-		unsetenv("NTLIBC_ENVIRON_CHECK");
+		unsetenv("SPICULE_ENVIRON_CHECK");
 	}
 
 	/* clearenv(3) (XSI, not in the base standard, restored per
@@ -406,11 +406,11 @@ static void test_env(void)
 			strncpy(pathbuf, saved_path, sizeof pathbuf - 1);
 			pathbuf[sizeof pathbuf - 1] = 0;
 		}
-		CHECK(setenv("NTLIBC_CLEARENV_VAR", "x", 1) == 0);
-		CHECK(getenv("NTLIBC_CLEARENV_VAR") != 0);
+		CHECK(setenv("SPICULE_CLEARENV_VAR", "x", 1) == 0);
+		CHECK(getenv("SPICULE_CLEARENV_VAR") != 0);
 
 		CHECK(clearenv() == 0);
-		CHECK(getenv("NTLIBC_CLEARENV_VAR") == 0);
+		CHECK(getenv("SPICULE_CLEARENV_VAR") == 0);
 		CHECK(getenv("PATH") == 0);
 		CHECK(environ != 0 && environ[0] == 0);
 
@@ -495,7 +495,7 @@ static void test_mkostemp(void)
  * src/stdlib/mktemp.c actually requests: mkostemps() calls
  * open(tmpl, flags|O_CREAT|O_EXCL|O_RDWR, 0600).
  *
- * N/A: ntlibc now writes the mode word to WSL's $LXMOD metadata, but
+ * N/A: spicule now writes the mode word to WSL's $LXMOD metadata, but
  * intentionally consumes only its execute/search bits.  Read bits remain
  * synthetic, while write permission remains the aggregate Windows
  * FILE_ATTRIBUTE_READONLY mapping.  Thus S_IRUSR|S_IWUSR-only still
@@ -562,7 +562,7 @@ static void test_mktemp(void)
 
 static void test_mkstemp_permission_bits(void)
 {
-#if NTLIBC_TEST(BUG, posix_stdlib_mkstemp_owner_only_permissions) /* BUG (compiles and links; formerly UNIMPL):: mkstemp.html DESCRIPTION -- the file is created with
+#if SPICULE_TEST(BUG, posix_stdlib_mkstemp_owner_only_permissions) /* BUG (compiles and links; formerly UNIMPL):: mkstemp.html DESCRIPTION -- the file is created with
        * mode S_IRUSR|S_IWUSR only (0600).  Was N/A, and asserted
        * "unrepresentable, not merely unimplemented".  That is the wrong
        * way round.  The proximate facts are right -- $LXMOD is consumed
@@ -631,7 +631,7 @@ static void test_mkstemp_permission_bits(void)
 }
 
 /* ---- realpath.html: caller-supplied (non-NULL) resolved_name buffer. ---- */
-#if NTLIBC_TEST(PASS, posix_stdlib_realpath_errno_not_flattened) /* realpath() preserves the errno from open().
+#if SPICULE_TEST(PASS, posix_stdlib_realpath_errno_not_flattened) /* realpath() preserves the errno from open().
 	 * ENOENT, losing two shall-fail errors.  realpath.html ERRORS, "The
 	 * realpath() function shall fail if": "[ENOTDIR] A component of the
 	 * path prefix names an existing file that is neither a directory
@@ -979,7 +979,7 @@ static void test_getsubopt_keylist(void)
 	CHECK(subopts != 0 && *subopts == 0);
 }
 
-#if defined(__linux__) && !defined(_NTLIBC_NATIVE_BUILD)
+#if defined(__linux__) && !defined(_SPICULE_NATIVE_BUILD)
 /* ============================================================
  * posix_openpt / grantpt / unlockpt / ptsname / ptsname_r (Linux
  * backend, src/stdlib/linux/plat_pty.c)
@@ -988,7 +988,7 @@ static void test_getsubopt_keylist(void)
  * Real only on native Linux -- NT genuinely has no PTY concept (see
  * include/stdlib.h's own updated comment), so this whole family stays
  * undefined-ok there. Guarded out of the NT/Wine build (no __linux__)
- * and the native-ASan harness (_NTLIBC_NATIVE_BUILD links only the NT
+ * and the native-ASan harness (_SPICULE_NATIVE_BUILD links only the NT
  * backend against fuzz/ntstubs.c, which defines none of these five)
  * the same way test/posix-unistd-ids.c's own test_res_ids() is.
  * ============================================================ */
@@ -1066,7 +1066,7 @@ int main(int argc, char **argv)
 	test_system();
 	test_a64l();
 	test_getsubopt_keylist();
-#if defined(__linux__) && !defined(_NTLIBC_NATIVE_BUILD)
+#if defined(__linux__) && !defined(_SPICULE_NATIVE_BUILD)
 	test_posix_openpt_family();
 #endif
 	test_quick_exit(argv[0]);

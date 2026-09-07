@@ -33,7 +33,7 @@ REGISTER_MAP_WITH_PROGRAMSTATE(AllocationFrame, SymbolRef,
 REGISTER_MAP_WITH_PROGRAMSTATE(AllocationFamily, SymbolRef,
                                const IdentifierInfo *)
 REGISTER_MAP_WITH_PROGRAMSTATE(AllocationLifecycle, SymbolRef,
-                               ntlibc::algebra::LifecycleState)
+                               spicule::algebra::LifecycleState)
 REGISTER_MAP_WITH_PROGRAMSTATE(FreerObligation, SymbolRef, bool)
 REGISTER_MAP_WITH_PROGRAMSTATE(ReplacedBy, SymbolRef, SymbolRef)
 /* elements_withtok(family, extent)'s caller-side obligation: a call whose
@@ -55,34 +55,34 @@ REGISTER_MAP_WITH_PROGRAMSTATE(AggregateObligationExtent, AggregateObligationKey
 
 namespace {
 
-using ntlibc::algebra::absentLifecycle;
-using ntlibc::algebra::applyLifecycleOperation;
-using ntlibc::algebra::contains;
-using ntlibc::algebra::dischargeLifecycle;
-using ntlibc::algebra::excludedSentinel;
-using ntlibc::algebra::findTokenSort;
-using ntlibc::algebra::hasQualifier;
-using ntlibc::algebra::LifecycleEvent;
-using ntlibc::algebra::LifecycleFact;
-using ntlibc::algebra::LifecycleFamilyId;
-using ntlibc::algebra::LifecycleFamilyMorphism;
-using ntlibc::algebra::LifecycleMorphismTransition;
-using ntlibc::algebra::LifecycleOperation;
-using ntlibc::algebra::LifecycleState;
-using ntlibc::algebra::LifecycleTransition;
-using ntlibc::algebra::liveLifecycle;
-using ntlibc::algebra::observeLifecycleExit;
-using ntlibc::algebra::replaceLifecycle;
-using ntlibc::algebra::ReplacementOutcome;
-using ntlibc::algebra::RawTokenImplementation;
-using ntlibc::algebra::rawTokenImplementation;
-using ntlibc::algebra::retagLifecycle;
-using ntlibc::algebra::SentinelSplit;
-using ntlibc::algebra::splitOnExcludedSentinel;
-using ntlibc::algebra::TokenImplementation;
-using ntlibc::algebra::TokenImplementationStatus;
-using ntlibc::algebra::tokenImplementation;
-using ntlibc::algebra::unknownLifecycle;
+using spicule::algebra::absentLifecycle;
+using spicule::algebra::applyLifecycleOperation;
+using spicule::algebra::contains;
+using spicule::algebra::dischargeLifecycle;
+using spicule::algebra::excludedSentinel;
+using spicule::algebra::findTokenSort;
+using spicule::algebra::hasQualifier;
+using spicule::algebra::LifecycleEvent;
+using spicule::algebra::LifecycleFact;
+using spicule::algebra::LifecycleFamilyId;
+using spicule::algebra::LifecycleFamilyMorphism;
+using spicule::algebra::LifecycleMorphismTransition;
+using spicule::algebra::LifecycleOperation;
+using spicule::algebra::LifecycleState;
+using spicule::algebra::LifecycleTransition;
+using spicule::algebra::liveLifecycle;
+using spicule::algebra::observeLifecycleExit;
+using spicule::algebra::replaceLifecycle;
+using spicule::algebra::ReplacementOutcome;
+using spicule::algebra::RawTokenImplementation;
+using spicule::algebra::rawTokenImplementation;
+using spicule::algebra::retagLifecycle;
+using spicule::algebra::SentinelSplit;
+using spicule::algebra::splitOnExcludedSentinel;
+using spicule::algebra::TokenImplementation;
+using spicule::algebra::TokenImplementationStatus;
+using spicule::algebra::tokenImplementation;
+using spicule::algebra::unknownLifecycle;
 
 struct TokenContract {
   const IdentifierInfo *Family;
@@ -349,7 +349,7 @@ class AllocationLifetimeChecker
     return {static_cast<uint64_t>(reinterpret_cast<std::uintptr_t>(Family))};
   }
 
-  static LifecycleFamilyId familyId(const ntlibc::algebra::TokenSort *Family) {
+  static LifecycleFamilyId familyId(const spicule::algebra::TokenSort *Family) {
     return familyId(Family ? Family->getIdentifier() : nullptr);
   }
 
@@ -380,7 +380,7 @@ class AllocationLifetimeChecker
       return absentLifecycle();
     const IdentifierInfo *const *Family = State->get<AllocationFamily>(Symbol);
     LifecycleFamilyId Id =
-        Family ? familyId(*Family) : ntlibc::algebra::NoLifecycleFamily;
+        Family ? familyId(*Family) : spicule::algebra::NoLifecycleFamily;
     return {*Phase, Id};
   }
 
@@ -586,7 +586,7 @@ public:
     SourceLocation Location = SM.getExpansionLoc(Token->getLocation());
     StringRef Internal =
         Implementation.Internal ? Implementation.Internal->getName() : Raw.Name;
-    llvm::errs() << "ntlibc-allocation-contract: implementation-"
+    llvm::errs() << "spicule-allocation-contract: implementation-"
                  << implementationStatusName(Implementation.Status) << '\t'
                  << Token->getName() << '\t'
                  << (Internal.empty() ? StringRef("-") : Internal) << '\t'
@@ -603,7 +603,7 @@ public:
     std::string Path = SM.getFilename(Location).str();
     unsigned Line = SM.getSpellingLineNumber(Location);
     if (Function->doesThisDeclarationHaveABody())
-      llvm::errs() << "ntlibc-allocation-contract: definition\t-\t"
+      llvm::errs() << "spicule-allocation-contract: definition\t-\t"
                    << Function->getName() << '\t' << Path << '\t' << Line
                    << '\n';
     for (const AnnotateAttr *Attribute :
@@ -617,7 +617,7 @@ public:
           !Function->doesThisDeclarationHaveABody() ? "returns-declaration"
           : Attribute->isInherited() ? "returns-definition-inherited"
                                      : "returns-definition-explicit";
-      llvm::errs() << "ntlibc-allocation-contract: " << Kind << '\t' << Family
+      llvm::errs() << "spicule-allocation-contract: " << Kind << '\t' << Family
                    << '\t' << Function->getName() << '\t' << Path << '\t'
                    << Line << '\n';
     }
@@ -634,7 +634,7 @@ public:
             !Function->doesThisDeclarationHaveABody() ? "takes-declaration"
             : Attribute->isInherited() ? "takes-definition-inherited"
                                        : "takes-definition-explicit";
-        llvm::errs() << "ntlibc-allocation-contract: " << Kind << '\t' << Family
+        llvm::errs() << "spicule-allocation-contract: " << Kind << '\t' << Family
                      << '\t' << Function->getName() << '\t' << Argument << '\t'
                      << Path << '\t' << Line << '\n';
       }
@@ -737,8 +737,8 @@ public:
             Actual ? implementationMorphism(C.getASTContext(), *Actual)
                    : std::nullopt;
         LifecycleFamilyMorphism Morphism = Permission.value_or(
-            LifecycleFamilyMorphism{ntlibc::algebra::NoLifecycleFamily,
-                                     ntlibc::algebra::NoLifecycleFamily});
+            LifecycleFamilyMorphism{spicule::algebra::NoLifecycleFamily,
+                                     spicule::algebra::NoLifecycleFamily});
         LifecycleMorphismTransition Discharged = dischargeLifecycle(
             lifecycleFor(State, Symbol), familyId(Expected), Morphism);
         After = Discharged.After;
@@ -749,8 +749,8 @@ public:
         std::optional<LifecycleFamilyMorphism> Permission =
             implementationMorphism(C.getASTContext(), Expected);
         LifecycleFamilyMorphism Morphism = Permission.value_or(
-            LifecycleFamilyMorphism{ntlibc::algebra::NoLifecycleFamily,
-                                     ntlibc::algebra::NoLifecycleFamily});
+            LifecycleFamilyMorphism{spicule::algebra::NoLifecycleFamily,
+                                     spicule::algebra::NoLifecycleFamily});
         LifecycleMorphismTransition Retagged = retagLifecycle(
             lifecycleFor(State, Symbol), familyId(Expected), Morphism);
         After = Retagged.After;
@@ -1015,8 +1015,8 @@ public:
         std::optional<LifecycleFamilyMorphism> Permission =
             implementationMorphism(C.getASTContext(), Returns->Family);
         LifecycleFamilyMorphism Morphism = Permission.value_or(
-            LifecycleFamilyMorphism{ntlibc::algebra::NoLifecycleFamily,
-                                     ntlibc::algebra::NoLifecycleFamily});
+            LifecycleFamilyMorphism{spicule::algebra::NoLifecycleFamily,
+                                     spicule::algebra::NoLifecycleFamily});
         LifecycleMorphismTransition Transfer = retagLifecycle(
             lifecycleFor(State, Returned), familyId(Returns->Family),
             Morphism);
@@ -1078,7 +1078,7 @@ public:
 
 void registerAllocationLifetimeChecker(CheckerRegistry &Registry) {
   Registry.addChecker<AllocationLifetimeChecker>(
-      "ntlibc.AllocationLifetime",
+      "spicule.AllocationLifetime",
       "Proves allocations are freed or transferred through a paired "
       "dynamic-storage token contract",
       "");

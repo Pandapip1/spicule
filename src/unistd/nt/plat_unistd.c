@@ -5,7 +5,7 @@
  * the contract each function makes.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -164,7 +164,7 @@ NTSTATUS __pipe_handles(HANDLE *rp, HANDLE *wp, int inherit)
 	HANDLE r, w;
 	NTSTATUS st;
 	unsigned pid = (unsigned)(ULONG_PTR)__teb()->ClientId.UniqueProcess;
-	const char pfx[] = "\\Device\\NamedPipe\\ntlibc.";
+	const char pfx[] = "\\Device\\NamedPipe\\spicule.";
 	int i = 0;
 
 	for (; pfx[i]; i++) name[i] = (unsigned char)pfx[i];
@@ -678,7 +678,7 @@ int __plat_symlink(const char *target, int newdirfd, const char *linkpath)
  *     other/trusted domain      0xfe500000 + RID when its AD
  *                                trustPosixOffset is unavailable
  *
- * The NTLIBC_USE_KERNEL32 build asks LSA for the local and primary domain
+ * The SPICULE_USE_KERNEL32 build asks LSA for the local and primary domain
  * SIDs; the default ntdll-only build cannot call LsaQueryInformationPolicy,
  * so it uses USERDOMAIN/COMPUTERNAME instead (equal means SAM, unequal
  * means the logged-on domain, unavailable means SAM).
@@ -732,7 +732,7 @@ static int sid_in_domain(const SID *sid, const SID *domain)
 	return memcmp(sid->SubAuthority, domain->SubAuthority, n) == 0;
 }
 
-#ifdef NTLIBC_USE_KERNEL32
+#ifdef SPICULE_USE_KERNEL32
 /* advapi32 is reached dynamically and only in the explicitly enabled
  * higher-level-DLL build, as required by CONTRIBUTING.md. */
 typedef NTSTATUS (NTAPI *lsa_open_policy_fn)(UNICODE_STRING *,
@@ -831,7 +831,7 @@ static int ascii_case_equal(const char *a, const char *b)
 static enum domain_kind current_domain_kind(const SID *sid)
 {
 	const char *user_domain, *computer;
-#ifdef NTLIBC_USE_KERNEL32
+#ifdef SPICULE_USE_KERNEL32
 	enum domain_kind kind = lsa_domain_kind(sid);
 	if (kind != DOMAIN_UNKNOWN) return kind;
 #else
@@ -934,7 +934,7 @@ static pid_t pgid_event_owner;
 
 static void pgid_event_name(pid_t pid, WCHAR name[48], UNICODE_STRING *us)
 {
-	static const char prefix[] = "\\BaseNamedObjects\\ntlibc-pgrp.";
+	static const char prefix[] = "\\BaseNamedObjects\\spicule-pgrp.";
 	int i = 0;
 
 	for (; prefix[i]; i++) name[i] = (unsigned char)prefix[i];
@@ -1047,7 +1047,7 @@ int __plat_fchown(__plat_handle_t h, uid_t uid, gid_t gid)
 /* No ntdll export answers "give me random bytes" at all: ntdll's own
  * RtlRandom/RtlRandomEx family are non-cryptographic PRNGs. The real
  * source, BCryptGenRandom, lives in bcrypt.dll, not ntdll -- exactly the
- * situation NTLIBC_USE_KERNEL32 exists for. Reached with LdrLoadDll()/
+ * situation SPICULE_USE_KERNEL32 exists for. Reached with LdrLoadDll()/
  * LdrGetProcedureAddress() rather than a linked import library, so a
  * binary built with this flag still only *links* against ntdll and only
  * pulls bcrypt.dll into its address space if it actually runs on a build
@@ -1089,7 +1089,7 @@ int __plat_fchown(__plat_handle_t h, uid_t uid, gid_t gid)
  * a wrong code or buffer layout does not fail loudly, it hands back
  * plausible-looking bytes that are not random. This stays on bcrypt.dll
  * until a client-side source turns up to corroborate a code and layout. */
-#ifdef NTLIBC_USE_KERNEL32
+#ifdef SPICULE_USE_KERNEL32
 typedef NTSTATUS (NTAPI *bcrypt_gen_random_fn)(PVOID, unsigned char *, ULONG, ULONG);
 
 /* BCRYPT_USE_SYSTEM_PREFERRED_RNG (bcrypt.h): use the system-preferred

@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: (C) 2026 Gavin John
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# hwasan-build.sh -- opt-in HWAddressSanitizer build for ntlibc, staged for
+# hwasan-build.sh -- opt-in HWAddressSanitizer build for spicule, staged for
 # a future arch/aarch64 target.
 #
 # HWASan is a memory-error *detector* -- tagged-pointer use-after-free and
@@ -34,15 +34,15 @@
 # selection as tools/asan-build.sh, not a mode of it.
 #
 # Usage: tools/hwasan-build.sh
-# Env:   NTLIBC_CC (default clang), NTLIBC_HWASAN_OBJ (default obj/hwasan),
-#        NTLIBC_ARCH (default x86_64)
+# Env:   SPICULE_CC (default clang), SPICULE_HWASAN_OBJ (default obj/hwasan),
+#        SPICULE_ARCH (default x86_64)
 
 set -eu
 
 srcdir=$(cd "$(dirname "$0")/.." && pwd)
-CC=${NTLIBC_CC:-clang}
-OBJ=${NTLIBC_HWASAN_OBJ:-$srcdir/obj/hwasan}
-ARCH=${NTLIBC_ARCH:-x86_64}
+CC=${SPICULE_CC:-clang}
+OBJ=${SPICULE_HWASAN_OBJ:-$srcdir/obj/hwasan}
+ARCH=${SPICULE_ARCH:-x86_64}
 
 if [ ! -f "$srcdir/obj/include/bits/alltypes.h" ]; then
 	echo "hwasan: obj/include/bits/alltypes.h missing -- run 'make' first" >&2
@@ -51,8 +51,8 @@ fi
 
 # HWASan needs a shared runtime for the same reason ASan does in
 # tools/asan-build.sh: with the static runtime, the sanitizer's own
-# start-up calls bind to ntlibc's own definitions (malloc/sysconf/...)
-# before ntlibc is initialised.
+# start-up calls bind to spicule's own definitions (malloc/sysconf/...)
+# before spicule is initialised.
 SAN="-fsanitize=hwaddress -shared-libsan"
 SAN_RT=libclang_rt.hwasan-$ARCH.so
 RT=$($CC -print-file-name="$SAN_RT")
@@ -73,7 +73,7 @@ LINKFLAGS="-Wl,-rpath,$RTDIR -Wl,--no-relax"
 INC="-I$srcdir/src/internal -I$srcdir/obj/include -I$srcdir/include \
      -I$srcdir/arch/$ARCH -I$srcdir/arch/generic"
 CFLAGS="$SAN -g -O1 -std=c99 -nostdinc -fno-builtin -fvisibility=hidden \
-        -D_XOPEN_SOURCE=700 -D_NTLIBC_INTERNAL -D_NTLIBC_NATIVE_BUILD $INC"
+        -D_XOPEN_SOURCE=700 -D_SPICULE_INTERNAL -D_SPICULE_NATIVE_BUILD $INC"
 
 rm -rf "$OBJ"
 mkdir -p "$OBJ/obj" "$OBJ/test"

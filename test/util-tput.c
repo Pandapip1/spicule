@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Black-box tests for ntlibc's Tier 8 tput(1p) (src/util/tput.c) --
+ * Black-box tests for spicule's Tier 8 tput(1p) (src/util/tput.c) --
  * same technique as test/util-timeutil.c: the standalone
  * obj/bin/tput.exe is spawned as a real process (via __spawn()+
  * waitpid()), and the shell built-in is exercised too (via
@@ -22,7 +22,7 @@
  * terminal (if any) actually ran this test binary.
  */
 /* setenv()/unsetenv() below are gated behind _POSIX_SOURCE/
- * _POSIX_C_SOURCE/_XOPEN_SOURCE/_GNU_SOURCE/_BSD_SOURCE in ntlibc's own
+ * _POSIX_C_SOURCE/_XOPEN_SOURCE/_GNU_SOURCE/_BSD_SOURCE in spicule's own
  * include/stdlib.h, none of which a plain -std=c99 build defines on its
  * own. Same fix, same reasoning, as test/posix-stdlib.c's own
  * top-of-file _GNU_SOURCE define. */

@@ -16,24 +16,24 @@
  * second time. See src/internal/linux/tls_setup.c for the
  * implementation and the full derivation of the block shape.
  *
- * __ntlibc_linux_tls_layout is written exactly once, by crt1.c's
+ * __spicule_linux_tls_layout is written exactly once, by crt1.c's
  * linux_setup_tls() during process startup (before any thread but the
  * initial one exists) -- every later reader, including every
  * pthread_create() call for the rest of the process's life, only reads
  * it. vaddr == 0 means "no PT_TLS segment"; the other three fields are
  * only meaningful when vaddr is nonzero.
  */
-#ifndef _NTLIBC_LINUX_TLS_H
-#define _NTLIBC_LINUX_TLS_H
+#ifndef _SPICULE_LINUX_TLS_H
+#define _SPICULE_LINUX_TLS_H
 
 #if defined(__aarch64__)
-struct ntlibc_linux_tls_layout {
+struct spicule_linux_tls_layout {
 	unsigned long vaddr;
 	unsigned long filesz;
 	unsigned long memsz;
 	unsigned long align;
 };
-extern struct ntlibc_linux_tls_layout __ntlibc_linux_tls_layout;
+extern struct spicule_linux_tls_layout __spicule_linux_tls_layout;
 
 /* Builds one fresh TCB (see tls_setup.c for the exact shape) and
  * returns the new thread pointer (TPIDR_EL0 value) it should be
@@ -42,7 +42,7 @@ extern struct ntlibc_linux_tls_layout __ntlibc_linux_tls_layout;
  * aarch64 `__thread` access always dereferences tp + 16 + offset
  * unconditionally, so a thread actually started with TPIDR_EL0 == 0
  * would fault on its first such access. */
-void *__ntlibc_linux_tls_block_create(void);
+void *__spicule_linux_tls_block_create(void);
 #endif
 
 #endif

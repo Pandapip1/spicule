@@ -26,7 +26,7 @@ DIAGNOSTIC = re.compile(
     r"proven to already satisfy its own paired-field extent invariant "
     r"before this call); "
     r"origin '(.*)'; context '(.*)'; expression '(.*)'; site '(.*)' "
-    r"\[ntlibc\.MemoryContract\]$"
+    r"\[spicule\.MemoryContract\]$"
 )
 
 

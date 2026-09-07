@@ -13,8 +13,8 @@
  * a tiny zero-padded-decimal formatter used by both strftime and
  * asctime so the two agree on how numbers look.
  */
-#ifndef _NTLIBC_TIME_IMPL_H
-#define _NTLIBC_TIME_IMPL_H
+#ifndef _SPICULE_TIME_IMPL_H
+#define _SPICULE_TIME_IMPL_H
 
 #include <time.h>
 #include <features.h>
@@ -127,10 +127,10 @@ static inline void __iso_week(long long year, int yday, int wday, long long *out
 	}
 }
 
-extern const char *const __ntlibc_day_name[7];
-extern const char *const __ntlibc_day_name_abbr[7];
-extern const char *const __ntlibc_month_name[12];
-extern const char *const __ntlibc_month_name_abbr[12];
+extern const char *const __spicule_day_name[7];
+extern const char *const __spicule_day_name_abbr[7];
+extern const char *const __spicule_month_name[12];
+extern const char *const __spicule_month_name_abbr[12];
 
 /* Write the decimal digits of v into tmp (capacity cap), zero-padded (or
  * pad-charred) to at least width digits -- more if v needs them, never

@@ -18,7 +18,7 @@ DIAGNOSTIC = re.compile(
     r"^(.*?):(\d+):(\d+): warning: "
     r"(signal handler call is not proven async-signal-safe|"
     r"signal handler writes non-atomic global state); context '(.*)'; "
-    r"expression '(.*)' \[ntlibc\.SignalSafety\]$"
+    r"expression '(.*)' \[spicule\.SignalSafety\]$"
 )
 
 

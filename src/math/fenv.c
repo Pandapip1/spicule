@@ -20,7 +20,7 @@
  * point unit, its entire control/status state in two plain 32-bit
  * registers (FPCR/FPSR, read/written by mrs/msr, no memory image at
  * all), and a FE_*-bit layout that does not match FPSR's own bit
- * numbering (see FE_TO_FPSR/FPSR_TO_FE below) -- ntlibc's own FE_*
+ * numbering (see FE_TO_FPSR/FPSR_TO_FE below) -- spicule's own FE_*
  * values stay the fixed, portable ones every arch's caller sees
  * (include/fenv.h's own banner explains why), translated internally
  * here, the same way this file always has been the one place that

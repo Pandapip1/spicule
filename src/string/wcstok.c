@@ -1,12 +1,12 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * wcstok()'s third `wchar_t **restrict ptr` argument is not an ntlibc
+ * wcstok()'s third `wchar_t **restrict ptr` argument is not an spicule
  * extension -- it is wcstok's actual POSIX/C99 signature, mirroring
  * strtok_r() rather than strtok(). Don't "fix" it to two arguments.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)

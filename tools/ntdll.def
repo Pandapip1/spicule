@@ -1,8 +1,8 @@
 ; SPDX-FileCopyrightText: (C) 2026 Gavin John
 ; SPDX-License-Identifier: GPL-3.0-or-later
 ;
-; The import library every ntlibc PE links against.  ntdll.dll is the
-; only DLL ntlibc imports from at all (KERNEL32=no is the default; see
+; The import library every spicule PE links against.  ntdll.dll is the
+; only DLL spicule imports from at all (KERNEL32=no is the default; see
 ; `make check-kernel32`), so this file is the complete statement of what
 ; the library asks of the operating system -- and therefore the complete
 ; statement of which Windows versions it can run on.
@@ -13,7 +13,7 @@
 ; before a single instruction of it runs.  So the library's minimum
 ; supported Windows version is the MAXIMUM of these annotations, and a
 ; single unannotated or careless addition here silently raises the floor
-; for every program built against ntlibc.  tools/lint-minver.sh is the
+; for every program built against spicule.  tools/lint-minver.sh is the
 ; guard: it fails if any export lacks an annotation, or if the maximum
 ; annotation is not the floor declared in README.md.
 ;

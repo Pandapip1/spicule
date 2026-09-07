@@ -1,15 +1,15 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Linux socket-backend pilot smoke test -- NOT part of ntlibc, same
+ * Linux socket-backend pilot smoke test -- NOT part of spicule, same
  * standing as fuzz/linux_pilot_test.c (the mman/unistd pilot).
  *
- * Exercises the REAL ntlibc public entry points recv()/send()
+ * Exercises the REAL spicule public entry points recv()/send()
  * (src/socket/sendrecv.c, statically linked here, unmodified) against
  * the new src/socket/linux/plat_socket.c backend, running as a real,
  * native aarch64 Linux process on this host -- no Wine, no emulation.
  *
- * ntlibc's own socket()/accept()/bind()/connect() front doors are out of
+ * spicule's own socket()/accept()/bind()/connect() front doors are out of
  * scope entirely (they call raw NT AFD `\Device\Afd` machinery directly
  * -- see src/socket/linux/plat_socket.c's own banner for why porting
  * them is a separate, larger effort). A raw socketpair(2) stands in for
@@ -18,7 +18,7 @@
  * standing in for open()) for the exact same reason: the thing being
  * tested is recv()/send(), not connection setup.
  *
- * Both ends of the pair are registered directly into ntlibc's own fd
+ * Both ends of the pair are registered directly into spicule's own fd
  * table (__fds[], via __fd_alloc() from fuzz/linux_pilot_harness_socket.c)
  * with .type = __FD_SOCKET and .pad's AFD_ST_CONNECTED bit set by hand --
  * src/socket/sendrecv.c's recv()/send() front doors both refuse to even
@@ -48,7 +48,7 @@ static int failures;
 
 /* Box a raw Linux fd the same way src/unistd/linux/plat_fd.c and
  * src/socket/linux/plat_socket.c both do (fd+1), and install it into
- * ntlibc's own fd table as an already-connected socket -- standing in
+ * spicule's own fd table as an already-connected socket -- standing in
  * for what a ported connect()/accept() would normally do. */
 static int install_connected_socket(long rawfd)
 {
@@ -78,7 +78,7 @@ int main(void)
 	int rawpair[2];
 	long sp_ret;
 	int a, b;
-	const char msg1[] = "hello from ntlibc socket() on linux";
+	const char msg1[] = "hello from spicule socket() on linux";
 	const char msg2[] = "and the reply travels back the other way";
 	char buf[128];
 

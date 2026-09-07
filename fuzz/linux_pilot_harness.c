@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Test-harness scaffolding for the Linux platform pilot -- NOT part of
- * ntlibc, exactly like fuzz/ntstubs.c is "not part of ntlibc" for the
+ * spicule, exactly like fuzz/ntstubs.c is "not part of spicule" for the
  * native ASan build. Stands in for the handful of internal helpers the
  * pilot's front-door files (close.c, read.c, write.c) reference but that
  * this pilot deliberately does not port:

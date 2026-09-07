@@ -33,7 +33,7 @@
  * That is deliberate here rather than merely accepted: a layout test
  * that included the header it is checking would agree with it by
  * construction.  The numbers below come from the references, not from
- * ntlibc:
+ * spicule:
  *
  *   - FIELD_OFFSET(FILE_FULL_EA_INFORMATION, EaName) == 8, and the
  *     ComputedLength / NUL-termination / NextEntryOffset rules:
@@ -79,7 +79,7 @@ static int fails;
 #define SHAPE_NT6 1 /* AFD_SHAPE_NT6, src/internal/afd.h */
 /* <sys/socket.h>'s own SOCK_STREAM value (1), re-spelled locally for
  * the same reason every other constant in this file is: this test does
- * not include ntlibc's headers.  __afd_build_open_ea_for() gained this
+ * not include spicule's headers.  __afd_build_open_ea_for() gained this
  * parameter for SOCK_DGRAM (2026-09-01, src/internal/afd.h); this file
  * still asserts only the SOCK_STREAM/"\Device\Tcp" shape it always has
  * -- the transport-name and AddressFamily/SocketType/Protocol checks
@@ -109,9 +109,9 @@ void __afd_build_open_ea_for(int shape, int socktype, void *buf);
 #define PKT_HEADER 24u
 
 /* Windows' AF_/SOCK_/IPPROTO_ numbers, which are what afd.sys reads
- * here.  They happen to equal ntlibc's <sys/socket.h>/<netinet/in.h>
+ * here.  They happen to equal spicule's <sys/socket.h>/<netinet/in.h>
  * values, but this test spells the wire numbers out so that changing
- * ntlibc's headers cannot silently change what it asserts. */
+ * spicule's headers cannot silently change what it asserts. */
 #define WIN_AF_INET 2u
 #define WIN_SOCK_STREAM 1u
 #define WIN_IPPROTO_TCP 6u
@@ -154,7 +154,7 @@ int main(void)
 
 	/* Allocate size + a guard run, so "the builder writes exactly the
 	 * bytes it declares" is checkable.  malloc() is at least 8-byte
-	 * aligned everywhere ntlibc runs, which covers the 4-byte
+	 * aligned everywhere spicule runs, which covers the 4-byte
 	 * alignment NT requires of an EA entry (below). */
 	alloc = malloc(size + GUARD);
 	if (!alloc) { printf("FAIL %s: out of memory\n", __FILE__); return 1; }

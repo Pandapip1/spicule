@@ -23,7 +23,7 @@
  * for an unknown request.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -37,7 +37,7 @@
 #ifndef __linux__
 #include "condrv.h"
 #endif
-#ifdef NTLIBC_USE_KERNEL32
+#ifdef SPICULE_USE_KERNEL32
 #include "kernel32.h"
 #endif
 
@@ -49,7 +49,7 @@ static int fionread_pipe(struct __fd *f, int *out)
 #ifndef __linux__
 /* TIOCGWINSZ, ntdll first: ConsolepGetScreenBufferInfo through the
  * console driver (src/internal/condrv.h), with kernel32's
- * GetConsoleScreenBufferInfo() only as the NTLIBC_USE_KERNEL32 fallback
+ * GetConsoleScreenBufferInfo() only as the SPICULE_USE_KERNEL32 fallback
  * for a host that does not speak that protocol. Both answer -1 without
  * setting errno; the caller decides that "no console answered" is
  * ENOTTY. */
@@ -68,7 +68,7 @@ static int winsize_condrv(HANDLE h, struct winsize *ws)
 
 static int winsize_kernel32(HANDLE h, struct winsize *ws)
 {
-#ifdef NTLIBC_USE_KERNEL32
+#ifdef SPICULE_USE_KERNEL32
 	PVOID dll, proc;
 	UNICODE_STRING dllname;
 	ANSI_STRING procname;

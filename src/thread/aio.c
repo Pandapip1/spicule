@@ -9,7 +9,7 @@
  * can be used and is safe to enter from completion handlers.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -73,13 +73,13 @@ struct thread_notice {
 };
 
 /* Guarded by __sig_lock()/__sig_unlock() (see file banner). */
-static struct aio_request requests[AIO_MAX] NTLIBC_GUARDED_BY(__ntlibc_sig_lock_token);
-static struct aio_group groups[AIO_MAX] NTLIBC_GUARDED_BY(__ntlibc_sig_lock_token);
-static unsigned long long next_sequence NTLIBC_GUARDED_BY(__ntlibc_sig_lock_token);
-static __plat_handle_t worker_wake NTLIBC_GUARDED_BY(__ntlibc_sig_lock_token);
-static int worker_started NTLIBC_GUARDED_BY(__ntlibc_sig_lock_token);
-static int worker_synchronous NTLIBC_GUARDED_BY(__ntlibc_sig_lock_token);
-static struct aio_waiter *waiters NTLIBC_GUARDED_BY(__ntlibc_sig_lock_token);
+static struct aio_request requests[AIO_MAX] SPICULE_GUARDED_BY(__spicule_sig_lock_token);
+static struct aio_group groups[AIO_MAX] SPICULE_GUARDED_BY(__spicule_sig_lock_token);
+static unsigned long long next_sequence SPICULE_GUARDED_BY(__spicule_sig_lock_token);
+static __plat_handle_t worker_wake SPICULE_GUARDED_BY(__spicule_sig_lock_token);
+static int worker_started SPICULE_GUARDED_BY(__spicule_sig_lock_token);
+static int worker_synchronous SPICULE_GUARDED_BY(__spicule_sig_lock_token);
+static struct aio_waiter *waiters SPICULE_GUARDED_BY(__spicule_sig_lock_token);
 
 /* Worker teardown. On Linux, __plat_thread_spawn() clones the worker WITHOUT
  * CLONE_THREAD, so it's a separate process (own pid/tgid) invisible to
@@ -90,17 +90,17 @@ static struct aio_waiter *waiters NTLIBC_GUARDED_BY(__ntlibc_sig_lock_token);
  * `worker_atexit_registered` is reset on fork so a forked child's first
  * submit() re-registers its own shutdown hook for its own lazily-started
  * worker. */
-static int worker_shutdown NTLIBC_GUARDED_BY(__ntlibc_sig_lock_token);
-static int worker_exited NTLIBC_GUARDED_BY(__ntlibc_sig_lock_token);
-static __plat_handle_t worker_done_event NTLIBC_GUARDED_BY(__ntlibc_sig_lock_token);
-static int worker_atexit_registered NTLIBC_GUARDED_BY(__ntlibc_sig_lock_token);
+static int worker_shutdown SPICULE_GUARDED_BY(__spicule_sig_lock_token);
+static int worker_exited SPICULE_GUARDED_BY(__spicule_sig_lock_token);
+static __plat_handle_t worker_done_event SPICULE_GUARDED_BY(__spicule_sig_lock_token);
+static int worker_atexit_registered SPICULE_GUARDED_BY(__spicule_sig_lock_token);
 
 /* request is always a pointer into the file-static requests[] table, never
  * NULL, so nonnull isn't declared on it (not expressible for a struct
  * field's own conditional liveness). */
 static void wake_waiters_locked(const struct aio_request *request)
     __attribute__((nonnull(1)))
-    NTLIBC_REQUIRES(__ntlibc_sig_lock_token);
+    SPICULE_REQUIRES(__spicule_sig_lock_token);
 static void wake_waiters_locked(const struct aio_request *request)
 {
 	struct aio_waiter *waiter;
@@ -179,7 +179,7 @@ static void finish_locked(struct aio_request *request, int error, ssize_t result
 	struct sigevent *individual, int *have_individual,
 	struct sigevent *list, int *have_list)
     __attribute__((nonnull(1, 4, 5, 7)))
-    NTLIBC_REQUIRES(__ntlibc_sig_lock_token);
+    SPICULE_REQUIRES(__spicule_sig_lock_token);
 static void finish_locked(struct aio_request *request, int error, ssize_t result, // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 	struct sigevent *individual, int *have_individual,
 	struct sigevent *list, int *have_list)
@@ -255,7 +255,7 @@ static ssize_t perform(struct aio_request *request, int *error)
 }
 
 static struct aio_request *next_queued(void)
-    NTLIBC_REQUIRES(__ntlibc_sig_lock_token);
+    SPICULE_REQUIRES(__spicule_sig_lock_token);
 static struct aio_request *next_queued(void)
 {
 	struct aio_request *best = 0;
@@ -331,7 +331,7 @@ static void aio_worker_atexit(void)
 	if (need_wait) __plat_wait_one(done, 0, 0, 0);
 }
 
-static int start_worker(void) NTLIBC_REQUIRES(__ntlibc_sig_lock_token);
+static int start_worker(void) SPICULE_REQUIRES(__spicule_sig_lock_token);
 static int start_worker(void)
 {
 	__plat_handle_t thread, event, done;
@@ -461,7 +461,7 @@ int aio_fsync(int op, struct aiocb *cb)
 }
 
 static struct aio_request *lookup(const struct aiocb *cb)
-    NTLIBC_REQUIRES(__ntlibc_sig_lock_token);
+    SPICULE_REQUIRES(__spicule_sig_lock_token);
 static struct aio_request *lookup(const struct aiocb *cb)
 {
 	struct aio_request *request;
@@ -521,7 +521,7 @@ static int timeout_valid(const struct timespec *timeout)
  * as ready, same as one already completed and collected via aio_return(). */
 static int suspend_list_ready(const struct aiocb *const list[], int count,
 	int *any) __attribute__((nonnull(1, 3)))
-    NTLIBC_REQUIRES(__ntlibc_sig_lock_token);
+    SPICULE_REQUIRES(__spicule_sig_lock_token);
 static int suspend_list_ready(const struct aiocb *const list[], int count,
 	int *any)
 {
@@ -554,7 +554,7 @@ static long long timeout_deadline(const struct timespec *timeout, long long now)
 }
 
 static void remove_waiter_locked(struct aio_waiter *waiter)
-    NTLIBC_REQUIRES(__ntlibc_sig_lock_token);
+    SPICULE_REQUIRES(__spicule_sig_lock_token);
 static void remove_waiter_locked(struct aio_waiter *waiter)
 {
 	struct aio_waiter **link = &waiters;
@@ -775,7 +775,7 @@ int lio_listio(int mode, struct aiocb *const list[], int count,
 	return 0;
 }
 
-void __aio_reset_after_fork(void) NTLIBC_NO_THREAD_SAFETY_ANALYSIS;
+void __aio_reset_after_fork(void) SPICULE_NO_THREAD_SAFETY_ANALYSIS;
 void __aio_reset_after_fork(void)
 {
 	int i;

@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * __ntlibc_linux_tls_block_create() -- one real aarch64 "variant I" TLS
+ * __spicule_linux_tls_block_create() -- one real aarch64 "variant I" TLS
  * block per call: a 16-byte {dtv;reserved} TCB header, a real DTV, and
  * an independent copy of the process's PT_TLS data immediately after
  * the header. Same shape crt/linux/crt1.c's own linux_setup_tls() used
@@ -31,7 +31,7 @@
 
 #if defined(__aarch64__)
 
-struct ntlibc_linux_tls_layout __ntlibc_linux_tls_layout;
+struct spicule_linux_tls_layout __spicule_linux_tls_layout;
 
 #define SYS_mmap 222 /* aarch64 only -- this whole file is aarch64-only,
                       * see linux/tls.h's own #if defined(__aarch64__) */
@@ -66,13 +66,13 @@ static long raw_syscall(long nr, long a1, long a2, long a3, long a4, long a5, lo
  * behaves identically regardless of which thread it is growing. */
 #define TLS_DTV_INITIAL_CAPACITY 8
 
-void *__ntlibc_linux_tls_block_create(void)
+void *__spicule_linux_tls_block_create(void)
 {
-	unsigned long tls_vaddr = __ntlibc_linux_tls_layout.vaddr;
-	unsigned long tls_filesz = __ntlibc_linux_tls_layout.filesz;
-	unsigned long tls_memsz = __ntlibc_linux_tls_layout.memsz;
-	unsigned long data_align = __ntlibc_linux_tls_layout.align > 16
-		? __ntlibc_linux_tls_layout.align : 16;
+	unsigned long tls_vaddr = __spicule_linux_tls_layout.vaddr;
+	unsigned long tls_filesz = __spicule_linux_tls_layout.filesz;
+	unsigned long tls_memsz = __spicule_linux_tls_layout.memsz;
+	unsigned long data_align = __spicule_linux_tls_layout.align > 16
+		? __spicule_linux_tls_layout.align : 16;
 	unsigned long tcb_size = 16; /* dtv + reserved, fixed by the ABI */
 	unsigned long alloc_size = tcb_size + tls_memsz + data_align; /* slack for alignment */
 	long mm, dtv_mm;
@@ -98,11 +98,11 @@ void *__ntlibc_linux_tls_block_create(void)
 	data = (unsigned char *)(((unsigned long)data + data_align - 1) & ~(data_align - 1));
 
 	if (tls_filesz) {
-		/* tls_vaddr == __ntlibc_linux_tls_layout.vaddr, the PT_TLS
+		/* tls_vaddr == __spicule_linux_tls_layout.vaddr, the PT_TLS
 		 * segment's own link-time virtual address as the kernel/loader
 		 * mapped this executable -- crt1.c's linux_setup_tls() (already
 		 * exempt below, same reasoning) populates
-		 * __ntlibc_linux_tls_layout once from the real ELF program
+		 * __spicule_linux_tls_layout once from the real ELF program
 		 * headers this process was loaded from, at a fixed load bias of
 		 * 0 for a non-PIE static binary. Copying tls_filesz bytes from
 		 * it below is exactly PT_TLS's own contract: the file-backed

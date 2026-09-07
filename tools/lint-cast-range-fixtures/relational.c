@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Fixtures for ntlibc.SizeCast's CastZ3Proof extension (see
+ * Fixtures for spicule.SizeCast's CastZ3Proof extension (see
  * tools/clang/SizeCastChecker.cpp's CastZ3Engine/CastZ3Proof/
  * CastZ3BranchFact): a same-domain relational guard between two live
  * symbols, combined with an independent bound on the second symbol,

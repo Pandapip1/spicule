@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Coverage fences for <complex.h>, which ntlibc does not have.
+ * Coverage fences for <complex.h>, which spicule does not have.
  * POSIX.1-2017 (IEEE Std 1003.1-2017, The Open Group Base
  * Specifications Issue 7, 2018 Edition), served at
  * https://pubs.opengroup.org/onlinepubs/9699919799/ ; clause text read
@@ -22,7 +22,7 @@
  * "The functionality described on this reference page is aligned with
  * the ISO C standard ... This volume of POSIX.1-2017 defers to the ISO
  * C standard" -- so they are base C99, not an option this target may
- * decline.  ntlibc already claims C99 (`config.mak`'s CFLAGS_C99FSE is
+ * decline.  spicule already claims C99 (`config.mak`'s CFLAGS_C99FSE is
  * `-std=c99`) and already has a substantial <math.h> with a
  * clause-cited audit in test/posix-math.c and test/math.c.  The
  * asymmetry between the real and complex halves of C99's mathematics is
@@ -80,7 +80,7 @@ static int fails;
  * carg.html, cabs.html
  * ================================================================== */
 
-#if NTLIBC_TEST(PASS, posix_complex_creal_cimag_conj)
+#if SPICULE_TEST(PASS, posix_complex_creal_cimag_conj)
 #include <complex.h>
 #include <math.h>
 
@@ -173,7 +173,7 @@ static void test_posix_complex_creal_cimag_conj(void)
  * .../functions/cexp.html, clog.html, cpow.html, csqrt.html
  * ================================================================== */
 
-#if NTLIBC_TEST(PASS, posix_complex_cexp_clog_cpow_csqrt)
+#if SPICULE_TEST(PASS, posix_complex_cexp_clog_cpow_csqrt)
 #include <complex.h>
 #include <math.h>
 
@@ -259,7 +259,7 @@ static void test_posix_complex_cexp_clog_cpow_csqrt(void)
  * csinh.html, ctanh.html
  * ================================================================== */
 
-#if NTLIBC_TEST(PASS, posix_complex_ctrig_and_chyperbolic)
+#if SPICULE_TEST(PASS, posix_complex_ctrig_and_chyperbolic)
 #include <complex.h>
 #include <math.h>
 
@@ -339,7 +339,7 @@ static void test_posix_complex_ctrig_and_chyperbolic(void)
  * casinh.html, catanh.html
  * ================================================================== */
 
-#if NTLIBC_TEST(PASS, posix_complex_inverse_branch_cuts)
+#if SPICULE_TEST(PASS, posix_complex_inverse_branch_cuts)
 #include <complex.h>
 #include <math.h>
 

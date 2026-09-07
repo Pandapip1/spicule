@@ -139,6 +139,6 @@ extern "C" const char clang_analyzerAPIVersionString[] =
 
 extern "C" void clang_registerCheckers(CheckerRegistry &Registry) {
   Registry.addChecker<FallibleResultChecker>(
-      "ntlibc.FallibleResult", "Finds discarded results from fallible APIs",
+      "spicule.FallibleResult", "Finds discarded results from fallible APIs",
       "");
 }

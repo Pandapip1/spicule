@@ -101,7 +101,7 @@ static void print_line(uintmax_t blocks512, const char *path)
  * `&f` (report()'s own stack-local struct FTW) on every call -- but
  * stating it with __attribute__((nonnull(2, 4))) here was tried and
  * reverted: it does silence this pair, but it also lets
- * ntlibc.OwnershipChecker's exploration reach past this function's first
+ * spicule.OwnershipChecker's exploration reach past this function's first
  * statement into the FTW_DP case below, where it cannot prove
  * level_sum[lvl]'s lower bound (lvl is never actually negative -- FTW's
  * `level` is a plain recursion-depth counter src/ftw/ftw.c's walk() only
@@ -178,8 +178,8 @@ int __util_du_main(
 		 * string_tokens.h's null_terminated token is defined purely as
 		 * that reachability fact (see its own comment) -- it carries no
 		 * companion "and the pointer itself is not NULL" qualifier, so
-		 * ntlibc.OwnershipChecker's AggregateElementToken machinery has
-		 * nothing to hand ntlibc.ValidPointer here. No annotation in
+		 * spicule.OwnershipChecker's AggregateElementToken machinery has
+		 * nothing to hand spicule.ValidPointer here. No annotation in
 		 * ownership.h currently closes this. */
 		if (a[0] != '-' || a[1] == 0) break;
 		if (!strcmp(a, "--")) { i++; break; }

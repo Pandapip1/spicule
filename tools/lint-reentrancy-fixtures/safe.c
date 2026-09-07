@@ -4,10 +4,10 @@
 /* Self-contained stub prototypes, mirroring how
  * tools/lint-lock-discipline-fixtures declares local pthread_mutex_lock-
  * shaped stubs rather than including real headers.  gmtime/strtok are the
- * real ntlibc family names (see src/time/gmtime.c, src/string/strtok.c);
+ * real spicule family names (see src/time/gmtime.c, src/string/strtok.c);
  * fake_gmtime/fake_localtime are a synthetic pair that shares one static-
  * buffer contract purely to exercise the sibling-invalidation path -- none
- * of ntlibc's real families have more than one member (see the header
+ * of spicule's real families have more than one member (see the header
  * comment in tools/clang/ReentrancyChecker.cpp). */
 struct tm { int tm_year; };
 struct tm *gmtime(const long *);

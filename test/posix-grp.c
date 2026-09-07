@@ -21,7 +21,7 @@
  *
  * <grp.h> mirrors test/pwd.c's own structure and its have_user() gate:
  * src/misc/grp.c's one group is only knowable when %USERNAME%/%USER%
- * is set, and ntlibc's own native `make asan` harness (fuzz/ntstubs.c)
+ * is set, and spicule's own native `make asan` harness (fuzz/ntstubs.c)
  * deliberately starts with an empty environ, so both branches are
  * exercised for real depending on which harness runs this file.
  */
@@ -160,7 +160,7 @@ static void test_getgrnam_other_not_found(void)
 	struct group *gr;
 
 	errno = 12345;
-	gr = getgrnam("definitely-not-a-real-ntlibc-group-xyz");
+	gr = getgrnam("definitely-not-a-real-spicule-group-xyz");
 	CHECK(gr == NULL);
 	CHECK(errno == 12345);
 }
@@ -244,7 +244,7 @@ static void test_getgrnam_r_success_and_not_found(void)
 	CHECK(gr.gr_gid == getgid());
 
 	result = (struct group *)0x1;
-	r = getgrnam_r("definitely-not-a-real-ntlibc-group-xyz", &gr, buf, sizeof buf, &result);
+	r = getgrnam_r("definitely-not-a-real-spicule-group-xyz", &gr, buf, sizeof buf, &result);
 	CHECK(r == 0);
 	CHECK(result == NULL);
 }
@@ -545,14 +545,14 @@ static void test_linux_getgrent_reaches_gid0(void)
 
 static void fixture_env_set(void)
 {
-	CHECK(setenv("NTLIBC_TEST_GROUP_PATH", FIX_GROUP, 1) == 0);
-	CHECK(setenv("NTLIBC_TEST_NSSWITCH_PATH", FIX_NSSWITCH, 1) == 0);
+	CHECK(setenv("SPICULE_TEST_GROUP_PATH", FIX_GROUP, 1) == 0);
+	CHECK(setenv("SPICULE_TEST_NSSWITCH_PATH", FIX_NSSWITCH, 1) == 0);
 }
 
 static void fixture_env_clear(void)
 {
-	unsetenv("NTLIBC_TEST_GROUP_PATH");
-	unsetenv("NTLIBC_TEST_NSSWITCH_PATH");
+	unsetenv("SPICULE_TEST_GROUP_PATH");
+	unsetenv("SPICULE_TEST_NSSWITCH_PATH");
 }
 
 /* getgrnam.html/getgrgid.html DESCRIPTION, and gr_mem's own "array of
@@ -723,8 +723,8 @@ static void test_linux_fixture_missing_nsswitch_defaults_to_files(void)
 	struct group *gr;
 
 	fixture_write(FIX_GROUP, "erin:x:6005:\n");
-	CHECK(setenv("NTLIBC_TEST_GROUP_PATH", FIX_GROUP, 1) == 0);
-	CHECK(setenv("NTLIBC_TEST_NSSWITCH_PATH", "fx-nsswitch-does-not-exist", 1) == 0);
+	CHECK(setenv("SPICULE_TEST_GROUP_PATH", FIX_GROUP, 1) == 0);
+	CHECK(setenv("SPICULE_TEST_NSSWITCH_PATH", "fx-nsswitch-does-not-exist", 1) == 0);
 
 	gr = getgrnam("erin");
 	CHECK(gr != NULL);
@@ -1362,7 +1362,7 @@ static void test_writev_all_zero(void)
  * return value, same errno, same st_size -- including under
  * RLIMIT_FSIZE, where write() clamps to the room left and both shapes
  * report the same short count.  The difference exists only to a flow of
- * control running *during* the call, and ntlibc exposes no way to make
+ * control running *during* the call, and spicule exposes no way to make
  * one: there is no <pthread.h> in the tree.
  *
  * That is not the same as the clause being inapplicable here, which is

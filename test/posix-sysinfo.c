@@ -316,7 +316,7 @@ static void test_uname_system_fields_are_not_the_environment(void)
 	}
 
 	CHECK(uname(&before) >= 0);
-	CHECK(setenv("COMPUTERNAME", "ntlibc-sysinfo-probe", 1) == 0);
+	CHECK(setenv("COMPUTERNAME", "spicule-sysinfo-probe", 1) == 0);
 	CHECK(uname(&after) >= 0);
 
 	CHECK(strcmp(after.sysname, before.sysname) == 0);
@@ -332,7 +332,7 @@ static void test_uname_system_fields_are_not_the_environment(void)
 	else CHECK(unsetenv("COMPUTERNAME") == 0);
 }
 
-#if NTLIBC_TEST(PASS, posix_sysinfo_uname_nodename_identifies_the_system) /* uname.html DESCRIPTION -- "The uname() function shall store
+#if SPICULE_TEST(PASS, posix_sysinfo_uname_nodename_identifies_the_system) /* uname.html DESCRIPTION -- "The uname() function shall store
 	information identifying the current system in the structure
 	pointed to by name", and of the five members "nodename shall
 	contain the name of this node within an implementation-defined
@@ -404,9 +404,9 @@ static void test_uname_nodename_identifies_the_system(void)
 
 	/* The environment is not the oracle: a forged COMPUTERNAME must
 	 * not become this node's name. */
-	CHECK(setenv("COMPUTERNAME", "ntlibc-not-this-nodes-name", 1) == 0);
+	CHECK(setenv("COMPUTERNAME", "spicule-not-this-nodes-name", 1) == 0);
 	CHECK(uname(&forged) >= 0);
-	CHECK(strcmp(forged.nodename, "ntlibc-not-this-nodes-name") != 0);
+	CHECK(strcmp(forged.nodename, "spicule-not-this-nodes-name") != 0);
 	CHECK(strcmp(forged.nodename, real.nodename) == 0);
 
 	/* ...and removing it does not delete the node's name either. */
@@ -634,7 +634,7 @@ static void test_times_cpu_agrees_with_clock_gettime(void)
 	CHECK(cpu_ticks - self_ticks < 500);
 }
 
-#if NTLIBC_TEST(BUG, posix_sysinfo_times_child_times_are_recursive) /* BUG: times.html DESCRIPTION -- "The tms_cutime structure
+#if SPICULE_TEST(BUG, posix_sysinfo_times_child_times_are_recursive) /* BUG: times.html DESCRIPTION -- "The tms_cutime structure
 	member is the sum of the tms_utime and tms_cutime times of the
 	child processes" and "The tms_cstime structure member is the sum
 	of the tms_stime and tms_cstime times of the child processes",
@@ -644,7 +644,7 @@ static void test_times_cpu_agrees_with_clock_gettime(void)
 	descendants.  But the times of a child are only added to those
 	of its parent when its parent successfully waits on the child."
 
-	ntlibc implements the non-recursive half only.  The clause is
+	spicule implements the non-recursive half only.  The clause is
 	two terms -- the reaped child's OWN CPU time (tms_utime), and
 	the CPU time that child had already collected from ITS children
 	(tms_cutime) -- and src/process/wait.c's fill_child_rusage()
@@ -674,7 +674,7 @@ static void test_times_cpu_agrees_with_clock_gettime(void)
 	does not perform directly.  A build driver runs a compiler
 	through a wrapper that itself waits for the compiler: the
 	wrapper's own CPU time is a rounding error and the compiler's is
-	the whole cost, and ntlibc charges the driver the wrapper and
+	the whole cost, and spicule charges the driver the wrapper and
 	discards the compiler.  There is no error and no missing return
 	value; the number is simply too small, silently, in proportion
 	to how deep the process tree goes.
@@ -704,15 +704,15 @@ static void test_times_cpu_agrees_with_clock_gettime(void)
 	WHY NOT N/A.  Two routes exist, and what each one
 	needs was checked rather than assumed:
 
-	  - Carry the numbers.  Whenever the child is itself an ntlibc
+	  - Carry the numbers.  Whenever the child is itself an spicule
 	    program this library owns both ends: the child could hand
 	    back children_utime100ns/children_ktime100ns at exit and
 	    fill_child_rusage() could add them to what ProcessTimes
 	    reports.  Nothing in src/ passes libc state to a child
-	    out-of-band today (`grep -rn '_NTLIBC\|__ntlibc_'` over the
+	    out-of-band today (`grep -rn '_SPICULE\|__spicule_'` over the
 	    C files of src/process/ finds nothing); the one precedent in
 	    the tree is in the test harness rather than the library --
-	    fuzz/ntstubs.c's XCHILD_MARK ("_NTLIBC_XCHILD=1",
+	    fuzz/ntstubs.c's XCHILD_MARK ("_SPICULE_XCHILD=1",
 	    fuzz/ntstubs.c:178), an environment marker a child looks for
 	    at startup.  So this is a channel to be built, not one to be
 	    reused.
@@ -734,7 +734,7 @@ static void test_times_cpu_agrees_with_clock_gettime(void)
 	Neither is free, and the job-object route in particular is a
 	real design decision about what a "child" is; but "we would have
 	to write it" is UNIMPL in this ledger, not N/A.  The clause is
-	also not vacuous the way a STREAMS clause is: ntlibc has
+	also not vacuous the way a STREAMS clause is: spicule has
 	processes, has wait(), and has grandchildren.
 
 	ACCEPTANCE CRITERION.  The assertion below, unfenced, on the
@@ -1141,7 +1141,7 @@ int main(int argc, char **argv)
 	self = argv[0];
 	(void)argc;
 
-#if NTLIBC_TEST(BUG, posix_sysinfo_times_child_times_are_recursive) /* BUG: see the fence above test_times_child_times_are_recursive.
+#if SPICULE_TEST(BUG, posix_sysinfo_times_child_times_are_recursive) /* BUG: see the fence above test_times_child_times_are_recursive.
 	The same fence, not a second one: these two roles exist only to
 	drive that assertion.
 
@@ -1185,14 +1185,14 @@ int main(int argc, char **argv)
 	test_uname_machine_matches_this_binary();
 	test_uname_release_and_version_identify_the_os();
 	test_uname_system_fields_are_not_the_environment();
-#if NTLIBC_TEST(PASS, posix_sysinfo_uname_nodename_identifies_the_system) /* see the fence above test_uname_nodename_identifies_the_system. */
+#if SPICULE_TEST(PASS, posix_sysinfo_uname_nodename_identifies_the_system) /* see the fence above test_uname_nodename_identifies_the_system. */
 	test_uname_nodename_identifies_the_system();
 #endif
 
 	test_tms_header_shape();
 	test_times_return_is_real_time_in_clock_ticks();
 	test_times_cpu_agrees_with_clock_gettime();
-#if NTLIBC_TEST(BUG, posix_sysinfo_times_child_times_are_recursive) /* BUG: see the fence above test_times_child_times_are_recursive. */
+#if SPICULE_TEST(BUG, posix_sysinfo_times_child_times_are_recursive) /* BUG: see the fence above test_times_child_times_are_recursive. */
 	test_times_child_times_are_recursive();
 #endif
 

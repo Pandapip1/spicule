@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: (C) 2026 Gavin John
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef NTLIBC_RELATION_CONTRACTS_H
-#define NTLIBC_RELATION_CONTRACTS_H
+#ifndef SPICULE_RELATION_CONTRACTS_H
+#define SPICULE_RELATION_CONTRACTS_H
 
 #include "llvm/ADT/StringRef.h"
 
 #include <optional>
 
-namespace ntlibc {
+namespace spicule {
 
 // Shared syntax for path-scoped pointer/object relations.  "element_of"
 // means the pointer belongs to the allocation currently named by the
@@ -25,9 +25,9 @@ struct ElementRelationContract {
 inline std::optional<ElementRelationContract>
 parseElementRelation(llvm::StringRef Annotation) {
   constexpr llvm::StringRef ReturnPrefix =
-      "ntlibc_relation_returns_element_of:";
+      "spicule_relation_returns_element_of:";
   constexpr llvm::StringRef ParameterPrefix =
-      "ntlibc_relation_parameter_element_of:";
+      "spicule_relation_parameter_element_of:";
   if (Annotation.starts_with(ReturnPrefix)) {
     llvm::StringRef Registry = Annotation.drop_front(ReturnPrefix.size());
     if (!Registry.empty())
@@ -46,6 +46,6 @@ parseElementRelation(llvm::StringRef Annotation) {
                                  Registry};
 }
 
-} // namespace ntlibc
+} // namespace spicule
 
 #endif

@@ -6,7 +6,7 @@
  * linked directly into libc.a -- no separate ld.so, no PT_INTERP, no
  * mmap'd-off-disk loader spliced in later the way glibc's "static
  * dlopen" retrofit works (which is also the cause of glibc bug 20802,
- * getauxval() breaking after static dlopen). ntlibc's Linux port has
+ * getauxval() breaking after static dlopen). spicule's Linux port has
  * no PT_INTERP to begin with and no existing ld.so to reuse, so this
  * file just IS the loader: ordinary code in libc.a that mmaps a
  * caller-named .so, parses it, relocates it, and hands back an opaque
@@ -158,7 +158,7 @@
  * real DTV; this file's module-id allocator (next_tls_module_id) and
  * DTV-growth function (tls_dtv_ensure_capacity()) hand every
  * PT_TLS-bearing object a fresh id and slot (setup_object_tls()); and
- * __ntlibc_tlsdesc_resolver (hand-written aarch64 asm, see its own
+ * __spicule_tlsdesc_resolver (hand-written aarch64 asm, see its own
  * banner near apply_one_reloc()) is the runtime resolver R_AARCH64_
  * TLSDESC relocations are wired to. See test/posix-dl-linux.c's
  * test_pt_tls_per_object() for running proof.
@@ -199,7 +199,7 @@
  * teardown_obj() as a whole -- deferred, disclosed rather than hidden.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -276,7 +276,7 @@ static unsigned long pgup(unsigned long v) { unsigned long p = real_page_size();
  * Found empirically, disclosed here rather than silently worked around:
  * this loader's address-space layout is exactly "reserve one big span,
  * then MAP_FIXED several independent file-backed sub-mappings inside
- * it, at exact addresses this file itself computes" -- and ntlibc's own
+ * it, at exact addresses this file itself computes" -- and spicule's own
  * public mmap() front door (src/mman/mman.c) is NOT built to support
  * that pattern. Read in full once this broke: mman.c keeps its own
  * reservation-table bookkeeping, one reservation PER mmap() call, and
@@ -666,7 +666,7 @@ typedef Elf64_Sym  Elf_Sym;
  * __tls_get_addr()/R_AARCH64_TLS_DTPMOD64+DTPREL64 "general dynamic"
  * pair) is flatly rejected as an "unsupported option" for this target.
  * See this file's own "TLS / per-library thread descriptors" banner
- * and the __ntlibc_tlsdesc_resolver asm block further down for the
+ * and the __spicule_tlsdesc_resolver asm block further down for the
  * runtime side of what this relocation type needs. */
 #define R_AARCH64_TLSDESC    1031
 /* GNU indirect-function ("ifunc") relocation -- confirmed empirically
@@ -1080,7 +1080,7 @@ static int resolve_symref(struct dlobj *obj, uint32_t symidx, uint64_t *out)
 static unsigned int next_tls_module_id = 2;
 
 /* Must equal src/internal/linux/tls_setup.c's own
- * __ntlibc_linux_tls_block_create() initial DTV allocation size (the
+ * __spicule_linux_tls_block_create() initial DTV allocation size (the
  * real block builder crt/linux/crt1.c's linux_setup_tls() calls for the
  * initial thread, and src/thread/linux/plat_thread.c's
  * __plat_thread_spawn() calls for every later pthread_create()'d one)
@@ -1166,14 +1166,14 @@ static int tls_dtv_ensure_capacity(unsigned int module_id)
  * disassembly above -- not the argument word's address). On return
  * x0 = (accessed address) - tpidr_el0 (the caller's own `add x0, x2,
  * x0` adds tpidr_el0 back). */
-extern void __ntlibc_tlsdesc_resolver(void); // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- implementation-reserved namespace, same as every other libc-internal symbol
+extern void __spicule_tlsdesc_resolver(void); // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- implementation-reserved namespace, same as every other libc-internal symbol
 __asm__(
 "	.text\n"
 "	.align	2\n"
-"	.global	__ntlibc_tlsdesc_resolver\n"
-"	.hidden	__ntlibc_tlsdesc_resolver\n"
-"	.type	__ntlibc_tlsdesc_resolver, %function\n"
-"__ntlibc_tlsdesc_resolver:\n"
+"	.global	__spicule_tlsdesc_resolver\n"
+"	.hidden	__spicule_tlsdesc_resolver\n"
+"	.type	__spicule_tlsdesc_resolver, %function\n"
+"__spicule_tlsdesc_resolver:\n"
 "	stp	x1, x2, [sp, #-32]!\n"
 "	stp	x3, x4, [sp, #16]\n"
 "	ldr	x1, [x0, #8]\n"
@@ -1188,7 +1188,7 @@ __asm__(
 "	ldp	x3, x4, [sp, #16]\n"
 "	ldp	x1, x2, [sp], #32\n"
 "	ret\n"
-"	.size	__ntlibc_tlsdesc_resolver, . - __ntlibc_tlsdesc_resolver\n"
+"	.size	__spicule_tlsdesc_resolver, . - __spicule_tlsdesc_resolver\n"
 );
 
 /* Build this object's own per-module TLS block (this object's own
@@ -1307,7 +1307,7 @@ static int apply_one_reloc(struct dlobj *obj, const struct reloc *r,
 		return 0;
 	}
 	case R_AARCH64_TLSDESC: {
-		/* See "TLS / per-library thread descriptors" (__ntlibc_tlsdesc_
+		/* See "TLS / per-library thread descriptors" (__spicule_tlsdesc_
 		 * resolver's own banner, above) for the two-word GOT-entry
 		 * shape and the (module_id, offset) packing this writes. */
 		uint64_t module_id, offset;
@@ -1352,7 +1352,7 @@ static int apply_one_reloc(struct dlobj *obj, const struct reloc *r,
 			module_id = (uint64_t)obj->tls_module_id;
 			offset = sym->st_value + (uint64_t)r->r_addend;
 		}
-		loc[0] = (unsigned long)(uintptr_t)(void *)&__ntlibc_tlsdesc_resolver;
+		loc[0] = (unsigned long)(uintptr_t)(void *)&__spicule_tlsdesc_resolver;
 		loc[1] = (unsigned long)((module_id << 48) | (offset & 0xffffffffffffULL));
 		return 0;
 	}

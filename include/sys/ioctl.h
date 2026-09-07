@@ -26,7 +26,7 @@ extern "C" {
 #include <ownership.h>
 
 /* TIOCGWINSZ: terminal window size (src/ioctl/ioctl.c, backed by
- * kernel32's GetConsoleScreenBufferInfo() -- NTLIBC_USE_KERNEL32 only,
+ * kernel32's GetConsoleScreenBufferInfo() -- SPICULE_USE_KERNEL32 only,
  * same reason as termios.h's ISIG/ICANON/ECHO). */
 struct winsize {
 	unsigned short ws_row;

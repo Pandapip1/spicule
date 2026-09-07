@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * crt/linux/crt1.c + crt/linux/aarch64/start.S smoke test -- NOT part
- * of ntlibc, same standing as every other fuzz/linux_pilot_test_*.c
+ * of spicule, same standing as every other fuzz/linux_pilot_test_*.c
  * file, but a different kind of pilot from the others: every earlier
  * one (linux_pilot_test_open.c, _rename.c, _statfam.c, ...) still ran
  * under fuzz/linux_pilot_harness*.c's own hand-rolled process
@@ -98,7 +98,7 @@ int main(int argc, char **argv, char **envp)
 	 * the real kernel ENOENT, proving TLS is live for library-internal
 	 * state too, not just this file's own test variable. */
 	errno = 0;
-	fd = open("/no/such/path/ntlibc-linux-crt-test", O_RDONLY);
+	fd = open("/no/such/path/spicule-linux-crt-test", O_RDONLY);
 	report(fd == -1, "open() of a nonexistent path fails");
 	report(errno == ENOENT, "errno reads back ENOENT through the real open()/openat() front door");
 

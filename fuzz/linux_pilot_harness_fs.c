@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Test-harness scaffolding for the Linux filesystem-subsystem pilot --
- * NOT part of ntlibc, same as fuzz/linux_pilot_harness.c. Its own file
+ * NOT part of spicule, same as fuzz/linux_pilot_harness.c. Its own file
  * (not shared with linux_pilot_harness.c) because it backs a separate
  * binary, linux_pilot_test_fs -- see tools/linux-build-fs.sh.
  *

@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Black-box tests for ntlibc's Tier 7 (Software Development option
+ * Black-box tests for spicule's Tier 7 (Software Development option
  * tier) `strip` (XCU strip(1p)). Same spawn/capture technique as
  * test/util-archive.c: the standalone obj/bin/strip.exe is spawned as
  * a real process (via __spawn()+waitpid()), and the shell built-in is

@@ -16,7 +16,7 @@ FIXTURES = ROOT / "tools/lint-tagged-result-fixtures"
 DIAGNOSTIC = re.compile(
     r"^(.*?):(\d+):(\d+): warning: tagged result field '(normal|special)' "
     r"is not proven selected; origin '(.*)'; context '(.*)'; access '(.*)' "
-    r"\[ntlibc\.TaggedResult\]$"
+    r"\[spicule\.TaggedResult\]$"
 )
 
 

@@ -5,15 +5,15 @@
 // construct:/destroy: token annotations off a callee's declaration and
 // classifies the real lock protocol operation they jointly encode, purely
 // from that callee's own AST -- no per-function name matching. This is the
-// single source of truth LockDisciplineChecker.cpp's ntlibc.LockDiscipline
-// and PurityChecker.cpp's ntlibc.Purity both need for "does this call have
+// single source of truth LockDisciplineChecker.cpp's spicule.LockDiscipline
+// and PurityChecker.cpp's spicule.Purity both need for "does this call have
 // an observable effect on a lock's held/not-held state", replacing what
 // used to be two independently hand-maintained name lists that had already
 // drifted apart (PurityChecker.cpp's LockNames[] included
 // pthread_cond_signal/pthread_cond_broadcast, which LockDisciplineChecker's
 // own table never did).
-#ifndef NTLIBC_LOCK_ALGEBRA_H
-#define NTLIBC_LOCK_ALGEBRA_H
+#ifndef SPICULE_LOCK_ALGEBRA_H
+#define SPICULE_LOCK_ALGEBRA_H
 
 #include "clang/AST/Attr.h"
 #include "clang/AST/Decl.h"
@@ -23,7 +23,7 @@
 
 #include <optional>
 
-namespace ntlibc::lock {
+namespace spicule::lock {
 
 enum class LockOperation : unsigned char {
   Initialize,
@@ -47,8 +47,8 @@ struct LockCall {
 
 namespace detail {
 
-using ntlibc::algebra::findTokenSort;
-using ntlibc::algebra::hasQualifier;
+using spicule::algebra::findTokenSort;
+using spicule::algebra::hasQualifier;
 
 inline bool isHeldToken(clang::ASTContext &Context, llvm::StringRef Name) {
   return hasQualifier(findTokenSort(Context, Name), "qual:lock_held");
@@ -204,6 +204,6 @@ inline bool isLockProtocolCall(const clang::FunctionDecl *Function) {
   return classifyCall(Function).has_value();
 }
 
-} // namespace ntlibc::lock
+} // namespace spicule::lock
 
 #endif

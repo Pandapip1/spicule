@@ -5,21 +5,21 @@
  * afl-compiler-rt.o, calls open/read/write/close/shmat/shmdt/getenv/
  * fork/waitpid/sigaction/signal to talk to afl-fuzz and run its
  * persistent-mode forkserver. Every one of those names is also a strong
- * symbol in ntlibc, and ntlibc's wins the ordinary ELF override (the
+ * symbol in spicule, and spicule's wins the ordinary ELF override (the
  * same class of bug STATRENAME fixes for stat()) -- so unpatched,
- * afl-compiler-rt.o reaches ntlibc's versions instead of the host's.
+ * afl-compiler-rt.o reaches spicule's versions instead of the host's.
  * Six failure modes were found by measurement, not anticipated:
  *
- *   1. read/write/close look fds up in ntlibc's own table (which never
- *      heard of FORKSRV_FD), getenv() searches ntlibc's environ (emptied
+ *   1. read/write/close look fds up in spicule's own table (which never
+ *      heard of FORKSRV_FD), getenv() searches spicule's environ (emptied
  *      by ntstubs.c for every native test), shmat/shmdt would attach
- *      ntlibc's simulated address space. Measured: afl-showmap showed the
+ *      spicule's simulated address space. Measured: afl-showmap showed the
  *      harness never touching FORKSRV_FD, exiting 0 silently.
  *   2. fork(), once fixed, turned out to be RtlCloneUserProcess, cloning
  *      an entire simulated NT process per test case -- slow enough to
  *      look like a hang (fuzz_string.c took over a second, tripping
  *      afl-fuzz's dry-run timeout).
- *   3. The forkserver child never exits on SIGTERM: ntlibc's SIGTERM
+ *   3. The forkserver child never exits on SIGTERM: spicule's SIGTERM
  *      handler (layered on simulated-NT signal delivery) does a couple
  *      of close()s and returns straight back into the blocking
  *      read(FORKSRV_FD) (measured with strace) -- so shutdown hangs.
@@ -34,7 +34,7 @@
  *      it's right (kernel sigset_t is 8 bytes, not glibc's 128, and a
  *      real handler needs a correct SA_RESTORER trampoline).
  *   4. Once (1)-(3) were fixed, fork() succeeded and reported to
- *      afl-fuzz, then waitpid() on the new child hit ntlibc's own
+ *      afl-fuzz, then waitpid() on the new child hit spicule's own
  *      process table, which knew nothing about a bare-syscall child and
  *      answered ECHILD -- afl-compiler-rt.o's error path then exit()s,
  *      which afl-fuzz sees as "Unable to communicate with fork server"
@@ -57,13 +57,13 @@
  * that need it, redirecting exactly the undefined references below to
  * the __real_* names here, so only those two objects reach the host's
  * real kernel/environment (or a real no-op, for sigaction/signal). pipe
- * is left alone -- the forkserver reaches this point through ntlibc's
+ * is left alone -- the forkserver reaches this point through spicule's
  * version without issue. Patch what measurement shows is broken, not
  * everything that could plausibly be: kill() was reasoned safe right up
  * until the SIGCONT hang showed it wasn't.
  *
  * Raw syscall()s throughout, for the same reason ntstubs.c uses them: a
- * plain read()/write()/... call here would hit the ntlibc symbol this
+ * plain read()/write()/... call here would hit the spicule symbol this
  * file exists to route around. syscall() itself isn't redirected, so it
  * still reaches glibc's thin ABI-stable wrapper.
  *
@@ -73,7 +73,7 @@
  * needs __AFL_SHM_ID before that (implementation-reserved priorities
  * 0-100, which a user constructor can't request). Measured: with a saved
  * envp pointer, afl-showmap still reported "No instrumentation detected"
- * because AFL++'s constructor ran first and found ntlibc's still-empty
+ * because AFL++'s constructor ran first and found spicule's still-empty
  * environ. /proc/self/environ has no such ordering dependency -- the
  * kernel populates it before any constructor runs.
  */
@@ -135,7 +135,7 @@ int __real_close(int fd)
 
 /* The classic fork(2) syscall, not glibc's wrapper (which does its own
  * pthread_atfork/tid bookkeeping this file has no business touching) and
- * not ntlibc's (see the file comment above for why that one is wrong
+ * not spicule's (see the file comment above for why that one is wrong
  * here specifically, not just unneeded). */
 int __real_fork(void)
 {
@@ -143,9 +143,9 @@ int __real_fork(void)
 }
 
 /* wait4(2) directly: a real child of a real fork() needs the kernel's
- * own accounting, not ntlibc's process table, which has no entry for a
+ * own accounting, not spicule's process table, which has no entry for a
  * child __real_fork() created -- see the file comment's fourth failure
- * for what asking ntlibc's waitpid() about it produces instead
+ * for what asking spicule's waitpid() about it produces instead
  * (ECHILD, immediately, every time). */
 #define SYS_wait4 61
 int __real_waitpid(int pid, int *status, int options)
@@ -177,13 +177,13 @@ int __real_fcntl(int fd, int cmd, ...)
  * parent by stopping itself: the parent's wait4(..., WUNTRACED) detects
  * the real kernel STOPPED state, refills the shared testcase buffer in
  * place (the same memory, inherited by fork()), and SIGCONTs the child.
- * ntlibc's raise() -- layered on this codebase's own simulated signal
+ * spicule's raise() -- layered on this codebase's own simulated signal
  * delivery, the same machinery the sigaction()/signal() no-ops above
  * exist to route around -- does not put the process into that real
  * kernel state, so the parent's wait4() never returns and the child
  * never resumes: exactly the "closes 198/199, then nothing, for a full
  * second" hang strace showed, with no syscall to explain it because
- * ntlibc's raise() never reached one. raise(sig) is POSIX sugar for
+ * spicule's raise() never reached one. raise(sig) is POSIX sugar for
  * kill(getpid(), sig); this spells that out directly with two raw
  * syscalls rather than also redirecting kill() and getpid() themselves,
  * since nothing else here calls either of those under names this file
@@ -201,7 +201,7 @@ int __real_raise(int sig)
  * afl-compiler-rt.o's forkserver loop resumes it for the next iteration
  * with kill(child_pid, SIGCONT) rather than forking again -- and that
  * call needs the same redirection raise() did, for the same reason:
- * ntlibc's kill() does not deliver a real SIGCONT to a real stopped
+ * spicule's kill() does not deliver a real SIGCONT to a real stopped
  * process, so the child never wakes and the loop hangs on its next
  * wait4() until afl-fuzz's own watchdog SIGKILLs everything a second
  * later.  Measured with strace: the first SIGSTOP and its WIFSTOPPED

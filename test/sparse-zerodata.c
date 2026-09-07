@@ -122,7 +122,7 @@
  * instead of the 4 KB one.  Every row is asserted on every cluster size,
  * because the rule is now known for every cluster size.
  *
- * Point NTLIBC_ZD_DIR at another volume, and NTLIBC_ZD_CLUSTER at the
+ * Point SPICULE_ZD_DIR at another volume, and SPICULE_ZD_CLUSTER at the
  * cluster size that was asked for, and this file measures there instead
  * -- after reading the size back off the filesystem and refusing to run
  * if it is not what was requested.  Building the volume is not this
@@ -838,14 +838,14 @@ static void run_alloc_class19(const char *name, int mark_sparse, long long punch
 int main(void)
 {
 	char dir[] = "zerodatXXXXXX";
-	const char *want = getenv("NTLIBC_ZD_DIR");
+	const char *want = getenv("SPICULE_ZD_DIR");
 	FILE_FS_SIZE_INFORMATION fsi;
 	IO_STATUS_BLOCK io;
 	NTSTATUS st;
 	HANDLE h;
 	int fd, i, total_rows;
 
-	/* NTLIBC_ZD_DIR points the probe at a volume other than the default
+	/* SPICULE_ZD_DIR points the probe at a volume other than the default
 	 * one -- .github/probes/ntfs-sparse-granularity.ps1 builds a
 	 * 1 KB-cluster VHD and sets it.  Failing to chdir is fatal, not a
 	 * fallback to the default volume: running the whole battery on 4 KB
@@ -854,11 +854,11 @@ int main(void)
 	 * class of error this file was rewritten to remove. */
 	if (want && *want) {
 		if (chdir(want) != 0) {
-			printf("FAIL zerodata: NTLIBC_ZD_DIR=%s but chdir failed: %s\n",
+			printf("FAIL zerodata: SPICULE_ZD_DIR=%s but chdir failed: %s\n",
 			       want, strerror(errno));
 			return 1;
 		}
-		printf("zerodata: NTLIBC_ZD_DIR=%s (a non-default volume was requested)\n", want);
+		printf("zerodata: SPICULE_ZD_DIR=%s (a non-default volume was requested)\n", want);
 	}
 
 	if (!mkdtemp(dir)) { printf("FAIL mkdtemp: %s\n", strerror(errno)); return 1; }
@@ -895,9 +895,9 @@ int main(void)
 	}
 	/* The one-level-up failure, made loud.
 	 *
-	 * A caller that points NTLIBC_ZD_DIR at a volume built for a
+	 * A caller that points SPICULE_ZD_DIR at a volume built for a
 	 * different cluster size must also say which size it asked for, via
-	 * NTLIBC_ZD_CLUSTER, and the two are compared against what the
+	 * SPICULE_ZD_CLUSTER, and the two are compared against what the
 	 * filesystem reports.  This is not belt-and-braces.  Formatting a
 	 * volume with a chosen allocation unit can fail while leaving the
 	 * volume mounted and perfectly usable at the default 4096 -- a
@@ -915,24 +915,24 @@ int main(void)
 	 * Void still cannot report green -- it exits 77, which the CI
 	 * harness surfaces as UNVERIFIED rather than PASS. */
 	if (want && *want) {
-		const char *cs = getenv("NTLIBC_ZD_CLUSTER");
+		const char *cs = getenv("SPICULE_ZD_CLUSTER");
 		long long asked = cs && *cs ? strtoll(cs, 0, 10) : 0;
 		if (!asked) {
-			printf("VOID zerodata: NTLIBC_ZD_DIR=%s names a volume chosen for its "
-			       "cluster size, but NTLIBC_ZD_CLUSTER does not say which size was "
+			printf("VOID zerodata: SPICULE_ZD_DIR=%s names a volume chosen for its "
+			       "cluster size, but SPICULE_ZD_CLUSTER does not say which size was "
 			       "asked for, so the %lld bytes per cluster reported here cannot be "
 			       "checked against anything. Nothing was tested.\n", want, g_cluster);
 			return 77;
 		}
 		if (asked != g_cluster) {
-			printf("VOID zerodata: NTLIBC_ZD_CLUSTER=%lld was requested, but the volume "
+			printf("VOID zerodata: SPICULE_ZD_CLUSTER=%lld was requested, but the volume "
 			       "at %s reports %lld bytes per cluster. The format did not take -- and "
 			       "a volume that is still mounted and usable at the wrong cluster size "
 			       "produces a complete, clean-looking run on the regime this was "
 			       "supposed to leave. Nothing was tested.\n", asked, want, g_cluster);
 			return 77;
 		}
-		printf("zerodata: NTLIBC_ZD_CLUSTER=%lld requested, %lld measured: the volume is "
+		printf("zerodata: SPICULE_ZD_CLUSTER=%lld requested, %lld measured: the volume is "
 		       "the one that was asked for.\n", asked, g_cluster);
 	}
 

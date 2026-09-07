@@ -488,7 +488,7 @@ static void test_tcgetsid(int consolefd)
  * no transmit queue exists to drain, suspend or discard), which is
  * sound but is a platform fact rather than a spec permission. */
 
-#if NTLIBC_TEST(NA, posix_termios_tcdrain_blocks_until_transmitted) /* N/A: tcdrain.html DESCRIPTION "shall block until all output
+#if SPICULE_TEST(NA, posix_termios_tcdrain_blocks_until_transmitted) /* N/A: tcdrain.html DESCRIPTION "shall block until all output
 	written to the object referred to by fildes is transmitted."
 	Observing this requires output that is still in flight after
 	write() returns; NT console output is already in the screen
@@ -517,11 +517,11 @@ static void test_tcdrain_blocks_until_transmitted(int consolefd)
 }
 #endif
 
-#if NTLIBC_TEST(NA, posix_termios_tcflow_suspends_output) /* N/A: tcflow.html DESCRIPTION -- TCOOFF "output shall be
+#if SPICULE_TEST(NA, posix_termios_tcflow_suspends_output) /* N/A: tcflow.html DESCRIPTION -- TCOOFF "output shall be
 	suspended", TCOON "suspended output shall be restarted", TCIOFF/
 	TCION "the system shall transmit a STOP [START] character".
 	Unlike tcsendbreak(), this page grants no implementation-defined
-	escape for a terminal with no serial line, so ntlibc's
+	escape for a terminal with no serial line, so spicule's
 	unconditional 0 return is a platform-argument no-op rather than
 	a spec-sanctioned one (see the note above this fence). It is
 	nevertheless unobservable here: there is no console API to
@@ -551,7 +551,7 @@ static void test_tcflow_suspends_output(int consolefd)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_termios_tcflush_discards_input) /* FIXED, for the implementable half; the output half stays N/A
+#if SPICULE_TEST(PASS, posix_termios_tcflush_discards_input) /* FIXED, for the implementable half; the output half stays N/A
 	and remains documented separately here (unchanged from before).
 	tcflush.html DESCRIPTION: "shall discard data written to the
 	object referred to by fildes ... but not transmitted, or data
@@ -617,8 +617,8 @@ static void test_tcflow_suspends_output(int consolefd)
 	WriteConsoleInput() (resolvable the same way
 	test/spawn-stdhandle-attr.c resolves NtCreateUserProcess, or
 	src/termios/termios.c's own k32_proc() resolves
-	FlushConsoleInputBuffer -- "ntlibc does not wrap it" was never the
-	real blocker, ntlibc's API surface is not a test's ceiling) plus a
+	FlushConsoleInputBuffer -- "spicule does not wrap it" was never the
+	real blocker, spicule's API surface is not a test's ceiling) plus a
 	hand-declared, ABI-exact KEY_EVENT_RECORD/INPUT_RECORD layout that
 	needs a real console to validate against. Left unwritten rather
 	than guessed at and possibly wrong. */
@@ -641,7 +641,7 @@ static void test_tcflush_discards_input(int consolefd)
 }
 #endif
 
-#if NTLIBC_TEST(NA, posix_termios_termios_cflag_serial_bits) /* N/A: termios.html struct termios DESCRIPTION -- c_cflag's
+#if SPICULE_TEST(NA, posix_termios_termios_cflag_serial_bits) /* N/A: termios.html struct termios DESCRIPTION -- c_cflag's
 	CS5/CS6/CS7/CS8, PARENB/PARODD, CSTOPB, CRTSCTS all describe a
 	physical serial line's wire encoding (character size, parity,
 	stop bits, hardware flow control). A console handle has none of
@@ -674,7 +674,7 @@ static void test_termios_cflag_serial_bits(void)
 }
 #endif
 
-#if NTLIBC_TEST(NA, posix_termios_termios_cc_reprogram) /* N/A: termios.html struct termios DESCRIPTION -- c_cc[]'s
+#if SPICULE_TEST(NA, posix_termios_termios_cc_reprogram) /* N/A: termios.html struct termios DESCRIPTION -- c_cc[]'s
 	VINTR/VEOF etc "control character values" are not independently
 	reprogrammable through any NT console API. VINTR's Ctrl-C
 	(ENABLE_PROCESSED_INPUT only turns Ctrl-C handling on or off
@@ -768,7 +768,7 @@ static void test_linux_pty_termios_roundtrip(void)
 	 * comment on the c_cflag checks below for why a real Linux pty
 	 * cannot hold either, discovered empirically (a throwaway host
 	 * oracle issuing the identical TCGETS2/TCSETS2 pair independently
-	 * of ntlibc reproduced byte-for-byte the same kernel-side
+	 * of spicule reproduced byte-for-byte the same kernel-side
 	 * normalization), not assumed. CSTOPB and CLOCAL are NOT touched by
 	 * that normalization, so they are the real, meaningful c_cflag
 	 * round-trip this test exercises. */
@@ -783,7 +783,7 @@ static void test_linux_pty_termios_roundtrip(void)
 	 * differ over) -- setting them ASYMMETRICALLY, empirically, silently
 	 * forces ispeed to equal ospeed no matter what ispeed was asked for,
 	 * confirmed via that same oracle (real kernel behaviour, not an
-	 * ntlibc translation gap: plat_termios.c hands the kernel exactly
+	 * spicule translation gap: plat_termios.c hands the kernel exactly
 	 * the two distinct values this header's cfsetispeed()/
 	 * cfsetospeed() were given). A symmetric, non-default pair is what
 	 * this test can actually prove a real round trip with. */
@@ -877,7 +877,7 @@ static void test_linux_pty_termios_roundtrip(void)
 	CHECK(ws.ws_xpixel == 0 && ws.ws_ypixel == 0);
 	/* ws_row/ws_col are deliberately NOT asserted nonzero: a freshly
 	 * allocated pty pair genuinely defaults its window size to 0x0
-	 * until something calls TIOCSWINSZ -- out of scope for ntlibc's own
+	 * until something calls TIOCSWINSZ -- out of scope for spicule's own
 	 * curated ioctl() front door (src/ioctl/ioctl.c's own banner: only
 	 * FIONREAD/FIONBIO/TIOCGWINSZ are recognised at all) -- so 0x0 here
 	 * is the real, honest kernel answer, not evidence of a stub. What
@@ -975,7 +975,7 @@ static void test_ioctl_unknown_request(void)
 }
 
 /* TIOCGWINSZ: real via kernel32's GetConsoleScreenBufferInfo() when a
- * console is reachable and this build has kernel32 (NTLIBC_USE_KERNEL32);
+ * console is reachable and this build has kernel32 (SPICULE_USE_KERNEL32);
  * ENOTTY otherwise -- the BSD-equivalent "not a terminal" answer,
  * same as Linux's ioctl_tty(2) family uses for a tty-only request
  * against something that is not a tty. Both outcomes are checked,
@@ -1016,7 +1016,7 @@ static void test_ioctl_tiocgwinsz_non_tty(const char *self)
  * hard CHECK(): src/file/flock.c's file banner documents a third,
  * non-deterministic issue found while developing this file --
  * byte-for-byte identical NtLockFile()/NtUnlockFile() call pairs, with
- * no ntlibc code involved at all, sometimes fail under this project's
+ * no spicule code involved at all, sometimes fail under this project's
  * heavily concurrent Wine test environment (many wine processes
  * against one shared wineserver) where they succeed in isolation. A
  * note, not a silent pass and not a hard failure -- the outcome is
@@ -1048,7 +1048,7 @@ static void test_flock_basic(const char *path)
 	 * relock conversion (the only correct way on NT, no atomic
 	 * primitive exists) for real Windows; this file just does not
 	 * trigger it, so `make check` does not hang on a confirmed Wine
-	 * bug rather than an ntlibc one. */
+	 * bug rather than an spicule one. */
 	note_or_check(flock(fd, LOCK_EX), "flock(LOCK_EX)");
 	/* Repeat of the same type: src/file/flock.c tracks this as a no-op
 	 * needing no further NT call -- but only once the first call above
@@ -1189,7 +1189,7 @@ int main(int argc, char **argv)
 	 * see this function's own comment. */
 	test_linux_pty_termios_roundtrip();
 #endif
-#if NTLIBC_TEST(PASS, posix_termios_tcflush_discards_input) /* PASS: see the fence above test_tcflush_discards_input.  Needed
+#if SPICULE_TEST(PASS, posix_termios_tcflush_discards_input) /* PASS: see the fence above test_tcflush_discards_input.  Needed
 	 * explicitly, unlike the (void) fenced cases elsewhere in this
 	 * tree: this test function takes consolefd, so
 	 * tools/test-policy.py's own auto-call injection (which only

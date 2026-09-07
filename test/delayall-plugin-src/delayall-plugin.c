@@ -5,8 +5,8 @@
  * delay-load thunks (built with -Wl,--delay-all, resolved through
  * __delayLoadHelper2 in crt/delayload2.c) -- as opposed to
  * test/rpath-plugin-src/rpath-plugin.c, which is called through
- * ntlibc's hand-authored NTLIBC_DELAY_STUB macros. Not linked against
- * ntlibc at all; built directly with `$(CC) -shared`, same as that
+ * spicule's hand-authored SPICULE_DELAY_STUB macros. Not linked against
+ * spicule at all; built directly with `$(CC) -shared`, same as that
  * other plugin.
  *
  * delayall_check() takes four ints and two doubles -- enough to occupy

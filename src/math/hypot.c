@@ -1,6 +1,6 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later */
-/* ntlibc targets Windows NT only; under this tcc's -win32 target "long
+/* spicule targets Windows NT only; under this tcc's -win32 target "long
  * double" is really just "double" (see src/math/ldbl_math.h), so squaring
  * two doubles near DBL_MAX (as hypot(1e300, 1e300) does) overflows the
  * intermediate the same as it would in plain double arithmetic - there

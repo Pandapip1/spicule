@@ -26,8 +26,8 @@
  * for a second, separate memset() pass over freshly-mapped (and on
  * some backends, already-zero) pages.
  */
-#ifndef _NTLIBC_PLAT_MALLOC_H
-#define _NTLIBC_PLAT_MALLOC_H
+#ifndef _SPICULE_PLAT_MALLOC_H
+#define _SPICULE_PLAT_MALLOC_H
 
 #include <features.h>
 #include <allocation_tokens.h>

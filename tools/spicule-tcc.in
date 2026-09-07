@@ -1,7 +1,7 @@
 #!/bin/sh
 # SPDX-FileCopyrightText: (C) 2026 Gavin John
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Compile and link a program against ntlibc, the way musl-gcc does for musl.
+# Compile and link a program against spicule, the way musl-gcc does for musl.
 # Everything not recognised is passed through to the compiler.
 cc="@CC@"
 inc="@INCDIR@"
@@ -19,8 +19,8 @@ esac
 # with that flag needs nothing extra itself. It must come *before*
 # -lc/-lntdll on the command line -- tcc resolves each archive in one
 # pass as it reaches it, so an object placed after -lc that still needs
-# libc.a symbols (delayload2.o needs ntlibc_rpath_load()/_fail() and
-# ntlibc_pe_find_export()/_dll_range()) is already too late.
+# libc.a symbols (delayload2.o needs spicule_rpath_load()/_fail() and
+# spicule_pe_find_export()/_dll_range()) is already too late.
 delayobj=
 case "$*" in
 *delay-all*) delayobj="$lib/delayload2.o" ;;

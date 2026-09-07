@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Black-box tests for ntlibc's second tier of POSIX standard utilities:
+ * Black-box tests for spicule's second tier of POSIX standard utilities:
  * `pwd`, `basename`, `dirname`, `pathchk` (XCU pwd(1p), basename(1p),
  * dirname(1p), pathchk(1p)), and the two non-XCU fellow travelers
  * `readlink` and `realpath` (src/util/readlink.c's own comment explains

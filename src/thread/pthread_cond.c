@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -140,7 +140,7 @@ static void unlink_waiter(struct cond_data *cond, struct cond_waiter *waiter)
 }
 
 /* Real, source-visible tokens for LockDisciplineChecker.cpp's
- * ntlibc.LockDiscipline stage (tools/clang/LockHandoffContracts.h). A
+ * spicule.LockDiscipline stage (tools/clang/LockHandoffContracts.h). A
  * function attaches one to its own declaration to assert a real lock
  * hand-off contract the checker cannot derive from the generic
  * pthread_*lock()/pthread_*unlock() protocol table alone, because the
@@ -149,9 +149,9 @@ static void unlink_waiter(struct cond_data *cond, struct cond_waiter *waiter)
  * sees past the #ifdef) are unaffected. */
 #ifdef __clang_analyzer__
 #define lock_requires_held_on_entry(argument) \
-	__attribute__((annotate("ntlibc_lock_requires_held_on_entry:" #argument)))
+	__attribute__((annotate("spicule_lock_requires_held_on_entry:" #argument)))
 #define lock_acquires_for_caller \
-	__attribute__((annotate("ntlibc_lock_acquires_for_caller")))
+	__attribute__((annotate("spicule_lock_acquires_for_caller")))
 #else
 #define lock_requires_held_on_entry(argument)
 #define lock_acquires_for_caller

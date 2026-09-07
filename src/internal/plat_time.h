@@ -23,8 +23,8 @@
  * __unix_to_ticks()/__clock_qpc_to_timespec()/__clock_combine_cpu_ticks()
  * and friends -- and are NOT part of this interface.
  */
-#ifndef _NTLIBC_PLAT_TIME_H
-#define _NTLIBC_PLAT_TIME_H
+#ifndef _SPICULE_PLAT_TIME_H
+#define _SPICULE_PLAT_TIME_H
 
 #include "plat_handle.h"
 

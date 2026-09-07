@@ -79,7 +79,7 @@
 #   WINE            wine binary (default: config.mak's WINE)
 #   LIBC_TEST_JOBS  parallel workers (default: nproc)
 #   LIBC_TEST_MATH  path to a full libc-test checkout, for `math`
-#   NTLIBC_TEST_PROFILE  whitespace-separated additional KEY=VALUE selectors
+#   SPICULE_TEST_PROFILE  whitespace-separated additional KEY=VALUE selectors
 
 set -u
 
@@ -111,12 +111,12 @@ VERIFIED_FLOOR=70
 # Normal skips known BUG and UNIMPL cases. Pedantic probes both to catch
 # stale classifications. Strict performs the same probes, then disallows
 # either disposition and requires every FLAKY case to pass.
-: "${NTLIBC_TEST_MODE:=normal}"
-: "${NTLIBC_TEST_RUNTIME:=wine}"
-: "${NTLIBC_TEST_PROFILE:=}"
-case "$NTLIBC_TEST_MODE" in
+: "${SPICULE_TEST_MODE:=normal}"
+: "${SPICULE_TEST_RUNTIME:=wine}"
+: "${SPICULE_TEST_PROFILE:=}"
+case "$SPICULE_TEST_MODE" in
 	normal|pedantic|strict) ;;
-	*) echo "libc-test: NTLIBC_TEST_MODE must be normal, pedantic or strict." >&2; exit 2 ;;
+	*) echo "libc-test: SPICULE_TEST_MODE must be normal, pedantic or strict." >&2; exit 2 ;;
 esac
 
 usage() { sed -n '2,82p' "$0" | sed 's/^# \{0,1\}//'; }
@@ -194,7 +194,7 @@ read_ledger() {
 	}' "$LEDGER"
 	[ -f "$1/errors" ] && return 0
 	profile_args=""
-	for term in $NTLIBC_TEST_PROFILE; do
+	for term in $SPICULE_TEST_PROFILE; do
 		profile_args="$profile_args --profile $term"
 	done
 	cases_args=""
@@ -202,7 +202,7 @@ read_ledger() {
 	# profile selectors are whitespace-separated, so this one has to split.
 	# shellcheck disable=SC2086
 	"$srcdir/tools/test-policy.py" resolve --suite libc-test \
-		--defaults "$LEDGER" --profile "runtime=$NTLIBC_TEST_RUNTIME" \
+		--defaults "$LEDGER" --profile "runtime=$SPICULE_TEST_RUNTIME" \
 		$cases_args $profile_args > "$1/rows" || return 1
 	return 0
 }
@@ -345,7 +345,7 @@ fi
 
 INC="-I$srcdir/arch/$ARCH -I$srcdir/arch/generic -Iobj/include -I$srcdir/include -I$SUITE/src/common"
 
-W=$(mktemp -d "${TMPDIR:-/tmp}/ntlibc-libctest.XXXXXX") || exit 1
+W=$(mktemp -d "${TMPDIR:-/tmp}/spicule-libctest.XXXXXX") || exit 1
 trap 'rm -rf "$W"' EXIT
 mkdir -p "$W/out" obj/libc-test
 
@@ -452,7 +452,7 @@ fi
 # different need from this corpus's *_dlopen/*_dso.mk tests (dlopen,
 # tls_align_dlopen, tls_init_dlopen, tls_get_new-dtv), which load their
 # companion .so at runtime and so hit this project's real, separate
-# __rpath gap (see include/ntlibc/rpath.h and those tests' ledger rows);
+# __rpath gap (see include/spicule/rpath.h and those tests' ledger rows);
 # tls_align needs nothing dlopen-related at all, just one more file on
 # the link line. This table is the minimal fix for that one case,
 # without teaching this script to parse .mk files in general for a
@@ -467,12 +467,12 @@ build_one() {
 	f=$1; n=$(basename "$f" .c)
 	want=$(ledger_status "$n")
 	if [ "$want" = NA ] ||
-	   { [ "$NTLIBC_TEST_MODE" = normal ] &&
+	   { [ "$SPICULE_TEST_MODE" = normal ] &&
 	     { [ "$want" = BUG ] || [ "$want" = UNIMPL ]; }; }; then
 		echo NA > "$W/out/$n.state"
 		return
 	fi
-	# __rpath (include/ntlibc/rpath.h) is documented as a symbol the
+	# __rpath (include/spicule/rpath.h) is documented as a symbol the
 	# CALLING PROGRAM defines, not one libc provides -- see
 	# tools/linkcheck.sh's linkcheck_exception() for the identical story
 	# against the library's own dlopen()/dlsym()/dlclose()/dlerror()
@@ -665,7 +665,7 @@ for f in $corpus; do
 		fi ;;
 	FLAKY)
 		flaky=$((flaky + 1))
-		if [ "$NTLIBC_TEST_MODE" = strict ] && [ "$rc" != 0 ]; then
+		if [ "$SPICULE_TEST_MODE" = strict ] && [ "$rc" != 0 ]; then
 			regressions="$regressions $n(FLAKY-strict)"
 		fi
 		echo "FLAKY $n (rc=$rc) -- $(ledger_reason "$n")" ;;
@@ -676,7 +676,7 @@ echo
 echo "=== libc-test summary (build $((build_end - build_start))s, run $((run_end - run_start))s) ==="
 echo "$passed PASS, $bugs BUG, $unimpl UNIMPL, $na NA, $flaky FLAKY"
 echo
-if [ "$NTLIBC_TEST_MODE" = normal ]; then
+if [ "$SPICULE_TEST_MODE" = normal ]; then
 	echo "$unimpl of $(echo "$corpus" | wc -w) tests are classified UNIMPL and were not"
 	echo "compiled in normal mode. Pedantic verifies that each still fails to build."
 else
@@ -765,7 +765,7 @@ else
 	done
 fi
 
-if [ "$NTLIBC_TEST_MODE" = strict ]; then
+if [ "$SPICULE_TEST_MODE" = strict ]; then
 	strict_bug=$(awk -F'\t' '$2=="BUG"{c++}END{print c+0}' "$W/rows")
 	strict_unimpl=$(awk -F'\t' '$2=="UNIMPL"{c++}END{print c+0}' "$W/rows")
 	if [ "$strict_bug" -gt 0 ] || [ "$strict_unimpl" -gt 0 ]; then
@@ -775,7 +775,7 @@ if [ "$NTLIBC_TEST_MODE" = strict ]; then
 fi
 
 # ---- the floor -----------------------------------------------------------
-if [ "$NTLIBC_TEST_MODE" != normal ] && [ "$verified" -lt "$VERIFIED_FLOOR" ]; then
+if [ "$SPICULE_TEST_MODE" != normal ] && [ "$verified" -lt "$VERIFIED_FLOOR" ]; then
 	echo
 	echo "libc-test: FAILED -- only $verified test(s) produced a real verdict;"
 	echo "libc-test: this stage's floor is $VERIFIED_FLOOR.  Everything else was"

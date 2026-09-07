@@ -5,7 +5,7 @@
  * the contract each function makes.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -300,7 +300,7 @@ void __plat_thread_tls_fixup(void)
 	SIZE_T block_size;
 	NTSTATUS status;
 
-	if (!ntlibc_pe_tls_directory(__peb->ImageBaseAddress, &dir)) return;
+	if (!spicule_pe_tls_directory(__peb->ImageBaseAddress, &dir)) return;
 	raw_start = (uintptr_t)dir->StartAddressOfRawData;
 	raw_end = (uintptr_t)dir->EndAddressOfRawData;
 	index_addr = (uintptr_t)dir->AddressOfIndex;
@@ -480,7 +480,7 @@ _Noreturn void __plat_thread_terminate_self(void)
 _Noreturn void __plat_cancel_unsafe_abort(const char *region)
 {
 	static const char prefix[] =
-		"ntlibc: undefined behavior: asynchronous cancellation during ";
+		"spicule: undefined behavior: asynchronous cancellation during ";
 	static const char suffix[] = "\r\n";
 	IO_STATUS_BLOCK io;
 	HANDLE error = 0;

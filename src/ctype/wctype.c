@@ -4,7 +4,7 @@
  * wctype.html: "shall construct a value ... that describes a class of
  * wide-character codes identified by the string ... in the current
  * locale."  The twelve names below are the ones "defined in all
- * locales" (iswctype.html); ntlibc has exactly one locale, so that is
+ * locales" (iswctype.html); spicule has exactly one locale, so that is
  * the whole set.  Encoding is a 1-based index into this same list,
  * consumed by the matching switch in iswctype.c -- kept in sync by
  * living right next to each other, one entry per line, in the same

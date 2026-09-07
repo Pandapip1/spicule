@@ -184,7 +184,7 @@ int __util_paste_main(
 	files = calloc((size_t)nfiles, sizeof *files); // NOLINT(bugprone-sizeof-expression) -- files is FILE**, *files is FILE*, the array holds pointers
 	if (!files) { fprintf(stderr, "paste: %s\n", strerror(ENOMEM)); if (delims != default_delim) free(delims); return 1; }
 
-	/* Checker gap (ntlibc.ResourceLeak): each fopen() below is stored
+	/* Checker gap (spicule.ResourceLeak): each fopen() below is stored
 	 * into files[j], a heap array indexed by a runtime loop variable --
 	 * the checker can't correlate that store with the files[j] load in
 	 * the close loop further down, so every entry here is reported as

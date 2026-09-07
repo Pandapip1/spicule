@@ -8,7 +8,7 @@
  * link time.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -32,7 +32,7 @@
 #define VFS_RUNTIME_MAGIC 0x32534656u /* "VFS2", little-endian */
 #define VFS_RUNTIME_CWD_NATIVE 0x80
 
-/* An ntlibc-specific trailer riding the same RuntimeData blob, past both
+/* An spicule-specific trailer riding the same RuntimeData blob, past both
  * the fixed osfile/osfhnd table and the optional VFS trailer. Carries
  * POSIX_SPAWN_SETSIGMASK's non-empty mask (src/process/posix_spawn.c) to
  * a child that has not run its own first instruction yet, so cannot be
@@ -79,7 +79,7 @@ int __handle_type(HANDLE h)
 /* The access mode of a handle this process did not open.
  *
  * The RuntimeData block a parent leaves for its child is msvcrt's
- * _osfile format, byte for byte -- what lets an ntlibc program and an
+ * _osfile format, byte for byte -- what lets an spicule program and an
  * msvcrt program inherit each other's descriptors. That format has no
  * access-mode bit (all eight are spoken for), so the mode cannot be
  * recovered from the block, and adding a ninth bit would make the

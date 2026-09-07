@@ -3,7 +3,7 @@
  *
  * Linux implementation of src/internal/plat_exit.h -- see src/mman/linux/
  * plat_mem.c's own banner for the general discipline this file follows
- * too (raw syscall(2), no host libc, -nostdinc against ntlibc's own
+ * too (raw syscall(2), no host libc, -nostdinc against spicule's own
  * headers, aarch64 syscall numbers confirmed against this host's own
  * <sys/syscall.h>, since this file's build cannot include that header
  * itself without pulling in glibc's conflicting type system).

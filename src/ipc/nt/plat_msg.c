@@ -40,7 +40,7 @@
  * this header, only by this specific backend's chosen record size.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -100,7 +100,7 @@ withtok(heap_allocated)
 static char *dir_path(void)
 {
 	const char *dir = msg_tmpdir();
-	const char suffix[] = "/ntlibc-sysvmsg";
+	const char suffix[] = "/spicule-sysvmsg";
 	size_t dirlen = strnlen(dir, PATH_MAX);
 	size_t total;
 	char *path;
@@ -163,7 +163,7 @@ static int registry_lock(__plat_handle_t *out)
 	if (!dir) return -1;
 	hash = path_hash(dir);
 	free(dir);
-	n = snprintf(name, sizeof name, "\\BaseNamedObjects\\ntlibc.sysvmsg.%08x%08x",
+	n = snprintf(name, sizeof name, "\\BaseNamedObjects\\spicule.sysvmsg.%08x%08x",
 	         (unsigned)(hash >> 32), (unsigned)hash);
 	if (n < 0 || (size_t)n >= sizeof name) {
 		if (n >= 0) errno = ENAMETOOLONG;

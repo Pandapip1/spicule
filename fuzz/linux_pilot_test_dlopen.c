@@ -3,7 +3,7 @@
  *
  * Real, running proof of src/dlfcn/linux/plat_dlfcn.c -- the from-
  * scratch ELF64 loader behind dlopen()/dlsym()/dlclose()/dlerror() on
- * the Linux platform pilot. Built and linked entirely on ntlibc's OWN
+ * the Linux platform pilot. Built and linked entirely on spicule's OWN
  * startup and library code (tools/linux-build-dlfcn.sh: crt/linux/
  * crt1.c + crt/linux/aarch64/start.S + the real lib/libc.a, -nostdlib
  * -static -no-pie -- no host crt, no host libc), the same discipline
@@ -12,7 +12,7 @@
  * /proc/self/exe, so this is also the only realistic way to exercise
  * that path -- a host-crt-linked test (tools/linux-build-malloc.sh's
  * lighter-weight pattern) would be a PIE binary belonging to the HOST's
- * glibc, not the non-PIE, ntlibc-owned image this design assumes.
+ * glibc, not the non-PIE, spicule-owned image this design assumes.
  *
  * fuzz/linux_pilot_test_dlopen_lib.c is the target .so this dlopen()s
  * (see that file's own banner for exactly which relocation types this

@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: (C) 2026 Gavin John
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# clang-tidy configuration for ntlibc.  Consumed by tools/lint.sh (`make
+# clang-tidy configuration for spicule.  Consumed by tools/lint.sh (`make
 # lint`), which is opt-in and never part of the normal tcc build.
 #
 # Enable all checks in the four families this project has selected.  Findings
@@ -158,9 +158,9 @@ Checks: >
 #       still true today: src/util/at.c:175.
 #   bugprone-unsafe-functions, cert-msc24-c, cert-msc33-c
 #       These flag *implementing* gets()/rand()/asctime()/rewind() and
-#       friends.  ntlibc implements them; it cannot be told not to.
+#       friends.  spicule implements them; it cannot be told not to.
 #       Verified still true today: src/netdb/linux/hostent.c:150 (defining
-#       rewind()'s own caller-facing replacement guidance fires on ntlibc's
+#       rewind()'s own caller-facing replacement guidance fires on spicule's
 #       own internal use of rewind()).
 #   cert-str34-c
 #       Co-fires with bugprone-signed-char-misuse on the exact same `(int)
@@ -175,7 +175,7 @@ Checks: >
 #       destination cannot overflow.  A check meant for application code
 #       calling libc cannot be usefully applied to libc calling itself.
 #   cert-env33-c
-#       Flags *implementing* system().  ntlibc implements it.  Verified
+#       Flags *implementing* system().  spicule implements it.  Verified
 #       still true today: src/util/awk_run.c:1755 (awk's own system()
 #       builtin, one of several utilities that legitimately shell out).
 #   clang-analyzer-security.insecureAPI.strcpy (56 findings, 20 distinct

@@ -3,10 +3,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Check that every tracked resource is proven released before function exit.
 
-Parses tools/clang/OwnershipChecker.cpp's ResourceLeakChecker (ntlibc.
+Parses tools/clang/OwnershipChecker.cpp's ResourceLeakChecker (spicule.
 ResourceLeak) diagnostic output -- the opt-in leak-at-exit half of
-ResourceLifecycleChecker's (ntlibc.Resource, always-on) acquire/use/release
-proof. ntlibc.Resource must be enabled alongside ntlibc.ResourceLeak in the
+ResourceLifecycleChecker's (spicule.Resource, always-on) acquire/use/release
+proof. spicule.Resource must be enabled alongside spicule.ResourceLeak in the
 same clang -analyzer-checker= invocation: ResourceLeakChecker only reads the
 ResourceMap/ResourceOrigin/ResourceFrame program-state facts
 ResourceLifecycleChecker's own track() writes, so run alone it has nothing
@@ -35,7 +35,7 @@ DIAGNOSTIC = re.compile(
     r"(resource is not proven released before function exit); "
     r"origin '(.*)'; context '(.*)'; "
     r"expression '(.*)'; site '(.*)' "
-    r"\[ntlibc\.ResourceLeak\]$"
+    r"\[spicule\.ResourceLeak\]$"
 )
 
 

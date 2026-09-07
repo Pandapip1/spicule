@@ -4,7 +4,7 @@
  * stat, from the information NT keeps.
  *
  * Permission and special bits come from WSL's $LXMOD NTFS extended
- * attribute when it exists, giving files created by ntlibc a persistent
+ * attribute when it exists, giving files created by spicule a persistent
  * POSIX mode without editing a Windows DACL. A file with no $LXMOD gets
  * a compatibility default: directories 0755, files 0644, a PE32/PE32+
  * image 0111 regardless of suffix, FILE_ATTRIBUTE_READONLY removing 0222.
@@ -15,7 +15,7 @@
  * details live in __plat_fstat()/__plat_fstatat() (src/stat/nt/plat_stat.c).
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)

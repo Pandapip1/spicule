@@ -35,7 +35,7 @@
  * the target's real kernel disposition from /proc/pid/status first, and
  * only sends if it says "caught" or "ignored". */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -62,17 +62,17 @@ NTSTATUS __sig_wait_delivery(LARGE_INTEGER *timeout)
 
 /* __plat_sigevent_set(), not __plat_event_set(): wake_event is a real
  * eventfd, a different __plat_handle_t domain than __plat_event_set()'s
- * ntlibc_linux_sync-pointer one on this platform. */
+ * spicule_linux_sync-pointer one on this platform. */
 void __sig_notify_delivery(void)
 {
 	if (wake_event) __plat_sigevent_set(wake_event);
 }
 
-/* NTLIBC_NO_THREAD_SAFETY_ANALYSIS: these four are
- * __ntlibc_sig_lock_token's real implementation on this platform, the
+/* SPICULE_NO_THREAD_SAFETY_ANALYSIS: these four are
+ * __spicule_sig_lock_token's real implementation on this platform, the
  * same reasoning src/signal/nt/sigdelivery.c's own matching comment
  * gives for its four. */
-void __sig_lock(void) NTLIBC_NO_THREAD_SAFETY_ANALYSIS
+void __sig_lock(void) SPICULE_NO_THREAD_SAFETY_ANALYSIS
 {
 	pid_t me;
 	if (!lock_sem) return;
@@ -84,7 +84,7 @@ void __sig_lock(void) NTLIBC_NO_THREAD_SAFETY_ANALYSIS
 	lock_depth = 1;
 }
 
-void __sig_unlock(void) NTLIBC_NO_THREAD_SAFETY_ANALYSIS
+void __sig_unlock(void) SPICULE_NO_THREAD_SAFETY_ANALYSIS
 {
 	if (!lock_sem) return;
 	if (--lock_depth > 0) {
@@ -96,7 +96,7 @@ void __sig_unlock(void) NTLIBC_NO_THREAD_SAFETY_ANALYSIS
 	__pthread_cancel_defer_leave();
 }
 
-int __sig_unlock_for_handler(void) NTLIBC_NO_THREAD_SAFETY_ANALYSIS
+int __sig_unlock_for_handler(void) SPICULE_NO_THREAD_SAFETY_ANALYSIS
 {
 	int depth;
 	if (!lock_sem) return 0;
@@ -107,7 +107,7 @@ int __sig_unlock_for_handler(void) NTLIBC_NO_THREAD_SAFETY_ANALYSIS
 	return depth;
 }
 
-void __sig_relock_after_handler(int depth) NTLIBC_NO_THREAD_SAFETY_ANALYSIS
+void __sig_relock_after_handler(int depth) SPICULE_NO_THREAD_SAFETY_ANALYSIS
 {
 	if (!lock_sem || depth <= 0) return;
 	__sig_lock();

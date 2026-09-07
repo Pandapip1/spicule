@@ -8,7 +8,7 @@
  * privileged `-u user` XSI extension (not in the base SYNOPSIS) has
  * no second user to name. Refused as an unrecognized option rather
  * than silently ignored (same rule as touch.c's -d). Every crontab
- * here is $HOME/.ntlibc/crontabs/crontab (spool.h).
+ * here is $HOME/.spicule/crontabs/crontab (spool.h).
  *
  * Every non-blank, non-comment line must parse as five crontab(5)
  * time fields (crontime.c) plus a command, validated eagerly at
@@ -53,7 +53,7 @@ static int split_field(const char **pp, char *out, size_t outsz)
 {
 	const char *p = *pp;
 	size_t n;
-	/* ntlibc.ValidPointer: open finding on this walk (cursor into a
+	/* spicule.ValidPointer: open finding on this walk (cursor into a
 	 * NUL-terminated fgets() buffer); __ownership_string_terminated()
 	 * doesn't close it (tried) -- crond.c's identical split_field() too. */
 	while (*p == ' ' || *p == '\t') p++;
@@ -103,7 +103,7 @@ static int validate_crontab(FILE *f, long *bad_line)
 
 static int do_list(void)
 {
-	char path[NTLIBC_SPOOL_PATH_MAX];
+	char path[SPICULE_SPOOL_PATH_MAX];
 	FILE *f withtok(file_stream_open);
 	int c;
 
@@ -121,7 +121,7 @@ static int do_list(void)
 
 static int do_remove(void)
 {
-	char path[NTLIBC_SPOOL_PATH_MAX];
+	char path[SPICULE_SPOOL_PATH_MAX];
 
 	if (!__spool_crontab_path(path, sizeof path)) { __util_diagf("crontab: cannot access crontab spool\n"); return 1; }
 	if (unlink(path) < 0) {
@@ -138,7 +138,7 @@ static int do_remove(void)
  * failure, returns -1 with *bad_line set and installs nothing. */
 static int install_crontab(FILE *src, long *bad_line)
 {
-	char path[NTLIBC_SPOOL_PATH_MAX], tmp[NTLIBC_SPOOL_PATH_MAX];
+	char path[SPICULE_SPOOL_PATH_MAX], tmp[SPICULE_SPOOL_PATH_MAX];
 	FILE *out withtok(file_stream_open);
 	int c;
 
@@ -196,9 +196,9 @@ static int do_install_from(FILE *src)
 static int do_edit(void)
 {
 	extern char **environ;
-	char path[NTLIBC_SPOOL_PATH_MAX];
-	char tmpl[NTLIBC_SPOOL_PATH_MAX];
-	char dir[NTLIBC_SPOOL_PATH_MAX];
+	char path[SPICULE_SPOOL_PATH_MAX];
+	char tmpl[SPICULE_SPOOL_PATH_MAX];
+	char dir[SPICULE_SPOOL_PATH_MAX];
 	int fd;
 	FILE *cur withtok(file_stream_open), *tf withtok(file_stream_open);
 	const char *editor;

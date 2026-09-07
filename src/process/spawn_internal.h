@@ -15,8 +15,8 @@
  * because nothing outside this directory has any business knowing the
  * shape -- the same argument src/wordexp/internal.h makes for itself.
  */
-#ifndef NTLIBC_SPAWN_INTERNAL_H
-#define NTLIBC_SPAWN_INTERNAL_H
+#ifndef SPICULE_SPAWN_INTERNAL_H
+#define SPICULE_SPAWN_INTERNAL_H
 
 #include <spawn.h>
 

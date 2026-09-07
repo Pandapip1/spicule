@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Test-harness scaffolding for the Linux socket-CREATION pilot -- NOT
- * part of ntlibc, same standing as fuzz/linux_pilot_harness_socket.c
+ * part of spicule, same standing as fuzz/linux_pilot_harness_socket.c
  * (the earlier recv()/send()-only pilot's own harness).
  *
  * Unlike that earlier harness, this one DOES need a real __fd_install():

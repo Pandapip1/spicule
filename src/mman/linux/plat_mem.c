@@ -6,7 +6,7 @@
  *
  * Every call here is a single raw Linux syscall via `svc #0`, not any
  * host libc wrapper: this file is compiled under -nostdinc against
- * ntlibc's OWN generated headers, never glibc's, so both the syscall
+ * spicule's OWN generated headers, never glibc's, so both the syscall
  * numbers and the wrapper are declared locally below.
  *
  * NT's reserve/commit split and section-view-vs-anonymous-reservation
@@ -20,7 +20,7 @@
  * after msync() (Linux updates mtime as a normal side effect).
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -34,7 +34,7 @@
  * this host's own /nix/store linux-headers asm/unistd_64.h /
  * asm/unistd_32.h. This file's -nostdinc build cannot include the
  * host's own <sys/syscall.h> itself, since it would pull in glibc's
- * conflicting type system alongside ntlibc's own.
+ * conflicting type system alongside spicule's own.
  *
  * i386 uses SYS_mmap2 (192), not the legacy SYS_mmap (90): that old
  * number is not a normal register-passing syscall at all -- it takes
@@ -164,7 +164,7 @@ static int is_sys_error(long ret)
 
 int __plat_mem_reserve(void **base_inout, size_t len, int prot)
 {
-	/* The PROT_ and MAP_ constants are ntlibc's own <sys/mman.h>
+	/* The PROT_ and MAP_ constants are spicule's own <sys/mman.h>
 	 * values, unchanged: they already match the Linux kernel ABI
 	 * exactly (confirmed by reading include/sys/mman.h), so unlike
 	 * the NT backend's prot_to_page()/prot_to_view() this file needs no

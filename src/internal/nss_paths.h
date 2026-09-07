@@ -26,7 +26,7 @@
  * own test suite.
  *
  * __nss_path() is the deliberate, disclosed answer: each of the five
- * paths above can be overridden by an ntlibc-internal, UNDOCUMENTED
+ * paths above can be overridden by an spicule-internal, UNDOCUMENTED
  * environment variable (never mentioned in any public header, never
  * part of any POSIX contract) that this library's own test fixtures
  * set and every other caller leaves unset. This is not a new idea in
@@ -34,7 +34,7 @@
  * HOSTALIASES overriding /etc/hosts for gethostbyname() are both real,
  * long-standing precedents for "an env var is the sanctioned way to
  * redirect a libc database lookup" -- this is the same shape, scoped
- * to ntlibc's own test harness rather than end-user configuration.
+ * to spicule's own test harness rather than end-user configuration.
  *
  * UPDATE (this pass): three more real flat-file databases join the
  * same seam -- /etc/services, /etc/protocols, /etc/networks, backing
@@ -45,8 +45,8 @@
  * the same override still lets a test assert real parsing behavior
  * against a controlled fixture rather than whatever this host happens
  * to have (or not have) at /etc/networks today. */
-#ifndef _NTLIBC_NSS_PATHS_H
-#define _NTLIBC_NSS_PATHS_H
+#ifndef _SPICULE_NSS_PATHS_H
+#define _SPICULE_NSS_PATHS_H
 
 #include <stdlib.h>
 
@@ -64,14 +64,14 @@ static inline const char *__nss_path(const char *var, const char *dflt)
 	return (p && *p) ? p : dflt;
 }
 
-#define __NSS_HOSTS_PATH()     __nss_path("NTLIBC_TEST_HOSTS_PATH",     "/etc/hosts")
-#define __NSS_PASSWD_PATH()    __nss_path("NTLIBC_TEST_PASSWD_PATH",    "/etc/passwd")
-#define __NSS_GROUP_PATH()     __nss_path("NTLIBC_TEST_GROUP_PATH",     "/etc/group")
-#define __NSS_RESOLV_PATH()    __nss_path("NTLIBC_TEST_RESOLV_PATH",    "/etc/resolv.conf")
-#define __NSS_NSSWITCH_PATH()  __nss_path("NTLIBC_TEST_NSSWITCH_PATH",  "/etc/nsswitch.conf")
-#define __NSS_SERVICES_PATH()  __nss_path("NTLIBC_TEST_SERVICES_PATH",  "/etc/services")
-#define __NSS_PROTOCOLS_PATH() __nss_path("NTLIBC_TEST_PROTOCOLS_PATH", "/etc/protocols")
-#define __NSS_NETWORKS_PATH()  __nss_path("NTLIBC_TEST_NETWORKS_PATH",  "/etc/networks")
+#define __NSS_HOSTS_PATH()     __nss_path("SPICULE_TEST_HOSTS_PATH",     "/etc/hosts")
+#define __NSS_PASSWD_PATH()    __nss_path("SPICULE_TEST_PASSWD_PATH",    "/etc/passwd")
+#define __NSS_GROUP_PATH()     __nss_path("SPICULE_TEST_GROUP_PATH",     "/etc/group")
+#define __NSS_RESOLV_PATH()    __nss_path("SPICULE_TEST_RESOLV_PATH",    "/etc/resolv.conf")
+#define __NSS_NSSWITCH_PATH()  __nss_path("SPICULE_TEST_NSSWITCH_PATH",  "/etc/nsswitch.conf")
+#define __NSS_SERVICES_PATH()  __nss_path("SPICULE_TEST_SERVICES_PATH",  "/etc/services")
+#define __NSS_PROTOCOLS_PATH() __nss_path("SPICULE_TEST_PROTOCOLS_PATH", "/etc/protocols")
+#define __NSS_NETWORKS_PATH()  __nss_path("SPICULE_TEST_NETWORKS_PATH",  "/etc/networks")
 
 #endif
 

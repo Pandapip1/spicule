@@ -27,18 +27,18 @@
 # already knows how to name precisely).
 #
 # Usage: tools/linux-build-pthread-cond.sh
-# Env:   NTLIBC_CC (default clang), NTLIBC_ARCH (default x86_64 -- see
+# Env:   SPICULE_CC (default clang), SPICULE_ARCH (default x86_64 -- see
 #          tools/linux-build.sh's own banner for why this is unrelated
 #          to the host's real CPU architecture)
 
 set -eu
 
 srcdir=$(cd "$(dirname "$0")/.." && pwd)
-CC=${NTLIBC_CC:-clang}
-ARCH=${NTLIBC_ARCH:-x86_64}
-OBJ=${NTLIBC_LINUX_OBJ:-$srcdir/obj/linux-pilot-pthread-cond}
+CC=${SPICULE_CC:-clang}
+ARCH=${SPICULE_ARCH:-x86_64}
+OBJ=${SPICULE_LINUX_OBJ:-$srcdir/obj/linux-pilot-pthread-cond}
 TAG=linux-build-pthread-cond
-TIMEOUT_SECS=${NTLIBC_PILOT_TIMEOUT:-30}
+TIMEOUT_SECS=${SPICULE_PILOT_TIMEOUT:-30}
 
 cd "$srcdir"
 
@@ -46,7 +46,7 @@ if [ -f config.mak ]; then
 	cfg_arch=$(sed -n 's/^ARCH *= *//p' config.mak | head -1)
 	if [ -n "$cfg_arch" ] && [ "$cfg_arch" != "$ARCH" ]; then
 		echo "$TAG: tree is configured for ARCH=$cfg_arch but this build is $ARCH." >&2
-		echo "$TAG: reconfigure (./configure --host=$ARCH-win32 CC=...) or set NTLIBC_ARCH=$cfg_arch." >&2
+		echo "$TAG: reconfigure (./configure --host=$ARCH-win32 CC=...) or set SPICULE_ARCH=$cfg_arch." >&2
 		exit 1
 	fi
 fi
@@ -59,7 +59,7 @@ fi
 
 INC="-Isrc/internal -Isrc/thread -Iobj/include -Iinclude -Iarch/$ARCH -Iarch/generic"
 CFLAGS="-std=c99 -nostdinc -fno-builtin -g -O0 -ffunction-sections -fdata-sections \
-$INC -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_NTLIBC_INTERNAL -Wall -Wno-unused-function"
+$INC -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_SPICULE_INTERNAL -Wall -Wno-unused-function"
 
 FILES="
 	src/thread/pthread_mutex.c

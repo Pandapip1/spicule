@@ -37,8 +37,8 @@
  * SVC/BRK.
  */
 .text
-.globl __ntlibc_sigreturn_trampoline
-__ntlibc_sigreturn_trampoline:
+.globl __spicule_sigreturn_trampoline
+__spicule_sigreturn_trampoline:
 	mov	$15, %rax		# SYS_rt_sigreturn (x86_64)
 	syscall
 1:	jmp	1b			# unreachable: rt_sigreturn(2) never returns on success

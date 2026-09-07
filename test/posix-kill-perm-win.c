@@ -5,7 +5,7 @@
  * have permission to send the signal to any receiving process."
  *
  * This lived in test/posix-unistd.c as an N/A fence claiming the clause
- * was "structurally impossible here", on the grounds that ntlibc has
+ * was "structurally impossible here", on the grounds that spicule has
  * exactly one immutable token-derived uid (src/unistd/ids.c), so no uid
  * mismatch can ever be checked.  Both halves of that were wrong.
  *
@@ -13,7 +13,7 @@
  * uids.  src/signal/signal.c's kill() reaches a non-child pid through
  * NtOpenProcess and maps STATUS_ACCESS_DENIED to EPERM directly: the
  * denial is NT's own access check on the target process object, not an
- * identity comparison ntlibc performs.
+ * identity comparison spicule performs.
  *
  * The verdict was wrong because that branch is reachable, and cheaply.
  * Measured on real Windows 11 Pro 22621 (build 22621), from a process

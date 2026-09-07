@@ -21,7 +21,7 @@ DIAGNOSTIC = re.compile(
     r"errno is read with no proven prior call or assignment that could "
     r"have set it); "
     r"origin '(.*)'; context '(.*)'; expression '(.*)' "
-    r"\[ntlibc\.ErrnoDiscipline\]$"
+    r"\[spicule\.ErrnoDiscipline\]$"
 )
 
 

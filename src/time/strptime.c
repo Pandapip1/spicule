@@ -10,7 +10,7 @@
  * are not implemented.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -73,7 +73,7 @@ static const char *read_num(const char *s, int maxdigits, long *out)
  * three tables are indexed as soon as their respective loops run (n is
  * always 7 or 12 at this file's two real call sites, never 0), and idx is
  * written (`*idx = i;`) on every match. None is ever NULL at either call
- * site (__ntlibc_day_name/_abbr, __ntlibc_month_name/_abbr, the matching
+ * site (__spicule_day_name/_abbr, __spicule_month_name/_abbr, the matching
  * literal-derived length table, and parse()'s on-stack `idx`). s is only
  * forwarded into strncasecmp() -- never dereferenced directly by this
  * function's own body -- so it is left unmarked, the same "purely
@@ -254,7 +254,7 @@ static const char *parse(const char *s, const char *f, struct tm *tm,
 				sizeof "Thursday" - 1, sizeof "Friday" - 1,
 				sizeof "Saturday" - 1
 			};
-			s = match_name(s, __ntlibc_day_name, __ntlibc_day_name_abbr,
+			s = match_name(s, __spicule_day_name, __spicule_day_name_abbr,
 			               lengths, 7, &idx);
 			if (!s) return NULL;
 			tm->tm_wday = idx;
@@ -269,7 +269,7 @@ static const char *parse(const char *s, const char *f, struct tm *tm,
 				sizeof "September" - 1, sizeof "October" - 1,
 				sizeof "November" - 1, sizeof "December" - 1
 			};
-			s = match_name(s, __ntlibc_month_name, __ntlibc_month_name_abbr,
+			s = match_name(s, __spicule_month_name, __spicule_month_name_abbr,
 			               lengths, 12, &idx);
 			if (!s) return NULL;
 			tm->tm_mon = idx;

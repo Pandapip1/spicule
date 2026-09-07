@@ -13,7 +13,7 @@
  * mq_close() still can't leave a stale descriptor or notification.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -102,7 +102,7 @@ static char *mq_path(const char *name)
 {
 	const char *component, *dir;
 	size_t namelen, n, d, i, maxdir;
-	const size_t prefix = sizeof "/ntlibc-mq/" - 1;
+	const size_t prefix = sizeof "/spicule-mq/" - 1;
 	size_t total;
 	char *path;
 	if (!name) { errno = EINVAL; return NULL; }
@@ -135,12 +135,12 @@ static char *mq_path(const char *name)
 	total = d + prefix + n + 1;
 	path = malloc(total);
 	if (!path) return NULL;
-	snprintf(path, total, "%s/ntlibc-mq/%s", dir, component);
+	snprintf(path, total, "%s/spicule-mq/%s", dir, component);
 	return path;
 }
 
 /* Both call sites pass a path built by mq_path(), which always embeds a
- * literal "/ntlibc-mq/" component, so strrchr() can never return NULL here. */
+ * literal "/spicule-mq/" component, so strrchr() can never return NULL here. */
 static int ensure_dir(const char *path) __attribute__((nonnull(1)));
 static int ensure_dir(const char *path)
 {
@@ -273,7 +273,7 @@ mqd_t mq_open(const char *name, int oflag, ...)
 	if (!path) return (mqd_t)-1;
 	if (ensure_dir(path) < 0) goto fail;
 	hash = path_hash(path);
-	n = snprintf(nsname, sizeof nsname, "\\BaseNamedObjects\\ntlibc.mq.name.%08x%08x",
+	n = snprintf(nsname, sizeof nsname, "\\BaseNamedObjects\\spicule.mq.name.%08x%08x",
 	         (unsigned)(hash >> 32), (unsigned)hash);
 	if (n < 0 || (size_t)n >= sizeof nsname) {
 		if (n >= 0) errno = ENAMETOOLONG;
@@ -301,19 +301,19 @@ mqd_t mq_open(const char *name, int oflag, ...)
 		h.sequence = 1;
 		object_sequence++;
 		n = snprintf(h.lock_name, sizeof h.lock_name,
-		         "\\BaseNamedObjects\\ntlibc.mq.%d.%u.lock", (int)getpid(), object_sequence);
+		         "\\BaseNamedObjects\\spicule.mq.%d.%u.lock", (int)getpid(), object_sequence);
 		if (n < 0 || (size_t)n >= sizeof h.lock_name) {
 			if (n >= 0) errno = ENAMETOOLONG;
 			goto fail_created;
 		}
 		n = snprintf(h.items_name, sizeof h.items_name,
-		         "\\BaseNamedObjects\\ntlibc.mq.%d.%u.items", (int)getpid(), object_sequence);
+		         "\\BaseNamedObjects\\spicule.mq.%d.%u.items", (int)getpid(), object_sequence);
 		if (n < 0 || (size_t)n >= sizeof h.items_name) {
 			if (n >= 0) errno = ENAMETOOLONG;
 			goto fail_created;
 		}
 		n = snprintf(h.spaces_name, sizeof h.spaces_name,
-		         "\\BaseNamedObjects\\ntlibc.mq.%d.%u.spaces", (int)getpid(), object_sequence);
+		         "\\BaseNamedObjects\\spicule.mq.%d.%u.spaces", (int)getpid(), object_sequence);
 		if (n < 0 || (size_t)n >= sizeof h.spaces_name) {
 			if (n >= 0) errno = ENAMETOOLONG;
 			goto fail_created;
@@ -654,7 +654,7 @@ int mq_unlink(const char *name)
 	if (!path) return -1;
 	if (ensure_dir(path) < 0) { free(path); return -1; }
 	hash = path_hash(path);
-	n = snprintf(nsname, sizeof nsname, "\\BaseNamedObjects\\ntlibc.mq.name.%08x%08x",
+	n = snprintf(nsname, sizeof nsname, "\\BaseNamedObjects\\spicule.mq.name.%08x%08x",
 	         (unsigned)(hash >> 32), (unsigned)hash);
 	if (n < 0 || (size_t)n >= sizeof nsname) {
 		if (n >= 0) errno = ENAMETOOLONG;

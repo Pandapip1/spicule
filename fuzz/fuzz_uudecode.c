@@ -22,7 +22,7 @@
  * filename field* -- attacker-controlled and, per uudecode.c's own
  * header comment, not sanitized at all. That's real, in-scope behavior
  * to fuzz, not a harness bug to route around: every open()/fopen()/
- * chmod() here goes through ntlibc's own I/O, which resolves against
+ * chmod() here goes through spicule's own I/O, which resolves against
  * fuzz/ntstubs.c's in-process simulated NT volume, not the real host
  * filesystem -- so a header filename like "../../etc/passwd" only ever
  * touches an in-memory tree private to this process. Set, "-o" instead

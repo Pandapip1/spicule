@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Black-box tests for ntlibc's Tier 4 archive/content-format POSIX
+ * Black-box tests for spicule's Tier 4 archive/content-format POSIX
  * standard utilities: `pax`, `file`, `ar` (XCU pax(1p), file(1p),
  * ar(1p)).  Same technique as test/util-sortset.c: the standalone
  * obj/bin/<name>.exe is spawned as a real process (via

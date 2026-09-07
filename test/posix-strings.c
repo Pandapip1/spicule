@@ -46,11 +46,11 @@ int __spawn(const char *path, char *const argv[], char *const envp[]);
 /* ============================== strings.h ============================== */
 
 /* strcasecmp.html DESCRIPTION: "use the current locale to determine the
- * case of the characters"; for the POSIX locale (the only one ntlibc's
+ * case of the characters"; for the POSIX locale (the only one spicule's
  * LC_CTYPE ever is -- src/ctype/is*.c classify by fixed ASCII ranges,
  * never consulting a locale object) "these functions shall behave as
  * if the strings had been converted to lowercase and then a byte
- * comparison performed."  ntlibc's tolower() only maps 'A'-'Z'
+ * comparison performed."  spicule's tolower() only maps 'A'-'Z'
  * (src/ctype/tolower.c: isupper() is `(unsigned)c-'A' < 26`), so bytes
  * >= 0x80 are never touched by the case fold and fall straight through
  * to a byte comparison.  strcasecmp() casts to `const unsigned char *`
@@ -123,7 +123,7 @@ static void test_ffs_every_bit(void)
 
 /* strings.h.html: legacy bcmp/bcopy/bzero/index/rindex were removed
  * from POSIX.1-2017's <strings.h> (present through SUSv3, gone in
- * Issue 7 / SUSv4).  ntlibc still ships them (src/string/bcmp.c etc.),
+ * Issue 7 / SUSv4).  spicule still ships them (src/string/bcmp.c etc.),
  * gated in include/strings.h behind "not _POSIX_SOURCE and not
  * _XOPEN_SOURCE>=700", i.e. exposed as a non-standard extension, not
  * claimed as base conformance.  Confirmed present and functioning here
@@ -183,7 +183,7 @@ static void test_isascii_toascii_defined_for_all_ints(void)
  * that the application shall ensure that the argument c is a
  * lowercase letter" -- and symmetrically for _tolower()/uppercase.
  * Only the in-contract inputs are asserted; behavior outside them is
- * unspecified by the application-usage contract, not by ntlibc, so
+ * unspecified by the application-usage contract, not by spicule, so
  * nothing is asserted there. */
 static void test_underscore_tolower_toupper(void)
 {
@@ -314,7 +314,7 @@ static void test_assert_message_and_death(const char *self)
 	 * blocking.  On a target where fd inheritance across __spawn does
 	 * not reach a real OS-level descriptor table (this project's
 	 * native ASan test harness forks the real host process directly,
-	 * bypassing ntlibc's own handle layer entirely for that step --
+	 * bypassing spicule's own handle layer entirely for that step --
 	 * see fuzz/ntstubs.c's RtlCreateUserProcess comment), nothing
 	 * arrives here even though the child ran and died correctly, as
 	 * just confirmed above; skip only the message-content assertions
@@ -363,7 +363,7 @@ static void test_assert_message_and_death(const char *self)
 /* basedefs/assert.h.html lists exactly one thing the header "shall
  * define": the assert() macro.  static_assert is *not* in it -- it is
  * an ISO C11 addition (N1570 7.2p3), and POSIX.1-2017's <assert.h> is
- * aligned with C99, whose __STDC_VERSION__ is 199901L.  ntlibc gates
+ * aligned with C99, whose __STDC_VERSION__ is 199901L.  spicule gates
  * `#define static_assert _Static_assert` on
  * `__STDC_VERSION__ >= 201112L` (include/assert.h), so under this
  * project's own build flags (-std=c99, configure's CFLAGS_C99FSE) the
@@ -499,7 +499,7 @@ static void test_utime_null_sets_current_time(void)
 
 /* utime.html DESCRIPTION: "Upon successful completion, utime() shall
  * mark the last file status change timestamp for update."  That is the
- * st_ctime/st_ctim field (sys_stat.h.html), which ntlibc reads from
+ * st_ctime/st_ctim field (sys_stat.h.html), which spicule reads from
  * FILE_BASIC_INFORMATION.ChangeTime (src/stat/stat.c).  Distinct from
  * the access/modification times the call is setting: setting those to
  * a 2001 value must *not* drag the status-change time backwards with
@@ -565,7 +565,7 @@ static void test_utime_marks_ctime(void)
  * Not observable, and not fenced as separate no-op tests because the
  * reason is a property of the platform rather than of utime():
  * [EACCES] and [EPERM] both need a second security principal to be
- * denied *as* -- ntlibc models exactly one user (geteuid() is the
+ * denied *as* -- spicule models exactly one user (geteuid() is the
  * token-derived current uid; see include/sys/resource.h's PRIO_USER note), so
  * every caller is always the owner with full access; [EROFS] needs a
  * read-only file system, which the test harness has no way to mount;
@@ -608,7 +608,7 @@ static void test_utime_errors(void)
  * prefix names an existing file that is neither a directory nor a
  * symbolic link to a directory."
  *
- * ntlibc used to report ENOENT here, not ENOTDIR, and not only from
+ * spicule used to report ENOENT here, not ENOTDIR, and not only from
  * utime(): open(), stat(), access(), unlink(), mkdir() and
  * utimensat() all gave ENOENT for the identical shape ("<existing
  * regular file>/below"), because this is one defect in the shared
@@ -650,7 +650,7 @@ static void test_utime_enotdir_path_prefix(void)
  * single component below is longer than either, so the *shall*-fail
  * clause is the one that applies.)
  *
- * ntlibc used to report ENOENT: open(), stat(), access(), unlink(),
+ * spicule used to report ENOENT: open(), stat(), access(), unlink(),
  * mkdir() and utimensat() all gave ENOENT for a 40000-character name.
  * chdir() was the sole exception, and it was the exception precisely
  * because it does not rely on the shared layer for this --
@@ -694,7 +694,7 @@ static void test_utime_enametoolong(void)
 /* endian.h is not part of POSIX.1-2017: no functions/endian.h.html or
  * basedefs/endian.h.html page exists (verified: the basedefs URL
  * 404s), and it is absent from the base-definitions header index. It
- * is a glibc/BSD extension ntlibc ships for source compatibility;
+ * is a glibc/BSD extension spicule ships for source compatibility;
  * gated behind _GNU_SOURCE/_BSD_SOURCE in include/endian.h. Recorded
  * as an extension, tested only for internal self-consistency:
  * __BYTE_ORDER names a real endianness, and the byte-swap helpers

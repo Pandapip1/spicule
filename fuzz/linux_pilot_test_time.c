@@ -2,10 +2,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Linux platform pilot smoke test -- time subsystem -- NOT part of
- * ntlibc, same standing as fuzz/linux_pilot_test.c (the mman/unistd
+ * spicule, same standing as fuzz/linux_pilot_test.c (the mman/unistd
  * pilot this extends) and fuzz/ntstubs.c before it.
  *
- * Exercises the REAL ntlibc public entry points (time(), clock(),
+ * Exercises the REAL spicule public entry points (time(), clock(),
  * clock_gettime(), clock_settime(), clock_getres(), timespec_get(),
  * stime(), from the real src/time/{time,clock,clock_gettime,stime,
  * timespec_get}.c, statically linked here) against the new
@@ -15,7 +15,7 @@
  * A raw clock_gettime(2) syscall, issued directly in this file with the
  * same aarch64 syscall number src/time/linux/plat_time.c itself uses
  * (confirmed independently against this host's glibc <sys/syscall.h>),
- * stands in for "the known-correct answer" throughout: every ntlibc
+ * stands in for "the known-correct answer" throughout: every spicule
  * front-door result below is cross-checked against it, not just
  * checked for "didn't crash".
  */
@@ -100,7 +100,7 @@ int main(void)
 		 * (that is src/time/timespec's sibling clock_nanosleep.c, not
 		 * converted here), so this is scaffolding exactly like fuzz/
 		 * linux_pilot_test.c's raw openat() stand-in for open(), not a
-		 * claim that ntlibc's own sleep is under test. */
+		 * claim that spicule's own sleep is under test. */
 		sleep_req.tv_sec = 0;
 		sleep_req.tv_nsec = 20000000L; /* 20ms */
 		rc = syscall(SYS_nanosleep, &sleep_req, (void *)0);

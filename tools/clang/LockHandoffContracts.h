@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: (C) 2026 Gavin John
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef NTLIBC_LOCK_HANDOFF_CONTRACTS_H
-#define NTLIBC_LOCK_HANDOFF_CONTRACTS_H
+#ifndef SPICULE_LOCK_HANDOFF_CONTRACTS_H
+#define SPICULE_LOCK_HANDOFF_CONTRACTS_H
 
 #include "llvm/ADT/StringRef.h"
 
 #include <optional>
 
-namespace ntlibc {
+namespace spicule {
 
 // Shared syntax for a function's own lock hand-off contract, attached via
 // __attribute__((annotate(...))) directly to the function's own
@@ -38,9 +38,9 @@ struct LockHandoffContract {
 inline std::optional<LockHandoffContract>
 parseLockHandoff(llvm::StringRef Annotation) {
   constexpr llvm::StringRef RequiresHeldPrefix =
-      "ntlibc_lock_requires_held_on_entry:";
+      "spicule_lock_requires_held_on_entry:";
   constexpr llvm::StringRef AcquiresForCaller =
-      "ntlibc_lock_acquires_for_caller";
+      "spicule_lock_acquires_for_caller";
   if (Annotation == AcquiresForCaller)
     return LockHandoffContract{LockHandoffKind::AcquiresForCaller, 0};
   if (!Annotation.starts_with(RequiresHeldPrefix))
@@ -53,6 +53,6 @@ parseLockHandoff(llvm::StringRef Annotation) {
   return LockHandoffContract{LockHandoffKind::RequiresHeldOnEntry, Index};
 }
 
-} // namespace ntlibc
+} // namespace spicule
 
 #endif

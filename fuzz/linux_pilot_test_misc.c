@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Linux platform pilot smoke test for the exit/misc/select/signal
- * extension -- NOT part of ntlibc, same standing as fuzz/
+ * extension -- NOT part of spicule, same standing as fuzz/
  * linux_pilot_test.c (the mman/unistd pilot this extends) and
  * fuzz/ntstubs.c.
  *
@@ -146,7 +146,7 @@ static void test_misc(void)
 
 	/* RLIMIT_NPROC: safe to lower on this process (no forking happens
 	 * here), and independently re-read via a raw prlimit64(2) syscall
-	 * afterward -- not through any ntlibc call -- to prove
+	 * afterward -- not through any spicule call -- to prove
 	 * __plat_job_apply_limits() actually reached the real kernel limit,
 	 * the same "verified through an independent read(), not just
 	 * through the mapping that wrote it" standard fuzz/
@@ -171,7 +171,7 @@ static void test_misc(void)
 	 * already established -- open()'s own front door is NT-path-only
 	 * and out of scope here too, see this file's own banner). */
 	{
-		long rawfd = syscall(SYS_openat, AT_FDCWD, "/tmp/ntlibc-linux-pilot-misc-test",
+		long rawfd = syscall(SYS_openat, AT_FDCWD, "/tmp/spicule-linux-pilot-misc-test",
 		                     0101 /* O_CREAT|O_WRONLY */ | 01000 /* O_TRUNC */, 0644L);
 		__plat_handle_t h;
 		long long off;
@@ -185,7 +185,7 @@ static void test_misc(void)
 		CHECK(__plat_write_start_offset(h, 1, &off) == 0 && off == 13,
 		      "__plat_write_start_offset(append=1) reports the file's real end via SEEK_END");
 		syscall(SYS_close, rawfd);
-		syscall(SYS_unlinkat, AT_FDCWD, "/tmp/ntlibc-linux-pilot-misc-test", 0L);
+		syscall(SYS_unlinkat, AT_FDCWD, "/tmp/spicule-linux-pilot-misc-test", 0L);
 	}
 }
 
@@ -248,7 +248,7 @@ static void test_select(void)
 	CHECK(t1 - t0 < 2000, "__plat_wait_multiple() returns promptly when the handle is already signalled, not after the full 5s budget");
 	/* __plat_event_peek() is NOT this check any more (src/signal/linux/
 	 * plat_signal.c's own banner on it): it was redesigned to take a
-	 * struct ntlibc_linux_sync* from the sync-object domain
+	 * struct spicule_linux_sync* from the sync-object domain
 	 * (src/thread/linux/plat_thread.c's __plat_event_set()), not this
 	 * file's box()/unbox() eventfd domain `ev` is in here.
 	 * __plat_wait_ready() (src/select/linux/plat_select.c) is that

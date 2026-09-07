@@ -35,8 +35,8 @@
  * inside the call that has the real status in hand; a generic status-to-
  * errno mapping performed afterward could never reconstruct that
  * distinction from a plain 0/-1 result. */
-#ifndef _NTLIBC_PLAT_PROCESS_H
-#define _NTLIBC_PLAT_PROCESS_H
+#ifndef _SPICULE_PLAT_PROCESS_H
+#define _SPICULE_PLAT_PROCESS_H
 
 #include <stddef.h>
 #include <sys/types.h>

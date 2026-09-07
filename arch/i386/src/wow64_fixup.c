@@ -3,7 +3,7 @@
  *
  * The WOW64-only repair fork() needs after RtlCloneUserProcess, for the
  * two ways a cloned thread comes back broken under WOW64 -- a 32-bit
- * ntlibc process on a 64-bit kernel -- that fork.c's own header comment
+ * spicule process on a 64-bit kernel -- that fork.c's own header comment
  * describes at a high level. Prior art: M2libc's x86/windows/process.c
  * calls this technique "heaven's gate" surgery.
  *
@@ -82,7 +82,7 @@
  * that name; gate_call() below is the whole of it.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)

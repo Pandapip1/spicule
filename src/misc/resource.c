@@ -12,7 +12,7 @@
  * primitive at all, and it was long mis-recorded as needing one.  Its
  * clause -- "a number one greater than the maximum value that the system
  * may assign to a newly-created descriptor" (setrlimit.html) -- is about
- * descriptors, and descriptors on this platform are wholly ntlibc's own:
+ * descriptors, and descriptors on this platform are wholly spicule's own:
  * __fd_alloc() hands them out of the static __fds[] table in this
  * process's address space and already returns EMFILE when it runs out.
  * "The system" in that sentence is this library.  So setrlimit() lowers
@@ -40,7 +40,7 @@
  * way getrlimit() already reported FD_MAX/CHILD_CAP_LIMIT_ without ever
  * asking NT to confirm them.
  *
- * RLIMIT_FSIZE is stored and enforced too, but by ntlibc rather than by
+ * RLIMIT_FSIZE is stored and enforced too, but by spicule rather than by
  * NT: see the note beside fsize_cur below and the checks in the write
  * paths.  It needs no NT primitive for the same reason RLIMIT_NOFILE
  * does not -- the resource is bounded by this library's own code.
@@ -92,7 +92,7 @@
  * pages' arithmetic to disagree about this process's priority.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -117,7 +117,7 @@ static rlim_t data_cur = RLIM_INFINITY, data_max = RLIM_INFINITY;
  * job object: NT has no per-process maximum-file-size primitive, and
  * needs none.  The limit is about what THIS process may create, and
  * every path by which this process can extend a file goes through
- * ntlibc's own I/O -- there is no mmap in this library at all -- so the
+ * spicule's own I/O -- there is no mmap in this library at all -- so the
  * enforcement point is our write paths, not the kernel's. */
 static rlim_t fsize_cur = RLIM_INFINITY, fsize_max = RLIM_INFINITY;
 #if defined(__linux__)
@@ -147,7 +147,7 @@ static rlim_t nofile_max = FD_MAX;
  *
  * NT has no per-process file-size quota and needs none.  The limit
  * governs what THIS process may create, and every path by which this
- * process can extend a file goes through ntlibc's own I/O -- write(),
+ * process can extend a file goes through spicule's own I/O -- write(),
  * pwrite(), writev(), ftruncate(), posix_fallocate(), and stdio, which
  * funnels into write().  There is no mmap in this library at all (no
  * <sys/mman.h>, no implementation), so that list is closed and
@@ -359,7 +359,7 @@ int setrlimit(int resource, const struct rlimit *rl)
 		 * the maximum value that the system may assign to a
 		 * newly-created descriptor".  Descriptors here are this
 		 * library's own -- __fd_alloc() hands them out of the static
-		 * __fds[] table -- so "the system" is ntlibc and the limit is
+		 * __fds[] table -- so "the system" is spicule and the limit is
 		 * enforceable without any NT primitive at all.  It is honoured
 		 * for real: __fd_alloc() loops to __fd_limit and returns the
 		 * EMFILE the clause requires past it.
@@ -398,7 +398,7 @@ int setrlimit(int resource, const struct rlimit *rl)
 		 * FSIZE is split out from the arm below because it is not like
 		 * the others: STACK/CORE/RSS/MEMLOCK have no mechanism that
 		 * could reach the thing being capped, whereas the file size
-		 * this process may create is bounded entirely by ntlibc's own
+		 * this process may create is bounded entirely by spicule's own
 		 * write paths.  "Refuse rather than lie" belongs where it is
 		 * true, and it is not true here. */
 		if (rl->rlim_max > cur.rlim_max) { errno = EPERM; return -1; }
@@ -511,7 +511,7 @@ int getpriority(int which, id_t who) // NOLINT(bugprone-easily-swappable-paramet
 
 	if (self) return self_nice;
 
-	/* Not self: ntlibc tracks no group/user directory, so only a
+	/* Not self: spicule tracks no group/user directory, so only a
 	 * foreign PRIO_PROCESS pid can possibly be found. */
 	if (which != PRIO_PROCESS) { errno = ESRCH; return -1; }
 
@@ -567,7 +567,7 @@ int setpriority(int which, id_t who, int value) // NOLINT(bugprone-easily-swappa
 	 * [or] effective user ID of the executing process [does not]
 	 * match the effective user ID of the process whose nice value is
 	 * being changed" is the only way that can be true here, since
-	 * ntlibc's one-user model has nothing else to check. */
+	 * spicule's one-user model has nothing else to check. */
 	if (__plat_process_open((int)who, &h) < 0) return -1;
 	__plat_close(h);
 	errno = EPERM;
@@ -610,7 +610,7 @@ int setpriority(int which, id_t who, int value) // NOLINT(bugprone-easily-swappa
  * and real NT gates only REALTIME (SeIncreaseBasePriorityPrivilege) --
  * so deriving the answer from what NT says would make [EPERM] unreachable
  * and let any process make itself more favourable than everything around
- * it.  ntlibc models one always-unprivileged user (src/unistd/ids.c),
+ * it.  spicule models one always-unprivileged user (src/unistd/ids.c),
  * the same premise setrlimit() refuses a hard-limit raise on, so a
  * negative incr is always refused here.  (The other route, the
  * finer-grained ProcessBasePriority class, is STATUS_NOT_IMPLEMENTED on

@@ -9,7 +9,7 @@
  * fmemopen/open_memstream block look the same.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -80,7 +80,7 @@ ssize_t __file_write(FILE *f, const void *buf withtok(readable_span(n)), size_t 
 				return -1;
 			}
 			need += term;
-			/* ntlibc's usable object-size range ends at PTRDIFF_MAX: offsets
+			/* spicule's usable object-size range ends at PTRDIFF_MAX: offsets
 			 * and differences within an allocated object must remain in the
 			 * ABI's signed pointer-difference type.  Reject a larger request
 			 * before the geometric growth itself crosses the size_t boundary. */

@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * rename()/renameat() front-door smoke test -- NOT part of ntlibc, same
+ * rename()/renameat() front-door smoke test -- NOT part of spicule, same
  * standing as fuzz/linux_pilot_test_open.c. Calls the REAL src/stdio/
  * misc.c front door (rename()/renameat()), not a raw syscall standing
  * in for it -- proving __plat_rename()'s path-resolution refactor
@@ -62,11 +62,11 @@ static int failures;
 
 static void cleanup(void)
 {
-	syscall(SYS_unlinkat, (long)AT_FDCWD_LX, (long)"/tmp/ntlibc-linux-rename-a", 0L);
-	syscall(SYS_unlinkat, (long)AT_FDCWD_LX, (long)"/tmp/ntlibc-linux-rename-b", 0L);
-	syscall(SYS_unlinkat, (long)AT_FDCWD_LX, (long)"/tmp/ntlibc-linux-rename-dir/inner", 0L);
-	syscall(SYS_unlinkat, (long)AT_FDCWD_LX, (long)"/tmp/ntlibc-linux-rename-dir", (long)0x200 /* AT_REMOVEDIR */);
-	syscall(SYS_unlinkat, (long)AT_FDCWD_LX, (long)"/tmp/ntlibc-linux-rename-dir2", (long)0x200 /* AT_REMOVEDIR */);
+	syscall(SYS_unlinkat, (long)AT_FDCWD_LX, (long)"/tmp/spicule-linux-rename-a", 0L);
+	syscall(SYS_unlinkat, (long)AT_FDCWD_LX, (long)"/tmp/spicule-linux-rename-b", 0L);
+	syscall(SYS_unlinkat, (long)AT_FDCWD_LX, (long)"/tmp/spicule-linux-rename-dir/inner", 0L);
+	syscall(SYS_unlinkat, (long)AT_FDCWD_LX, (long)"/tmp/spicule-linux-rename-dir", (long)0x200 /* AT_REMOVEDIR */);
+	syscall(SYS_unlinkat, (long)AT_FDCWD_LX, (long)"/tmp/spicule-linux-rename-dir2", (long)0x200 /* AT_REMOVEDIR */);
 }
 
 int main(void)
@@ -75,18 +75,18 @@ int main(void)
 
 	/* --- plain rename() of a real file --- */
 	{
-		int fd = open("/tmp/ntlibc-linux-rename-a", O_CREAT | O_WRONLY, 0644);
+		int fd = open("/tmp/spicule-linux-rename-a", O_CREAT | O_WRONLY, 0644);
 		CHECK(fd >= 0, "open() of the source file for rename() succeeded");
 		if (fd >= 0) CHECK(close(fd) == 0, "close() succeeded");
 
-		CHECK(rename("/tmp/ntlibc-linux-rename-a", "/tmp/ntlibc-linux-rename-b") == 0,
+		CHECK(rename("/tmp/spicule-linux-rename-a", "/tmp/spicule-linux-rename-b") == 0,
 		      "rename() through the real front door succeeded");
 		{
-			int fd2 = open("/tmp/ntlibc-linux-rename-a", O_RDONLY);
+			int fd2 = open("/tmp/spicule-linux-rename-a", O_RDONLY);
 			CHECK(fd2 == -1 && errno == ENOENT, "the old name is really gone after rename()");
 		}
 		{
-			int fd2 = open("/tmp/ntlibc-linux-rename-b", O_RDONLY);
+			int fd2 = open("/tmp/spicule-linux-rename-b", O_RDONLY);
 			CHECK(fd2 >= 0, "the new name really exists after rename()");
 			if (fd2 >= 0) close(fd2);
 		}
@@ -95,10 +95,10 @@ int main(void)
 	/* --- renameat() with real dirfds --- */
 	{
 		int dfd, dfd2, r;
-		syscall(SYS_mkdirat, (long)AT_FDCWD_LX, (long)"/tmp/ntlibc-linux-rename-dir", 0755L);
-		syscall(SYS_mkdirat, (long)AT_FDCWD_LX, (long)"/tmp/ntlibc-linux-rename-dir2", 0755L);
-		dfd = open("/tmp/ntlibc-linux-rename-dir", O_RDONLY | O_DIRECTORY);
-		dfd2 = open("/tmp/ntlibc-linux-rename-dir2", O_RDONLY | O_DIRECTORY);
+		syscall(SYS_mkdirat, (long)AT_FDCWD_LX, (long)"/tmp/spicule-linux-rename-dir", 0755L);
+		syscall(SYS_mkdirat, (long)AT_FDCWD_LX, (long)"/tmp/spicule-linux-rename-dir2", 0755L);
+		dfd = open("/tmp/spicule-linux-rename-dir", O_RDONLY | O_DIRECTORY);
+		dfd2 = open("/tmp/spicule-linux-rename-dir2", O_RDONLY | O_DIRECTORY);
 		CHECK(dfd >= 0 && dfd2 >= 0, "open()ing both real directories for renameat() succeeded");
 
 		r = openat(dfd, "inner", O_CREAT | O_WRONLY, 0644);
@@ -118,22 +118,22 @@ int main(void)
 
 	/* --- rename() onto a directory where types mismatch: ENOTDIR --- */
 	{
-		int fd = open("/tmp/ntlibc-linux-rename-b", O_CREAT | O_WRONLY, 0644);
+		int fd = open("/tmp/spicule-linux-rename-b", O_CREAT | O_WRONLY, 0644);
 		if (fd >= 0) close(fd);
-		CHECK(rename("/tmp/ntlibc-linux-rename-dir", "/tmp/ntlibc-linux-rename-b") == -1 &&
+		CHECK(rename("/tmp/spicule-linux-rename-dir", "/tmp/spicule-linux-rename-b") == -1 &&
 		      (errno == ENOTDIR || errno == EISDIR || errno == EEXIST),
 		      "rename() of a directory onto an existing non-directory fails with a type-mismatch errno");
 	}
 
 	/* --- rename() of a directory into its own descendant: EINVAL --- */
 	{
-		int r = rename("/tmp/ntlibc-linux-rename-dir2", "/tmp/ntlibc-linux-rename-dir2/sub");
+		int r = rename("/tmp/spicule-linux-rename-dir2", "/tmp/spicule-linux-rename-dir2/sub");
 		CHECK(r == -1 && errno == EINVAL, "rename() of a directory into its own descendant fails EINVAL");
 	}
 
 	/* --- rename() of a nonexistent source: ENOENT --- */
 	{
-		int r = rename("/tmp/ntlibc-linux-rename-does-not-exist", "/tmp/ntlibc-linux-rename-x");
+		int r = rename("/tmp/spicule-linux-rename-does-not-exist", "/tmp/spicule-linux-rename-x");
 		CHECK(r == -1 && errno == ENOENT, "rename() of a missing source fails ENOENT");
 	}
 

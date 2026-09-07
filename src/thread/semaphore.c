@@ -7,7 +7,7 @@
  * already-open handles keep the dispatcher object alive.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -66,7 +66,7 @@ static char *sem_path(const char *name)
 {
 	const char *component, *dir;
 	size_t n, d, i, maxdir;
-	const size_t prefix = sizeof "/ntlibc-sem/" - 1;
+	const size_t prefix = sizeof "/spicule-sem/" - 1;
 	size_t total;
 	char *path;
 	if (!name) { errno = EINVAL; return NULL; }
@@ -96,12 +96,12 @@ static char *sem_path(const char *name)
 	total = d + prefix + n + 1;
 	path = malloc(total);
 	if (!path) return NULL;
-	snprintf(path, total, "%s/ntlibc-sem/%s", dir, component);
+	snprintf(path, total, "%s/spicule-sem/%s", dir, component);
 	return path;
 }
 
 /* Call sites all pass a path built by sem_path(), which always embeds a
- * literal "/ntlibc-sem/" component, so strrchr() can't return NULL here. */
+ * literal "/spicule-sem/" component, so strrchr() can't return NULL here. */
 static int ensure_dir(const char *path) __attribute__((nonnull(1)));
 static int ensure_dir(const char *path)
 {
@@ -139,7 +139,7 @@ static int namespace_lock(const char *path, __plat_handle_t *out)
 	unsigned long long hash = path_hash(path);
 	int n;
 
-	n = snprintf(name, sizeof name, "\\BaseNamedObjects\\ntlibc.sem.name.%08x%08x",
+	n = snprintf(name, sizeof name, "\\BaseNamedObjects\\spicule.sem.name.%08x%08x",
 	         (unsigned)(hash >> 32), (unsigned)hash);
 	if (n < 0 || (size_t)n >= sizeof name) {
 		if (n >= 0) errno = ENAMETOOLONG;
@@ -274,7 +274,7 @@ retry_record:
 	if (fd < 0) { saved = errno; goto fail_locked; }
 	if (created) {
 		int create_result;
-		n = snprintf(object, sizeof object, "\\BaseNamedObjects\\ntlibc.sem.%d.%u",
+		n = snprintf(object, sizeof object, "\\BaseNamedObjects\\spicule.sem.%d.%u",
 		         (int)getpid(), ++object_sequence);
 		if (n < 0 || (size_t)n >= sizeof object) {
 			saved = n < 0 ? errno : ENAMETOOLONG;

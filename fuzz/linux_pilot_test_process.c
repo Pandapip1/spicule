@@ -1,19 +1,19 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Linux process/fork/wait pilot smoke test -- NOT part of ntlibc, same
+ * Linux process/fork/wait pilot smoke test -- NOT part of spicule, same
  * standing as fuzz/ntstubs.c's own native-build scaffolding and
  * fuzz/linux_pilot_test.c's for the mman/unistd-fd-ops pilot this one
  * sits alongside.
  *
- * Exercises the REAL ntlibc public entry points fork()/waitpid() (from
+ * Exercises the REAL spicule public entry points fork()/waitpid() (from
  * the real src/process/fork.c and src/process/wait.c, statically linked
  * here) and close()/read()/write() (from the already-proven mman/
  * unistd-fd-ops pilot's own front doors) against the new
  * src/process/linux/plat_process.c backend, running as a real, native
  * aarch64 Linux process on this host -- no Wine, no emulation.
  *
- * Three things this test does NOT go through ntlibc for, each raw-
+ * Three things this test does NOT go through spicule for, each raw-
  * syscall scaffolding standing in for a subsystem this pilot deliberately
  * does not port: pipe(2) itself (src/unistd/pipe.c
  * still calls the NT-only __pipe_handles(), never ported here -- a raw
@@ -59,7 +59,7 @@ static int failures;
 	if (!(cond)) { printf("FAIL - %s (errno=%d)\n", msg, errno); failures++; } \
 } while (0)
 
-/* Raw pipe2(2), installed into ntlibc's OWN fd table the same way
+/* Raw pipe2(2), installed into spicule's OWN fd table the same way
  * linux_pilot_test.c installs its raw openat() fd -- see this file's
  * banner for why pipe() itself is out of scope. */
 static void make_pipe(int *fd_r, int *fd_w)
@@ -75,7 +75,7 @@ static void make_pipe(int *fd_r, int *fd_w)
 /* ---- front doors, with the child's own write() proven by content ----- */
 static void test_fork_wait(void)
 {
-	const char msg[] = "hello from a real fork()ed ntlibc child on linux";
+	const char msg[] = "hello from a real fork()ed spicule child on linux";
 	int fd_r, fd_w;
 	pid_t pid;
 
@@ -211,18 +211,18 @@ static void make_file(const char *path, long mode)
 static void test_is_program(void)
 {
 	printf("\n-- test 3: __plat_is_program() --\n");
-	make_file("/tmp/ntlibc-linux-pilot-process-exec", 0755L);
-	make_file("/tmp/ntlibc-linux-pilot-process-noexec", 0644L);
+	make_file("/tmp/spicule-linux-pilot-process-exec", 0755L);
+	make_file("/tmp/spicule-linux-pilot-process-noexec", 0644L);
 
-	CHECK(__plat_is_program("/tmp/ntlibc-linux-pilot-process-exec") == 1,
+	CHECK(__plat_is_program("/tmp/spicule-linux-pilot-process-exec") == 1,
 	      "a regular file with an execute bit is a program");
-	CHECK(__plat_is_program("/tmp/ntlibc-linux-pilot-process-noexec") == 0,
+	CHECK(__plat_is_program("/tmp/spicule-linux-pilot-process-noexec") == 0,
 	      "a regular file with no execute bit is not a program");
-	CHECK(__plat_is_program("/tmp/ntlibc-linux-pilot-process-does-not-exist") == 0,
+	CHECK(__plat_is_program("/tmp/spicule-linux-pilot-process-does-not-exist") == 0,
 	      "a nonexistent path is not a program");
 
-	syscall(35 /* unlinkat */, (long)AT_FDCWD_LX, "/tmp/ntlibc-linux-pilot-process-exec", 0L);
-	syscall(35 /* unlinkat */, (long)AT_FDCWD_LX, "/tmp/ntlibc-linux-pilot-process-noexec", 0L);
+	syscall(35 /* unlinkat */, (long)AT_FDCWD_LX, "/tmp/spicule-linux-pilot-process-exec", 0L);
+	syscall(35 /* unlinkat */, (long)AT_FDCWD_LX, "/tmp/spicule-linux-pilot-process-noexec", 0L);
 }
 
 int main(void)

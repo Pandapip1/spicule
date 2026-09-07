@@ -123,7 +123,7 @@ static int fails;
  * All five now hold.  INET6_ADDRSTRLEN is checked separately below.
  *
  * Deliberately unused here, and worth saying why: INADDR_LOOPBACK,
- * which ntlibc defines and test/posix-socket.c uses throughout, is
+ * which spicule defines and test/posix-socket.c uses throughout, is
  * nowhere in netinet_in.h.html -- the page requires INADDR_ANY ("IPv4
  * wildcard address") and INADDR_BROADCAST ("IPv4 broadcast address")
  * and stops there.  It is a BSD extension this tree happens to
@@ -173,7 +173,7 @@ static void test_arpa_inet_header_contents(void)
  * would assert something the page does not require, and would break
  * against a conforming macro-only implementation.
  *
- * ntlibc declares all eight as functions and defines no macro
+ * spicule declares all eight as functions and defines no macro
  * (include/arpa/inet.h, src/socket/inet.c), so it meets the stricter
  * clause where the stricter clause applies.
  * ------------------------------------------------------------------ */
@@ -332,7 +332,7 @@ static void test_inet_addr_forms_and_radix(void)
  * buf[INET_ADDRSTRLEN]`, which is exactly what that permits.
  * Asserting the overwrite is what makes the permission a recorded
  * property instead of an accident, and it is the behaviour a caller
- * that stashes the pointer will meet.  ntlibc has no threads, so the
+ * that stashes the pointer will meet.  spicule has no threads, so the
  * thread-safety half of the clause has no object here.
  * ------------------------------------------------------------------ */
 static void test_inet_ntoa_static_storage(void)
@@ -444,7 +444,7 @@ static void test_inet_ntop_size_and_family(void)
  * this file audits both functions together: everything
  * test_inet_addr_forms_and_radix asserts inet_addr() must ACCEPT,
  * inet_pton() must REFUSE, so a shared parser is necessarily wrong for
- * one of them.  ntlibc keeps them apart -- src/socket/inet.c writes
+ * one of them.  spicule keeps them apart -- src/socket/inet.c writes
  * inet_pton()'s loop by hand instead of reusing the strtoul() path --
  * and every refusal below holds.  The last string it was too lax about,
  * a part with a leading zero, was fixed in c7c0171 and is asserted live
@@ -526,7 +526,7 @@ static void test_inet_pton_strict_grammar(void)
 /* --------------------------------------------------------------------
  * The AF_INET6 half of inet_ntop.html.
  * ------------------------------------------------------------------ */
-#if NTLIBC_TEST(PASS, posix_inet_inet6_text_forms) /* Implemented: inet_ntop.html DESCRIPTION -- "The AF_INET and AF_INET6
+#if SPICULE_TEST(PASS, posix_inet_inet6_text_forms) /* Implemented: inet_ntop.html DESCRIPTION -- "The AF_INET and AF_INET6
 	address families shall be supported."  The same paragraph says
 	of inet_ntop()'s af argument "This can be AF_INET or
 	AF_INET6", and of inet_pton()'s dst buffer that it "shall be
@@ -560,7 +560,7 @@ static void test_inet_pton_strict_grammar(void)
 
 	The former classification was UNIMPL, not N/A, and the distinction
 	mattered more here than
-	anywhere else in the socket subsystem.  The rest of ntlibc's
+	anywhere else in the socket subsystem.  The rest of spicule's
 	IPv6 absence has a mechanism behind it: an AF_INET6 socket
 	needs an AFD path this tree does not have, and
 	test/networking-audit.md sec 6 stages that work behind a bind()
@@ -646,7 +646,7 @@ static void test_inet6_text_forms(void)
 	 * fence above), fuzz_inet.c's own harness still asserted that
 	 * inet_pton(AF_INET6, ...) must fail with -1/EAFNOSUPPORT for every
 	 * input, the same assertion test_inet_pton_strict_grammar now makes
-	 * about AF_UNIX/AF_UNSPEC below; ntlibc's pre-IPv6 inet_pton()
+	 * about AF_UNIX/AF_UNSPEC below; spicule's pre-IPv6 inet_pton()
 	 * returned something other than -1 without setting errno to it, so
 	 * the harness's own oracle_mismatch_i() called abort()
 	 * (host_oracle.c).  That was not a memory-safety bug and left no
@@ -677,13 +677,13 @@ static void test_inet6_text_forms(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_inet_inet6_addrstrlen_defined) /* Implemented: basedefs/arpa_inet.h.html DESCRIPTION -- "The
+#if SPICULE_TEST(PASS, posix_inet_inet6_addrstrlen_defined) /* Implemented: basedefs/arpa_inet.h.html DESCRIPTION -- "The
 	<arpa/inet.h> header shall define the INET_ADDRSTRLEN and
 	INET6_ADDRSTRLEN macros as described in <netinet/in.h>", and
 	basedefs/netinet_in.h.html, which describes them with their
 	values: "INET_ADDRSTRLEN 16. Length of the string form for IP."
 	and "INET6_ADDRSTRLEN 46. Length of the string form for IPv6."
-	ntlibc's <netinet/in.h> now defines both.
+	spicule's <netinet/in.h> now defines both.
 
 	Fenced separately from test_inet6_text_forms because it is a distinct
 	header contract.
@@ -723,10 +723,10 @@ static void test_inet6_addrstrlen_defined(void)
 /* --------------------------------------------------------------------
  * inet_addr()'s two defects.
  * ------------------------------------------------------------------ */
-#if NTLIBC_TEST(PASS, posix_inet_inet_addr_rejects_sign_and_space) /* inet_addr.html DESCRIPTION and RETURN VALUE -- the
+#if SPICULE_TEST(PASS, posix_inet_inet_addr_rejects_sign_and_space) /* inet_addr.html DESCRIPTION and RETURN VALUE -- the
 	function converts "the string pointed to by cp, in the standard
 	IPv4 dotted decimal notation", and "Otherwise, it shall return
-	(in_addr_t)(-1)".  ntlibc accepts three spellings that are not
+	(in_addr_t)(-1)".  spicule accepts three spellings that are not
 	in that notation under any reading of the page.
 
 	MECHANISM.  src/socket/inet.c parses each part with
@@ -820,7 +820,7 @@ static void test_inet_addr_rejects_sign_and_space(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_inet_inet_addr_preserves_errno) /* errno.html DESCRIPTION -- "No function in this volume of
+#if SPICULE_TEST(PASS, posix_inet_inet_addr_preserves_errno) /* errno.html DESCRIPTION -- "No function in this volume of
 	POSIX.1-2017 shall set errno to 0."  inet_addr()'s parse loop
 	(src/socket/inet.c) executes `errno = 0;` before every
 	strtoul() call, on the success path and the failure path alike,
@@ -893,17 +893,17 @@ int main(void)
 	test_inet_ntop_size_and_family();
 	test_inet_pton_strict_grammar();
 
-#if NTLIBC_TEST(PASS, posix_inet_inet6_text_forms) /* See the fence above test_inet6_text_forms.  Fenced here
+#if SPICULE_TEST(PASS, posix_inet_inet6_text_forms) /* See the fence above test_inet6_text_forms.  Fenced here
 	too because the function it calls is inside that #if 0. */
 	test_inet6_text_forms();
 #endif
-#if NTLIBC_TEST(PASS, posix_inet_inet6_addrstrlen_defined) /* See the fence above test_inet6_addrstrlen_defined. */
+#if SPICULE_TEST(PASS, posix_inet_inet6_addrstrlen_defined) /* See the fence above test_inet6_addrstrlen_defined. */
 	test_inet6_addrstrlen_defined();
 #endif
-#if NTLIBC_TEST(PASS, posix_inet_inet_addr_rejects_sign_and_space)
+#if SPICULE_TEST(PASS, posix_inet_inet_addr_rejects_sign_and_space)
 	test_inet_addr_rejects_sign_and_space();
 #endif
-#if NTLIBC_TEST(PASS, posix_inet_inet_addr_preserves_errno)
+#if SPICULE_TEST(PASS, posix_inet_inet_addr_preserves_errno)
 	test_inet_addr_preserves_errno();
 #endif
 

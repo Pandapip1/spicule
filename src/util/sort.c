@@ -181,7 +181,7 @@ static size_t key_start_off(const char *line withtok(readable_span(len)), size_t
 	/* nf > 0 here; split_fields() never returns a count without a
 	 * backing fields array. */
 	__ownership_pointer_nonnull(fields);
-	/* OPEN LINT FINDING (ntlibc.ValidPointer): fields[f-1].end <= len
+	/* OPEN LINT FINDING (spicule.ValidPointer): fields[f-1].end <= len
 	 * always holds, since split_fields() never records an end beyond
 	 * the line's len -- but the checker can't correlate a struct field
 	 * value against a bound set in a different function, so this stays

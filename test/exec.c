@@ -14,7 +14,7 @@
  * same __spawn() path execv() uses.
  */
 /* wait3()/wait4()/setenv()/clock_gettime() below are all feature-test
- * gated in ntlibc's own headers (see include/sys/wait.h's own comment on
+ * gated in spicule's own headers (see include/sys/wait.h's own comment on
  * why); test/posix-unistd-exec.c already needs the identical define for
  * the same reason.  Harmless noise under a lenient compiler that never
  * enforced the gate, but a genuine build break under one (clang, here)
@@ -106,12 +106,12 @@ static int argv_child(int argc, char **argv)
 		return RC_ARGV_MISMATCH;
 	}
 	if (!strcmp(argv[1], "--argv-env")) {
-		const char *v = getenv("NTLIBC_TEST_ENV");
+		const char *v = getenv("SPICULE_TEST_ENV");
 		if (!v || strcmp(v, "hello world")) {
-			printf("child: NTLIBC_TEST_ENV = %s\n", v ? v : "(unset)");
+			printf("child: SPICULE_TEST_ENV = %s\n", v ? v : "(unset)");
 			return RC_ENV_MISMATCH;
 		}
-		if (getenv("NTLIBC_TEST_ABSENT")) return RC_ENV_MISMATCH;
+		if (getenv("SPICULE_TEST_ABSENT")) return RC_ENV_MISMATCH;
 	}
 	return 0;
 }
@@ -136,14 +136,14 @@ static int argv0_child(int argc, char **argv)
  * an environment block and which spawn.c therefore drops, and one that
  * merely begins with '=', which is Windows' own per-drive
  * current-directory shape and must survive. */
-#define ENV_NOEQ_ENTRY "NTLIBC_EMPTY_NOEQ"
-#define ENV_DRIVE_ENTRY "=Z:=Z:\\ntlibc-test"
+#define ENV_NOEQ_ENTRY "SPICULE_EMPTY_NOEQ"
+#define ENV_DRIVE_ENTRY "=Z:=Z:\\spicule-test"
 static const char *const envblock_probes[] = {
-	"NTLIBC_EMPTY_A=1",
+	"SPICULE_EMPTY_A=1",
 	"",                     /* used to terminate the block */
-	"NTLIBC_EMPTY_B=2",
+	"SPICULE_EMPTY_B=2",
 	ENV_NOEQ_ENTRY,         /* no '=' at all: not representable, dropped */
-	"NTLIBC_EMPTY_C=3",
+	"SPICULE_EMPTY_C=3",
 	ENV_DRIVE_ENTRY,        /* '=' first, but a real name ("=Z:"): kept */
 	0
 };
@@ -153,9 +153,9 @@ static const char *const envblock_probes[] = {
 static int envblock_child(void)
 {
 	static const char *const want[][2] = {
-		{ "NTLIBC_EMPTY_A", "1" },
-		{ "NTLIBC_EMPTY_B", "2" },
-		{ "NTLIBC_EMPTY_C", "3" },
+		{ "SPICULE_EMPTY_A", "1" },
+		{ "SPICULE_EMPTY_B", "2" },
+		{ "SPICULE_EMPTY_C", "3" },
 		{ 0, 0 }
 	};
 	int i;
@@ -209,13 +209,13 @@ static int argvl_child(int argc, char **argv)
 		return RC_ARGV_MISMATCH;
 	}
 	if (!strcmp(argv[1], "--argvl-env")) {
-		const char *v = getenv("NTLIBC_TEST_ENV");
+		const char *v = getenv("SPICULE_TEST_ENV");
 		if (!v || strcmp(v, "hello world")) {
-			printf("child: NTLIBC_TEST_ENV = %s\n", v ? v : "(unset)");
+			printf("child: SPICULE_TEST_ENV = %s\n", v ? v : "(unset)");
 			return RC_ENV_MISMATCH;
 		}
 		/* execle()'s envp replaces the environment outright */
-		if (getenv("NTLIBC_TEST_ABSENT")) return RC_ENV_MISMATCH;
+		if (getenv("SPICULE_TEST_ABSENT")) return RC_ENV_MISMATCH;
 	}
 	return RC_OK;
 }
@@ -246,11 +246,11 @@ static int exec_child(const char *self, const char *role)
 		char *envp[3];
 		char sysroot[512];
 		const char *sr = getenv("SystemRoot");
-		envp[0] = (char *)"NTLIBC_TEST_ENV=hello world";
+		envp[0] = (char *)"SPICULE_TEST_ENV=hello world";
 		if (sr) { snprintf(sysroot, sizeof sysroot, "SystemRoot=%s", sr); envp[1] = sysroot; }
 		else envp[1] = (char *)"SystemRoot=C:\\Windows";
 		envp[2] = 0;
-		setenv("NTLIBC_TEST_ABSENT", "1", 1);   /* must not leak past an explicit envp */
+		setenv("SPICULE_TEST_ABSENT", "1", 1);   /* must not leak past an explicit envp */
 		execve(self, build_argv(self, "--argv-env"), envp);
 	} else if (!strcmp(role, "--exec-exit")) {
 		char *v[4];
@@ -270,11 +270,11 @@ static int exec_child(const char *self, const char *role)
 		char *envp[3];
 		char sysroot[512];
 		const char *sr = getenv("SystemRoot");
-		envp[0] = (char *)"NTLIBC_TEST_ENV=hello world";
+		envp[0] = (char *)"SPICULE_TEST_ENV=hello world";
 		if (sr) { snprintf(sysroot, sizeof sysroot, "SystemRoot=%s", sr); envp[1] = sysroot; }
 		else envp[1] = (char *)"SystemRoot=C:\\Windows";
 		envp[2] = 0;
-		setenv("NTLIBC_TEST_ABSENT", "1", 1);   /* must not leak past an explicit envp */
+		setenv("SPICULE_TEST_ABSENT", "1", 1);   /* must not leak past an explicit envp */
 		execvpe(self, build_argv(self, "--argv-env"), envp);
 	} else if (!strcmp(role, "--exec-l")) {
 		execl(self, self, "--argvl", ARGVL_1, ARGVL_2, (char *)0);
@@ -282,11 +282,11 @@ static int exec_child(const char *self, const char *role)
 		char *envp[3];
 		char sysroot[512];
 		const char *sr = getenv("SystemRoot");
-		envp[0] = (char *)"NTLIBC_TEST_ENV=hello world";
+		envp[0] = (char *)"SPICULE_TEST_ENV=hello world";
 		if (sr) { snprintf(sysroot, sizeof sysroot, "SystemRoot=%s", sr); envp[1] = sysroot; }
 		else envp[1] = (char *)"SystemRoot=C:\\Windows";
 		envp[2] = 0;
-		setenv("NTLIBC_TEST_ABSENT", "1", 1);   /* must not leak past an explicit envp */
+		setenv("SPICULE_TEST_ABSENT", "1", 1);   /* must not leak past an explicit envp */
 		execle(self, self, "--argvl-env", ARGVL_1, ARGVL_2, (char *)0, envp);
 	} else if (!strcmp(role, "--exec-lp")) {
 		/* self contains a slash or is an absolute path: used as-is,
@@ -323,7 +323,7 @@ static int exec_child(const char *self, const char *role)
 		fputs("buffered", f);           /* deliberately not flushed */
 		if (atexit(atexit_must_not_run)) return 4;
 		execl(self, self, "--exit", "0", (char *)0);
-#if defined(__linux__) && !defined(_NTLIBC_NATIVE_BUILD)
+#if defined(__linux__) && !defined(_SPICULE_NATIVE_BUILD)
 	} else if (!strcmp(role, "--exec-pid")) {
 		/* The real-exec bar, per src/process/exec.c's own banner:
 		 * on Linux execve() must replace THIS OS process's image in
@@ -499,7 +499,7 @@ static void envblock_bisect(const char *self, char **ev, int nprobe, int nenv)
  *
  * The probes still prove the point.  The empty entry is the *second*
  * thing in the block, so if it truncated the block again, everything
- * after it -- all three NTLIBC_EMPTY_* variables and the whole inherited
+ * after it -- all three SPICULE_EMPTY_* variables and the whole inherited
  * environment -- would be gone. */
 static void test_empty_env_entry(const char *self)
 {
@@ -982,7 +982,7 @@ int main(int argc, char **argv)
 		return argv_child(argc, argv);
 	if (argc > 1 && (!strcmp(argv[1], "--argvl") || !strcmp(argv[1], "--argvl-env")))
 		return argvl_child(argc, argv);
-#if defined(__linux__) && !defined(_NTLIBC_NATIVE_BUILD)
+#if defined(__linux__) && !defined(_SPICULE_NATIVE_BUILD)
 	/* Reached only by the --exec-pid role's own execl() above, in the
 	 * SAME OS process if (and only if) that was a real in-place exec:
 	 * the pid it captured just before calling execl() is the value now
@@ -996,7 +996,7 @@ int main(int argc, char **argv)
 	CHECK(run_role(argv[0], "--exec-vp") == 0);
 	CHECK(run_role(argv[0], "--exec-ve") == 0);
 	CHECK(run_role(argv[0], "--exec-vpe") == 0);
-#if defined(__linux__) && !defined(_NTLIBC_NATIVE_BUILD)
+#if defined(__linux__) && !defined(_SPICULE_NATIVE_BUILD)
 	/* src/process/exec.c's real, in-place execve() on Linux: getpid()
 	 * must be unchanged across the exec, not merely the exec'd
 	 * program's output -- see exec_child()'s own "--exec-pid" comment

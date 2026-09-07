@@ -20,7 +20,7 @@
  *
  * __plat_mkdir() passes `mode` straight to mkdirat(2) UNMASKED, mirroring
  * __plat_open()'s Linux implementation: masking it here too would
- * double-mask against the real kernel-level umask ntlibc's own umask()
+ * double-mask against the real kernel-level umask spicule's own umask()
  * (src/stat/chmod.c) already pushes out via __plat_umask_apply() below.
  *
  * __plat_chmodat()'s AT_SYMLINK_NOFOLLOW: the raw fchmodat(2) syscall
@@ -33,7 +33,7 @@
  * deliberately: unlike the classic kernel `struct stat`, whose raw layout
  * differs between architectures, struct statx is a fixed,
  * architecture-independent ABI. st_mode needs NO translation into
- * ntlibc's own struct stat, since ntlibc's S_IF*, S_IR* etc. values are
+ * spicule's own struct stat, since spicule's S_IF*, S_IR* etc. values are
  * the same standard bits the kernel uses -- unlike NT, which has to
  * synthesize a mode from FILE_ATTRIBUTE_* bits. `type` goes unused here
  * for the same reason: statx(2) already reports the correct type
@@ -54,7 +54,7 @@
  * work around a Wine quirk.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -311,7 +311,7 @@ int __plat_chmod(__plat_handle_t h, mode_t mode)
 }
 
 /* fchmodat2(2) is Linux 6.6+. AT_SYMLINK_NOFOLLOW (0x100) is already the
- * real Linux value ntlibc's own constant matches, so it passes through
+ * real Linux value spicule's own constant matches, so it passes through
  * with no translation. */
 int __plat_chmodat(int dirfd, const char *path, int flags, mode_t mode) // NOLINT(bugprone-easily-swappable-parameters) -- fixed platform-backend contract; flags and file mode have distinct roles
 {

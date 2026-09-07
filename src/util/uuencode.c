@@ -80,7 +80,7 @@ int __util_uuencode_main(
 		decode_name = argv[i];
 		in = stdin;
 	} else if (noperands == 2) {
-		/* Checker gap (ntlibc.ResourceLeak): the fclose()s below are
+		/* Checker gap (spicule.ResourceLeak): the fclose()s below are
 		 * already gated on this same `src_path` (set right here, never
 		 * reassigned) rather than on `in != stdin` -- but the checker
 		 * can't prove argv[i], i < argc, is non-null, so it still

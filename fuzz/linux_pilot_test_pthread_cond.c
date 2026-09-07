@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * pthread_cond_t front-door pilot -- NOT part of ntlibc, same standing
+ * pthread_cond_t front-door pilot -- NOT part of spicule, same standing
  * as fuzz/linux_pilot_test_pthread_mutex.c (this file's own structure
  * mirrors that one almost exactly; see its banner for the general
  * pattern).

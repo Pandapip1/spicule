@@ -33,8 +33,8 @@
  * backend needs no equivalent check at all, only the NT backend still
  * needs its own NT-path-buffer-comparing version (moved in unchanged).
  */
-#ifndef _NTLIBC_PLAT_STDIO_H
-#define _NTLIBC_PLAT_STDIO_H
+#ifndef _SPICULE_PLAT_STDIO_H
+#define _SPICULE_PLAT_STDIO_H
 
 /* Rename `old` (relative to `olddirfd`) to `new` (relative to
  * `newdirfd`) -- POSIX rename(2)/renameat(2) semantics exactly

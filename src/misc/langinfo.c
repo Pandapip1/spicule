@@ -17,7 +17,7 @@
  *
  * ERRORS: "No errors are defined."  Nothing here sets errno.
  *
- * ntlibc has exactly one locale, "C" (src/misc/locale.c), so the first
+ * spicule has exactly one locale, "C" (src/misc/locale.c), so the first
  * of those two sentences is the whole of the locale story: every item
  * answers with its POSIX-locale string and there is no second answer to
  * choose between.  That is why nl_langinfo_l() ignores its locale_t
@@ -65,7 +65,7 @@
  *    expressions <regex.h> here compiles and matches.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -79,10 +79,10 @@
  * divergence would be a link-time type error under any checker, and the
  * live cross-check in test/posix-msgcat.c compares every one of these
  * strings against what strftime() prints. */
-extern const char *const __ntlibc_day_name[7]; // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- libc-internal name is intentionally reserved against application collision
-extern const char *const __ntlibc_day_name_abbr[7]; // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- libc-internal name is intentionally reserved against application collision
-extern const char *const __ntlibc_month_name[12]; // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- libc-internal name is intentionally reserved against application collision
-extern const char *const __ntlibc_month_name_abbr[12]; // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- libc-internal name is intentionally reserved against application collision
+extern const char *const __spicule_day_name[7]; // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- libc-internal name is intentionally reserved against application collision
+extern const char *const __spicule_day_name_abbr[7]; // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- libc-internal name is intentionally reserved against application collision
+extern const char *const __spicule_month_name[12]; // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- libc-internal name is intentionally reserved against application collision
+extern const char *const __spicule_month_name_abbr[12]; // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- libc-internal name is intentionally reserved against application collision
 
 char *nl_langinfo(nl_item item)
 {
@@ -113,13 +113,13 @@ char *nl_langinfo(nl_item item)
 	}
 
 	if (item >= DAY_1 && item <= DAY_7)
-		return (char *)__ntlibc_day_name[item - DAY_1];
+		return (char *)__spicule_day_name[item - DAY_1];
 	if (item >= ABDAY_1 && item <= ABDAY_7)
-		return (char *)__ntlibc_day_name_abbr[item - ABDAY_1];
+		return (char *)__spicule_day_name_abbr[item - ABDAY_1];
 	if (item >= MON_1 && item <= MON_12)
-		return (char *)__ntlibc_month_name[item - MON_1];
+		return (char *)__spicule_month_name[item - MON_1];
 	if (item >= ABMON_1 && item <= ABMON_12)
-		return (char *)__ntlibc_month_name_abbr[item - ABMON_1];
+		return (char *)__spicule_month_name_abbr[item - ABMON_1];
 
 	/* "these functions shall return a pointer to an empty string if
 	 * item contains an invalid setting" -- an empty string, never a

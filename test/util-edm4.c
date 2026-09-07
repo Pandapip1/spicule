@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Black-box tests for ntlibc's Tier 4 "bigger engines" POSIX standard
+ * Black-box tests for spicule's Tier 4 "bigger engines" POSIX standard
  * utilities: `ed`, `m4` (XCU ed(1p), m4(1p)).  Same technique as
  * test/util-textio.c: the standalone obj/bin/<name>.exe is spawned as a
  * real process (via __spawn()+waitpid()) with stdin redirected from a

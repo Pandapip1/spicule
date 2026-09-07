@@ -27,7 +27,7 @@ jobs:
   # builds nothing, and needs neither the cross toolchain nor Wine.
   #
   # It is in CI, and not only in tools/gate.sh, because it guards the one
-  # claim no other job in this file can test. `ntlibc-suite` runs under
+  # claim no other job in this file can test. `spicule-suite` runs under
   # Wine, whose ntdll has no version gates at all and resolves every
   # import regardless of vintage; `windows-test` runs on Server 2025,
   # which is many releases past the floor. Both are green on an image
@@ -173,7 +173,7 @@ jobs:
       - name: Run native Linux build suites
         if: matrix.arch == 'aarch64'
         env:
-          NTLIBC_ARCH: aarch64
+          SPICULE_ARCH: aarch64
         # $(nproc)/$script expand in this step's own (non-Nix) shell, same
         # as every other run: block here -- only the built binary each
         # invocation execs (the script named by $script) runs inside
@@ -236,7 +236,7 @@ jobs:
             obj/sh/sh.exe
           if-no-files-found: error
 
-  ntlibc-suite:
+  spicule-suite:
     needs: [build-toolchain, build-wine]
     runs-on: ubuntu-24.04
     timeout-minutes: 20

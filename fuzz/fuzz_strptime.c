@@ -17,7 +17,7 @@
  *
  * No host oracle: glibc's strptime accepts locale-dependent names and a
  * superset of conversions (E/O modifiers, %s, week-number fields that DO
- * feed back into tm on some platforms) that ntlibc's deliberately does
+ * feed back into tm on some platforms) that spicule's deliberately does
  * not implement, so a differential comparison would be mostly noise.
  * This is a crash/UB/OOB check under ASan+UBSan, plus a couple of
  * invariants strptime's own contract guarantees regardless of locale.

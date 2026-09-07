@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -53,7 +53,7 @@ static long double raw_yl2xp1(long double x, long double y) // NOLINT(bugprone-e
 /* 2^t - 1 for |t| <= 1 (we only ever call this with |t| <~ 0.7213). */
 static long double raw_f2xm1(long double t)
 {
-	__asm__ __volatile__(NTLIBC_FLDL " (%0)\n\tf2xm1\n\t" NTLIBC_FSTPL " (%0)" : : "r"(&t) : "memory");
+	__asm__ __volatile__(SPICULE_FLDL " (%0)\n\tf2xm1\n\t" SPICULE_FSTPL " (%0)" : : "r"(&t) : "memory");
 	return t;
 }
 
@@ -61,7 +61,7 @@ static long double raw_f2xm1(long double t)
  * argument order as ldbl_math.h's __x87_yl2x. */
 static long double raw_yl2xp1(long double x, long double y) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
-	__asm__ __volatile__(NTLIBC_FLDL " (%0)\n\t" NTLIBC_FLDL " (%1)\n\tfyl2xp1\n\t" NTLIBC_FSTPL " (%0)" : : "r"(&y), "r"(&x) : "memory");
+	__asm__ __volatile__(SPICULE_FLDL " (%0)\n\t" SPICULE_FLDL " (%1)\n\tfyl2xp1\n\t" SPICULE_FSTPL " (%0)" : : "r"(&y), "r"(&x) : "memory");
 	return y;
 }
 #endif

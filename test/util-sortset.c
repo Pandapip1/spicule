@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Black-box tests for ntlibc's sorting/set-operation POSIX standard
+ * Black-box tests for spicule's sorting/set-operation POSIX standard
  * utilities: `sort`, `uniq`, `comm`, `join`, `tsort` (XCU sort(1p),
  * uniq(1p), comm(1p), join(1p), tsort(1p)).  Same technique as
  * test/util-fsops.c: the standalone obj/bin/<name>.exe is spawned as a

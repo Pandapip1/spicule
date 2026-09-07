@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * <arpa/inet.h>: byte-order conversion and address-text helpers.  Every
- * one of these is pure C with no NT dependency at all -- ntlibc only
+ * one of these is pure C with no NT dependency at all -- spicule only
  * targets i386/x86_64 (arch/i386, arch/x86_64), both little-endian, so
  * "network byte order" (big-endian, historically) and "host byte
  * order" are never the same and the swap below is unconditional; there
@@ -10,7 +10,7 @@
  * matter for.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)

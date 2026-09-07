@@ -4,13 +4,13 @@
  * getentropy(): fill a caller-given buffer with cryptographically strong
  * random bytes (BSD/glibc extension, not POSIX). NT has no entropy
  * source in ntdll; the real implementation needs bcrypt.dll's
- * BCryptGenRandom, so it's only real under NTLIBC_USE_KERNEL32 (ENOSYS
+ * BCryptGenRandom, so it's only real under SPICULE_USE_KERNEL32 (ENOSYS
  * otherwise) -- see src/unistd/nt/plat_unistd.c's __plat_getentropy().
  * Linux's is real unconditionally, via getrandom(2).
  *
  * getentropy(3): buflen > 256 is EIO. */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)

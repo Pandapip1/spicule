@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: (C) 2026 Gavin John
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Run ntlibc PE tests with the same harness under Wine and Windows."""
+"""Run spicule PE tests with the same harness under Wine and Windows."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ MEASURE_PREFIX = "measure:"
 # chosen to tell them apart. If sh-engine now passes, the test was slow on
 # native NT and the number was wrong; if it still times out, the extra
 # eight minutes prove a genuine stall in the shell engine's process
-# spawn/wait/pipe handling, which is a defect in ntlibc and not in this
+# spawn/wait/pipe handling, which is a defect in spicule and not in this
 # table. Either outcome is information the 120 s ceiling was destroying.
 #
 # So this entry is expected to be temporary in one direction or the other.
@@ -217,7 +217,7 @@ def main() -> int:
     results: dict[Path, Result] = {}
     serial = [path for path in executables if is_serial(path)]
     parallel = [path for path in executables if not is_serial(path)]
-    with tempfile.TemporaryDirectory(prefix="ntlibc-run-tests.") as tmp:
+    with tempfile.TemporaryDirectory(prefix="spicule-run-tests.") as tmp:
         root = Path(tmp)
         # The process-sensitive tests are one sequential task, overlapping
         # the independent pool without ever overlapping each other.

@@ -19,7 +19,7 @@
  * with an out-of-range base left its endptr flat-out uninitialized
  * (observed: a garbage multi-terabyte offset for input "").  So the host
  * oracle is only ever called with a base of 0 or in [2,36]; an
- * out-of-range base still drives ntlibc's six functions (which document
+ * out-of-range base still drives spicule's six functions (which document
  * EINVAL/endptr==nptr for it, src/stdlib/strtol.c's `parse`), just
  * without a host comparison.
  *
@@ -33,9 +33,9 @@
  * genuinely comparable to the host's 64-bit strtoll/strtoull.
  *
  * strtol/strtoul are NOT compared against the host's strtol/strtoul.
- * ntlibc targets LLP64: `long` is 32 bits (arch/x86_64/bits/limits.h,
+ * spicule targets LLP64: `long` is 32 bits (arch/x86_64/bits/limits.h,
  * LONG_MAX 0x7fffffffL), but this is a *native* build, where the host
- * compiler's `long` is 64 bits -- so ntlibc's strtol saturates at its
+ * compiler's `long` is 64 bits -- so spicule's strtol saturates at its
  * own 32-bit LONG_MAX while returning a 64-bit `long`, and glibc's
  * saturates at 2^63-1.  That is a header/target mismatch (the same
  * reason test/strto.c skips strtol natively), not a defect, and a naive
@@ -43,9 +43,9 @@
  * are checked for *self-consistency* against strtoll/strtoull: the
  * parse itself (which characters are consumed, where endptr lands) must
  * agree between the 32-bit- and 64-bit-limited wrappers, and the result
- * must equal the 64-bit one saturated to ntlibc's own LONG_MIN/LONG_MAX
+ * must equal the 64-bit one saturated to spicule's own LONG_MIN/LONG_MAX
  * (taken from <limits.h> as this harness's own compiler sees it, which
- * -nostdinc/-I arch/$(ARCH) makes ntlibc's, not the host's).
+ * -nostdinc/-I arch/$(ARCH) makes spicule's, not the host's).
  */
 #include <stdlib.h>
 #include <string.h>
@@ -83,7 +83,7 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 
 	if (base != 0 && (base < 2 || base > 36)) {
 		/* Invalid base: no host comparison (see the file header) -- just
-		 * check ntlibc's own documented contract for it directly. */
+		 * check spicule's own documented contract for it directly. */
 		char *e;
 		errno = 0;
 		if (strtoll(buf, &e, base) != 0 || e != buf)
@@ -137,7 +137,7 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 		oracle_mismatch_i("strtoumax != strtoull", buf, (long long)got_um, (long long)got_ull);
 
 	/* ---- strtol/strtoul: self-consistency against strtoll/strtoull,
-	 * saturating to ntlibc's OWN LONG_MIN/LONG_MAX/ULONG_MAX (this
+	 * saturating to spicule's OWN LONG_MIN/LONG_MAX/ULONG_MAX (this
 	 * harness's <limits.h> is arch/$(ARCH)'s, per -nostdinc), never the
 	 * host's.
 	 *
@@ -183,7 +183,7 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 			/* Truncate with the header's own ULONG_MAX mask, not a cast
 			 * to `unsigned long`: natively that type is 64 bits (the
 			 * compiler's, not the PE target's), so a cast alone does
-			 * not reproduce the 32-bit wraparound ntlibc's strtoul
+			 * not reproduce the 32-bit wraparound spicule's strtoul
 			 * actually performs (arch/x86_64/bits/limits.h keeps `long`
 			 * at 32 bits only in its own macros, not in the type). */
 			unsigned long long want = got_ull & (unsigned long long)ULONG_MAX;

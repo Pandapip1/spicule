@@ -71,7 +71,7 @@
 # no PE-only test even mentions, so a reader who investigates one never
 # discovers it was already covered.  The cost is that a name mentioned in
 # a comment in exactly those two files is let through; today that
-# suppresses two names (gets, ntlibc_delayLoadHelper2), which is a price
+# suppresses two names (gets, spicule_delayLoadHelper2), which is a price
 # worth paying for a worklist that does not cry wolf.
 #
 # ---------------------------------------------------------------------
@@ -159,7 +159,7 @@ fi
 # ARCH for the header set.  This is a native build, so the only sensible
 # answer is the one whose bits/ headers describe this machine's word
 # size; x86_64 is the tree's LLP64 arch and the one asan-build uses.
-ARCH=${NTLIBC_ARCH:-x86_64}
+ARCH=${SPICULE_ARCH:-x86_64}
 
 # Tests that genuinely cannot be compiled natively, with the reason, in
 # the style of tools/asan-build.sh's not_native().  Anything here is
@@ -209,7 +209,7 @@ if [ -z "$lintdecls_clang_cpp" ]; then
 	echo "lint-unreferenced: CI does (libclang-18-dev)." >&2
 	exit 1
 fi
-lintdecls_plugin="$workdir/ntlibc-lintdecls.so"
+lintdecls_plugin="$workdir/spicule-lintdecls.so"
 # llvm-config deliberately returns shell words, not one argument.
 # shellcheck disable=SC2046
 clang++-18 -fPIC -shared $(llvm-config-18 --cxxflags) \
@@ -224,9 +224,9 @@ scan_one() {
 	# shellcheck disable=SC2086
 	clang-18 -std=c99 -fsyntax-only $lintdecls_flags \
 		-Xclang -load -Xclang "$lintdecls_plugin" \
-		-Xclang -add-plugin -Xclang ntlibc-lintdecls \
-		-Xclang -plugin-arg-ntlibc-lintdecls -Xclang "$1" \
-		-Xclang -plugin-arg-ntlibc-lintdecls -Xclang "$2" \
+		-Xclang -add-plugin -Xclang spicule-lintdecls \
+		-Xclang -plugin-arg-spicule-lintdecls -Xclang "$1" \
+		-Xclang -plugin-arg-spicule-lintdecls -Xclang "$2" \
 		"$2" 2>> "$workdir/scan.err"
 }
 : > "$workdir/scan.err"
@@ -234,7 +234,7 @@ scan_one() {
 # ---- declared: every function a public header prototypes ------------------
 #
 # Headers are preprocessed the way a real consumer's #include sees them
-# (no -D_NTLIBC_INTERNAL), ARCH=x86_64 for bits/alltypes.h's shape -- see
+# (no -D_SPICULE_INTERNAL), ARCH=x86_64 for bits/alltypes.h's shape -- see
 # tools/lint-undefined.sh's identical choice and its reasoning (a public
 # header's declared function set does not vary by arch in this tree).
 headers=$(find include -type f -name '*.h' | sort)
@@ -332,7 +332,7 @@ for arch in i386 x86_64 aarch64; do
 	mkdir -p "$agendir/include/bits" || exit 1
 	cat "arch/$arch/bits/alltypes.h.gen" include/alltypes.h.gen > "$agendir/include/bits/alltypes.h" || exit 1
 	t=$(triple_for "$arch")
-	lintdecls_flags="-nostdinc -fno-builtin -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_NTLIBC_INTERNAL -Iarch/$arch -Iarch/generic -I$agendir/include -Iinclude -Isrc/internal ${t:+--target=$t}"
+	lintdecls_flags="-nostdinc -fno-builtin -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_SPICULE_INTERNAL -Iarch/$arch -Iarch/generic -I$agendir/include -Iinclude -Isrc/internal ${t:+--target=$t}"
 	for f in $(lintdecls_sources_for "$arch"); do
 		scan_one def "$f" || def_rc=1
 	done >> "$workdir/def.raw"
@@ -415,7 +415,7 @@ sort -u -o "$workdir/symrefs" "$workdir/symrefs"
 nsym=$(grep -c . "$workdir/symrefs" || true)
 
 # Policy-fenced tests are absent from the ordinary objects above because
-# test/test-policy.h deliberately expands every NTLIBC_TEST() to zero.
+# test/test-policy.h deliberately expands every SPICULE_TEST() to zero.
 # The policy runner turns one buildable case on at a time.  For reference
 # accounting it is enough (and much cheaper) to turn every buildable kind on
 # for preprocessing: no definitions are linked, while macro expansion keeps
@@ -432,7 +432,7 @@ for t in test/*.c; do
 	esac
 	# TINC deliberately expands to the four generated/source include options.
 	# shellcheck disable=SC2086
-	if ! sed -E 's/^([[:space:]]*#[[:space:]]*if[[:space:]]+)NTLIBC_TEST\([[:space:]]*(PASS|BUG|FLAKY),[^)]*\)/\1 1/' "$t" |
+	if ! sed -E 's/^([[:space:]]*#[[:space:]]*if[[:space:]]+)SPICULE_TEST\([[:space:]]*(PASS|BUG|FLAKY),[^)]*\)/\1 1/' "$t" |
 		"$CC_NATIVE" -E -std=c99 -nostdinc -fno-builtin -D_XOPEN_SOURCE=700 \
 		-D_GNU_SOURCE -I"$srcdir/test" $TINC -x c - \
 		> "$workdir/policy/$n.i" 2> "$workdir/policy/$n.err"; then

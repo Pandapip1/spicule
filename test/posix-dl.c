@@ -2,11 +2,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * `test/POSIX-COVERAGE.md`'s audit so far has only ever asked "for a
- * header ntlibc *has*, are every function's clauses covered?".  That
- * question cannot find a header POSIX requires that ntlibc simply does
+ * header spicule *has*, are every function's clauses covered?".  That
+ * question cannot find a header POSIX requires that spicule simply does
  * not have -- a full-source bootstrap found exactly that kind of gap
  * for <pwd.h>.  This file is the first pass at the other question, for
- * four headers ntlibc did not implement at all when it was written:
+ * four headers spicule did not implement at all when it was written:
  *
  *   <dlfcn.h>    dynamic loading
  *   <sys/mman.h> memory mapping
@@ -42,7 +42,7 @@
  *   #if 0 / * UNIMPL: <requirement + citation> * /  -- absent, but
  *   implementable; the fence names the NT mechanism that would do it.
  *
- * Each header gets a short unfenced section first, wherever ntlibc
+ * Each header gets a short unfenced section first, wherever spicule
  * already has *something* real to point the clause at under a
  * different name -- those assertions run and are counted like any
  * other test.  <dlfcn.h>, <spawn.h> and <termios.h> each have one;
@@ -61,7 +61,7 @@
 #include <sys/mman.h>
 #include <termios.h>
 #include <spawn.h>
-#include "ntlibc/rpath.h"
+#include "spicule/rpath.h"
 
 static int fails;
 #define CHECK(cond) do { if (!(cond)) { fails++; printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); } } while (0)
@@ -74,7 +74,7 @@ extern char **environ;
 
 /* rpath.c requires the image to define this even when, as here, it is
  * populated with two entries, the first deliberately nonexistent:
- * ntlibc_rpath_load() only consults it for a dllname with no path
+ * spicule_rpath_load() only consults it for a dllname with no path
  * component, and almost every call below gives one -- but
  * test_dlerror_null_after_successful_dlopen() needs a bare name whose
  * lookup misses an earlier entry before hitting a later one, which is
@@ -87,9 +87,9 @@ const char *const __rpath[] = { "no-such-rpath-dir", "C:\\Windows\\System32", 0 
 /* ============================================================
  * <dlfcn.h> -- dlopen/dlsym/dlclose/dlerror
  *
- * ntlibc already had the loading primitive dlopen() sits on top of:
- * ntlibc_rpath_load()/ntlibc_rpath_sym()/ntlibc_rpath_error()
- * (include/ntlibc/rpath.h, implemented in src/internal/rpath.c) wrap
+ * spicule already had the loading primitive dlopen() sits on top of:
+ * spicule_rpath_load()/spicule_rpath_sym()/spicule_rpath_error()
+ * (include/spicule/rpath.h, implemented in src/internal/rpath.c) wrap
  * exactly the two ntdll entry points a real dlopen()/dlsym() would
  * also use -- LdrLoadDll()/LdrGetProcedureAddress(). <dlfcn.h> and
  * src/dlfcn/dlfcn.c now exist and are exercised directly below,
@@ -107,20 +107,20 @@ const char *const __rpath[] = { "no-such-rpath-dir", "C:\\Windows\\System32", 0 
 /* ---- what already works, unfenced: the real loader plumbing ---- */
 static void test_dl_underlying_mechanism(void)
 {
-	ntlibc_dll_t *dll;
+	spicule_dll_t *dll;
 	void *sym;
 
 	/* dlopen.html RETURN VALUE: "If dlopen() is unable to load the
 	 * shared object, it returns a null pointer and sets an error
-	 * condition." ntlibc_rpath_load() already does exactly this for a
+	 * condition." spicule_rpath_load() already does exactly this for a
 	 * DLL that plainly does not exist. */
-	dll = ntlibc_rpath_load("C:\\this-dll-does-not-exist-at-all.dll");
+	dll = spicule_rpath_load("C:\\this-dll-does-not-exist-at-all.dll");
 	CHECK(dll == 0);
 
 	/* dlerror.html DESCRIPTION: "returns a null-terminated character
 	 * string ... that describes the last error that occurred." */
-	CHECK(strcmp(ntlibc_rpath_error(), "no error") != 0);
-	CHECK(strstr(ntlibc_rpath_error(), "this-dll-does-not-exist-at-all.dll") != 0);
+	CHECK(strcmp(spicule_rpath_error(), "no error") != 0);
+	CHECK(strstr(spicule_rpath_error(), "this-dll-does-not-exist-at-all.dll") != 0);
 
 	/* Loading a real, always-present module by an explicit path
 	 * component (bypassing __rpath, see rpath.h) -- the same
@@ -128,18 +128,18 @@ static void test_dl_underlying_mechanism(void)
 	 * dlopen()+dlsym() give. ntdll.dll is guaranteed mapped in every
 	 * NT process already, so this needs no companion DLL the way
 	 * test/rpath.c's end-to-end delay-load case does. */
-	dll = ntlibc_rpath_load("C:\\Windows\\System32\\ntdll.dll");
+	dll = spicule_rpath_load("C:\\Windows\\System32\\ntdll.dll");
 	if (dll) {
 		/* dlsym.html RETURN VALUE: a non-null address for a symbol
 		 * that exists in the handle. */
-		sym = ntlibc_rpath_sym(dll, "RtlAllocateHeap");
+		sym = spicule_rpath_sym(dll, "RtlAllocateHeap");
 		CHECK(sym != 0);
 
 		/* dlsym.html RETURN VALUE: NULL, diagnosable via dlerror(),
 		 * for a symbol that does not exist in the handle. */
-		sym = ntlibc_rpath_sym(dll, "no_such_export_in_ntdll_at_all");
+		sym = spicule_rpath_sym(dll, "no_such_export_in_ntdll_at_all");
 		CHECK(sym == 0);
-		CHECK(strcmp(ntlibc_rpath_error(), "no error") != 0);
+		CHECK(strcmp(spicule_rpath_error(), "no error") != 0);
 	}
 	/* If ntdll could not even be resolved by an absolute path (would
 	 * mean LdrLoadDll itself is broken), don't fail this file over an
@@ -158,7 +158,7 @@ static void test_dl_underlying_mechanism(void)
 
 /* dlopen.html DESCRIPTION -- dlopen(path, RTLD_NOW) must load `path`
  * and make its symbols available to dlsym(). NT mechanism:
- * ntlibc_rpath_load() already *is* this, modulo the mode argument --
+ * spicule_rpath_load() already *is* this, modulo the mode argument --
  * LdrLoadDll() resolves the target's own import table eagerly
  * regardless of mode, so RTLD_NOW is trivially satisfiable (dlopen
  * always behaves as if RTLD_NOW was given) and RTLD_LAZY can only ever
@@ -176,12 +176,12 @@ static void test_dlopen_now_lazy(void)
 	if (h2) dlclose(h2);
 }
 
-#if NTLIBC_TEST(NA, posix_dl_dlopen_rtld_local_scoping) /* N/A: dlopen.html DESCRIPTION -- RTLD_LOCAL: "symbols ... are
+#if SPICULE_TEST(NA, posix_dl_dlopen_rtld_local_scoping) /* N/A: dlopen.html DESCRIPTION -- RTLD_LOCAL: "symbols ... are
 	not made available to resolve references in subsequently
 	loaded shared objects" (the default, when RTLD_GLOBAL is not
 	given). The NT loader has no notion of a module-scoped symbol
 	table at all: every DLL's export directory
-	(src/internal/pe.c's own ntlibc_pe_find_export, and the
+	(src/internal/pe.c's own spicule_pe_find_export, and the
 	LdrGetProcedureAddress a real dlsym() would use) is reachable
 	from any handle on that module process-wide the moment
 	LdrLoadDll() maps it, and there is no ntdll call that narrows a
@@ -211,10 +211,10 @@ static void test_dlopen_rtld_local_scoping(void)
  * the reference count drops to 0 ... the object is unloaded." NT
  * mechanism: LdrUnloadDll() (src/internal/nt.h) against the loader
  * data table entry's own LoadCount field, which LdrLoadDll() already
- * maintains -- see ntlibc_rpath_unload()'s own comment
+ * maintains -- see spicule_rpath_unload()'s own comment
  * (src/internal/rpath.c) for the Wine-source confirmation that
  * LdrLoadDll()/LdrUnloadDll() refcount this without any help from
- * ntlibc. */
+ * spicule. */
 static void test_dlclose_refcounts(void)
 {
 	void *h1 = dlopen("C:\\Windows\\System32\\ntdll.dll", RTLD_NOW);
@@ -234,11 +234,11 @@ static void test_dlclose_refcounts(void)
  * intervening call to dlopen() or dlsym() returned NULL and set the
  * error condition." This is the single-shot-consumption contract
  * implementations most often get wrong -- and it is exactly the one
- * clause ntlibc_rpath_error() (src/internal/rpath.c) deliberately does
+ * clause spicule_rpath_error() (src/internal/rpath.c) deliberately does
  * NOT implement (see test_dl_underlying_mechanism() above, which
  * relies on it staying sticky). src/dlfcn/dlfcn.c's dlerror() layers
- * the single-shot contract on top using ntlibc_rpath_error_seq()
- * instead, without changing ntlibc_rpath_error() itself. */
+ * the single-shot contract on top using spicule_rpath_error_seq()
+ * instead, without changing spicule_rpath_error() itself. */
 static void test_dlerror_consumed_once(void)
 {
 	void *h = dlopen("C:\\this-does-not-exist.dll", RTLD_NOW);
@@ -303,7 +303,7 @@ static void test_dlerror_consumed_once(void)
  * <termios.h> -- the best partial mapping in this group, and the one
  * that has since been built.
  *
- * The argument this section made, when <termios.h> did not exist: ntlibc
+ * The argument this section made, when <termios.h> did not exist: spicule
  * already has isatty() (src/unistd/isatty.c), which is exactly the gate
  * a real tcgetattr() would need first (termios.html ERRORS: "[ENOTTY]
  * The file associated with fildes is not a terminal."). Beyond that
@@ -316,7 +316,7 @@ static void test_dlerror_consumed_once(void)
  * control do not exist for a console handle at all (those belong to
  * an actual serial port, reached through an entirely different
  * kernel32 API -- GetCommState()/SetCommState() over a COM port
- * handle -- which ntlibc's isatty() does not and should not
+ * handle -- which spicule's isatty() does not and should not
  * recognise as a tty in the termios sense).
  *
  * That argument was taken up.  include/termios.h and
@@ -371,7 +371,7 @@ static void test_termios_isatty_prerequisite(void)
  * would only make it easier to forget which copy is real --
  * test/posix-termios.c tests it against the shipped header. */
 
-#if NTLIBC_TEST(NA, posix_dl_termios_cc_special_chars) /* N/A: termios.html struct termios DESCRIPTION -- c_cc[] special
+#if SPICULE_TEST(NA, posix_dl_termios_cc_special_chars) /* N/A: termios.html struct termios DESCRIPTION -- c_cc[] special
 	characters (VINTR, VEOF, VERASE, VKILL, ...): "control
 	character values". A real console's Ctrl-C handling is fixed
 	kernel behaviour wired to SetConsoleCtrlHandler
@@ -395,18 +395,18 @@ static void test_termios_cc_special_chars(void)
 }
 #endif
 
-#if NTLIBC_TEST(NA, posix_dl_termios_baud_rate) /* N/A: termios.html cfgetispeed.html/cfsetospeed.html etc. --
+#if SPICULE_TEST(NA, posix_dl_termios_baud_rate) /* N/A: termios.html cfgetispeed.html/cfsetospeed.html etc. --
 	baud rate is a property of a physical (or virtual) serial line's
 	clocking, not of a console session at all. A Windows console
 	handle has no bit rate, parity, or stop-bit configuration --
 	those exist only for an actual COM-port device opened by name
 	(kernel32 GetCommState()/SetCommState() over a DCB, a completely
 	separate device class from HANDLEs isatty() calls a tty). Since
-	ntlibc's isatty() (src/unistd/isatty.c) only recognises
+	spicule's isatty() (src/unistd/isatty.c) only recognises
 	__FD_CONSOLE as a terminal -- correctly, since that is what
 	POSIX programs mean by "the controlling terminal" on this
 	platform -- there is no reachable fd for which cfsetospeed()
-	could mean anything at all, not merely one ntlibc has not wired
+	could mean anything at all, not merely one spicule has not wired
 	up yet. */
 static void test_termios_baud_rate(void)
 {
@@ -426,7 +426,7 @@ static void test_termios_baud_rate(void)
  * is a different clause with a different answer, and keeps its N/A
  * fence immediately below. */
 
-#if NTLIBC_TEST(NA, posix_dl_tcflush_output) /* N/A: tcflush.html DESCRIPTION -- TCOFLUSH/TCIOFLUSH:
+#if SPICULE_TEST(NA, posix_dl_tcflush_output) /* N/A: tcflush.html DESCRIPTION -- TCOFLUSH/TCIOFLUSH:
 	"discard[s] data written ... but not transmitted". A console
 	handle has no transmit buffer to discard from in the first place
 	-- WriteConsole()/WriteFile() to a console completes only once
@@ -442,7 +442,7 @@ static void test_tcflush_output(void)
 }
 #endif
 
-#if NTLIBC_TEST(NA, posix_dl_tcdrain_noop_only) /* N/A: tcdrain.html DESCRIPTION -- "wait until all output
+#if SPICULE_TEST(NA, posix_dl_tcdrain_noop_only) /* N/A: tcdrain.html DESCRIPTION -- "wait until all output
 	written ... has been transmitted." Same reasoning as TCOFLUSH
 	above: a console write is synchronously complete (the data is
 	already in the screen buffer) by the time WriteConsole() returns,
@@ -455,7 +455,7 @@ static void test_tcdrain_noop_only(void)
 }
 #endif
 
-#if NTLIBC_TEST(NA, posix_dl_tcsendbreak_unsupported) /* N/A: tcsendbreak.html DESCRIPTION -- "transmit[s] a
+#if SPICULE_TEST(NA, posix_dl_tcsendbreak_unsupported) /* N/A: tcsendbreak.html DESCRIPTION -- "transmit[s] a
 	continuous stream of zero-valued bits for a specific duration"
 	(a break condition, a physical-layer concept for an actual
 	serial line, per POSIX's own Rationale on this page: "on
@@ -471,7 +471,7 @@ static void test_tcsendbreak_unsupported(void)
 }
 #endif
 
-#if NTLIBC_TEST(NA, posix_dl_termios_cflag_serial_bits) /* N/A: termios.html struct termios DESCRIPTION -- c_cflag's
+#if SPICULE_TEST(NA, posix_dl_termios_cflag_serial_bits) /* N/A: termios.html struct termios DESCRIPTION -- c_cflag's
 	CS5/CS6/CS7/CS8 (character size), PARENB/PARODD (parity),
 	CSTOPB (stop bits), and the XSI CRTSCTS/hardware-flow-control
 	bit are all properties of a physical serial line's wire
@@ -627,7 +627,7 @@ static void test_spawn_fd_remap_via_existing_inheritance(const char *self)
  * UNIMPL fence here arguing that the object was implementable directly
  * on top of __spawn() by replaying each recorded action against the
  * *parent's* fd table immediately before the call and undoing it after,
- * safe because ntlibc has no threads to race the table.  That is now
+ * safe because spicule has no threads to race the table.  That is now
  * exactly what src/process/posix_spawn.c does, action for action, and
  * src/process/spawn_file_actions.c is the recording half -- so
  * posix_spawn.html DESCRIPTION step 3 ("The file actions ... shall be
@@ -669,7 +669,7 @@ static void test_spawn_fd_remap_via_existing_inheritance(const char *self)
  * test/posix-spawn.c (test_setsigmask_nonempty_is_delivered), against
  * the shipped header, where the argument it carries (RTL_USER_PROCESS_PARAMETERS' RuntimeData is a real
  * parent-to-child channel, but a mask sent that way would reach an
- * ntlibc-built child only and silently do nothing for cmd.exe, so it
+ * spicule-built child only and silently do nothing for cmd.exe, so it
  * would not be POSIX's promise) is stated once rather than twice.
  * src/process/posix_spawn.c honours the empty mask, which is true by
  * construction, and refuses a non-empty one with EINVAL rather than
@@ -687,7 +687,7 @@ static void test_spawn_fd_remap_via_existing_inheritance(const char *self)
  * implementation may use vfork() ... instead of fork()") is purely a
  * performance hint about *how* the new process image comes into
  * being, not an observable behaviour. __spawn() never forks in the
- * first place -- every ntlibc process creation is already a direct
+ * first place -- every spicule process creation is already a direct
  * RtlCreateUserProcess(), the NT equivalent of an already-vfork-like
  * "no copy of the parent's address space" creation -- so this flag is
  * satisfied by construction, with nothing to implement or fence. */
@@ -719,7 +719,7 @@ static void test_dlopen_null_returns_a_handle(void)
  * ambiguous with a symbol whose value is NULL.
  *
  * test_dl_underlying_mechanism() exercises this at the
- * ntlibc_rpath_sym()/ntlibc_rpath_error() layer; nothing exercised it
+ * spicule_rpath_sym()/spicule_rpath_error() layer; nothing exercised it
  * through the <dlfcn.h> surface, which is what an application sees. */
 static void test_dlsym_failure_through_dlfcn(void)
 {
@@ -743,7 +743,7 @@ static void test_dlsym_failure_through_dlfcn(void)
 
 	/* dlsym.html: "If handle does not refer to a valid symbol table
 	 * handle ... dlsym() shall return a null pointer." Only the NULL
-	 * handle is asserted: it is answered entirely inside ntlibc, so
+	 * handle is asserted: it is answered entirely inside spicule, so
 	 * it is deterministic. A synthetic non-NULL garbage base is
 	 * deliberately not tested -- what LdrGetProcedureAddress() does
 	 * with an unmapped address is not contractually specified on
@@ -761,7 +761,7 @@ static void test_dlsym_failure_through_dlfcn(void)
  * diagnostic information shall be available through dlerror()."
  * test_dlopen_now_lazy() calls dlclose() but never checks a failure
  * path. The NULL handle is used for the same reason as above: it is
- * answered inside ntlibc, before any NT call. */
+ * answered inside spicule, before any NT call. */
 static void test_dlclose_invalid_handle(void)
 {
 	(void)dlerror();
@@ -803,7 +803,7 @@ static void test_dlerror_message_shape(void)
  * test_dlclose_refcounts() checks the identical-string case. This is
  * the different-pathname case, using forward slashes -- which
  * src/internal/rpath.c normalises itself, so the assertion is decided
- * by ntlibc's own code rather than by the loader's module-identity
+ * by spicule's own code rather than by the loader's module-identity
  * rules. The case-insensitivity variant is deliberately not asserted:
  * Wine's and real NT's module identity diverge there, and this file
  * runs under both. */
@@ -829,7 +829,7 @@ static void test_dlopen_single_copy_different_pathnames(void)
  * says of RTLD_GLOBAL/RTLD_LOCAL only that "the default behavior is
  * unspecified" when neither is given, and gives no [EINVAL] for any
  * mode at all. glibc's rejection of an invalid mode is an extension.
- * So ntlibc accepting any mode is conforming, and no test here asserts
+ * So spicule accepting any mode is conforming, and no test here asserts
  * a rejection. */
 static void test_dlfcn_header_constants(void)
 {
@@ -840,7 +840,7 @@ static void test_dlfcn_header_constants(void)
 	CHECK((RTLD_NOW & RTLD_GLOBAL) == 0 && (RTLD_NOW & RTLD_LOCAL) == 0);
 }
 
-#if NTLIBC_TEST(PASS, posix_dl_dlerror_null_after_successful_dlopen) /* dlerror.html DESCRIPTION -- "If no dynamic linking errors
+#if SPICULE_TEST(PASS, posix_dl_dlerror_null_after_successful_dlopen) /* dlerror.html DESCRIPTION -- "If no dynamic linking errors
 	have occurred since the last invocation of dlerror(), dlerror()
 	shall return NULL."
 
@@ -870,7 +870,7 @@ static void test_dlfcn_header_constants(void)
 	outstanding when the caller clears-and-calls.
 
 	Fix shape: snapshot the error sequence on entry to
-	ntlibc_rpath_load() and restore it before returning a successful
+	spicule_rpath_load() and restore it before returning a successful
 	handle, or accumulate misses without recording an error and
 	record one only once the whole search has failed. */
 static void test_dlerror_null_after_successful_dlopen(void)
@@ -885,7 +885,7 @@ static void test_dlerror_null_after_successful_dlopen(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_dl_dlopen_null_global_symbol_set) /* dlopen.html DESCRIPTION -- "If file is a null pointer,
+#if SPICULE_TEST(PASS, posix_dl_dlopen_null_global_symbol_set) /* dlopen.html DESCRIPTION -- "If file is a null pointer,
 	dlopen() shall return a global symbol table handle for the
 	currently running process image. This symbol table handle shall
 	provide access to the symbols from an ordered set of executable
@@ -934,7 +934,7 @@ static void test_dlopen_null_global_symbol_set(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_dl_dlopen_relative_pathname_uses_cwd) /* dlopen.html DESCRIPTION:
+#if SPICULE_TEST(PASS, posix_dl_dlopen_relative_pathname_uses_cwd) /* dlopen.html DESCRIPTION:
 	dlopen.html DESCRIPTION -- "If file contains a <slash>
 	character, the file argument is used as the pathname for the
 	file. Otherwise, file is used in an implementation-defined manner

@@ -23,8 +23,8 @@
  * verbatim by whichever backend is compiled in, not something each
  * backend reimplements.
  */
-#ifndef _NTLIBC_PLAT_MEM_H
-#define _NTLIBC_PLAT_MEM_H
+#ifndef _SPICULE_PLAT_MEM_H
+#define _SPICULE_PLAT_MEM_H
 
 #include <stddef.h>
 #include <sys/types.h>

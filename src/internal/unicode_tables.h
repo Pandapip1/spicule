@@ -6,8 +6,8 @@
  * Kept separate from the generated file itself so regenerating the
  * tables (tools/gen-unicode-tables.py) never needs to touch this header.
  */
-#ifndef NTLIBC_UNICODE_TABLES_H
-#define NTLIBC_UNICODE_TABLES_H
+#ifndef SPICULE_UNICODE_TABLES_H
+#define SPICULE_UNICODE_TABLES_H
 
 #include <stddef.h>
 

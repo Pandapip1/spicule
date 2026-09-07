@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Test-harness scaffolding for the Linux platform pilot's time
- * extension -- NOT part of ntlibc, exactly like
+ * extension -- NOT part of spicule, exactly like
  * fuzz/linux_pilot_harness.c (the mman/unistd pilot's own harness,
  * which this file is the sibling of) and fuzz/ntstubs.c before it.
  *

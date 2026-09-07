@@ -38,7 +38,7 @@
  * exceptions are gethostname() (a getenv), alarm() (an NT waitable
  * timer, whose APC is what delivers SIGALRM) and the fd lookups they
  * *should* be making and do not.  Wine is therefore a sound oracle for
- * essentially all of it -- what is being measured is ntlibc's own C,
+ * essentially all of it -- what is being measured is spicule's own C,
  * not NT's behaviour -- and for the one part that is NT's behaviour,
  * the timer, Wine's NtCreateTimer/NtSetTimer were measured to queue
  * and deliver the APC the same way the documented NT ones do.
@@ -307,7 +307,7 @@ static void test_setid_family(void)
 	errno = 0; CHECK(setgid((gid_t)-1) == -1 && errno == EINVAL);
 }
 
-#if defined(__linux__) && !defined(_NTLIBC_NATIVE_BUILD)
+#if defined(__linux__) && !defined(_SPICULE_NATIVE_BUILD)
 /* ============================================================
  * setresuid / setresgid / getresuid / getresgid (Linux backend)
  * https://man7.org/linux/man-pages/man2/setresuid.2.html
@@ -317,7 +317,7 @@ static void test_setid_family(void)
  * single-fixed-identity reasoning stays true there, so these four are
  * still undefined-ok on that build. Guarded out of both the NT/Wine
  * build (__linux__ undefined there) and the native-ASan harness
- * (_NTLIBC_NATIVE_BUILD, which links only the NT backend against
+ * (_SPICULE_NATIVE_BUILD, which links only the NT backend against
  * fuzz/ntstubs.c and so has no real definition of any of these four --
  * see tools/asan-build.sh's own "other platform" skip rule for every
  * Linux-backend source file under src/.
@@ -392,7 +392,7 @@ static void test_euidaccess(void)
 	unlink(tmpl);
 
 	errno = 0;
-	CHECK(euidaccess("/no/such/path/at/all/ntlibc-test", F_OK) == -1);
+	CHECK(euidaccess("/no/such/path/at/all/spicule-test", F_OK) == -1);
 	CHECK(errno == ENOENT);
 }
 #endif
@@ -648,7 +648,7 @@ static void test_chown_family(void)
 	 * privileges, the set-user-ID (S_ISUID) and set-group-ID (S_ISGID)
 	 * bits of the file mode shall be cleared upon successful return."
 	 *
-	 * N/A, with the mechanism: ntlibc reserves $LXMOD for the execute
+	 * N/A, with the mechanism: spicule reserves $LXMOD for the execute
 	 * permission mapping and does not expose its set-user-ID or
 	 * set-group-ID bits; FILE_ATTRIBUTE_READONLY remains the write
 	 * mapping.  st_mode can therefore never
@@ -790,7 +790,7 @@ static void test_alarm(void)
 	 * roughly 2 of 3 with six of them running at once -- and it is
 	 * LOST, not late: the same probe with sleep(30) still reports
 	 * nothing caught after the full thirty seconds in the runs that
-	 * miss, so no timeout makes it reliable.  Nothing on the ntlibc
+	 * miss, so no timeout makes it reliable.  Nothing on the spicule
 	 * side is timing-dependent (one NtSetTimer with an absolute due
 	 * time and an APC routine, then one alertable NtDelayExecution),
 	 * so the drop is between wineserver's timer expiry and the APC
@@ -835,7 +835,7 @@ static void test_alarm(void)
 	}
 	CHECK(signal(SIGALRM, prev) == alarm_catcher);
 
-#if NTLIBC_TEST(NA, posix_ids_pause_requires_async_signal_delivery) /* N/A: pause() cannot be called from this suite at all --
+#if SPICULE_TEST(NA, posix_ids_pause_requires_async_signal_delivery) /* N/A: pause() cannot be called from this suite at all --
 	 * calling it deadlocks the run rather than failing it.
 	 *
 	 * pause.html DESCRIPTION: "The pause() function shall suspend the
@@ -945,7 +945,7 @@ static void test_nice(void)
 
 	/* ERRORS: "[EPERM] The incr argument is negative and the calling
 	 * process does not have appropriate privileges", the page's only
-	 * error.  ntlibc has exactly one user and it is never privileged
+	 * error.  spicule has exactly one user and it is never privileged
 	 * (src/unistd/ids.c), so this is decided here rather than asked of
 	 * NT -- which, probed, accepts every priority raise including
 	 * REALTIME and would leave the clause unreachable.  The test is
@@ -1019,7 +1019,7 @@ static void test_gethostname(void)
 		CHECK(small[4] == '@');		/* nothing written past namelen */
 	}
 
-#if NTLIBC_TEST(PASS, posix_ids_gethostname_short_buffer_succeeds) /* gethostname() truncates successfully when the buffer is short.
+#if SPICULE_TEST(PASS, posix_ids_gethostname_short_buffer_succeeds) /* gethostname() truncates successfully when the buffer is short.
 	 * when the name does not fit.
 	 *
 	 * gethostname.html DESCRIPTION: "The namelen argument shall
@@ -1100,7 +1100,7 @@ int main(int argc, char **argv)
 	test_getid_always_successful();
 	test_getgroups();
 	test_setid_family();
-#if defined(__linux__) && !defined(_NTLIBC_NATIVE_BUILD)
+#if defined(__linux__) && !defined(_SPICULE_NATIVE_BUILD)
 	test_res_ids();
 	test_euidaccess();
 #endif
@@ -1124,7 +1124,7 @@ int main(int argc, char **argv)
 		 *
 		 * `unverified` only ever comes from test_alarm()'s SIGALRM-
 		 * delivery retry loop above, which is unconditional and unrelated
-		 * to this file's one NTLIBC_TEST-fenced case.  A
+		 * to this file's one SPICULE_TEST-fenced case.  A
 		 * tools/test-policy.py probe recompiles this whole file to
 		 * validate that case in isolation, and test_alarm() still runs
 		 * alongside it; without this guard, a dropped SIGALRM here (see
@@ -1133,7 +1133,7 @@ int main(int argc, char **argv)
 		printf("posix-unistd-ids: %d assertion group(s) unverified in "
 		       "this environment (see SKIP lines above); no failures in "
 		       "what did run\n", unverified);
-		if (!NTLIBC_TEST_POLICY_PROBE) return 77;
+		if (!SPICULE_TEST_POLICY_PROBE) return 77;
 	}
 	printf("posix-unistd-ids: all tests passed\n");
 	return 0;

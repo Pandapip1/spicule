@@ -38,7 +38,7 @@ DIAGNOSTIC = re.compile(
     r"already-declared pure function contains inline assembly|"
     r"already-declared pure function has no definition visible in this translation unit|"
     r"function has no proven side effects and could be declared __attribute__\(\(pure\)\)); "
-    r"origin '(.*)'; context '(.*)'; expression '(.*)' \[ntlibc\.Purity\]$"
+    r"origin '(.*)'; context '(.*)'; expression '(.*)' \[spicule\.Purity\]$"
 )
 
 

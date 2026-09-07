@@ -18,7 +18,7 @@
  * explicitly marked "informational" in a comment.
  *
  * arch/i386 runs the x87 unit at 80-bit internal precision even though
- * ntlibc's own `long double` is 64-bit on the NT target (see
+ * spicule's own `long double` is 64-bit on the NT target (see
  * src/math/ldbl_math.h); results can legitimately differ in the last bit(s)
  * between arches for the same reason test/math.c is skipped on host
  * ASan builds (tools/asan-build.sh, not_native()).  Run `make check`
@@ -344,7 +344,7 @@ static void test_fmaxmin(void)
 	CHECK(fmax(1.0, 2.0) == 2.0 && fmin(1.0, 2.0) == 1.0);
 	/* informational only: POSIX does not specify which zero wins when
 	 * comparing +0 and -0 (they compare equal), so this pins down
-	 * ntlibc's own (permitted) choice rather than a "shall" clause --
+	 * spicule's own (permitted) choice rather than a "shall" clause --
 	 * see src/math/fmax.c's "+0 beats -0" comment. */
 	CHECK(poszero(fmax(0.0, -0.0)) && poszero(fmax(-0.0, 0.0)));
 	CHECK(negzero(fmin(0.0, -0.0)) && negzero(fmin(-0.0, 0.0)));
@@ -519,8 +519,8 @@ static int poszerol(long double x) { return x == 0.0L && !signbit(x); }
  * the same special-value tables audited above for the double forms
  * apply verbatim to sinf/sinl, cosf/cosl, tanf/tanl, atanf/atanl,
  * atan2f/atan2l ("shall be equivalent to" the double function).
- * ntlibc's `long double` is 64-bit on this PE target -- bit-identical
- * layout to `double` (src/math/ldbl_math.h's NTLIBC_LDBL_EXTENDED note) --
+ * spicule's `long double` is 64-bit on this PE target -- bit-identical
+ * layout to `double` (src/math/ldbl_math.h's SPICULE_LDBL_EXTENDED note) --
  * so unlike a genuine 80-bit long double there is no extra internal
  * precision to lose at the l-variant's own store; any float/long
  * double vs. double numeric difference reported here is purely
@@ -665,7 +665,7 @@ static void test_lround_lrint(void)
 
 	/* rint.html: "may raise the inexact floating-point exception if
 	 * the result differs in value from the argument" -- confirmed live
-	 * that ntlibc's frndint-based rint() does so. */
+	 * that spicule's frndint-based rint() does so. */
 	CHECK(feclearexcept(FE_ALL_EXCEPT) == 0);
 	CHECK(rint(2.5) == 2.0);
 	CHECK((fetestexcept(FE_ALL_EXCEPT) & FE_INEXACT) == FE_INEXACT);
@@ -741,7 +741,7 @@ static void test_asin_acos(void)
  * NaN->NaN; sinh/tanh: ±0/±Inf->x; cosh: ±0->1, ±Inf->+Inf;
  * sinh/cosh overflow -> range error, ±HUGE_VAL. Not declared by
  * include/math.h. */
-#if NTLIBC_TEST(PASS, posix_math_sinh_large_negative_is_finite) /* sinh() stays finite for ordinary finite arguments below
+#if SPICULE_TEST(PASS, posix_math_sinh_large_negative_is_finite) /* sinh() stays finite for ordinary finite arguments below
 	 * about -38.  sinh.html RETURN VALUE: "Upon successful completion,
 	 * these functions shall return the hyperbolic sine of x."  The only
 	 * sanctioned +-HUGE_VAL return is the range error ERRORS names,
@@ -864,7 +864,7 @@ static void test_erf_erfc(void)
  * non-positive integer -> pole error, +HUGE_VAL; overflow ->
  * range error, ±HUGE_VAL; NaN->NaN; x==1 or 2 -> +0; ±Inf ->
  * +Inf. tgamma (IEC 60559 branch, which math_errhandling==2
- * commits ntlibc to): negative integer -> domain error, NaN;
+ * commits spicule to): negative integer -> domain error, NaN;
  * ±0 -> pole error, ±HUGE_VAL; overflow -> range error,
  * ±HUGE_VAL; NaN->NaN; +Inf->+Inf; -Inf -> domain error, NaN.
  * Not declared by include/math.h. */
@@ -1125,7 +1125,7 @@ static void test_exp2(void)
  * and y are NaN, a NaN shall be returned."  No ERRORS are defined.
  * The ±0 assertions below are informational in exactly the sense
  * test_fmaxmin() records for the double forms: POSIX does not say
- * which zero wins, so these pin down ntlibc's own permitted choice
+ * which zero wins, so these pin down spicule's own permitted choice
  * (+0 for fmax, -0 for fmin) and check that the f/l variants agree
  * with the double one rather than each having drifted separately. ---- */
 static void test_fmaxmin_variants(void)

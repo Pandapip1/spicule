@@ -29,7 +29,7 @@
  *     locale_t uselocale(locale_t l)  { (void)l; return &__c_locale; }
  *
  * One immutable, stateless, file-scope object handed out for
- * everything.  ntlibc is C/POSIX-locale-only -- setlocale() in the same
+ * everything.  spicule is C/POSIX-locale-only -- setlocale() in the same
  * file accepts no other name -- so that is not obviously wrong, and the
  * point of this audit is to separate the parts of it that are genuinely
  * *correct for such a libc* from the parts that would mislead a caller.
@@ -96,7 +96,7 @@ static void test_newlocale_accepts_the_preset_names(void)
 	locale_t a, b, c;
 
 	/* "C" / "POSIX" / "" are defined for all settings of
-	 * category_mask -- and ntlibc has no other locale, so all three
+	 * category_mask -- and spicule has no other locale, so all three
 	 * name the same one. */
 	a = newlocale(LC_ALL_MASK, "C", (locale_t)0);
 	b = newlocale(LC_ALL_MASK, "POSIX", (locale_t)0);
@@ -182,7 +182,7 @@ static void test_newlocale_einval_on_invalid_mask(void)
  * fail: "[ENOMEM]".
  *
  * VERDICT: N/A, and the mechanism is the reason, not the convenience.
- * ntlibc has exactly one locale object; it is a file-scope static with
+ * spicule has exactly one locale object; it is a file-scope static with
  * no mutable state (`struct __locale_struct { int dummy; };`), and
  * every category of it is fixed at "C" because setlocale() accepts no
  * other name.  A "duplicate copy" of an immutable, stateless object is
@@ -319,7 +319,7 @@ static void test_uselocale_reports_lc_global_locale(void)
  * mistake its absence for the shall-fail gap in newlocale() above.
  *
  * Likewise newlocale.html's *may fail* "[EINVAL] The locale argument is
- * not a valid string pointer" (ntlibc accepts a null `name` and treats
+ * not a valid string pointer" (spicule accepts a null `name` and treats
  * it as "C") and both pages' shall-fail [ENOMEM], which needs a real
  * allocation failure and has no injection hook here. */
 

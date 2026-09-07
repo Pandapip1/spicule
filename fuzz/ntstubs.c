@@ -4,8 +4,8 @@
  * ntstubs.c -- the ntdll side of the world, for native (Linux) builds.
  *
  * Lets the real src/ sources be compiled and linked by a native clang with
- * ASan/UBSan/libFuzzer. Nothing here is part of ntlibc: it stands in for
- * ntdll.dll, the one thing a native build can't have. Everything ntlibc
+ * ASan/UBSan/libFuzzer. Nothing here is part of spicule: it stands in for
+ * ntdll.dll, the one thing a native build can't have. Everything spicule
  * itself computes runs unmodified.
  *
  * Three grades of stub live here:
@@ -17,13 +17,13 @@
  *              from-spec conversion), RtlInitUnicodeString.
  *   plausible  NtQueryVolumeInformationFile for descriptors 0-2, which a
  *              native run can't classify beyond "a character device".
- *   refusing   everything else: STATUS_NOT_IMPLEMENTED. Any ntlibc code
+ *   refusing   everything else: STATUS_NOT_IMPLEMENTED. Any spicule code
  *              path reaching one is not covered by the native build and
  *              reports an error rather than pretending to work --
  *              chiefly object-manager symbolic links and NtFsControlFile.
  *
  * Host services are reached through syscall(2) rather than
- * write()/read()/malloc(), since those names belong to ntlibc in this
+ * write()/read()/malloc(), since those names belong to spicule in this
  * link and calling them would recurse straight back into the library.
  *
  * A caveat worth keeping documented: NTSTATUS was once `long`, 32-bit on
@@ -122,7 +122,7 @@ PPEB __peb = &shim_peb;
 PTEB __teb(void)
 {
 	/* On NT this is gs:0x30.  Natively there is no TEB, and the only
-	 * thing ntlibc reads out of it is the last-error slot, so a plain
+	 * thing spicule reads out of it is the last-error slot, so a plain
 	 * zeroed block is enough. */
 	return (PTEB)shim_teb;
 }
@@ -166,7 +166,7 @@ NTSTATUS NTAPI RtlGetVersion(RTL_OSVERSIONINFOW *vi)
 
 /*
  * Natively there is no crt1.o: glibc's startup calls main() directly, so
- * the parts of __libc_start_main() that ntlibc code depends on have to
+ * the parts of __libc_start_main() that spicule code depends on have to
  * happen in a constructor instead.  ASan's own initialisation runs at
  * priority 1, ahead of this.
  *
@@ -184,7 +184,7 @@ char **__argv;
 int __argc;
 char *__progname;
 char *__progname_full;
-static char *shim_argv[2] = { (char *)"ntlibc-native", 0 };
+static char *shim_argv[2] = { (char *)"spicule-native", 0 };
 
 /* RtlCreateUserProcess appends this to the envp it hands the real execve,
  * so that the child's constructor -- which otherwise has no way to tell
@@ -192,10 +192,10 @@ static char *shim_argv[2] = { (char *)"ntlibc-native", 0 };
  * knows to rebuild environ from its real, inherited envp instead of
  * resetting it to empty.  Never left in the environment __ntshim_init()
  * builds: filtered out below. */
-#define XCHILD_MARK "_NTLIBC_XCHILD=1"
-#define XHOST_PREFIX "_NTLIBC_XHOST="
-#define XVFS_PREFIX "_NTLIBC_XVFS="
-#define XRUNTIME_PREFIX "_NTLIBC_XRUNTIME="
+#define XCHILD_MARK "_SPICULE_XCHILD=1"
+#define XHOST_PREFIX "_SPICULE_XHOST="
+#define XVFS_PREFIX "_SPICULE_XVFS="
+#define XRUNTIME_PREFIX "_SPICULE_XRUNTIME="
 static char *host_self;
 static int vfs_snapshot_fd = -1;
 
@@ -217,7 +217,7 @@ static int vfs_snapshot_fd = -1;
  * fork+execve passes the fd number to the child via envp
  * (XSTATUS_FD_MARK below), since the fd itself survives execve
  * (memfd_create() doesn't set FD_CLOEXEC here). */
-#define XSTATUS_FD_PREFIX "_NTLIBC_XSTATUS_FD="
+#define XSTATUS_FD_PREFIX "_SPICULE_XSTATUS_FD="
 #define XSTATUS_N 4096
 struct xstatus_ent { int pid; int code; };
 static struct xstatus_ent *xstatus_tab;
@@ -231,8 +231,8 @@ static void xstatus_init(char **envp)
 	if (envp) for (i = 0; envp[i]; i++)
 		if (!strncmp(envp[i], XSTATUS_FD_PREFIX, sizeof(XSTATUS_FD_PREFIX) - 1)) {
 			/* No <stdlib.h> here (this file only pulls in <stdio.h> and
-			 * <string.h>, ntlibc's own -- atoi() would either be
-			 * undeclared or, worse, ntlibc's own not-yet-initialised
+			 * <string.h>, spicule's own -- atoi() would either be
+			 * undeclared or, worse, spicule's own not-yet-initialised
 			 * one), so a minimal digit parse in place of it. */
 			const char *s = envp[i] + sizeof(XSTATUS_FD_PREFIX) - 1;
 			fd = 0;
@@ -240,7 +240,7 @@ static void xstatus_init(char **envp)
 			break;
 		}
 	if (fd < 0) {
-		fd = (int)syscall(SYS_memfd_create, "ntlibc-xstatus", 0);
+		fd = (int)syscall(SYS_memfd_create, "spicule-xstatus", 0);
 		if (fd < 0) return;                     /* degrade to the host-status heuristic */
 		if (syscall(SYS_ftruncate, fd, (long)bytes) < 0) { syscall(SYS_close, fd); return; }
 	}
@@ -327,7 +327,7 @@ __attribute__((constructor(200))) void __ntshim_init(int argc, char **argv, char
 	 * and "the environment installed at program startup" silently
 	 * becomes "the environment when someone first asked" -- which is the
 	 * behaviour src/math/fenv.c explicitly rejects.  Anything that links
-	 * ntlibc's objects without its crt1 has to make this call. */
+	 * spicule's objects without its crt1 has to make this call. */
 	__fenv_init();
 	xstatus_init(envp);
 
@@ -354,23 +354,23 @@ __attribute__((constructor(200))) void __ntshim_init(int argc, char **argv, char
 		if (argc > 0 && argv && host_self) materialize_argv0(argv[0], host_self);
 	}
 
-	/* NTLIBC_FUZZ_MIRROR: make one host directory visible in the volume,
+	/* SPICULE_FUZZ_MIRROR: make one host directory visible in the volume,
 	 * so libFuzzer can find a corpus directory and write back to it.  See
 	 * the block comment above mirror_init().  Reads envp rather than
 	 * environ, which the loop above has just emptied. */
 	mirror_init(envp);
 
-	/* A native *test* binary never calls ntlibc's exit(): glibc's
+	/* A native *test* binary never calls spicule's exit(): glibc's
 	 * start-up calls main(), main() returns, and glibc's exit() ends the
 	 * process, so __stdio_exit() does not run and anything left in a FILE
 	 * buffer is lost.  A libFuzzer harness is the other case -- measured
 	 * under gdb, libFuzzer's FuzzerDriver ends a timed run with exit(0),
-	 * which binds to ntlibc's definition in this executable, so there
+	 * which binds to spicule's definition in this executable, so there
 	 * __funcs_on_exit() and __stdio_exit() do run -- but only on the
 	 * orderly path; a crash, an abort or a sanitizer report skips them,
 	 * and those are exactly the runs whose output matters.  libFuzzer's
 	 * own diagnostics go through this stdout/stderr (its fprintf/stderr
-	 * references bind to ntlibc's, likewise the definitions here), so
+	 * references bind to spicule's, likewise the definitions here), so
 	 * they would vanish.  Unbuffered costs nothing and loses nothing. */
 	setvbuf(stdout, 0, _IONBF, 0);
 	setvbuf(stderr, 0, _IONBF, 0);
@@ -382,7 +382,7 @@ __attribute__((constructor(200))) void __ntshim_init(int argc, char **argv, char
  * ntdll, and the fuzzers drive these entry points millions of times, so
  * real files would be slow, leave debris, and risk letting a library bug
  * damage something real. In-memory is hermetic and deterministic, and
- * ASan still catches a handle/buffer mistake in ntlibc's own use of it.
+ * ASan still catches a handle/buffer mistake in spicule's own use of it.
  *
  * What is modelled:
  *   nodes    A file or directory: contents (growable byte buffer), the
@@ -393,7 +393,7 @@ __attribute__((constructor(200))) void __ntshim_init(int argc, char **argv, char
  *            pseudo-handles 1-3 are stdin/stdout/stderr, marked as
  *            devices. NtDuplicateObject shares the same file object (and
  *            so the same position), as on NT and POSIX.
- *   paths    ntlibc hands in NT paths; RtlDosPathNameToNtPathName_U_-
+ *   paths    spicule hands in NT paths; RtlDosPathNameToNtPathName_U_-
  *            WithStatus below does the DOS->NT half exactly as ntdll
  *            does, and resolve() does the object-manager half, so
  *            src/internal/path.c is really exercised, not bypassed.
@@ -643,7 +643,7 @@ static size_t wlen(const WCHAR *s)
 	return n;
 }
 
-/* A NAME?PATTERN match with NT's two wildcards.  ntlibc always passes a
+/* A NAME?PATTERN match with NT's two wildcards.  spicule always passes a
  * null FileName to NtQueryDirectoryFile, so this only exists so that a
  * caller that does pass one is not silently given the whole directory. */
 static int wmatch(const WCHAR *pat, size_t pn, const WCHAR *name, size_t nn)
@@ -815,7 +815,7 @@ static int vfs_snapshot_write(int fd)
 
 static int vfs_snapshot_export(void)
 {
-	int fd = (int)syscall(SYS_memfd_create, "ntlibc-vfs", 0);
+	int fd = (int)syscall(SYS_memfd_create, "spicule-vfs", 0);
 	if (fd < 0) return -1;
 	if (vfs_snapshot_write(fd) < 0) { syscall(SYS_close, fd); return -1; }
 	return fd;
@@ -975,14 +975,14 @@ static void materialize_argv0(const char *name, const char *host)
  *
  * libFuzzer's corpus is a *directory*: it stats/lists/reads it at
  * start-up and writes new interesting inputs into it, all through the C
- * library it's linked against (ntlibc here), so those calls land in the
+ * library it's linked against (spicule here), so those calls land in the
  * in-memory volume above, which starts out holding only C:\work and
  * C:\tmp. The corpus directory is simply not in it, so libFuzzer refuses
  * to start ("required directory does not exist"). NtCreateFile is fully
  * implemented against the volume; the gap is a missing directory, not a
  * missing syscall.
  *
- * NTLIBC_FUZZ_MIRROR=<host directory> closes it: the named host tree is
+ * SPICULE_FUZZ_MIRROR=<host directory> closes it: the named host tree is
  * copied into the volume at start-up at the same path (dos_from_posix()
  * maps "/a/b" onto "\??\C:\a\b"), and a file in that subtree is written
  * back to the host when the last handle opened for writing is closed --
@@ -1118,7 +1118,7 @@ static void mirror_import(struct vnode *dir, char *host, size_t hostlen, int dep
  * would find nothing. */
 static void mirror_init(char **envp)
 {
-	static const char key[] = "NTLIBC_FUZZ_MIRROR=";
+	static const char key[] = "SPICULE_FUZZ_MIRROR=";
 	const char *val = 0;
 	char path[MIRROR_PATH_MAX];
 	size_t len, i;
@@ -1256,7 +1256,7 @@ static void mirror_flush(struct ofile *f)
 
 /* Remove a mirrored file from the host, when the volume has just dropped
  * its last link to it.  Same fence as mirror_flush: nothing outside the
- * subtree named by NTLIBC_FUZZ_MIRROR, and never a directory. */
+ * subtree named by SPICULE_FUZZ_MIRROR, and never a directory. */
 static void mirror_unlink(struct ofile *f)
 {
 	char path[MIRROR_PATH_MAX];
@@ -2375,7 +2375,7 @@ NTSTATUS NTAPI NtQueryInformationFile(HANDLE h, PIO_STATUS_BLOCK io, PVOID buf,
 		return STATUS_SUCCESS;
 	}
 	default:
-		/* Including FileAllInformation: nothing in ntlibc asks for it, and
+		/* Including FileAllInformation: nothing in spicule asks for it, and
 		 * a half-filled FILE_ALL_INFORMATION would be worse than a refusal. */
 		return STATUS_INVALID_INFO_CLASS;
 	}
@@ -2754,7 +2754,7 @@ NTSTATUS NTAPI NtQueryDirectoryFile(HANDLE h, HANDLE ev, PIO_APC_ROUTINE apc, PV
 	if (!f) return STATUS_INVALID_HANDLE;
 	if (f->kind != OF_VFS || !f->node->isdir) return STATUS_INVALID_PARAMETER;
 	if (!(f->access & FILE_LIST_DIRECTORY)) return STATUS_ACCESS_DENIED;
-	/* Only the class ntlibc uses is served; a half-filled record of some
+	/* Only the class spicule uses is served; a half-filled record of some
 	 * other shape would be worse than a refusal. */
 	if (cls != FileIdBothDirectoryInformation) return STATUS_INVALID_INFO_CLASS;
 	if (io) { io->Status = STATUS_SUCCESS; io->Information = 0; }
@@ -3211,7 +3211,7 @@ NTSTATUS NTAPI NtDelayExecution(BOOLEAN alertable, LARGE_INTEGER *t)
  * Two things to model.  The yield itself is a real host sched_yield(2):
  * the point of the primitive is to relinquish the processor, and a stub
  * that returned without doing so would turn any spin-on-yield loop in
- * ntlibc into a busy wait here rather than showing it up.
+ * spicule into a busy wait here rather than showing it up.
  *
  * The status is the interesting half.  NT returns STATUS_SUCCESS only
  * when it actually switched to another thread, and the *informational*
@@ -3400,7 +3400,7 @@ static char *nt_to_host_path(const WCHAR *p, size_t n)
 
 /* Classify an image that exists only in the simulated volume.  Native
  * process creation can execute one thing: another copy of this ELF test
- * binary.  Tests make such copies through ntlibc's own read/write calls,
+ * binary.  Tests make such copies through spicule's own read/write calls,
  * so they have no corresponding host file for faccessat()/execve(). */
 static int vfs_image_kind(const UNICODE_STRING *image)
 {
@@ -3643,7 +3643,7 @@ NTSTATUS NTAPI NtSuspendProcess(HANDLE h)
 	/* OF_PROC is backed by a real Linux child, so make process suspension
 	 * stateful for native job-control tests.  The raw host signal number is
 	 * intentional: this shim cannot include the host's signal.h alongside
-	 * ntlibc's headers (and NtTerminateProcess below does the same for 9). */
+	 * spicule's headers (and NtTerminateProcess below does the same for 9). */
 	struct ofile *f = of_get(h);
 	if (!f || f->kind != OF_PROC) return STATUS_INVALID_HANDLE;
 	return syscall(SYS_kill, (long)f->pid, 19) < 0
@@ -3831,7 +3831,7 @@ NTSTATUS NTAPI NtQueryInformationProcess(HANDLE h, PROCESSINFOCLASS cls, PVOID b
  * of test/posix-sysmisc.c to see the same round trip 'make check' does
  * under Wine. Nothing is actually done with the class (this host process
  * really changing its own OS scheduling priority would be a surprising
- * side effect of running a test suite), which is fine: ntlibc's own
+ * side effect of running a test suite), which is fine: spicule's own
  * cached nice value, not a requery of this, is what getpriority() reads
  * back for the process's own priority (see include/sys/resource.h). */
 NTSTATUS NTAPI NtSetInformationProcess(HANDLE h, PROCESSINFOCLASS cls, PVOID buf, ULONG len)
@@ -3972,7 +3972,7 @@ ULONG NTAPI RtlNtStatusToDosError(NTSTATUS st) { return (ULONG)st & 0xffff; }
 /*
  * RtlUTF8ToUnicodeN / RtlUnicodeToUTF8N.
  *
- * These two are ntdll's, not ntlibc's.  src/internal/utf.c used to be a
+ * These two are ntdll's, not spicule's.  src/internal/utf.c used to be a
  * wrapper around them -- these were written from their documented
  * behaviour (malformed input replaced with U+FFFD and reported as
  * STATUS_SOME_NOT_MAPPED; a short destination filled as far as it goes
@@ -4079,11 +4079,11 @@ NTSTATUS NTAPI RtlUnicodeToUTF8N(char *dst, ULONG dstbytes, PULONG written,
 
 /*
  * libFuzzer is built with _FORTIFY_SOURCE, so its Printf() calls
- * __vfprintf_chk rather than vfprintf.  Its FILE* is ntlibc's stderr (the
+ * __vfprintf_chk rather than vfprintf.  Its FILE* is spicule's stderr (the
  * only stderr in this executable), but __vfprintf_chk would come from
  * glibc and would read that pointer as a glibc FILE -- so every diagnostic
  * libFuzzer prints, and every crash artefact it announces, silently
- * vanished.  Routing the checked forms back to ntlibc's own stdio is what
+ * vanished.  Routing the checked forms back to spicule's own stdio is what
  * makes the fuzzer able to talk.
  */
 int __vfprintf_chk(FILE *f, int flag, const char *fmt, __builtin_va_list ap)
@@ -4887,7 +4887,7 @@ NTSTATUS NTAPI NtReleaseSemaphore(HANDLE handle, LONG release,
  *     size 0, so the small table below remembers what this stub handed out.
  */
 /* Raw syscalls, not the <sys/mman.h> wrappers: this file is compiled
- * -nostdinc against ntlibc's own headers, so mmap() here would recurse
+ * -nostdinc against spicule's own headers, so mmap() here would recurse
  * into mman.c's own mmap() (unbounded recursion), and the asan build's
  * -D_XOPEN_SOURCE=700 doesn't even expose MAP_ANONYMOUS (the
  * _BSD_SOURCE/_GNU_SOURCE gate in sys/mman.h doing its job). So the
@@ -5388,27 +5388,27 @@ PVOID NTAPI RtlAddVectoredExceptionHandler(ULONG first, PVECTORED_EXCEPTION_HAND
  * `stat` to __real_stat in the library objects with objcopy, and this
  * file supplies the host-layout `stat` those objects no longer answer
  * to); tools/asan-build.sh's test binaries do not use it, and see
- * ntlibc's stat() unchanged.  fuzz/statshim.h has the whole story and
+ * spicule's stat() unchanged.  fuzz/statshim.h has the whole story and
  * the measured offsets.
  */
-#ifdef NTLIBC_FUZZ_STATWRAP
+#ifdef SPICULE_FUZZ_STATWRAP
 #include <sys/stat.h>
 #include "statshim.h"
 
 int __real_stat(const char *path, struct stat *st);
 
-/* This IS `stat` in the harness link, and __real_stat is ntlibc's own.
+/* This IS `stat` in the harness link, and __real_stat is spicule's own.
  *
  * fuzz/Makefile renames `stat` to __real_stat throughout the library
- * objects with objcopy, so ntlibc's own callers (glob.c, ftw.c,
- * mktemp.c) reach ntlibc's stat() with ntlibc's struct stat. What's left
+ * objects with objcopy, so spicule's own callers (glob.c, ftw.c,
+ * mktemp.c) reach spicule's stat() with spicule's struct stat. What's left
  * holding the name `stat` is this function, answering in the *host's*
  * layout, reachable only by libFuzzer's own runtime calling stat() to
  * check its corpus path (see fuzz/statshim.h for the measured offsets).
  *
  * The predecessor was __wrap_stat under -Wl,--wrap=stat, which was
  * wrong: --wrap is link-wide, so every internal stat() call site got a
- * 144-byte host struct stat written into its 120-byte ntlibc one. Its
+ * 144-byte host struct stat written into its 120-byte spicule one. Its
  * blast radius had been stated as "confined to fuzz/"; it wasn't, and
  * nothing noticed until fuzz_glob became the first harness to reach an
  * internal stat() call.
@@ -5418,7 +5418,7 @@ int __real_stat(const char *path, struct stat *st);
  * call __real_stat(); fuzz_glob.c does.
  *
  * Defined under a private name and aliased to `stat` in assembly: the
- * included <sys/stat.h> already declares stat() with ntlibc's own
+ * included <sys/stat.h> already declares stat() with spicule's own
  * signature, and this one deliberately takes a void * that is a host
  * struct stat, so a C definition would conflict; the alias is the same
  * symbol either way. */
@@ -5429,7 +5429,7 @@ static int host_layout_stat(const char *path, void *hostbuf)
 	int r;
 
 	/* The caller's buffer is a *host* struct stat, which is larger than
-	 * ntlibc's; never write through it directly. */
+	 * spicule's; never write through it directly. */
 	if (!hostbuf) return __real_stat(path, 0);
 	r = __real_stat(path, &st);
 	if (r != 0) return r;

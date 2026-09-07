@@ -156,7 +156,7 @@ static void test_no_leaked_worker_process_after_exit(const char *helper_exe)
 	pid_t child;
 	int status, i, leak;
 
-	snprintf(path, sizeof path, "/tmp/.ntlibc-posix-realtime-linux-aio-%d.txt",
+	snprintf(path, sizeof path, "/tmp/.spicule-posix-realtime-linux-aio-%d.txt",
 	         (int)self);
 
 	child = fork();

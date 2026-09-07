@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <limits.h>
 
-/* ntlibc supports exactly one locale, "C".  locale_t is an opaque
+/* spicule supports exactly one locale, "C".  locale_t is an opaque
  * pointer; we hand out the address of one static object for it. */
 struct __locale_struct { int dummy; };
 static struct __locale_struct __c_locale; // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- libc-internal name is intentionally reserved against application collision

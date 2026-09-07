@@ -21,7 +21,7 @@
  *   5  B's own fds (a pipe from before the fork) broke -- FAIL
  *   6  a child B spawned *after* fork was not waitable -- FAIL
  *
- * and the parent turns 3 into "hung past the timeout".  ntlibc has no
+ * and the parent turns 3 into "hung past the timeout".  spicule has no
  * alarm() (it is a stub) and no threads, so the timeout is implemented
  * on the parent side: it polls B with WNOHANG and kills it if it is
  * still alive after TIMEOUT_S seconds.

@@ -13,8 +13,8 @@ char *asctime_r(const struct tm *tm, char *buf)
 {
 	char *p = buf;
 	int n;
-	const char *wd = (unsigned)tm->tm_wday < 7 ? __ntlibc_day_name_abbr[tm->tm_wday] : "???";
-	const char *mo = (unsigned)tm->tm_mon < 12 ? __ntlibc_month_name_abbr[tm->tm_mon] : "???";
+	const char *wd = (unsigned)tm->tm_wday < 7 ? __spicule_day_name_abbr[tm->tm_wday] : "???";
+	const char *mo = (unsigned)tm->tm_mon < 12 ? __spicule_month_name_abbr[tm->tm_mon] : "???";
 
 	*p++ = wd[0]; *p++ = wd[1]; *p++ = wd[2]; *p++ = ' ';
 	*p++ = mo[0]; *p++ = mo[1]; *p++ = mo[2]; *p++ = ' ';

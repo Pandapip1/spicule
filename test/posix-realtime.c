@@ -47,7 +47,7 @@ static int fails;
  * sem_post.html, sem_getvalue.html, sem_destroy.html
  * ================================================================== */
 
-#if NTLIBC_TEST(PASS, posix_realtime_sem_init_count)
+#if SPICULE_TEST(PASS, posix_realtime_sem_init_count)
 #include <semaphore.h>
 #include <errno.h>
 
@@ -106,7 +106,7 @@ static void test_posix_realtime_sem_init_count(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_realtime_sem_timedwait_etimedout)
+#if SPICULE_TEST(PASS, posix_realtime_sem_timedwait_etimedout)
 #include <semaphore.h>
 #include <time.h>
 #include <errno.h>
@@ -166,7 +166,7 @@ static void test_posix_realtime_sem_timedwait_etimedout(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_realtime_sem_timedwait_remote_signal_eintr)
+#if SPICULE_TEST(PASS, posix_realtime_sem_timedwait_remote_signal_eintr)
 #include <semaphore.h>
 #include <signal.h>
 #include <sys/wait.h>
@@ -242,7 +242,7 @@ static void test_posix_realtime_sem_timedwait_remote_signal_eintr(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_realtime_sem_open_named)
+#if SPICULE_TEST(PASS, posix_realtime_sem_open_named)
 #include <semaphore.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -258,18 +258,18 @@ static void test_posix_realtime_sem_open_named(void)
 	 * argument shall specify the initial value for the semaphore."
 	 * The name "conforms to the construction rules for a pathname"; a
 	 * leading <slash> is the portable form. */
-	a = sem_open("/ntlibc_posix_realtime", O_CREAT | O_EXCL, 0600, 1);
+	a = sem_open("/spicule_posix_realtime", O_CREAT | O_EXCL, 0600, 1);
 	CHECK(a != SEM_FAILED);
 
 	/* ERRORS: "[EEXIST] O_CREAT and O_EXCL are set and the named
 	 * semaphore already exists." */
-	b = sem_open("/ntlibc_posix_realtime", O_CREAT | O_EXCL, 0600, 1);
+	b = sem_open("/spicule_posix_realtime", O_CREAT | O_EXCL, 0600, 1);
 	CHECK(b == SEM_FAILED);
 	CHECK(errno == EEXIST);
 
 	/* Reopening without O_EXCL returns a usable reference to the same
 	 * semaphore, whose value is the one it was created with. */
-	b = sem_open("/ntlibc_posix_realtime", 0);
+	b = sem_open("/spicule_posix_realtime", 0);
 	CHECK(b != SEM_FAILED);
 	CHECK(sem_getvalue(b, &value) == 0);
 	CHECK(value == 1);
@@ -284,15 +284,15 @@ static void test_posix_realtime_sem_open_named(void)
 	 * semaphore is postponed". */
 	CHECK(sem_close(a) == 0);
 	CHECK(sem_close(b) == 0);
-	CHECK(sem_unlink("/ntlibc_posix_realtime") == 0);
+	CHECK(sem_unlink("/spicule_posix_realtime") == 0);
 
 	/* ERRORS: "[ENOENT] The named semaphore does not exist." */
-	CHECK(sem_unlink("/ntlibc_posix_realtime") == -1);
+	CHECK(sem_unlink("/spicule_posix_realtime") == -1);
 	CHECK(errno == ENOENT);
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_realtime_sem_open_recovers_interrupted_publish)
+#if SPICULE_TEST(PASS, posix_realtime_sem_open_recovers_interrupted_publish)
 #include <semaphore.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -306,7 +306,7 @@ static void test_posix_realtime_sem_open_named(void)
 static void test_posix_realtime_sem_open_recovers_interrupted_publish(void)
 {
 	const char *dir = getenv("TMPDIR");
-	const char *name = "/ntlibc_posix_realtime_stale";
+	const char *name = "/spicule_posix_realtime_stale";
 	char namespace[PATH_MAX], record[PATH_MAX];
 	sem_t *sem;
 	int fd;
@@ -314,9 +314,9 @@ static void test_posix_realtime_sem_open_recovers_interrupted_publish(void)
 	if (!dir || !*dir) dir = getenv("TMP");
 	if (!dir || !*dir) dir = getenv("TEMP");
 	if (!dir || !*dir) dir = ".";
-	CHECK(snprintf(namespace, sizeof namespace, "%s/ntlibc-sem", dir)
+	CHECK(snprintf(namespace, sizeof namespace, "%s/spicule-sem", dir)
 	      < (int)sizeof namespace);
-	CHECK(snprintf(record, sizeof record, "%s/ntlibc_posix_realtime_stale",
+	CHECK(snprintf(record, sizeof record, "%s/spicule_posix_realtime_stale",
 	               namespace) < (int)sizeof record);
 	CHECK(mkdir(namespace, 0777) == 0 || errno == EEXIST);
 	/* This is the durable state left if a creator dies between publishing
@@ -346,7 +346,7 @@ static void test_posix_realtime_sem_open_recovers_interrupted_publish(void)
  * mq_receive.html, mq_getattr.html, mq_notify.html, mq_close.html
  * ================================================================== */
 
-#if NTLIBC_TEST(PASS, posix_realtime_mq_send_receive_priority)
+#if SPICULE_TEST(PASS, posix_realtime_mq_send_receive_priority)
 #include <mqueue.h>
 #include <fcntl.h>
 #include <string.h>
@@ -368,7 +368,7 @@ static void test_posix_realtime_mq_send_receive_priority(void)
 	 * O_CREAT is specified ... the message queue is created ... the
 	 * attr argument [when not NULL] specifies the maximum number of
 	 * messages and the maximum size of each message." */
-	q = mq_open("/ntlibc_posix_realtime_q", O_CREAT | O_EXCL | O_RDWR,
+	q = mq_open("/spicule_posix_realtime_q", O_CREAT | O_EXCL | O_RDWR,
 		    0600, &attr);
 	CHECK(q != (mqd_t)-1);
 
@@ -406,11 +406,11 @@ static void test_posix_realtime_mq_send_receive_priority(void)
 	CHECK(errno == EMSGSIZE);
 
 	CHECK(mq_close(q) == 0);
-	CHECK(mq_unlink("/ntlibc_posix_realtime_q") == 0);
+	CHECK(mq_unlink("/spicule_posix_realtime_q") == 0);
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_realtime_mq_timed_extreme_past)
+#if SPICULE_TEST(PASS, posix_realtime_mq_timed_extreme_past)
 #include <mqueue.h>
 #include <fcntl.h>
 #include <string.h>
@@ -449,8 +449,8 @@ static void test_posix_realtime_mq_timed_extreme_past(void)
 	memset(&attr, 0, sizeof attr);
 	attr.mq_maxmsg = 1;
 	attr.mq_msgsize = 1;
-	mq_unlink("/ntlibc_posix_realtime_timed");
-	q = mq_open("/ntlibc_posix_realtime_timed",
+	mq_unlink("/spicule_posix_realtime_timed");
+	q = mq_open("/spicule_posix_realtime_timed",
 		O_CREAT | O_EXCL | O_RDWR, 0600, &attr);
 	CHECK(q != (mqd_t)-1);
 	if (q == (mqd_t)-1) return;
@@ -471,11 +471,11 @@ static void test_posix_realtime_mq_timed_extreme_past(void)
 	CHECK(pthread_join(releaser, NULL) == 0);
 
 	CHECK(mq_close(q) == 0);
-	CHECK(mq_unlink("/ntlibc_posix_realtime_timed") == 0);
+	CHECK(mq_unlink("/spicule_posix_realtime_timed") == 0);
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_realtime_mq_attr_nonblock)
+#if SPICULE_TEST(PASS, posix_realtime_mq_attr_nonblock)
 #include <mqueue.h>
 #include <fcntl.h>
 #include <string.h>
@@ -491,7 +491,7 @@ static void test_posix_realtime_mq_attr_nonblock(void)
 	attr.mq_maxmsg = 1;
 	attr.mq_msgsize = (long)sizeof buf;
 
-	q = mq_open("/ntlibc_posix_realtime_a", O_CREAT | O_EXCL | O_RDWR,
+	q = mq_open("/spicule_posix_realtime_a", O_CREAT | O_EXCL | O_RDWR,
 		    0600, &attr);
 	CHECK(q != (mqd_t)-1);
 
@@ -538,11 +538,11 @@ static void test_posix_realtime_mq_attr_nonblock(void)
 	CHECK(errno == EAGAIN);
 
 	CHECK(mq_close(q) == 0);
-	CHECK(mq_unlink("/ntlibc_posix_realtime_a") == 0);
+	CHECK(mq_unlink("/spicule_posix_realtime_a") == 0);
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_realtime_mq_notify_single_registration)
+#if SPICULE_TEST(PASS, posix_realtime_mq_notify_single_registration)
 #include <mqueue.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -559,7 +559,7 @@ static void test_posix_realtime_mq_notify_single_registration(void)
 	attr.mq_maxmsg = 2;
 	attr.mq_msgsize = 8;
 
-	q = mq_open("/ntlibc_posix_realtime_n", O_CREAT | O_EXCL | O_RDWR,
+	q = mq_open("/spicule_posix_realtime_n", O_CREAT | O_EXCL | O_RDWR,
 		    0600, &attr);
 	CHECK(q != (mqd_t)-1);
 
@@ -591,7 +591,7 @@ static void test_posix_realtime_mq_notify_single_registration(void)
 	CHECK(mq_notify(q, NULL) == 0);
 
 	CHECK(mq_close(q) == 0);
-	CHECK(mq_unlink("/ntlibc_posix_realtime_n") == 0);
+	CHECK(mq_unlink("/spicule_posix_realtime_n") == 0);
 }
 #endif
 
@@ -601,7 +601,7 @@ static void test_posix_realtime_mq_notify_single_registration(void)
  * aio_cancel.html, lio_listio.html
  * ================================================================== */
 
-#if NTLIBC_TEST(PASS, posix_realtime_aio_write_read_roundtrip)
+#if SPICULE_TEST(PASS, posix_realtime_aio_write_read_roundtrip)
 #include <aio.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -616,7 +616,7 @@ static void test_posix_realtime_aio_write_read_roundtrip(void)
 	char in[16];
 	int fd, err;
 
-	fd = open("ntlibc-aio.tmp", O_RDWR | O_CREAT | O_TRUNC, 0600);
+	fd = open("spicule-aio.tmp", O_RDWR | O_CREAT | O_TRUNC, 0600);
 	CHECK(fd >= 0);
 	if (fd < 0)
 		return;
@@ -689,11 +689,11 @@ static void test_posix_realtime_aio_write_read_roundtrip(void)
 	CHECK(memcmp(in, out, sizeof out) == 0);
 
 	CHECK(close(fd) == 0);
-	CHECK(unlink("ntlibc-aio.tmp") == 0);
+	CHECK(unlink("spicule-aio.tmp") == 0);
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_realtime_lio_listio_wait)
+#if SPICULE_TEST(PASS, posix_realtime_lio_listio_wait)
 #include <aio.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -709,7 +709,7 @@ static void test_posix_realtime_lio_listio_wait(void)
 	char back[8];
 	int fd;
 
-	fd = open("ntlibc-lio.tmp", O_RDWR | O_CREAT | O_TRUNC, 0600);
+	fd = open("spicule-lio.tmp", O_RDWR | O_CREAT | O_TRUNC, 0600);
 	CHECK(fd >= 0);
 	if (fd < 0)
 		return;
@@ -759,11 +759,11 @@ static void test_posix_realtime_lio_listio_wait(void)
 	CHECK(errno == EINVAL);
 
 	CHECK(close(fd) == 0);
-	CHECK(unlink("ntlibc-lio.tmp") == 0);
+	CHECK(unlink("spicule-lio.tmp") == 0);
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_realtime_aio_cancel_notcanceled)
+#if SPICULE_TEST(PASS, posix_realtime_aio_cancel_notcanceled)
 #include <aio.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -777,7 +777,7 @@ static void test_posix_realtime_aio_cancel_notcanceled(void)
 	char out[8] = "cancelme";
 	int fd, rc;
 
-	fd = open("ntlibc-aiocancel.tmp", O_RDWR | O_CREAT | O_TRUNC, 0600);
+	fd = open("spicule-aiocancel.tmp", O_RDWR | O_CREAT | O_TRUNC, 0600);
 	CHECK(fd >= 0);
 	if (fd < 0)
 		return;
@@ -819,7 +819,7 @@ static void test_posix_realtime_aio_cancel_notcanceled(void)
 	aio_return(&cb);
 
 	CHECK(close(fd) == 0);
-	CHECK(unlink("ntlibc-aiocancel.tmp") == 0);
+	CHECK(unlink("spicule-aiocancel.tmp") == 0);
 }
 #endif
 
@@ -830,7 +830,7 @@ static void test_posix_realtime_aio_cancel_notcanceled(void)
  * direct standards assertion now that all five interfaces exist.
  * ================================================================== */
 
-#if NTLIBC_TEST(PASS, posix_realtime_timer_settime_gettime)
+#if SPICULE_TEST(PASS, posix_realtime_timer_settime_gettime)
 #include <time.h>
 #include <signal.h>
 #include <string.h>
@@ -940,7 +940,7 @@ static void test_posix_realtime_timer_settime_gettime(void)
  * nothing else; this is that sentence, made testable.
  * ================================================================== */
 
-#if NTLIBC_TEST(PASS, posix_realtime_sched_policy_priorities)
+#if SPICULE_TEST(PASS, posix_realtime_sched_policy_priorities)
 #include <sched.h>
 #include <unistd.h>
 #include <time.h>

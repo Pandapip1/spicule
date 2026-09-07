@@ -93,9 +93,9 @@ max="$max_maj.$max_min"
 max_names=$(printf '%s\n' "$exports" | sed -n "s/^\([A-Za-z_][A-Za-z0-9_]*\)[[:space:]]*;[[:space:]]*$max_maj\\.${max_min}[[:space:]]*$/\1/p" | tr '\n' ' ' | sed 's/[[:space:]]*$//')
 
 # README states the floor once, in a line this script owns the format of.
-declared=$(sed -n 's/^<!-- ntlibc-min-ntdll: \([0-9][0-9]*\.[0-9][0-9]*\) -->$/\1/p' "$readme")
+declared=$(sed -n 's/^<!-- spicule-min-ntdll: \([0-9][0-9]*\.[0-9][0-9]*\) -->$/\1/p' "$readme")
 if [ -z "$declared" ]; then
-	echo "lint-minver: README.md has no '<!-- ntlibc-min-ntdll: MAJOR.MINOR -->' marker."
+	echo "lint-minver: README.md has no '<!-- spicule-min-ntdll: MAJOR.MINOR -->' marker."
 	echo "    That marker is where the supported floor is declared; this script compares it"
 	echo "    against tools/ntdll.def, whose highest annotation is $max (from: $max_names)."
 	rc=1

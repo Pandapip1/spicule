@@ -170,7 +170,7 @@ static void test_read_write(void)
 }
 
 /* ---- lseek: lseek.html ---- */
-#if NTLIBC_TEST(PASS, posix_io_pread_pwrite_negative_offset) /* pread()/pwrite() reject a negative offset.
+#if SPICULE_TEST(PASS, posix_io_pread_pwrite_negative_offset) /* pread()/pwrite() reject a negative offset.
 	 * the current file position instead.  read.html ERRORS, shall fail:
 	 * "The pread() function shall fail if: [EINVAL] The file offset is
 	 * negative."  write.html carries the identical clause for pwrite().
@@ -458,11 +458,11 @@ static void test_fs(void)
  * The construction is deliberately independent of the working
  * directory's own depth -- two 200-byte components under a short one
  * put the RELATIVE path past 400 bytes on its own, so the test means
- * the same thing whether it runs from "D:\a\ntlibc\ntlibc" or from a
+ * the same thing whether it runs from "D:\a\spicule\spicule" or from a
  * drive root.  Every individual component stays within {NAME_MAX}
  * (255), so this is a statement about path length only and does not
  * quietly re-test the component limit. */
-#if NTLIBC_TEST(PASS, posix_io_rmdir_rejects_dot) /* rmdir() rejects final dot and dot-dot components.  rmdir.html DESCRIPTION: "If the
+#if SPICULE_TEST(PASS, posix_io_rmdir_rejects_dot) /* rmdir() rejects final dot and dot-dot components.  rmdir.html DESCRIPTION: "If the
 	 * path argument refers to a path whose final component is either
 	 * dot or dot-dot, rmdir() shall fail."  ERRORS, shall fail:
 	 * "[EINVAL] The path argument contains a last component that is

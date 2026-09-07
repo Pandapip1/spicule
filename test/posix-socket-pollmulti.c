@@ -12,7 +12,7 @@
  * this file measures is reachable from select(), poll(), or any other
  * entry point THIS library exposes today.  (Other AFD clients DO reach
  * it -- see the "nobody batches" section below.  The scope of this
- * sentence is ntlibc, not the wire.)  A passing run here is NOT
+ * sentence is spicule, not the wire.)  A passing run here is NOT
  * evidence that the shipped poll path is verified -- that path never
  * executes the code this file exercises.
  *
@@ -35,7 +35,7 @@
  *
  *   3. The stride as an element *pitch* -- the spacing between
  *      Handles[0] and Handles[1].  Untested against any device when
- *      this file was written, and unreached by ntlibc's own select().
+ *      this file was written, and unreached by spicule's own select().
  *      This is what this file measures, and it is measured now: see
  *      the CI runs cited under "Compaction is observed" below.
  *
@@ -52,14 +52,14 @@
  * __afd_build_poll_request(&req, 0, 1) -- HandleCount is the literal
  * 1.  So a select() over N sockets issues N separate SINGLE-HANDLE
  * ioctls, never one N-handle request.  Handles[1] and beyond are
- * never written, never sent, and never read back by shipped ntlibc
+ * never written, never sent, and never read back by shipped spicule
  * code.  A one-element array cannot exercise a stride at all: element
  * 0 sits at base + 0 * stride for every stride there is.
  *
  * *** But "nobody batches" is NOT why the pitch is latent. ***
  *
  * That was this file's first answer and it was too narrow -- it is a
- * fact about ntlibc's select(), not about the wire.  Plenty of code
+ * fact about spicule's select(), not about the wire.  Plenty of code
  * does batch.  Read in the ReactOS tree at d610480e: WSPSelect fills
  * one AFD_POLL_INFO with the whole fd_set, sets HandleCount, and
  * issues a SINGLE IOCTL_AFD_SELECT for all of them
@@ -90,7 +90,7 @@
  *
  * The exposed class is the foreign client that hand-rolls the
  * structure from documentation rather than sharing the driver's
- * header: wepoll, libuv, mio -- and this library.  ntlibc declares its
+ * header: wepoll, libuv, mio -- and this library.  spicule declares its
  * own AFD_POLL_INFO in src/internal/afd.h and computes its own offsets
  * (AFD_POLL_REQ_OFF_HANDLES, AFD_POLL_H_SIZE); there is no shared
  * header and therefore NO SELF-CONSISTENCY SAFETY NET.  For us a wrong

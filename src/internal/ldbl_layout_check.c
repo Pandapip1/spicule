@@ -4,7 +4,7 @@
  * __verify_ldbl_layout(): a startup canary for the one assumption every
  * `long double` bit-twiddling function in src/math (ldbl_math.h,
  * fpclassify.c, frexp.c, copysign.c, fabs.c) rests on -- that
- * NTLIBC_LDBL_EXTENDED (src/internal/ldbl_format.h) correctly predicts
+ * SPICULE_LDBL_EXTENDED (src/internal/ldbl_format.h) correctly predicts
  * which physical bit layout this build's compiler actually uses for
  * `long double`. C itself guarantees none of that layout (see
  * ldbl_format.h's own banner), so the prediction is inferred from one
@@ -16,7 +16,7 @@
  * time, this function actually LOOKS: it writes three real `long
  * double` constants with well-known values, reads back the raw bits
  * through the same union-punning idiom fpclassify.c already uses, and
- * compares them against the bit pattern NTLIBC_LDBL_EXTENDED and this
+ * compares them against the bit pattern SPICULE_LDBL_EXTENDED and this
  * translation unit's target architecture together predict. If they
  * disagree, every one of those math functions would silently compute
  * wrong results (best case) or read/write past the end of a `long
@@ -70,7 +70,7 @@
  * this could be gotten wrong, not three. */
 static const long double ldbl_probe[3] = { 1.0L, 2.0L, 0.75L };
 
-#if !NTLIBC_LDBL_EXTENDED
+#if !SPICULE_LDBL_EXTENDED
 /* tcc's -win32 targets: `long double` is a plain 8-byte alias for
  * `double` (IEEE binary64, bias 1023, implicit leading bit). Same
  * union shape src/math/fpclassify.c's own __fpclassify() uses for
@@ -88,7 +88,7 @@ static const struct ldbl_bits ldbl_expect[3] = {
  * a 64-bit mantissa with an EXPLICIT integer bit, followed by a 16-bit
  * sign+exponent half (bias 16383) -- Intel SDM vol 1 ch 8. Exact same
  * union shape and field names as fpclassify.c's own
- * NTLIBC_LDBL_EXTENDED branch, deliberately, so a reader who has
+ * SPICULE_LDBL_EXTENDED branch, deliberately, so a reader who has
  * already read that function recognizes this layout immediately. */
 struct ldbl_bits { uint64_t m; uint16_t se; };
 static int ldbl_bits_eq(struct ldbl_bits a, struct ldbl_bits b) { return a.m == b.m && a.se == b.se; }

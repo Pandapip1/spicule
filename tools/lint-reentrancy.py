@@ -18,7 +18,7 @@ DIAGNOSTIC = re.compile(
     r"^(.*?):(\d+):(\d+): warning: "
     r"read of a pointer returned by an earlier '(\w+)' call after a later "
     r"'\4' call may observe overwritten internal static storage; "
-    r"origin '(.*)'; context '(.*)'; expression '(.*)' \[ntlibc\.Reentrancy\]$"
+    r"origin '(.*)'; context '(.*)'; expression '(.*)' \[spicule\.Reentrancy\]$"
 )
 
 

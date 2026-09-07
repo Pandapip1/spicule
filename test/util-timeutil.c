@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Black-box tests for ntlibc's Tier 5 "process/environment" utilities:
+ * Black-box tests for spicule's Tier 5 "process/environment" utilities:
  * `time` and `timeout` (XCU time(1p); timeout is not XCU-mandatory --
  * see src/util/timeout.c's own header comment). Same technique as
  * test/util-sortset.c: the standalone obj/bin/<name>.exe is spawned as

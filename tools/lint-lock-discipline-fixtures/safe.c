@@ -37,13 +37,13 @@ int setprioceiling_style(mutex_t *mutex) {
 }
 
 /* Real, source-visible tokens for LockDisciplineChecker.cpp's
- * ntlibc.LockDiscipline stage -- see tools/clang/LockHandoffContracts.h
+ * spicule.LockDiscipline stage -- see tools/clang/LockHandoffContracts.h
  * and src/thread/pthread_cond.c's own copy of these two macros, which
  * this mirrors. */
 #define lock_requires_held_on_entry(argument) \
-  __attribute__((annotate("ntlibc_lock_requires_held_on_entry:" #argument)))
+  __attribute__((annotate("spicule_lock_requires_held_on_entry:" #argument)))
 #define lock_acquires_for_caller \
-  __attribute__((annotate("ntlibc_lock_acquires_for_caller")))
+  __attribute__((annotate("spicule_lock_acquires_for_caller")))
 
 /* cond_wait's mutex argument's index (1) and its
  * lock_requires_held_on_entry() annotation are both significant here:

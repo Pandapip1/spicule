@@ -45,8 +45,8 @@
  * the matching note in plat_misc.h, whose sched.c call site makes
  * exactly the same decision for exactly the same reason).
  */
-#ifndef _NTLIBC_PLAT_SIGNAL_H
-#define _NTLIBC_PLAT_SIGNAL_H
+#ifndef _SPICULE_PLAT_SIGNAL_H
+#define _SPICULE_PLAT_SIGNAL_H
 
 #include <sys/types.h>
 #include "plat_handle.h"
@@ -76,7 +76,7 @@ int __plat_event_set(__plat_handle_t ev);
  * src/signal/linux/plat_signal.c's own box()/unbox() eventfd domain
  * (fd+1), but __plat_event_set()'s one Linux implementation
  * (src/thread/linux/plat_thread.c) casts its argument straight to
- * `struct ntlibc_linux_sync *` and dereferences it -- a completely
+ * `struct spicule_linux_sync *` and dereferences it -- a completely
  * different __plat_handle_t domain that only happens to share this
  * project's one universal handle typedef, the identical class of
  * mismatch this header's own __plat_kill_open()/__plat_process_suspend()
@@ -262,7 +262,7 @@ int __plat_segv_code(void *addr);
  * rt_sigaction(2)-installed entry point with its own sigreturn trampoline,
  * disclosed and left for later exactly where src/signal/linux/
  * sigdelivery.c's own banner already discloses the identical gap on the
- * delivery side. A signal caught by a real ntlibc handler still only
+ * delivery side. A signal caught by a real spicule handler still only
  * fires for what this library synthesizes itself -- raise(), abort(), a
  * hardware fault turned into a signal, kill() to self (see signal.c's own
  * header comment) -- exactly as before this function existed; this call

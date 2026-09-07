@@ -70,12 +70,12 @@ REGISTER_MAP_WITH_PROGRAMSTATE(ThreadCapabilityMap, const IdentifierInfo *,
 
 namespace {
 
-using ntlibc::algebra::applyTokenOperation;
-using ntlibc::algebra::contains;
-using ntlibc::algebra::TokenEvent;
-using ntlibc::algebra::TokenOperation;
-using ntlibc::algebra::TokenState;
-using ntlibc::algebra::TokenTransition;
+using spicule::algebra::applyTokenOperation;
+using spicule::algebra::contains;
+using spicule::algebra::TokenEvent;
+using spicule::algebra::TokenOperation;
+using spicule::algebra::TokenState;
+using spicule::algebra::TokenTransition;
 
 constexpr unsigned SlotDiagnosed = 0;
 constexpr unsigned SlotLastCapable = 1;
@@ -1136,7 +1136,7 @@ extern "C" const char clang_analyzerAPIVersionString[] =
 
 extern "C" void clang_registerCheckers(CheckerRegistry &Registry) {
   Registry.addChecker<ErrnoDisciplineChecker>(
-      "ntlibc.ErrnoDiscipline",
+      "spicule.ErrnoDiscipline",
       "Proves errno is read only from the call whose failure it reports, "
       "and only after some call or assignment could have set it",
       "");

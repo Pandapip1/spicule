@@ -21,7 +21,7 @@ DIAGNOSTIC = re.compile(
     r"proven whole-object initializer|"
     r"Nt\*/Zw\* OUT parameter is read back without any field proven "
     r"consumed); origin '(.*)'; context '(.*)'; "
-    r"expression '(.*)'; site '(.*)' \[ntlibc\.AbiZeroInit\]$"
+    r"expression '(.*)'; site '(.*)' \[spicule\.AbiZeroInit\]$"
 )
 
 

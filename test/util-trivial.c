@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Black-box tests for the first tier of ntlibc's POSIX standard
+ * Black-box tests for the first tier of spicule's POSIX standard
  * utilities: `true`, `false` and `test`/`[` (XCU true(1p), false(1p),
  * test(1p)).  Grouped into one file rather than three, the way
  * src/sh/builtin.c itself groups them as "the trivial four" -- their

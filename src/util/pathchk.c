@@ -94,7 +94,7 @@ static int check_one(const char *path withtok(null_terminated))
 	 * recheck) get "dereference extent is not proven sufficient"
 	 * findings. Genuinely safe: path carries withtok(null_terminated)
 	 * and start only ever advances to a position already read as
-	 * non-NUL. But ntlibc.ValidPointer's extent proof runs off
+	 * non-NUL. But spicule.ValidPointer's extent proof runs off
 	 * RegionStore's dynamic-extent tracking, which null_terminated (a
 	 * pure reachable-NUL fact) never populates -- a data-dependent walk
 	 * over a borrowed, unsized char* has no annotation here that closes

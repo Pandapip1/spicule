@@ -34,10 +34,10 @@
  *     for the RLIMIT_* resources NT *can* enforce (RLIMIT_NPROC,
  *     RLIMIT_CPU, RLIMIT_AS/RLIMIT_DATA -- job objects give a real
  *     primitive), and for RLIMIT_NOFILE, which needs no NT primitive at
- *     all (the fd table is ntlibc's own -- see the RLIMIT_NOFILE
+ *     all (the fd table is spicule's own -- see the RLIMIT_NOFILE
  *     section below, which was an N/A fence until that was noticed).
  *     RLIMIT_FSIZE likewise needs no NT primitive: every path by which
- *     this process can extend a file is ntlibc's own, so both halves of
+ *     this process can extend a file is spicule's own, so both halves of
  *     its clause -- the [EFBIG] refusal and the SIGXFSZ the same
  *     sentence requires -- are enforced in src/misc/resource.c and
  *     tested unfenced below.  Still fenced for the ones no mechanism
@@ -93,7 +93,7 @@ extern char **environ;
 
 /* getrlimit.html DESCRIPTION/RETURN VALUE/ERRORS.
  *
- * ntlibc's getrlimit() (src/misc/resource.c) reports real, enforced
+ * spicule's getrlimit() (src/misc/resource.c) reports real, enforced
  * numbers for the two resources it actually caps -- RLIMIT_NOFILE
  * against the fixed __fds[FD_MAX] table (src/internal/libc.h,
  * FD_MAX == 1024) and RLIMIT_NPROC against CHILD_CAP_LIMIT_
@@ -115,7 +115,7 @@ static void test_getrlimit(void)
 
 	/* RLIM_INFINITY: "considered to be larger than any other limit
 	 * value ... the implementation shall not enforce limits on that
-	 * resource" -- ntlibc has no cap for any of these on NT. */
+	 * resource" -- spicule has no cap for any of these on NT. */
 	CHECK(getrlimit(RLIMIT_CPU, &rl) == 0 && rl.rlim_cur == RLIM_INFINITY && rl.rlim_max == RLIM_INFINITY);
 	CHECK(getrlimit(RLIMIT_FSIZE, &rl) == 0 && rl.rlim_cur == RLIM_INFINITY);
 	CHECK(getrlimit(RLIMIT_DATA, &rl) == 0 && rl.rlim_cur == RLIM_INFINITY);
@@ -235,7 +235,7 @@ static void test_setrlimit_enforceable(void)
  *     RLIMIT_CPU, RLIMIT_DATA, RLIMIT_FSIZE, RLIMIT_NOFILE,
  *     RLIMIT_STACK, RLIMIT_AS -- and neither of these appears on the
  *     page.  Including them in a POSIX-conformance N/A was a
- *     miscategorisation; they are extensions ntlibc chooses to report
+ *     miscategorisation; they are extensions spicule chooses to report
  *     RLIM_INFINITY for.
  *
  * Nothing in this accounting is UNIMPL any longer: RLIMIT_FSIZE's
@@ -300,7 +300,7 @@ static void test_setrlimit_fsize_accepts_lowering(void)
  * setrlimit() call could shrink at runtime, only a recompile."  That was
  * a category error, and it is what kept this clause unimplemented for as
  * long as it was: RLIMIT_NOFILE does not cap an NT object.  Descriptors
- * here are ntlibc's own, handed out by __fd_alloc() (src/internal/fd.c)
+ * here are spicule's own, handed out by __fd_alloc() (src/internal/fd.c)
  * from the static __fds[] table in this process's address space, and
  * that function already returned the EMFILE the clause requires -- the
  * only missing piece was that its loop bound was the compile-time
@@ -387,14 +387,14 @@ static void test_setrlimit_nofile_child(void)
  * that may be created by a process", and the ENFORCEMENT half.
  *
  * This was fenced UNIMPL on the reasoning that "RLIMIT_FSIZE enforcement
- * would only ever be as complete as ntlibc's own I/O paths: a file grown
+ * would only ever be as complete as spicule's own I/O paths: a file grown
  * by any other means, in this process or another, would sail past it."
  * Both halves of that turned out weaker than they read:
  *
  *   - "in another process" is outside the clause, not a hole in it.  The
  *     limit governs what THIS process may create.
  *   - "in this process" was checkable, and the surface is CLOSED.  Every
- *     path by which this process can extend a file is ntlibc's own --
+ *     path by which this process can extend a file is spicule's own --
  *     write(), pwrite(), writev() (which delegates to write()),
  *     ftruncate(), posix_fallocate(), and stdio, which funnels into
  *     write().  There is no mmap in this library at all: no
@@ -420,7 +420,7 @@ static void test_setrlimit_nofile_child(void)
  * cannot partially succeed fail outright.
  *
  * "With SIGXFSZ ignored" above is now a thing this test has to arrange
- * rather than a footnote about the measuring harness: ntlibc generates
+ * rather than a footnote about the measuring harness: spicule generates
  * the signal for real (test_setrlimit_fsize_sigxfsz() below), and its
  * default action is to end the process, so every [EFBIG] asserted here
  * would otherwise kill this binary before the next line ran.  Exactly
@@ -580,7 +580,7 @@ static void test_setrlimit_fsize_sigxfsz(void)
  * any setrlimit() call in this process can run, and ntdll exposes no
  * route to lower a running thread's ceiling.  See the accounting
  * above. */
-#if NTLIBC_TEST(NA, posix_sysmisc_setrlimit_stack_unenforceable) /* N/A: RLIMIT_STACK, see above */
+#if SPICULE_TEST(NA, posix_sysmisc_setrlimit_stack_unenforceable) /* N/A: RLIMIT_STACK, see above */
 static void test_setrlimit_stack_unenforceable(void)
 {
 	struct rlimit rl;
@@ -597,7 +597,7 @@ static void test_setrlimit_stack_unenforceable(void)
 
 /* getrusage.html DESCRIPTION/RETURN VALUE/ERRORS.  Moved from XSI to
  * the POSIX base standard in Issue 5 (getrusage.html "Standards
- * Status").  ntlibc reports real numbers for ru_utime/ru_stime, read
+ * Status").  spicule reports real numbers for ru_utime/ru_stime, read
  * from NtQueryInformationProcess(ProcessTimes) -- verified below by
  * confirming they are the right units (a struct timeval, tv_usec in
  * [0,1e6)) and by exercising a real child to confirm RUSAGE_CHILDREN's
@@ -631,7 +631,7 @@ static void test_getrusage(const char *self)
 	tv_is_valid(&ru.ru_stime);
 
 	/* RUSAGE_THREAD: not in POSIX.1-2017 (Linux/BSD extension used
-	 * elsewhere in this project's own header comment); ntlibc treats
+	 * elsewhere in this project's own header comment); spicule treats
 	 * it as an alias for RUSAGE_SELF since it has no per-thread
 	 * accounting -- just confirm it does not error. */
 	CHECK(getrusage(RUSAGE_THREAD, &ru) == 0);
@@ -954,7 +954,7 @@ static void test_poll_ready_count(void)
 	close(fds[1]);
 }
 
-#if NTLIBC_TEST(PASS, posix_sysmisc_poll_hup_excludes_pollout) /* BUG: poll() reports POLLHUP and POLLOUT together.  poll.html
+#if SPICULE_TEST(PASS, posix_sysmisc_poll_hup_excludes_pollout) /* BUG: poll() reports POLLHUP and POLLOUT together.  poll.html
 	 * DESCRIPTION, the POLLHUP entry: "A device has been disconnected,
 	 * or a pipe or FIFO has been closed.  This event and POLLOUT are
 	 * mutually-exclusive; a stream can never be writable if a hangup
@@ -981,7 +981,7 @@ static void test_poll_ready_count(void)
 	 * A caller that polls for POLLIN|POLLOUT on a hung-up descriptor is
 	 * told it may write, which is the one thing the clause exists to
 	 * rule out.  The third branch is the worst of the three: there
-	 * ntlibc reports "hung up" and "writable" at once for a descriptor
+	 * spicule reports "hung up" and "writable" at once for a descriptor
 	 * whose state it has just admitted it could not sample.
 	 *
 	 * The fix is one mask in poll.c: POLLHUP clears POLLOUT/POLLWRNORM.
@@ -1121,7 +1121,7 @@ static void test_fd_macros(void)
 /* Not a POSIX.1-2017 header at all -- absent from the basedefs index
  * (https://pubs.opengroup.org/onlinepubs/9699919799/idx/head.html
  * lists 17 sys/ headers; sys/param.h is not among them). A BSD
- * extension, correctly not claimed as POSIX anywhere in ntlibc's own
+ * extension, correctly not claimed as POSIX anywhere in spicule's own
  * comments. Only internal consistency is testable: there is no spec
  * page to hold it to. */
 static int side_effect_calls;
@@ -1359,7 +1359,7 @@ static void test_getopt_long_only(void)
 
 	/* "If an option starting with '-' does not match a long option
 	 * but does match a single-character option, the single-character
-	 * option is returned." ntlibc's src/misc/getopt_long.c takes this
+	 * option is returned." spicule's src/misc/getopt_long.c takes this
 	 * further for the case this file's DESCRIPTION comment documents:
 	 * a long option whose *name* is exactly one character and also
 	 * appears in optstring is deliberately treated as ambiguous and
@@ -1409,7 +1409,7 @@ static void test_getopt_long_index(void)
 
 /* Reset behaviour between scans: BSD getopt_long(3): "setting optind
  * to 0 will indicate that getopt_long should reset, and optind will
- * be set to 1 in the process." ntlibc's own optreset variable
+ * be set to 1 in the process." spicule's own optreset variable
  * (declared in <getopt.h>) is the same idea, checked in src/misc/
  * getopt.c/getopt_long.c: "if (!optind || optreset) { ... optind = 1;
  * optreset = 0; }" -- both triggers are tested here, independently. */
@@ -1828,7 +1828,7 @@ static void test_waitid_errors(void)
  * NtResumeProcess.  The clause scopes WSTOPPED to a child "that has
  * stopped upon receipt of a signal", and the only signals that exist on
  * this platform are the ones this library delivers -- so the stop is
- * always one ntlibc performed itself (kill(pid, SIGSTOP), see
+ * always one spicule performed itself (kill(pid, SIGSTOP), see
  * src/signal/signal.c), which is why it needs no kernel notification to
  * learn of it and NT's missing stop transition costs nothing.
  *

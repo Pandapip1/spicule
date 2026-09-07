@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Clause-by-clause POSIX.1-2017 audit of four headers of the
- * locale/message-handling family, none of which ntlibc had when this
+ * locale/message-handling family, none of which spicule had when this
  * file was written:
  *
  *   <langinfo.h>   nl_langinfo, nl_langinfo_l      IMPLEMENTED 2026-08-25
@@ -167,7 +167,7 @@
  *                 anything NT cannot do.  The strongest platform
  *                 dependency on any of the twelve pages consulted is
  *                 catopen()'s pathname resolution and its FD_CLOEXEC
- *                 requirement, and ntlibc implements and audits both;
+ *                 requirement, and spicule implements and audits both;
  *                 everything else is computation over memory.  Three of
  *                 the four are table lookup and string formatting over data
  *                 this tree already holds; the fourth (<nl_types.h>) is
@@ -175,7 +175,7 @@
  *                 of an installed catalogue, and its callers are
  *                 written to keep working when it does.
  *
- * The counter-argument considered and rejected: "ntlibc is
+ * The counter-argument considered and rejected: "spicule is
  * C-locale-only -- src/misc/locale.c's setlocale() accepts no other
  * name -- so a locale-data accessor has nothing to accessorise; call it
  * N/A."  N/A in this ledger requires a *mechanism* that keeps the
@@ -280,11 +280,11 @@
  *     37: .p_cs_precedes = 127,
  *     43: .int_p_cs_precedes = 127,
  *
- *     $ grep -n '__ntlibc_day_name\|__ntlibc_month_name' src/time/names.c
- *     5:  const char *const __ntlibc_day_name[7] = {
- *     8:  const char *const __ntlibc_day_name_abbr[7] = {
- *     11: const char *const __ntlibc_month_name[12] = {
- *     15: const char *const __ntlibc_month_name_abbr[12] = {
+ *     $ grep -n '__spicule_day_name\|__spicule_month_name' src/time/names.c
+ *     5:  const char *const __spicule_day_name[7] = {
+ *     8:  const char *const __spicule_day_name_abbr[7] = {
+ *     11: const char *const __spicule_month_name[12] = {
+ *     15: const char *const __spicule_month_name_abbr[12] = {
  *
  *     $ grep -n "case 'c':\|case 'x':\|case 'X':\|case 'r':\|case 'p':"
  *         src/time/strftime.c
@@ -601,7 +601,7 @@ static void test_lc_numeric_and_lc_monetary_data_without_an_accessor(void)
  * among the pages this audit consulted; they are given below as this
  * audit's reading and deliberately not quoted.  Nothing in this test
  * depends on that reading being exact -- what it asserts is that
- * ntlibc's regcomp()/regexec() handle expressions of that shape, i.e.
+ * spicule's regcomp()/regexec() handle expressions of that shape, i.e.
  * that the *consumer* of these two items works here today.
  *
  * That is the shape of this file's whole finding in miniature, which is
@@ -637,7 +637,7 @@ static void test_yesexpr_noexpr_have_a_working_consumer(void)
  * langinfo.h.html gives CODESET as "Codeset name.", category LC_CTYPE.
  * It is what libc-test's t_setutf8() asks for, and its absence is why
  * test/libc-test-expected.txt marks `fgetwc-buffering` unverifiable on
- * this target.  ntlibc has exactly one answer to give -- src/internal/
+ * this target.  spicule has exactly one answer to give -- src/internal/
  * utf.c's banner: "UTF-8 is the library's only character encoding: that
  * is what every char* a program hands in or gets back is" -- and no way
  * to give it.
@@ -874,12 +874,12 @@ static void test_langinfo_h_item_constants(void)
       implementations may return the empty string ("")."
     - CODESET is "UTF-8" because that is the only encoding this
       library has (src/internal/utf.c's banner); the *name* is
-      implementation-defined, and this test fixes ntlibc's choice
+      implementation-defined, and this test fixes spicule's choice
       rather than quoting a requirement.
     - YESEXPR and NOEXPR come from XBD Chapter 7, which this
       audit did not have; see the note at
       test_yesexpr_noexpr_have_a_working_consumer.  They are
-      asserted here as ntlibc's chosen answer, not as a quoted one.
+      asserted here as spicule's chosen answer, not as a quoted one.
 
    So this case is not a guess about what the answers would be.  It is
    the same set of answers this file already checks through other
@@ -975,7 +975,7 @@ static void test_nl_langinfo_posix_locale_values(void)
    One clause this case deliberately does not test, because it cannot
    be tested here and pretending otherwise would be worse than
    recording it: "The nl_langinfo() function need not be thread-safe"
-   -- and, by RATIONALE, nl_langinfo_l() must be.  ntlibc has no
+   -- and, by RATIONALE, nl_langinfo_l() must be.  spicule has no
    threads (pthread.h is a recorded absence), so there is no second
    thread to observe the difference from.  It is noted because the
    buffer choice is constrained by a clause no test here will catch;
@@ -1126,7 +1126,7 @@ static void test_nl_types_h_catalogue_access(void)
  *
  * That format is not POSIX's: POSIX standardises gencat's *source*
  * text and says nothing about the compiled bytes, so the layout is
- * ntlibc's choice (it is musl's, so that catalogues are portable
+ * spicule's choice (it is musl's, so that catalogues are portable
  * between the two).  This test therefore fixes an implementation
  * detail on purpose, and is the one place in this file that does.  If
  * the format is ever changed, this is what has to change with it --
@@ -1323,7 +1323,7 @@ static void test_catgets_reads_a_catalogue(void)
    WHERE THIS TEST IS DELIBERATELY SILENT.  src/misc/strfmon.c has to
    choose a fallback everywhere the POSIX locale says "not available"
    -- the radix character, the default right precision, the negative
-   sign, symbol placement -- and those choices are ntlibc's, not the
+   sign, symbol placement -- and those choices are spicule's, not the
    standard's.  This file asserts a value for exactly one of them (the
    default right precision, implicitly, via "%n" of 1234.567 still
    containing "1234"), and states the rest as the source's business.
@@ -1410,7 +1410,7 @@ static void test_strfmon_posix_locale(void)
 	}
 }
 
-#if NTLIBC_TEST(PASS, posix_msgcat_strfmon_alignment_pads_to_equal_length) /* strfmon() pads the positive
+#if SPICULE_TEST(PASS, posix_msgcat_strfmon_alignment_pads_to_equal_length) /* strfmon() pads the positive
     left-precision format to the length of the negative one.
 
 	strfmon.html, under Left Precision, verbatim: "To ensure
@@ -1516,7 +1516,7 @@ static void test_strfmon_alignment_pads_to_equal_length(void)
 
    iconv_open.html: "Settings of fromcode and tocode and their
    permitted combinations are implementation-defined." -- so the
-   particular codeset names below are ntlibc's choice, not a
+   particular codeset names below are spicule's choice, not a
    requirement, and this comment says which is which.  RETURN VALUE:
    "Otherwise, iconv_open() shall return (iconv_t)-1 and set errno
    to indicate the error."  iconv_close.html RETURN VALUE: "Upon
@@ -1657,7 +1657,7 @@ int main(void)
 	test_nl_types_h_catalogue_access();
 	test_catgets_reads_a_catalogue();
 	test_strfmon_posix_locale();
-#if NTLIBC_TEST(PASS, posix_msgcat_strfmon_alignment_pads_to_equal_length) /* BUG: see the fence over test_strfmon_alignment_pads_to_equal_length(). */
+#if SPICULE_TEST(PASS, posix_msgcat_strfmon_alignment_pads_to_equal_length) /* BUG: see the fence over test_strfmon_alignment_pads_to_equal_length(). */
 	test_strfmon_alignment_pads_to_equal_length();
 #endif
 	test_iconv_open_convert_close();

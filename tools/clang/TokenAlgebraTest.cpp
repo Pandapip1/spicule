@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-using namespace ntlibc::algebra;
+using namespace spicule::algebra;
 
 static bool require(bool Condition, const char *Message) {
   if (!Condition)

@@ -278,7 +278,7 @@ size_t confstr(int name, char *buf withtok(writable_span(len)), size_t len)
 	}
 	/* Both writes stay inside writable_span(len) (i+1 < len bounds the
 	 * loop write, i <= len-1 bounds the terminator); checker gap
-	 * (ntlibc.ValidPointer) -- the nonnull proof that span's zero_vacuous
+	 * (spicule.ValidPointer) -- the nonnull proof that span's zero_vacuous
 	 * grants doesn't reach through the loop-bound guard the way a plain
 	 * `if (len)` would. */
 	for (i = 0; s[i] && i + 1 < len; i++) buf[i] = s[i];

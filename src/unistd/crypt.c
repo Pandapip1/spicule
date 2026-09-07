@@ -177,7 +177,7 @@ static uint64_t des_block(uint64_t block, const uint64_t subkeys[16], unsigned s
 			unsigned row = ((six & 0x20u) >> 4) | (six & 1u); /* 0..3 */
 			unsigned col = (six >> 1) & 0xFu; /* 0..15 */
 			/* row*16+col is 0..63 by the masks above, in range for
-			 * Sbox[j]'s 64 entries; checker gap (ntlibc.ValidPointer) --
+			 * Sbox[j]'s 64 entries; checker gap (spicule.ValidPointer) --
 			 * it does not carry that bound through three chained
 			 * bitwise ops and a multiply. */
 			f = (f << 4) | Sbox[j][row * 16 + col];

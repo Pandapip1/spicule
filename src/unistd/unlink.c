@@ -13,7 +13,7 @@
 #include "libc.h"
 #include "plat_unistd.h"
 
-/* Checker gap (ntlibc.CapabilityToken/ntlibc.OwnershipType): strlen(path)
+/* Checker gap (spicule.CapabilityToken/spicule.OwnershipType): strlen(path)
  * below needs path to carry null_terminated, which is concretely true
  * (every POSIX path argument is a C string) -- but stating it here via
  * withtok(null_terminated) cascades that same requirement up through

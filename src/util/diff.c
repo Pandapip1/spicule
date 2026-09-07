@@ -75,6 +75,18 @@
  *
  * EXIT STATUS: 0 no differences; 1 differences found; >1 an error
  * occurred.
+ *
+ * OWNERSHIP LINT: most of the (pointer, length) parameter pairs below
+ * (dline/hunk/group/editop arrays and their .s/.a0/.hstart/etc. fields)
+ * are genuinely always live and in-bounds by construction, but adding
+ * __attribute__((nonnull(...))) or an __ownership_pointer_nonnull() axiom
+ * to close the resulting "not proven nonnull" findings was tried and
+ * reverted: once the checker accepts a pointer is nonnull, it then
+ * demands a much harder proof that the paired length is within that
+ * pointer's own memory-contract span (ntlibc.MemoryContract), which
+ * nothing in this file currently establishes -- confirmed empirically
+ * to trade each closed finding for a new, harder one rather than a net
+ * reduction. Left open rather than chased into that deeper proof.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -934,7 +946,13 @@ static int diff_files(const char *path1 withtok(null_terminated), const char *pa
 
 /* ==== directory comparison (mandatory: see this file's header comment) ==== */
 
-struct namelist { char **names; size_t n; };
+/* names is its own heap allocation, released by free_namelist(); marking
+ * it lets AllocationLifetimeChecker see list_dir_sorted()'s own
+ * `out->names = names;` as transferring the obligation into the struct
+ * instead of reporting it leaked at that function's return (same
+ * "assignment into an annotated destination moves the obligation" idiom
+ * as src/util/join.c's struct jline/src/util/tsort.c's struct node). */
+struct namelist { char **names withtok(heap_allocated); size_t n; };
 
 static int namecmp(const void *pa, const void *pb) __attribute__((nonnull(1, 2)));
 static int namecmp(const void *pa, const void *pb)
@@ -993,6 +1011,17 @@ static int list_dir_sorted(const char *path, struct namelist *out)
 			memcpy(dup, d->d_name, bytes);
 		}
 		names[n++] = dup;
+		/* dup: "dynamic allocation is not freed before function exit"
+		 * on both this function's returns -- a known checker-vocabulary
+		 * gap, not a real leak. withtok(heap_allocated) on struct
+		 * namelist's own `names` field (above) lets the checker see the
+		 * ARRAY's obligation move on `out->names = names;`, but element
+		 * stores through a subscript (`names[n++] = dup`) are not
+		 * recognized the same way, so each dup is still reported
+		 * "leaked" here even though every element is freed, either by
+		 * the fail: loop right below or by free_namelist() at every
+		 * real caller (same class as src/util/awk_parse.c's mknode()
+		 * comment on this same array-of-owned-pointers shape). */
 	}
 	(void)closedir(dp);
 	qsort(names, n, sizeof *names, namecmp);
@@ -1142,6 +1171,13 @@ int __util_diff_main(
 					val = argv[i];
 				}
 				n = strtol(val, &end, 10);
+				/* val[0]: "pointer dereference is not proven nonnull" --
+				 * val is ultimately one of argv's own elements (or an
+				 * offset into one), and strtol(), unlike strcmp() used
+				 * on `arg` above, carries no __attribute__((nonnull(1)))
+				 * to establish it first; left open, same accepted class
+				 * as src/util/du.c's own argv[i][0] gap (see that
+				 * file's comment). */
 				if (*end || val[0] == 0 || n < (fmtc == 'C' ? 1 : 0)) {
 					__util_diagf("diff: -%c: invalid context count %s\n", fmtc, val);
 					return 2;
@@ -1189,6 +1225,7 @@ int __util_diff_main(
 		base = strrchr(filepath, '/');
 		base = base ? base + 1 : filepath;
 		snprintf(resolved, sizeof resolved, "%s/%s", dirpath, base);
+		__ownership_string_terminated(resolved); /* snprintf() always NUL-terminates a nonzero-size buffer */
 
 		if (dir_is_first) return diff_files(resolved, filepath, resolved, filepath, &opts, stdout, 0);
 		return diff_files(filepath, resolved, filepath, resolved, &opts, stdout, 0);

@@ -2,53 +2,38 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * cut(1p): `cut -b list [-n] [file...]`, `cut -c list [file...]`, or
- * `cut -f list [-d delim] [-s] [file...]` -- "exactly one of -b, -c or
- * -f" is required (OPTIONS: these three "are mutually exclusive").
+ * `cut -f list [-d delim] [-s] [file...]` -- exactly one of -b, -c, -f
+ * is required; they're mutually exclusive.
  *
- * `list` is XCU cut(1p)'s own range-list grammar, shared verbatim by all
- * three modes: "a comma or <blank>-separated list of numbers and/or
- * number ranges. Numbers ... range: N N'th byte, character or field,
- * counted from 1. N- from Nth to end of line. N-M from Nth to Mth
- * inclusive. -M from first to Mth." parse_list() below builds a plain
- * array of (start, end) pairs (end == RANGE_OPEN for a trailing "N-")
- * and is_selected() does a linear membership scan -- no attempt to
- * merge/sort ranges, since "the selected input shall be written in the
- * order collected" (ascending position order) regardless of how the
- * list itself was written or how many of its ranges overlap a given
- * position, and a linear scan over a handful of ranges per character
- * position is not a real cost for real command lines.
+ * `list` is XCU cut(1p)'s range-list grammar, shared by all three modes:
+ * comma/blank-separated numbers and ranges, 1-based ("N", "N-", "N-M",
+ * "-M"). parse_list() builds a plain array of (start, end) pairs (end ==
+ * RANGE_OPEN for a trailing "N-") and is_selected() does a linear
+ * membership scan -- no merging/sorting, since output order is always
+ * ascending position order regardless of how the list was written, and a
+ * linear scan over a handful of ranges is not a real cost here.
  *
  * -b (bytes) vs -c (characters): this build's mbrtowc() (src/stdlib/
- * mbrtowc.c) really does decode UTF-8 unconditionally -- there is no
- * setlocale() to turn it off, so unlike a build where "the current
- * locale" always means single-byte C, the byte/character distinction
- * here is backed by real multibyte decoding, not just a name. -c
- * therefore counts and slices actual decoded characters (falling back to
- * one raw byte per position on an invalid or incomplete sequence, so a
- * corrupt byte is never silently dropped or allowed to desynchronize the
- * rest of the line); -b counts and slices raw bytes. -n ("do not split a
- * multi-byte character" when a byte-list boundary falls inside one) is
- * refused loudly rather than implemented partially or silently ignored,
- * same "refuse rather than guess" reasoning as src/util/touch.c's -d:
- * -b's contract is exact byte offsets, and rounding those to a character
- * boundary is a second, different feature this file does not implement.
+ * mbrtowc.c) decodes UTF-8 unconditionally, so the byte/character split
+ * is backed by real multibyte decoding, not just a name. -c counts and
+ * slices decoded characters (falling back to one raw byte on an invalid
+ * or incomplete sequence, so a corrupt byte is never dropped or lets the
+ * rest of the line desync); -b counts and slices raw bytes. -n ("don't
+ * split a multi-byte character" at a byte-list boundary) is refused
+ * loudly rather than implemented partially -- -b's contract is exact
+ * byte offsets, and rounding to a character boundary is a different
+ * feature this file doesn't implement.
  *
- * -s ("suppress lines with no delimiter") is real and implemented, field
- * mode only -- OPTIONS: "-s Suppress lines with no delimiter characters
- * ... Unless -s is specified, lines with no delimiters shall be passed
- * through unmodified." -d is likewise field-mode only ("Use delim as the
- * field delimiter character instead of the <tab> character"); using
- * either with -b/-c is refused rather than silently ignored.
+ * -s (suppress lines with no delimiter) is field-mode only; lines
+ * without a delimiter pass through unmodified unless -s is given. -d is
+ * likewise field-mode only; either with -b/-c is refused.
  *
  * A missing/unreadable file operand is diagnosed and counted as a
- * failure; other operands still run (the file loop below never stops
- * early), matching this project's other multi-operand utilities (see
- * src/util/rm.c).
+ * failure; other operands still run, matching src/util/rm.c.
  *
- * EXIT STATUS: "0 Success. >0 An error occurred." -- 2 for a usage
- * error (bad option, bad list, conflicting flags), 1 for a runtime one
- * (a file that could not be opened), same split src/util/rm.c and
- * src/util/cp.c already use.
+ * EXIT STATUS: 2 for a usage error (bad option, bad list, conflicting
+ * flags), 1 for a runtime one (a file that could not be opened), same
+ * split src/util/rm.c and src/util/cp.c use.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -139,10 +124,8 @@ static int is_selected(const struct range *r, size_t n, long pos)
 }
 
 /* Decoded length, in bytes, of the character (or byte-list fallback
- * unit) starting at `p`, within `avail` bytes -- shared logic with
- * src/util/fold.c's identical (and identically small) helper; see that
- * file's header for why this ten-line function is duplicated rather
- * than given a shared declaration in src/internal/util.h. */
+ * unit) starting at `p`, within `avail` bytes -- duplicated from
+ * src/util/fold.c's identical helper; see that file's header for why. */
 static size_t char_len(const unsigned char *p, size_t avail)
 {
 	mbstate_t st;
@@ -177,11 +160,9 @@ static void process_char_mode(FILE *f, const struct range *ranges, size_t nr, in
 			while (off < ulen) {
 				size_t clen = char_len((const unsigned char *)line + off, ulen - off);
 				if (is_selected(ranges, nr, pos)) {
-					/* clen <= ulen - off by char_len()'s own contract
-					 * (never more than the `avail` bytes handed to it), so
-					 * line+off..line+off+clen stays within [line,
-					 * line+ulen] -- same restatement as
-					 * process_field_mode()'s analogous fwrite() below. */
+					/* clen <= ulen - off by char_len()'s contract, so this
+					 * stays within [line, line+ulen] -- same restatement as
+					 * process_field_mode()'s fwrite() below. */
 					__ownership_readable_span(line + off, clen);
 					fwrite(line + off, 1, clen, stdout);
 				}
@@ -225,12 +206,10 @@ static void process_field_mode(FILE *f, const struct range *ranges, size_t nr, c
 
 				if (is_selected(ranges, nr, field)) {
 					if (wrote_any) fputc(delim, stdout);
-					/* start..start+flen is always within [line, line+ulen]
-					 * (flen is p-start or end-start, both bounded by
-					 * end-start): true by the cursor arithmetic above, not
-					 * traced by the checker across the memchr loop -- same
-					 * restatement src/util/join.c's join_write() already
-					 * does for its own field-slice fwrite(). */
+					/* start..start+flen is within [line, line+ulen] by the
+					 * cursor arithmetic above, not traced by the checker
+					 * across the memchr loop -- same restatement
+					 * src/util/join.c's join_write() does for its fwrite(). */
 					__ownership_readable_span(start, flen);
 					fwrite(start, 1, flen, stdout);
 					wrote_any = 1;
@@ -261,10 +240,8 @@ int __util_cut_main(
 	for (; i < argc; i++) {
 		char *a = argv[i];
 
-		/* a is one of argv's own elements (i < argc), genuinely never
-		 * NULL by this function's own elements_withtok(null_terminated,
-		 * argc) contract on argv -- same restatement as src/util/od.c's
-		 * option loop. */
+		/* a is argv[i], i < argc, never NULL per argv's own
+		 * elements_withtok(null_terminated, argc) contract. */
 		__ownership_pointer_nonnull(a);
 		if (a[0] != '-' || a[1] == 0) break;
 		if (!strcmp(a, "--")) { i++; break; }
@@ -310,13 +287,9 @@ int __util_cut_main(
 		fprintf(stderr, "cut: you must specify a list of bytes, characters, or fields\n");
 		return 2;
 	}
-	/* Every path above that sets `mode` sets `listspec` in the very
-	 * same branch (either to the attached "-f1,3" tail or to the next
-	 * argv[] word), so `mode` being nonzero already guarantees
-	 * `listspec` is too -- restated here as a direct check, rather
-	 * than left as an invariant only this file's control flow proves,
-	 * since a static checker reading parse_list()'s own `*spec` cannot
-	 * otherwise see the connection between the two variables. */
+	/* Every path that sets `mode` sets `listspec` in the same branch, so
+	 * mode nonzero already guarantees listspec is too -- restated here
+	 * as a direct check since the checker can't see that connection. */
 	if (!listspec) {
 		fprintf(stderr, "cut: internal error: no list captured for -%c\n", mode);
 		return 2;
@@ -342,17 +315,14 @@ int __util_cut_main(
 	} else {
 		for (; i < argc; i++) {
 			FILE *f;
-			/* argv[i] is one of argv's own elements (i < argc), genuinely
-			 * null-terminated by this function's own
-			 * elements_withtok(null_terminated, argc) contract on argv --
-			 * restated here since the checker does not trace that fact
-			 * through the two argv[i] uses below. */
+			/* argv[i], i < argc, is NUL-terminated per argv's own
+			 * elements_withtok(null_terminated, argc) contract -- restated
+			 * since the checker doesn't trace that through the uses below. */
 			__ownership_string_terminated(argv[i]);
 			/* use_stdin, not `f != stdin`, decides the fclose() below --
 			 * the checker can't prove opaque pointers unequal, so a direct
-			 * comparison makes the fopen() allocation look conditionally
-			 * leaked (same idiom as src/util/sed.c's
-			 * script_buf_append_file()). */
+			 * comparison avoids a false conditional-leak finding on fopen()
+			 * (same idiom as src/util/sed.c's script_buf_append_file()). */
 			int use_stdin = !strcmp(argv[i], "-");
 			f = use_stdin ? stdin : fopen(argv[i], "r");
 			if (!f) {

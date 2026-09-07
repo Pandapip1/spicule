@@ -4,84 +4,48 @@
  * sort(1p): `sort [-bdfinru] [-k keydef]... [-t char] [-o output] [-c|-C]
  * [file...]`.
  *
- * DEFAULT KEY: "If no -k option is specified, a default sort key of the
- * entire line shall be used" -- compared byte-by-byte (this library's
- * only locale is "C", src/misc/locale.c, so the collating sequence is
- * plain byte value; nothing here claims a stronger collation than that
- * actually exists).
+ * DEFAULT KEY: no -k means the whole line is the key, compared
+ * byte-by-byte (this library's only locale is "C", src/misc/locale.c).
  *
- * DEFAULT FIELD SPLITTING (-t not given): "each maximal non-empty
- * sequence of <blank> characters that follows a non-<blank> shall be a
- * field separator.  The leading field separator is included in the
- * first field." -- i.e. leading blanks on the line are part of field 1,
- * not stripped; every field after the first has its own leading
- * separator consumed rather than kept.  This is deliberately NOT the
- * same rule join(1p) uses for its own default (join drops leading
- * blanks entirely) -- see src/util/join.c's header for that contrast.
+ * DEFAULT FIELD SPLITTING (-t not given): each run of blanks following a
+ * non-blank char is a field separator and is consumed, except leading
+ * blanks on the line, which stay part of field 1. This is the opposite
+ * of join(1p)'s default (join drops leading blanks); see
+ * src/util/join.c's header.
  *
- * -k keydef GRAMMAR: `field_start[type][,field_end[type]]` where
- * field_start is `F[.C]` and field_end is `F[.C]` (F and C both 1-based;
- * C omitted on field_start means "first character of the field", C
- * omitted or 0 on field_end means "last character of the field"); type
- * is zero or more of 'b','d','f','i','n','r' with no separator.  All six
- * are implemented.  "If any modifier is attached to a field_start or to
- * a field_end, no option shall apply to either" -- read here as: any
- * attached modifier anywhere in one -k spec makes that whole key use
- * exactly its own attached modifiers (global -b/-d/-f/-i/-n/-r do not
- * leak in), which this file implements exactly.  One deliberate
- * simplification within that: 'b' is applied symmetrically to both
- * field_start and field_end of a key when attached to *either* one,
- * rather than tracked as two independent per-endpoint booleans --
- * spelled out because the standard's literal wording ("shall apply only
- * to the field_start or field_end to which it is attached") does allow
- * the asymmetric reading, and this file does not implement that.  If
- * field_end is omitted, the key runs from field_start to the end of the
- * line (not just to the end of that field).
+ * -k keydef GRAMMAR: `field_start[type][,field_end[type]]`, both
+ * field_start and field_end are `F[.C]` (F,C 1-based; C omitted means
+ * "start of field" on field_start, "end of field" on field_end); type is
+ * any run of 'b','d','f','i','n','r', all implemented. Any modifier
+ * attached anywhere in one -k spec makes that key use only its own
+ * attached modifiers (global -b/-d/-f/-i/-n/-r do not leak in).
+ * Deliberate simplification: 'b' attached to either endpoint applies to
+ * both, rather than tracked per-endpoint as POSIX's literal wording
+ * would allow. Omitted field_end runs to the end of the line, not just
+ * the end of that field.
  *
- * TIEBREAK: "lines that otherwise compare equal shall be ordered as if
- * none of -d, -f, -i, -n, or -k were present (but with -r still in
- * effect, if it was specified) and with all bytes in the lines
- * significant" -- i.e. a whole-line, unfiltered byte comparison (with
- * the *global* -r, not any per-key 'r') is the final tiebreaker whenever
- * the primary (possibly multi-key) comparison finds two lines equal,
- * UNLESS -u is given, in which case such lines are exactly the
- * "duplicate key" pairs -u exists to collapse and no tiebreak is
- * computed for them.  This is what makes `sort -k1,1 -k2,2n` behave
- * differently from a naive single-key sort on just the first key.
+ * TIEBREAK: lines that compare equal under the primary key(s) fall back
+ * to a whole-line, unfiltered byte comparison (honoring global -r only,
+ * not any per-key 'r'), unless -u is given -- in which case such lines
+ * are exactly the duplicates -u collapses, and no tiebreak runs. This is
+ * why `sort -k1,1 -k2,2n` differs from a naive single-key sort.
  *
- * STABILITY: this file's own sort (merge_sort() below) is a textbook
- * stable bottom-up merge sort, chosen over qsort()/a hand-rolled
- * quicksort specifically so two lines that compare equal keep their
- * original relative order -- XCU does not require this, but scripts
- * routinely depend on it, and a stable merge costs no real extra effort
- * here over an unstable one.
+ * STABILITY: merge_sort() below is a stable bottom-up merge sort (over
+ * qsort()/quicksort) so equal-comparing lines keep their original order;
+ * POSIX doesn't require this but scripts rely on it, and stability costs
+ * nothing extra here.
  *
- * -c/-C (check, don't sort): "Check that the single input file is
- * ordered" -- note "single": more than one file operand together with
- * -c/-C is refused.  EXIT STATUS is genuinely not the usual 0/1/2>-is-
- * error shape every other utility in this batch uses: "0 All input
- * files were output successfully, or -c was specified and the input
- * file was correctly sorted." / "1 Under the -c option, the file was
- * not ordered as specified, or if the -c and -u options were both
- * specified, two input lines were found with equal keys." / ">1 An
- * error occurred." -- so exit 1 here means "the check failed", not "an
- * error occurred": a caller testing `[ $? -gt 1 ]` for a real error and
- * `[ $? -eq 1 ]` for "unsorted" needs that distinction preserved, and it
- * is (usage/I-O errors below return 2, never 1).
+ * -c/-C (check, don't sort): only a single input file is allowed. EXIT
+ * STATUS is unusual: 0 = sorted (or all input written), 1 = -c found the
+ * file unsorted (or -c -u found equal keys), >1 = a real error. Usage/IO
+ * errors below always return 2, never 1, to preserve that distinction.
  *
- * -o output: "may be the same as one of the input files" -- safe here
- * because every input line is read into memory (read_all_lines() below)
- * before -o is ever opened, so `sort -o f f` cannot truncate f before
- * f has been read.
+ * -o output: safe to reuse an input filename, because every line is
+ * read into memory (read_all_lines() below) before -o is ever opened.
  *
- * -m (merge, assume inputs already sorted) is a real sort(1p) option
- * that is deliberately not implemented -- refused loudly with a
- * diagnostic and a nonzero exit, the same "refuse rather than silently
- * ignore" rule src/util/touch.c's -d applies to itself: doing a full
- * sort instead of a merge when -m is requested would be silently wrong
- * only in the specific case of correctness under repeated -m runs on
- * pre-merged streams, exactly the kind of "looks right, isn't" gap this
- * project's utilities refuse rather than paper over.
+ * -m (merge, assume inputs already sorted) is a real option, deliberately
+ * not implemented: refused loudly with a diagnostic rather than silently
+ * doing a full sort instead.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -119,11 +83,8 @@ struct line {
 
 /* ==== field splitting ==================================================== */
 
-/* realloc(), not out = realloc(out, ...): on failure realloc() returns
- * NULL without freeing the original block, so assigning straight back
- * into `out` would both lose the data already collected *and* leak that
- * original block -- the classic realloc mistake clang-tidy's bugprone-
- * suspicious-realloc-usage and cppcheck's memleakOnRealloc both flag. */
+/* Not out = realloc(out, ...): on failure realloc() returns NULL without
+ * freeing the original block, so assigning straight back would leak it. */
 static struct field *fields_grow(struct field *out, size_t *cap)
 	__attribute__((nonnull(2)));
 withtok(heap_allocated)
@@ -139,10 +100,9 @@ static struct field *fields_grow(
 	return g;
 }
 
-/* Ensures `*out` has room for field index `n`, growing it via
- * fields_grow() first if not; on failure `*out` is freed and cleared so
- * every caller can propagate a single false return without repeating
- * fields_grow()'s own free-on-failure contract at each call site. */
+/* Ensures `*out` has room for field index `n`, growing via fields_grow()
+ * if not; on failure frees and clears `*out` so callers just propagate
+ * a false return. */
 static int field_reserve(struct field **out, size_t *cap, size_t n)
 	__attribute__((nonnull(1, 2)));
 static int field_reserve(struct field **out withtok(heap_allocated), size_t *cap,
@@ -213,24 +173,19 @@ static size_t key_start_off(const char *line withtok(readable_span(len)), size_t
 	struct field fl;
 	size_t start;
 
-	/* line is always a struct line's own text field, always live -- see
+	/* line is always a struct line's own text field -- see
 	 * compare_by_key()'s call site. */
 	__ownership_pointer_nonnull(line);
 	if (f < 1) f = 1;
 	if ((size_t)(f - 1) >= nf) return len;
-	/* nf > 0 here, and struct line's own fields/nfields are always set
-	 * together (split_fields() never returns a count without a backing
-	 * array) -- so fields is live whenever an index below nf is taken. */
+	/* nf > 0 here; split_fields() never returns a count without a
+	 * backing fields array. */
 	__ownership_pointer_nonnull(fields);
-	/* OPEN LINT FINDING (ntlibc.ValidPointer, "dereference extent is not
-	 * proven sufficient"): fields[f-1].end <= len always holds -- every
-	 * field split_fields() records has end set from an index that never
-	 * exceeds the line's own len -- so start < fl.end <= len is a safe
-	 * line[] access below. The checker can't correlate a struct field
-	 * value against a bound established in a different function
-	 * (split_fields) at a different time; no existing ownership.h
-	 * annotation expresses that relation, so this is left open rather
-	 * than papered over. */
+	/* OPEN LINT FINDING (ntlibc.ValidPointer): fields[f-1].end <= len
+	 * always holds, since split_fields() never records an end beyond
+	 * the line's len -- but the checker can't correlate a struct field
+	 * value against a bound set in a different function, so this stays
+	 * open rather than papered over. */
 	fl = fields[f - 1];
 	start = fl.start;
 	if (bflag) while (start < fl.end && isblank((unsigned char)line[start])) start++;
@@ -248,11 +203,11 @@ static size_t key_end_off(const char *line withtok(readable_span(len)), size_t l
 	size_t fstart, end;
 
 	(void)len;
-	/* line is always live -- see key_start_off()'s identical note. */
+	/* line -- see key_start_off()'s identical note. */
 	__ownership_pointer_nonnull(line);
 	if (f < 1) f = 1;
 	if ((size_t)(f - 1) >= nf) return len;
-	/* nf > 0 here -- see key_start_off()'s identical fields/nfields note. */
+	/* nf > 0 -- see key_start_off()'s identical fields/nfields note. */
 	__ownership_pointer_nonnull(fields);
 	/* OPEN LINT FINDING -- see key_start_off()'s identical note above. */
 	fl = fields[f - 1];
@@ -266,14 +221,9 @@ static size_t key_end_off(const char *line withtok(readable_span(len)), size_t l
 
 /* ==== character-level comparison ========================================= */
 
-/* An absurdly long numeric sort key (30+ digits under `sort -n`) must
- * not be allowed to wrap around long long's range: a wrapped value can
- * come out negative or otherwise smaller than a normal-sized key it
- * should sort *after*, flipping the comparison order.  POSIX sort still
- * has to process the rest of the file even when one field is malformed
- * or extreme, so this saturates to LLONG_MAX/LLONG_MIN -- "at least
- * this large" -- rather than erroring the line out; the overflow check
- * happens before each multiply/add so `v` never actually wraps. */
+/* Saturates to LLONG_MAX/LLONG_MIN instead of wrapping on an absurdly
+ * long numeric key (30+ digits under -n) -- a wrapped value could come
+ * out smaller than a key it should sort after, flipping the order. */
 static long long parse_numeric(const char *s, size_t len)
 	__attribute__((nonnull(1)));
 static long long parse_numeric(const char *s, size_t len)
@@ -355,11 +305,8 @@ static int compare_by_key(const struct sort_opts *o, const struct sort_key *k, c
 	size_t as, ae, bs, be;
 	int c;
 
-	/* o and a/b are always &o (or a value already traced back to it)
-	 * and &lines[i] at every real call site -- see line_compare()'s
-	 * identical note, one call up. k is always &o->keys[i] for some
-	 * i < o->nkeys <= the fixed-size o->keys[64] array -- always live,
-	 * never a bare NULL key pointer. */
+	/* o/a/b -- see line_compare()'s identical note, one call up. k is
+	 * always &o->keys[i] for some i < o->nkeys, never NULL. */
 	__ownership_pointer_nonnull(o);
 	__ownership_pointer_nonnull(a);
 	__ownership_pointer_nonnull(b);
@@ -372,9 +319,8 @@ static int compare_by_key(const struct sort_opts *o, const struct sort_key *k, c
 		iflag = o->i; nflag = o->n; rflag = o->r;
 	}
 
-	/* a->text/b->text are always allocated with exactly a->len/b->len
-	 * readable content bytes (plus a trailing NUL) -- see
-	 * read_all_lines()'s own struct line construction. */
+	/* a->text has exactly a->len readable bytes -- see
+	 * read_all_lines()'s struct line construction. */
 	__ownership_readable_span(a->text, a->len);
 	as = key_start_off(a->text, a->len, a->fields, a->nfields, k->f1, k->c1, bflag);
 	ae = k->has_end ? key_end_off(a->text, a->len, a->fields, a->nfields, k->f2, k->c2, bflag) : a->len;
@@ -393,10 +339,8 @@ static int line_compare(const struct sort_opts *o, const struct line *a, const s
 {
 	int c;
 
-	/* a and b are always &lines[i] for some i within a live lines[]
-	 * array (__util_sort_main's own nlines/lines invariant, restated in
-	 * merge_sort() and __util_sort_main() below), never a bare NULL
-	 * struct line pointer. */
+	/* a and b are always &lines[i] within a live lines[] array
+	 * (__util_sort_main's nlines/lines invariant), never NULL. */
 	__ownership_pointer_nonnull(a);
 	__ownership_pointer_nonnull(b);
 	if (o->nkeys) {
@@ -431,10 +375,8 @@ static void merge_sort(struct line *lines, size_t n, const struct sort_opts *o)
 	size_t width;
 
 	if (n < 2) return;
-	/* n >= 2 here, and __util_sort_main() only ever calls merge_sort()
-	 * with lines/nlines already populated by read_all_lines(), which
-	 * never leaves nlines nonzero without a matching heap-allocated
-	 * lines array -- so lines is live whenever n >= 2. */
+	/* n >= 2 here, and read_all_lines() never leaves nlines nonzero
+	 * without a matching heap-allocated lines array. */
 	__ownership_pointer_nonnull(lines);
 	tmp = __util_mallocarray(n, sizeof *tmp);
 	if (!tmp) return; /* input stays in original (still-valid) order */
@@ -498,10 +440,8 @@ static int parse_keydef(const char *spec, struct sort_key *k)
 	if (v < 1) return -1;
 	k->f1 = (int)v;
 	p = end;
-	/* end is strtol()'s own endptr output: always a real, live pointer
-	 * into (or just past) p's original NUL-terminated text, never NULL,
-	 * whenever p itself was nonnull (C11 7.22.1.4p8) -- restated at
-	 * every p = end below for the same reason. */
+	/* end is strtol()'s endptr output: never NULL when p was nonnull
+	 * (C11 7.22.1.4p8) -- restated at every p = end below. */
 	__ownership_pointer_nonnull(p);
 	k->c1 = 1;
 	if (*p == '.') {
@@ -514,8 +454,7 @@ static int parse_keydef(const char *spec, struct sort_key *k)
 		__ownership_pointer_nonnull(p);
 	}
 	parse_key_mods(&p, k);
-	/* parse_key_mods() only ever advances *pp forward from its own
-	 * (already nonnull) input by incrementing it -- never assigns NULL. */
+	/* parse_key_mods() only advances *pp, never assigns NULL. */
 	__ownership_pointer_nonnull(p);
 	if (*p == ',') {
 		p++;
@@ -590,8 +529,7 @@ static void free_lines(struct line *lines, size_t n)
 {
 	size_t i;
 	for (i = 0; i < n; i++) {
-		/* i < n, and lines is heap-allocated with >= n entries whenever
-		 * n >= 1 -- see merge_sort()'s identical lines/n note. */
+		/* i < n -- see merge_sort()'s identical lines/n note. */
 		__ownership_pointer_nonnull(lines);
 		free(lines[i].text);
 		free(lines[i].fields);
@@ -646,11 +584,9 @@ int __util_sort_main(
 					if (++i >= argc) { __util_diagf("sort: -k: option requires an argument\n"); return 2; }
 					val = argv[i];
 				}
-				/* val is either an offset into argv[i]'s own bytes or
-				 * argv[i] itself with i < argc just checked -- both
-				 * genuinely never NULL by this function's own
-				 * elements_withtok(null_terminated, argc) contract on
-				 * argv. */
+				/* val is an offset into argv[i]'s bytes, or argv[i]
+				 * itself -- never NULL per argv's own
+				 * elements_withtok(null_terminated, argc) contract. */
 				__ownership_pointer_nonnull(val);
 				if (o.nkeys >= sizeof keys / sizeof keys[0]) {
 					__util_diagf("sort: too many -k options\n");
@@ -672,9 +608,7 @@ int __util_sort_main(
 					if (++i >= argc) { __util_diagf("sort: -t: option requires an argument\n"); return 2; }
 					val = argv[i];
 				}
-				/* val is either an offset into argv[i]'s own bytes or
-				 * argv[i] itself with i < argc just checked -- see the
-				 * -k case's identical note above. */
+				/* val -- see the -k case's identical note above. */
 				__ownership_pointer_nonnull(val);
 				if (val[0] == 0 || val[1] != 0) {
 					__util_diagf("sort: -t: field separator must be exactly one character\n");
@@ -715,10 +649,8 @@ int __util_sort_main(
 		return 2;
 	}
 
-	/* Read every operand (or stdin, if none) fully into memory before
-	 * anything is written anywhere -- see this file's header comment on
-	 * why -o's "may equal an input file" requirement depends on this
-	 * order specifically. */
+	/* Read every operand (or stdin) fully into memory before anything
+	 * is written -- see this file's header comment on -o. */
 	if (nfiles == 0) {
 		if (read_all_lines(stdin, &lines, &nlines, &cap) < 0) {
 			__util_diagf("sort: out of memory\n");
@@ -753,9 +685,7 @@ int __util_sort_main(
 
 	if (o.nkeys) {
 		for (li = 0; li < nlines; li++) {
-			/* li < nlines, and lines is heap-allocated with >= nlines
-			 * entries whenever nlines >= 1 -- see merge_sort()'s
-			 * identical lines/n note. */
+			/* li < nlines -- see merge_sort()'s identical lines/n note. */
 			__ownership_pointer_nonnull(lines);
 			lines[li].fields = split_fields(lines[li].text, lines[li].len, &o, &lines[li].nfields);
 		}
@@ -808,8 +738,7 @@ int __util_sort_main(
 			lines[keep++] = lines[write_i];
 		}
 		for (write_i = 0; write_i < keep; write_i++) {
-			/* keep <= nlines (set by the loop above), so keep > 0 here
-			 * implies nlines > 0 and lines is live, same invariant. */
+			/* keep <= nlines, so keep > 0 implies lines is live. */
 			__ownership_pointer_nonnull(lines);
 			if (fprintf(outf, "%s\n", lines[write_i].text) < 0) {
 				/* The output error fixes the result; close only releases outf. */

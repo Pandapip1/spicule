@@ -31,6 +31,7 @@
 #include <stdio.h>
 #include <libgen.h>
 #include "util.h"
+#include "ownership_stubs.h"
 
 int __util_basename_main(
 	int argc, char **argv elements_withtok(null_terminated, argc))
@@ -44,8 +45,18 @@ int __util_basename_main(
 	}
 
 	base = basename(argv[1]);
+	/* libgen.h's basename() is an opaque external declaration with no
+	 * ownership contract of its own; base is genuinely a real C string
+	 * either way (a pointer into argv[1]'s own null-terminated buffer,
+	 * or a static "."). */
+	__ownership_string_terminated(base);
 	if (argc == 3) {
 		const char *suffix = argv[2];
+		/* suffix is argv[2], null-terminated by this function's own
+		 * elements_withtok(null_terminated, argc) contract on argv --
+		 * restated here since that token does not survive the argv[2]
+		 * read this checker can trace on its own. */
+		__ownership_string_terminated(suffix);
 		blen = strlen(base);
 		slen = strlen(suffix);
 		/* "is not identical to the characters remaining" (slen < blen,

@@ -8,16 +8,32 @@
 #include <time.h>
 #include <string.h>
 #include "time_impl.h"
+#include "ownership_stubs.h" /* __ownership_pointer_nonnull(), __ownership_writable_span() */
 
-char *asctime_r(const struct tm *tm, char *buf)
+/* Widened to hold up to 8 year digits (see the tm_year comment below),
+ * one byte more than the classic 26-byte "Www Mmm dd hh:mm:ss yyyy\n\0". */
+char *asctime_r(const struct tm *tm, char *buf withtok(writable_span(30)))
 {
 	char *p = buf;
 	int n;
+	__ownership_writable_span(p, 30);
 	const char *wd = (unsigned)tm->tm_wday < 7 ? __ntlibc_day_name_abbr[tm->tm_wday] : "???";
 	const char *mo = (unsigned)tm->tm_mon < 12 ? __ntlibc_month_name_abbr[tm->tm_mon] : "???";
+	/* Both branches are always a real string literal (either "???" or one
+	 * of names.c's fixed tables); the checker can't see into a global
+	 * array's initializer. */
+	__ownership_pointer_nonnull(wd);
+	__ownership_pointer_nonnull(mo);
 
 	*p++ = wd[0]; *p++ = wd[1]; *p++ = wd[2]; *p++ = ' ';
 	*p++ = mo[0]; *p++ = mo[1]; *p++ = mo[2]; *p++ = ' ';
+	/* Open finding, left as-is: every write below through '*p' is sound
+	 * (__num_digits' own `if (n > cap) n = cap;` bounds each returned n
+	 * by the cap literal actually passed here, so p never leaves the
+	 * writable_span(30) asserted above), but the checker has no
+	 * annotation in ownership.h for "this return value is bounded by
+	 * this parameter", so it cannot carry that bound from __num_digits'
+	 * return across the `p += n;` that follows. Not a real bug. */
 	n = __num_digits(p, 2, (unsigned)tm->tm_mday, 2, ' '); p += n; *p++ = ' ';
 	n = __num_digits(p, 2, (unsigned)tm->tm_hour, 2, '0'); p += n; *p++ = ':';
 	n = __num_digits(p, 2, (unsigned)tm->tm_min, 2, '0'); p += n; *p++ = ':';

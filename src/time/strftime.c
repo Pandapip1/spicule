@@ -30,6 +30,7 @@
 #include <string.h>
 #include <limits.h>
 #include "time_impl.h"
+#include "ownership_stubs.h" /* __ownership_pointer_nonnull() */
 
 /* out is required: `out[n++] = ...`/`out[n] = 0;` are unconditional
  * whenever the computed digit count fits (`needed < out_size`), with no
@@ -77,24 +78,22 @@ static int format_number(char *out, size_t out_size, long long value, // NOLINT(
  * this tree ever passes a NULL tm together with a non-empty format
  * (test/time.c and friends always pass a real `struct tm`).
  *
- * Marking s/f/tm here lets the checker explore deeper into this
- * function's own body than before, surfacing PUT_STR's own `*_s`
- * (`const char *_s = (str); while (*_s) PUT_CH(*_s++);`) as a new
- * finding at each of its call sites (%a/%A/%h/%b/%B/%p/%r). Not a
- * parameter of this function at all -- _s is PUT_STR's own macro-local,
- * always one of __ntlibc_day_name[_abbr]/__ntlibc_month_name[_abbr]'s
- * fixed, non-null string-literal elements (time_impl.h's own extern
- * arrays, populated by names.c) or the literal "AM"/"PM" -- sound by
- * hand, left as a residual rather than force-fit. */
-static size_t do_strftime(char *restrict s, size_t max, const char *restrict f, const struct tm *restrict tm)
+ * s also carries writable_span(max): every PUT_CH/PUT_NUM write is at a
+ * symbolic offset (pos), so the checker needs a real extent to check it
+ * against, the same fact do_strftime's own `s[pos] = 0;` at `done`
+ * relies on. */
+static size_t do_strftime(char *restrict s withtok(writable_span(max)), size_t max, const char *restrict f, const struct tm *restrict tm)
     __attribute__((nonnull(1, 3, 4)));
-static size_t do_strftime(char *restrict s, size_t max, const char *restrict f, const struct tm *restrict tm)
+static size_t do_strftime(char *restrict s withtok(writable_span(max)), size_t max, const char *restrict f, const struct tm *restrict tm)
 {
 	size_t pos = 0;
 	int overflow = 0;
 
 #define PUT_CH(c) do { if (pos + 1 >= max) { overflow = 1; goto done; } s[pos++] = (char)(c); } while (0)
-#define PUT_STR(str) do { const char *_s = (str); while (*_s) PUT_CH(*_s++); } while (0)
+/* _s is always one of __ntlibc_day_name[_abbr]/__ntlibc_month_name[_abbr]'s
+ * fixed, non-null string-literal elements (names.c) or the literal
+ * "AM"/"PM"; the checker can't see into a global array's initializer. */
+#define PUT_STR(str) do { const char *_s = (str); __ownership_pointer_nonnull(_s); while (*_s) PUT_CH(*_s++); } while (0)
 #define PUT_NUM(v, w, pad) do { \
 		long long _v = (long long)(v); \
 		unsigned long _mag = _v < 0 \
@@ -278,7 +277,18 @@ done:
  * checks max and forwards all three unchanged, so there is nothing in
  * ITS OWN body for the attribute to describe -- the same "forwarded,
  * callee already owns the contract" shape as time.h's own ctime_r()/
- * clock_gettime() comments. */
+ * clock_gettime() comments.
+ *
+ * do_strftime()'s own s does carry writable_span(max), which is real
+ * (that's strftime()'s actual POSIX contract), but is deliberately NOT
+ * repeated on strftime()'s own s here: this codebase's in-tree callers
+ * pass a buffer whose size relationship to `max` is often several
+ * frames removed from strftime()'s own call (src/util/ls.c's fmt_time(),
+ * src/util/diff.c's format_ctx_timestamp()) and not provable from this
+ * checker's per-function view -- forwarding the Require onto strftime()
+ * itself would turn each of those already-correct call sites into a new,
+ * unfixable finding rather than a real bug. Left as this function's own
+ * residual, real but not analyzable across that many call frames. */
 size_t strftime(char *restrict s, size_t max, const char *restrict f, const struct tm *restrict tm)
 {
 	if (!max) return 0;

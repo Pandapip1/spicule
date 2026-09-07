@@ -25,7 +25,7 @@
  * (even for a zero-length skip) as the very first thing this function
  * does, with no NULL check, and every real call site in this file
  * already holds a live cursor into the string being parsed. */
-static const char *skip_ws(const char *s) __attribute__((nonnull(1)));
+static const char *skip_ws(const char *s) __attribute__((nonnull(1), returns_nonnull));
 static const char *skip_ws(const char *s)
 {
 	while (isspace((unsigned char)*s)) s++;
@@ -41,11 +41,8 @@ static const char *skip_ws(const char *s)
  * returns non-NULL, and every one of this file's own call sites passes
  * `&v`, a real on-stack local, never NULL.
  *
- * The same `*s` (the line right after `s = skip_ws(s);`) is now itself
- * flagged: the same "no returns_nonnull-shaped contract this checker
- * reads yet" gap parse()'s own comment documents -- skip_ws() never
- * returns NULL, verified by inspection of its own single-statement
- * body, not just assumed. */
+ * skip_ws()'s own `returns_nonnull` covers the `*s` right after
+ * `s = skip_ws(s);` below. */
 static const char *read_num(const char *s, int maxdigits, long *out)
     __attribute__((nonnull(1, 3)));
 static const char *read_num(const char *s, int maxdigits, long *out)
@@ -118,17 +115,11 @@ static const char *match_name(const char *s, const char *const *full,
  * Marking s here lets the checker explore further into this loop than
  * before, surfacing several more `*s` sites (the literal-character
  * comparison, `%z`'s post-skip_ws()/read_num() checks, `%Z`'s scan, and
- * `%%`) that a fresh dataflow pass cannot re-derive as nonnull across a
- * reassignment from skip_ws()/read_num()/match_name()'s own return
- * value -- none of the three carries a `returns_nonnull`-shaped
- * contract this checker currently reads, even though all three are, by
- * inspection, incapable of returning NULL on any path this loop
- * actually takes (skip_ws() never returns NULL at all; read_num()/
- * match_name()'s NULL returns are always caught by this loop's own
- * `s = ...; if (!s) return NULL;` before `s` is used again). Sound by
- * hand at every one of these sites; closing the class properly would
- * mean teaching the checker to trust `returns_nonnull`-shaped
- * functions, a real but separate lemma this pass did not attempt. */
+ * `%%`). skip_ws() now carries `returns_nonnull` (it is, by inspection,
+ * incapable of returning NULL on any path), which the checker reads
+ * directly; read_num()/match_name()'s NULL returns are always caught by
+ * this loop's own `s = ...; if (!s) return NULL;` before `s` is used
+ * again. */
 // NOLINTNEXTLINE(misc-no-recursion) -- composite directives recurse into fixed subformats with bounded expansion depth
 static const char *parse(const char *s, const char *f, struct tm *tm,
 	int *pm, int *century, int *year2) __attribute__((nonnull(1, 2, 3, 4, 5, 6)));

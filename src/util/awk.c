@@ -168,7 +168,12 @@ static char *load_progfiles(char **files, int nfiles)
 	int i;
 
 	for (i = 0; i < nfiles; i++) {
-		FILE *f = strcmp(files[i], "-") == 0 ? stdin : fopen(files[i], "r");
+		/* use_stdin, not `f != stdin`, decides the fclose() below -- the
+		 * checker can't prove opaque pointers unequal, so a direct
+		 * comparison makes this fopen() allocation look conditionally
+		 * leaked (same idiom as src/util/join.c's read_all()). */
+		int use_stdin = strcmp(files[i], "-") == 0;
+		FILE *f = use_stdin ? stdin : fopen(files[i], "r");
 		char chunk[4096];
 		size_t n;
 		if (!f) {
@@ -178,7 +183,7 @@ static char *load_progfiles(char **files, int nfiles)
 		}
 		while ((n = fread(chunk, 1, sizeof chunk, f)) > 0)
 			buf_grow_append(&buf, &len, &cap, chunk, n);
-		if (f != stdin) (void)fclose(f);
+		if (!use_stdin) (void)fclose(f);
 		if (len == 0 || buf[len - 1] != '\n') buf_grow_append(&buf, &len, &cap, "\n", 1);
 	}
 	if (!buf) buf = strdup("");

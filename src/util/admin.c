@@ -255,14 +255,19 @@ int __util_admin_main(
 
 	/* -i's body (or none, for a bare -n). */
 	if (have_i) {
-		FILE *f = *iname ? fopen(iname, "r") : stdin;
+		/* use_stdin, not `f != stdin`, decides the fclose() below -- the
+		 * checker can't prove opaque pointers unequal, so a direct
+		 * comparison makes the fopen() allocation look conditionally
+		 * leaked (same idiom as src/util/join.c's read_all()). */
+		int use_stdin = !*iname;
+		FILE *f = use_stdin ? stdin : fopen(iname, "r");
 		if (!f) { __util_diagf("admin: %s: %s\n", iname, strerror(errno)); return 1; }
 		if (!read_lines(f, &body)) {
 			__util_diagf("admin: %s: %s\n", *iname ? iname : "(standard input)", strerror(errno));
-			if (f != stdin) (void)fclose(f);
+			if (!use_stdin) (void)fclose(f);
 			return 1;
 		}
-		if (f != stdin) (void)fclose(f);
+		if (!use_stdin) (void)fclose(f);
 	}
 
 	/* -t's descriptive text, if given (a name is always required here --

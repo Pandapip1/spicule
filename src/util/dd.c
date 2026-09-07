@@ -328,6 +328,7 @@ int __util_dd_main(
 	struct dd_opts o;
 	struct sigaction sa, old_sa;
 	int ifd = -1, ofd = -1, i, status = 0, had_error = 0;
+	int have_if, have_of;
 	uintmax_t in_full = 0, in_partial = 0, out_full = 0, out_partial = 0;
 
 	memset(&o, 0, sizeof o);
@@ -374,16 +375,24 @@ int __util_dd_main(
 #undef KEYIS
 	}
 
-	ifd = o.if_path ? open(o.if_path, O_RDONLY) : 0;
+	/* have_if/have_of, not `ifd > 0`/`ofd > 1`, decide the close()s below
+	 * -- the checker can't prove a freshly open()'d descriptor unequal
+	 * to the literal default (0/1) it stands in for when the path is
+	 * omitted, so a direct comparison makes these open() allocations
+	 * look conditionally leaked (same idiom as src/util/join.c's
+	 * read_all() uses for FILE* vs. stdin/stdout). */
+	have_if = o.if_path != 0;
+	ifd = have_if ? open(o.if_path, O_RDONLY) : 0;
 	if (ifd < 0) { __util_diagf("dd: %s: %s\n", o.if_path, strerror(errno)); return 1; }
 
-	if (o.of_path) {
+	have_of = o.of_path != 0;
+	if (have_of) {
 		int oflags = O_WRONLY | O_CREAT | (o.notrunc ? 0 : O_TRUNC);
 		ofd = open(o.of_path, oflags, 0666);
 	} else {
 		ofd = 1;
 	}
-	if (ofd < 0) { __util_diagf("dd: %s: %s\n", o.of_path, strerror(errno)); if (ifd > 0) (void)close(ifd); return 1; }
+	if (ofd < 0) { __util_diagf("dd: %s: %s\n", o.of_path, strerror(errno)); if (have_if) (void)close(ifd); return 1; }
 
 	if (dd_position(ifd, o.skip, o.ibs, 1, o.if_path ? o.if_path : "stdin") < 0) { had_error = 1; goto summary; }
 	if (dd_position(ofd, o.seek, o.obs, 0, o.of_path ? o.of_path : "stdout") < 0) { had_error = 1; goto summary; }
@@ -407,8 +416,8 @@ summary:
 	__util_diagf("%" PRIuMAX "+%" PRIuMAX " records in\n%" PRIuMAX "+%" PRIuMAX " records out\n",
 		in_full, in_partial, out_full, out_partial);
 
-	if (ifd > 0) (void)close(ifd);
-	if (ofd > 1 && close(ofd) < 0) {
+	if (have_if) (void)close(ifd);
+	if (have_of && close(ofd) < 0) {
 		__util_diagf("dd: closing '%s': %s\n", o.of_path ? o.of_path : "stdout", strerror(errno));
 		had_error = 1;
 	}

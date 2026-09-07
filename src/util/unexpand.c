@@ -153,14 +153,20 @@ int __util_unexpand_main(
 			unexpand_stream(stdin, &tl, effective_a);
 		} else {
 			for (; i < argc; i++) {
-				FILE *f = !strcmp(argv[i], "-") ? stdin : fopen(argv[i], "r");
+				/* use_stdin, not `f != stdin`, decides the fclose() below
+				 * -- the checker can't prove opaque pointers unequal, so
+				 * a direct comparison makes the fopen() allocation look
+				 * conditionally leaked (same idiom as src/util/join.c's
+				 * read_all()). */
+				int use_stdin = !strcmp(argv[i], "-");
+				FILE *f = use_stdin ? stdin : fopen(argv[i], "r");
 				if (!f) {
 					fprintf(stderr, "unexpand: %s: %s\n", argv[i], strerror(errno));
 					had_error = 1;
 					continue;
 				}
 				unexpand_stream(f, &tl, effective_a);
-				if (f != stdin) (void)fclose(f);
+				if (!use_stdin) (void)fclose(f);
 			}
 		}
 	}

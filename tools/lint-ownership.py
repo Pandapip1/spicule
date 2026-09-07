@@ -139,7 +139,13 @@ def fixture_test(path: pathlib.Path) -> None:
             # gate (tools/lint.sh's resourceleak stage) -- spicule.Resource
             # alone (this script's own DIAGNOSTIC) no longer emits that
             # message, so it must not be in this gate's expected set.
-            if "ownership-expect" in line and "ownership-expect: resource-leak" not in line:
+            # "ownership-expect: pointer-axiom-*" is the same split for the
+            # opt-in spicule.RedundantPointerAxiom checker and tools/
+            # lint-pointer-axiom.py: those lines are deliberately findings
+            # for that gate and clean for this one.
+            if ("ownership-expect" in line
+                    and "ownership-expect: resource-leak" not in line
+                    and "ownership-expect: pointer-axiom-" not in line):
                 expected.add((source.relative_to(ROOT).as_posix(), number))
     actual = {(finding.path, finding.line) for finding in parse_log(path)}
     errors = validate_contracts(parse_contracts(path))

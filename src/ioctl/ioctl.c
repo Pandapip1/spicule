@@ -8,9 +8,10 @@
  *     (the same field src/select/select.c's __fd_probe() queries, as a
  *     count instead of a boolean); for __FD_FILE, EndOfFile minus the
  *     current position. Anything else gets EINVAL, not a fabricated 0.
- *   - TIOCGWINSZ: on NT, kernel32's GetConsoleScreenBufferInfo() (gated
- *     on NTLIBC_USE_KERNEL32; no ntdll path exists), ENOTTY without it
- *     or on a non-console fd. On Linux it's a real ioctl(2)
+ *   - TIOCGWINSZ: on NT, ConsolepGetScreenBufferInfo through the console
+ *     driver (src/internal/condrv.h), falling back to kernel32's
+ *     GetConsoleScreenBufferInfo() where that is built in; ENOTTY when
+ *     neither answers or on a non-console fd. On Linux it's a real ioctl(2)
  *     (src/ioctl/linux/plat_ioctl.c), with no fd-type pre-check since
  *     the kernel's own dispatch already answers ENOTTY for a non-tty.
  *   - FIONBIO: toggles O_NONBLOCK, the same flag fcntl(F_SETFL) flips.
@@ -33,6 +34,9 @@
 #include <errno.h>
 #include "libc.h"
 #include "plat_ioctl.h"
+#ifndef __linux__
+#include "condrv.h"
+#endif
 #ifdef NTLIBC_USE_KERNEL32
 #include "kernel32.h"
 #endif
@@ -41,6 +45,54 @@ static int fionread_pipe(struct __fd *f, int *out)
 {
 	return __plat_fionread_pipe(f->h, out);
 }
+
+#ifndef __linux__
+/* TIOCGWINSZ, ntdll first: ConsolepGetScreenBufferInfo through the
+ * console driver (src/internal/condrv.h), with kernel32's
+ * GetConsoleScreenBufferInfo() only as the NTLIBC_USE_KERNEL32 fallback
+ * for a host that does not speak that protocol. Both answer -1 without
+ * setting errno; the caller decides that "no console answered" is
+ * ENOTTY. */
+static int winsize_condrv(HANDLE h, struct winsize *ws)
+{
+	CONSOLE_SCREENBUFFERINFO_MSG info;
+
+	memset(&info, 0, sizeof info);
+	if (__condrv_call(h, ConsolepGetScreenBufferInfo, &info, sizeof info) < 0) return -1;
+	ws->ws_col = (unsigned short)info.CurrentWindowSizeX;
+	ws->ws_row = (unsigned short)info.CurrentWindowSizeY;
+	ws->ws_xpixel = 0;
+	ws->ws_ypixel = 0;
+	return 0;
+}
+
+static int winsize_kernel32(HANDLE h, struct winsize *ws)
+{
+#ifdef NTLIBC_USE_KERNEL32
+	PVOID dll, proc;
+	UNICODE_STRING dllname;
+	ANSI_STRING procname;
+	CONSOLE_SCREEN_BUFFER_INFO info;
+
+	RtlInitUnicodeString(&dllname, L"kernel32.dll");
+	if (!NT_SUCCESS(LdrLoadDll(0, 0, &dllname, &dll))) return -1;
+	procname.Buffer = "GetConsoleScreenBufferInfo";
+	procname.Length = procname.MaximumLength =
+		sizeof "GetConsoleScreenBufferInfo" - 1;
+	if (!NT_SUCCESS(LdrGetProcedureAddress(dll, &procname, 0, &proc))) return -1;
+	if (!((BOOL (NTAPI *)(HANDLE, CONSOLE_SCREEN_BUFFER_INFO *))proc)(h, &info)) return -1;
+	ws->ws_col = (unsigned short)(info.srWindow.Right - info.srWindow.Left + 1);
+	ws->ws_row = (unsigned short)(info.srWindow.Bottom - info.srWindow.Top + 1);
+	ws->ws_xpixel = 0;
+	ws->ws_ypixel = 0;
+	return 0;
+#else
+	(void)h;
+	(void)ws;
+	return -1;
+#endif
+}
+#endif
 
 static int fionread_file(struct __fd *f, int *out)
 {
@@ -82,33 +134,10 @@ int ioctl(int fd, unsigned long req, ...) // NOLINT(bugprone-easily-swappable-pa
 		return __plat_tiocgwinsz(f->h, (struct winsize *)arg);
 #else
 		if (f->type != __FD_CONSOLE) { errno = ENOTTY; return -1; }
-#ifdef NTLIBC_USE_KERNEL32
-		{
-			struct winsize *ws = arg;
-			PVOID dll, proc;
-			UNICODE_STRING dllname;
-			ANSI_STRING procname;
-			CONSOLE_SCREEN_BUFFER_INFO info;
-
-			RtlInitUnicodeString(&dllname, L"kernel32.dll");
-			if (!NT_SUCCESS(LdrLoadDll(0, 0, &dllname, &dll))) { errno = ENOTTY; return -1; }
-			procname.Buffer = "GetConsoleScreenBufferInfo";
-			procname.Length = procname.MaximumLength =
-				sizeof "GetConsoleScreenBufferInfo" - 1;
-			if (!NT_SUCCESS(LdrGetProcedureAddress(dll, &procname, 0, &proc))) { errno = ENOTTY; return -1; }
-			if (!((BOOL (NTAPI *)(HANDLE, CONSOLE_SCREEN_BUFFER_INFO *))proc)(f->h, &info)) { errno = ENOTTY; return -1; }
-			ws->ws_col = (unsigned short)(info.srWindow.Right - info.srWindow.Left + 1);
-			ws->ws_row = (unsigned short)(info.srWindow.Bottom - info.srWindow.Top + 1);
-			ws->ws_xpixel = 0;
-			ws->ws_ypixel = 0;
-			return 0;
-		}
-#else
-		/* No ntdll path to console screen-buffer info exists
-		 * (CONTRIBUTING.md); NTLIBC_USE_KERNEL32 is required. */
+		if (winsize_condrv(f->h, arg) == 0) return 0;
+		if (winsize_kernel32(f->h, arg) == 0) return 0;
 		errno = ENOTTY;
 		return -1;
-#endif
 #endif
 	}
 	case FIONBIO: {

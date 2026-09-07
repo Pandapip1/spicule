@@ -14,6 +14,7 @@
 #include <errno.h>
 #include "libc.h"
 #include "plat_fd.h"
+#include "conin.h"
 
 int __plat_close(__plat_handle_t h)
 {
@@ -26,6 +27,11 @@ ssize_t __plat_read(__plat_handle_t h, void *buf, size_t count)
 {
 	IO_STATUS_BLOCK io;
 	NTSTATUS st;
+
+	/* A console whose line discipline this library runs has exactly one
+	 * NtReadFile caller -- the thread in src/internal/nt/conin.c -- and
+	 * every other reader takes bytes from its queue instead. */
+	if (__conin_owns(h)) return __conin_read(buf, count);
 
 	io.Status = 0; io.Information = 0;
 	st = NtReadFile(h, 0, 0, 0, &io, buf, (ULONG)count, 0, 0);

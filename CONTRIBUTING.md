@@ -16,7 +16,11 @@ other higher-level DLL require both:
 
 The default configuration is `--disable-kernel32`. The guarded build exists
 for the few facilities with no ntdll equivalent, such as console control
-handlers, and is covered by the x86_64 kernel32 CI leg.
+handlers, and is covered by the x86_64 kernel32 CI leg. It also carries the
+fallbacks for facilities that do have an ntdll path but not on every host:
+console mode and screen-buffer size go through the console driver directly
+(`src/internal/condrv.h`) and reach for kernel32 only when that protocol is
+not answered.
 
 The shell under `src/sh/` is part of libc because `system()`, `popen()` and
 `wordexp()` require shell-language behavior that `cmd.exe` cannot provide.

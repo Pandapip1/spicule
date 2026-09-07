@@ -362,9 +362,9 @@ static void test_termios_einval(int consolefd)
 }
 
 /* tcgetattr.html/tcsetattr.html DESCRIPTION: c_lflag's ISIG/ICANON/
- * ECHO -- src/termios/termios.c's file banner: real via kernel32's
- * GetConsoleMode()/SetConsoleMode() (NTLIBC_USE_KERNEL32 only), an
- * honest stored-not-applied shadow otherwise. Both outcomes are a
+ * ECHO -- src/termios/termios.c's file banner: real against the
+ * console's own input mode where one can be reached, an honest
+ * stored-not-applied shadow otherwise. Both outcomes are a
  * real, checkable answer -- not a blind skip -- so both are asserted
  * on whichever this build/environment actually produces. */
 static void test_termios_lflag_roundtrip(int consolefd)
@@ -373,7 +373,7 @@ static void test_termios_lflag_roundtrip(int consolefd)
 	tcflag_t before;
 
 	if (consolefd < 0) {
-		printf("note: no /dev/tty available under this test run (no real console attached, or NT gives no ntdll path to console mode at all without NTLIBC_USE_KERNEL32) -- skipping the ISIG/ICANON/ECHO console-mode round trip\n");
+		printf("note: no /dev/tty available under this test run (no real console attached) -- skipping the ISIG/ICANON/ECHO console-mode round trip\n");
 		return;
 	}
 	CHECK(tcgetattr(consolefd, &t) == 0);

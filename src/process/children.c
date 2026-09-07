@@ -36,7 +36,13 @@
 
 static struct __child __child_seed[CHILD_MAX_]; // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- libc-internal name is intentionally reserved against application collision
 
-struct __child *__children = __child_seed;
+/* withtok(internal_heap_allocated) here (matching __malloc()/__free()'s
+ * own family in libc.h) lets AllocationLifetimeChecker's
+ * checkPostStmt<BinaryOperator> recognize child_grow()'s own
+ * `__children = n;` as moving the allocation into a real owning slot
+ * instead of reporting it leaked at child_grow()'s own exit -- the same
+ * idiom src/util/tsort.c's static `nodes` global already uses. */
+struct __child *__children withtok(internal_heap_allocated) = __child_seed;
 int __child_cap = CHILD_MAX_;
 
 static int child_grow(void)
@@ -51,6 +57,10 @@ static int child_grow(void)
 	if (!__size_mul_checked((size_t)cap, sizeof *n, &bytes)) return -1;
 	n = __malloc(bytes);
 	if (!n) return -1;
+	/* n's whole extent is `bytes == cap * sizeof *n` by construction, but
+	 * ValidPointer's extent proof cannot cancel that product against a
+	 * bounded loop index the way it can a single fixed offset -- a real
+	 * checker gap, left open (same shape as mman.c's find_slot()). */
 	for (i = 0; i < __child_cap; i++) n[i] = __children[i];
 	for (; i < cap; i++) n[i] = (struct __child){0};
 	if (__children != __child_seed) __free(__children);

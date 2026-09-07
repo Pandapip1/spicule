@@ -55,7 +55,11 @@ struct __pthread {
 	int sched_priority;
 	sigset_t sigmask;
 	struct __pthread_cleanup *cleanup;
-	struct __pthread_specific *specific;
+	/* Allocated by pthread_setspecific(), released by
+	 * __pthread_run_specific_destructors() -- marking the field lets
+	 * AllocationLifetimeChecker see that assignment as a transfer, not a
+	 * leak (same idiom as src/util/join.c's struct jline fields). */
+	struct __pthread_specific *specific withtok(heap_allocated);
 };
 
 extern __thread struct __pthread *__pthread_self_control;

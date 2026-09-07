@@ -5,10 +5,18 @@
  * export directory. See src/internal/pe.h for why this exists (the
  * ntdll delay-import bootstrap problem) and the field layouts used.
  *
- * NT-only for the same reason and by the same guard as rpath.c/
- * delayload2.c: nothing here has a native stand-in, and this is reached
- * only from delayload2.c, which is already excluded from a native
- * ASan/UBSan build.
+ * NT-only, by the same guard as rpath.c/delayload2.c: everything here
+ * reads an already-mapped PE image, and a native ELF process has none.
+ *
+ * Two files call in, and they are excluded from a native ASan/UBSan
+ * build by different means. crt/delayload2.c is not under src/ at all,
+ * so tools/asan-build.sh never compiles it. src/thread/nt/plat_thread.c
+ * IS in that build on purpose -- it supplies every __plat_thread_* the
+ * native harness needs -- so its one caller,
+ * __plat_thread_tls_fixup(), carries a copy of the guard below around
+ * that function alone. A third caller has to do the same: that script
+ * links every object it kept into every test binary, so a single native
+ * reference to a symbol this file owns breaks every test's link at once.
  */
 
 /* This translation unit implements spicule's freestanding -nostdinc

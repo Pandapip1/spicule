@@ -88,6 +88,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <limits.h>
+#include "ownership_stubs.h"
 
 /* The assembled quantity -- sign, symbol, grouped digits, radix,
  * fraction -- before field-width padding.  A double's %f expansion is
@@ -109,7 +110,11 @@ struct out {
  * this tree's own established mem/str doctrine (242ed40) treats that
  * as a genuine use regardless of length. Every real call site passes
  * &o (a stack local, never NULL) and either fmt (proven live by the
- * `while (*fmt)` loop that reached it) or field (a stack array). */
+ * `while (*fmt)` loop that reached it) or field (a stack array).
+ *
+ * o->p's own span is unprovable for the same reason vstrfmon()'s own
+ * comment below documents for putc_n()/`*o.p = 0`: o->p == s, and s is
+ * deliberately not required nonnull. */
 static int put(struct out *o, const char *t, size_t l) __attribute__((nonnull(1, 2)));
 static int put(struct out *o, const char *t, size_t l)
 {
@@ -121,7 +126,11 @@ static int put(struct out *o, const char *t, size_t l)
 	return 0;
 }
 
-/* o required, same as put() above. */
+/* o required, same as put() above. o->p itself is only ever NULL if a
+ * caller passes s == NULL with maxsize != 0, which vstrfmon()'s own
+ * comment below already documents as a deliberately unenforced caller
+ * contract (POSIX undefined behaviour), not something this checker's
+ * dereference-nonnull proof can or should treat as a library bug. */
 static int putc_n(struct out *o, char c, size_t n) __attribute__((nonnull(1)));
 static int putc_n(struct out *o, char c, size_t n)
 {
@@ -138,7 +147,15 @@ static int putc_n(struct out *o, char c, size_t n)
  * required: *fl is dereferenced unconditionally at entry with no
  * guard, and f/t both flow into memcpy() unconditionally, same
  * doctrine as put() above. Every real call site passes field (a
- * stack array) and &fl (a stack local). */
+ * stack array) and &fl (a stack local).
+ *
+ * f[*fl + i] is in-bounds by construction: the guard just above proves
+ * *fl + l <= FIELD_MAX, so *fl + i < FIELD_MAX for every i < l. Checker
+ * gap (spicule.ValidPointer), not a workaround target: f is a plain
+ * `char *` parameter here, with no compile-time array type to compare
+ * the index against, regardless of what a real caller happens to pass
+ * (see OwnershipChecker.cpp's arrayIndexProvenInBounds's own comment on
+ * exactly this "array reached only through a pointer" limitation). */
 static int fappend(char *restrict f, size_t *fl, const char *restrict t, size_t l)
     __attribute__((nonnull(1, 2, 3)));
 static int fappend(char *restrict f, size_t *fl, const char *restrict t, size_t l)
@@ -157,7 +174,10 @@ static int fappend(char *restrict f, size_t *fl, const char *restrict t, size_t 
  * ...; o.p = s;`), so a NULL s genuinely does not crash on that one
  * path -- an artifact of the E2BIG check rather than a documented
  * "s is optional" contract, but not something `nonnull` may
- * overstate either way. */
+ * overstate either way. The same tradeoff reaches put()/putc_n()'s
+ * o->p writes above and this function's own final `*o.p = 0;`: a
+ * caller passing s == NULL with maxsize != 0 is POSIX undefined
+ * behaviour, not a bug this library corrects. */
 static ssize_t vstrfmon(char *s, size_t maxsize, const char *fmt, va_list ap)
     __attribute__((nonnull(3)));
 static ssize_t vstrfmon(char *s, size_t maxsize, const char *fmt, va_list ap)
@@ -247,9 +267,22 @@ static ssize_t vstrfmon(char *s, size_t maxsize, const char *fmt, va_list ap)
 
 		sym = nosym ? "" : (intl ? lc->int_curr_symbol : lc->currency_symbol);
 		radix = lc->mon_decimal_point;
-		if (!*radix) radix = lc->decimal_point;
+		/* Every struct lconv string member is a real, permanently valid
+		 * (possibly empty) C string by construction (src/misc/locale.c's
+		 * __posix_lconv literal initializer) -- true by that contract,
+		 * not visible to the checker across this struct-field read.
+		 * radix is asserted again below: the fallback assigns it a
+		 * DIFFERENT field, which needs its own assertion. */
+		unsafe_assume_string_terminated(sym);
+		unsafe_assume_string_terminated(radix);
+		if (!*radix) {
+			radix = lc->decimal_point;
+			unsafe_assume_string_terminated(radix);
+		}
 		thousep = lc->mon_thousands_sep;
 		grouping = lc->mon_grouping;
+		unsafe_assume_string_terminated(thousep);
+		unsafe_assume_string_terminated(grouping);
 
 		x = va_arg(ap, double);
 
@@ -276,6 +309,11 @@ static ssize_t vstrfmon(char *s, size_t maxsize, const char *fmt, va_list ap)
 		 * stale if a branch is ever added: a new branch that
 		 * forgets to assign is a compile-time warning rather than
 		 * a silently empty sign. */
+		/* lc->negative_sign is asserted once here, before either of the
+		 * two `*lc->negative_sign ? ...` fallback tests below reads it
+		 * -- same real-field contract as the sym/radix/thousep/grouping
+		 * block above. */
+		unsafe_assume_string_terminated(lc->negative_sign);
 		if (x < 0) {
 			if (negpar) sign = "(";
 			else sign = *lc->negative_sign ? lc->negative_sign : "-";
@@ -284,10 +322,13 @@ static ssize_t vstrfmon(char *s, size_t maxsize, const char *fmt, va_list ap)
 			if (lp && negpar) align_pad = 2;
 			else if (lp) {
 				const char *negative = *lc->negative_sign ? lc->negative_sign : "-";
+				unsafe_assume_string_terminated(negative);
+				unsafe_assume_string_terminated(sign);
 				if (strlen(negative) > strlen(sign))
 					align_pad = strlen(negative) - strlen(sign);
 			}
 		}
+		unsafe_assume_string_terminated(sign);
 		if (lp && x < 0 && !negpar && strlen(lc->positive_sign) > strlen(sign))
 			align_pad = strlen(lc->positive_sign) - strlen(sign);
 		if (align_pad) {

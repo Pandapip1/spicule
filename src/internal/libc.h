@@ -1152,7 +1152,8 @@ int __wait_encode_status(int);
 int __is_wow64(void);
 unsigned __rand_next(void);
 /* getopt's diagnostic writer, shared with getopt_long. */
-void __getopt_msg(const char *msg, const char *optname, size_t l);
+void __getopt_msg(const char *msg withtok(null_terminated),
+    const char *optname, size_t l);
 /* The strerror table lookup, shared with strerror_r.  Never NULL. */
 const char *__strerror_msg(int e);
 

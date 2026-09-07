@@ -12,6 +12,7 @@
 #include <features.h>
 #include <stdlib.h>
 #include <memory_tokens.h>
+#include <string_tokens.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -227,7 +228,8 @@ int gethostname(char *name withtok(writable_span(len)), size_t len);
 
 /* Same evidence as the identical declaration in include/getopt.h --
  * see that comment. */
-int getopt(int, char * const [], const char *) __attribute__((nonnull(2, 3)));
+int getopt(int argc, char *const argv[] elements_withtok(null_terminated, argc), const char *)
+    __attribute__((nonnull(2, 3)));
 extern char *optarg;
 extern int optind, opterr, optopt;
 

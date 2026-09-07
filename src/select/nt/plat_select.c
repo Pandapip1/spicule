@@ -15,6 +15,7 @@
 #include "libc.h"
 #include "plat_select.h"
 #include "afd.h"
+#include "conin.h"
 
 int __plat_pipe_probe(__plat_handle_t h, unsigned long *read_avail, unsigned long *write_quota) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
@@ -51,6 +52,18 @@ int __plat_wait_ready(__plat_handle_t h)
 {
 	LARGE_INTEGER zero = 0;
 	return NtWaitForSingleObject(h, 0, &zero) == STATUS_WAIT_0;
+}
+
+int __plat_console_ready(__plat_handle_t h)
+{
+	if (__conin_owns(h)) return __conin_pending();
+	return __plat_wait_ready(h);
+}
+
+__plat_handle_t __plat_console_wait(__plat_handle_t h)
+{
+	if (__conin_owns(h)) return __conin_event();
+	return h;
 }
 
 void __plat_socket_probe(__plat_handle_t h, int *canread, int *canwrite, int *hup) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles

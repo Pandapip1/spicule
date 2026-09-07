@@ -132,9 +132,9 @@ struct termios {
 #define CRTSCTS 020000000000
 
 /* c_lflag: ISIG/ICANON/ECHO are the real, load-bearing three, mapped
- * onto GetConsoleMode()/SetConsoleMode() (NTLIBC_USE_KERNEL32 only --
- * no ntdll path to console mode exists). The rest are accepted and
- * stored only, same as c_iflag/c_oflag. */
+ * onto the NT console's own input mode (through the console driver, or
+ * kernel32's GetConsoleMode()/SetConsoleMode() where that is built in).
+ * The rest are accepted and stored only, same as c_iflag/c_oflag. */
 #define ISIG    0000001
 #define ICANON  0000002
 #define ECHO    0000010

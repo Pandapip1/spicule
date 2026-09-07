@@ -8,7 +8,11 @@
  * shapes the way select() wants to:
  *   - __FD_CONSOLE: an input handle really is a waitable NT object, so
  *     it is waited on directly; output is always ready (writes never
- *     block).
+ *     block). Both the peek and the wait go through
+ *     __plat_console_ready()/__plat_console_wait() rather than touching
+ *     the handle, since a console this library runs the line discipline
+ *     for (src/internal/nt/conin.c) answers from that thread's queue
+ *     instead.
  *   - __FD_PIPE: the handle is not signalled on data arrival/drain, so
  *     it is polled via NtQueryInformationFile(FilePipeLocalInformation)'s
  *     ReadDataAvailable/WriteQuotaAvailable. wine-9.0 and older hardcode
@@ -142,9 +146,9 @@ void __fd_probe(struct __fd *f, int *canread, int *canwrite, int *hup)
 		break;
 	}
 	case __FD_CONSOLE:
-		/* Read side is resolved by the caller waiting on f->h
-		 * directly -- a console input handle really is an NT wait
-		 * object. Output is always ready: writes never block. */
+		/* Read side is resolved by the caller's own console peek and
+		 * wait (__plat_console_ready()/__plat_console_wait()), not
+		 * here. Output is always ready: writes never block. */
 		*canread = 0;
 		*canwrite = 1;
 		break;
@@ -186,7 +190,11 @@ void __fd_wait_or_delay(__plat_handle_t *console_handles, int ncons, long long w
 	__plat_handle_t sigev = __sig_delivery_event();
 	int n = 0, i;
 
-	for (i = 0; i < ncons; i++) handles[n++] = console_handles[i];
+	/* console_handles[] holds the descriptors' own handles; what is
+	 * actually waitable for a console read may be something else
+	 * entirely once this library runs that console's line discipline
+	 * (plat_select.h's __plat_console_wait()). */
+	for (i = 0; i < ncons; i++) handles[n++] = __plat_console_wait(console_handles[i]);
 	if (sigev) handles[n++] = sigev;
 
 	if (n > 0) {
@@ -254,7 +262,7 @@ static int poll_pass(int nfds, const fd_set *in_r, const fd_set *in_w, const fd_
 	{
 		int i;
 		for (i = 0; i < n; i++)
-			if (__plat_wait_ready(console_h[i])) {
+			if (__plat_console_ready(console_h[i])) {
 				FD_SET(console_fd[i], out_r);
 				total++;
 			}

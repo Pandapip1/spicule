@@ -145,6 +145,12 @@ int __plat_wait_ready(__plat_handle_t h)
 	return (pfd.revents & (POLLIN | POLLHUP | POLLERR)) != 0;
 }
 
+/* The identity here: Linux has a real tty layer, nothing is ever
+ * classified __FD_CONSOLE (src/unistd/linux/plat_isatty.c), and there
+ * is no reader thread standing between a descriptor and its device. */
+int __plat_console_ready(__plat_handle_t h) { return __plat_wait_ready(h); }
+__plat_handle_t __plat_console_wait(__plat_handle_t h) { return h; }
+
 void __plat_socket_probe(__plat_handle_t h, int *canread, int *canwrite, int *hup) // NOLINT(bugprone-easily-swappable-parameters) -- fixed platform-backend contract; readiness outputs have distinct roles
 {
 	struct pollfd pfd;

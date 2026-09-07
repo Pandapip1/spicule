@@ -16,12 +16,20 @@
  * the target thread checks for a signal -- sig_delivery_thread() itself,
  * or a signal-aware wait.
  *
- * Ctrl-C/Ctrl-Break arrive through kernel32's console control handler, not
- * NT exceptions, and there is no ntdll path to them at all. With
+ * Console control events arrive through kernel32's console control handler,
+ * not NT exceptions: conhost dispatches them by having user32 inject a
+ * thread into this process, so there really is no ntdll path to them. With
  * NTLIBC_USE_KERNEL32, __signal_init() turns CTRL_C_EVENT/CTRL_BREAK_EVENT
  * into SIGINT the same way the vectored handler turns DBG_CONTROL_C/
- * DBG_CONTROL_BREAK into one; without it, Ctrl-C is never turned into a
- * signal and the default console behavior (ending the process) stands.
+ * DBG_CONTROL_BREAK into one.
+ *
+ * Ctrl-C does have an ntdll path, just not that one: a program that leaves
+ * canonical mode takes the console's line discipline over
+ * (src/internal/nt/conin.c), and the interrupt character then arrives as
+ * an ordinary 0x03 byte that this library turns into SIGINT itself. Ctrl-C
+ * outside that case, and Ctrl-Break in every case, still need the control
+ * handler above; without it the default console behavior (ending the
+ * process) stands.
  */
 
 /* This translation unit implements ntlibc's freestanding -nostdinc

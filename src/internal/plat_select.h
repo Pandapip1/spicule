@@ -56,6 +56,23 @@ int __plat_pipe_wqa_trustworthy(void);
  * here): 1 if it was already signalled, 0 if not. */
 int __plat_wait_ready(__plat_handle_t h);
 
+/* The read-readiness pair for a console fd, kept behind the platform
+ * boundary because on NT the answer may not come from the handle at
+ * all: once src/internal/nt/conin.c's reader thread owns a console
+ * input handle it is the only NtReadFile caller, so the handle stops
+ * being signalled for anyone else and readiness means "that thread's
+ * queue has something", not "the device does".
+ *
+ * __plat_console_ready() is the zero-timeout peek and is the only
+ * readiness answer -- never re-derived from whatever
+ * __plat_console_wait() returned, which is a wakeup object and may be
+ * auto-reset.  __plat_console_wait() is the handle to park on until
+ * that answer can change.  On Linux both are the identity: nothing
+ * there is ever classified __FD_CONSOLE (src/unistd/linux/
+ * plat_isatty.c), so neither is reachable with a real console handle. */
+int __plat_console_ready(__plat_handle_t h);
+__plat_handle_t __plat_console_wait(__plat_handle_t h);
+
 /* The IOCTL_AFD_SELECT probe for a socket -- see select.c's __fd_probe()
  * __FD_SOCKET case (moved here verbatim) for the reasoning behind every
  * field of afd.h this touches.  Always sets *canread / *canwrite / *hup;

@@ -25,13 +25,17 @@
  *     signal at all -- src/signal/signal.c's ctrl_handler() is exactly
  *     what this gates), ENABLE_LINE_INPUT (ICANON: does a read wait for
  *     a full line or return per-keystroke), ENABLE_ECHO_INPUT (ECHO:
- *     are typed characters echoed) are reached via kernel32's
- *     GetConsoleMode()/SetConsoleMode() -- there is no ntdll path to
- *     console mode at all (CONTRIBUTING.md), so this is
- *     NTLIBC_USE_KERNEL32-only, same as SetConsoleCtrlHandler().
- *   - tcflush()'s input side (TCIFLUSH/TCIOFLUSH): real, via kernel32's
- *     FlushConsoleInputBuffer() -- tcflush.html DESCRIPTION "discard[s]
- *     data received but not read" is exactly what that call does.
+ *     are typed characters echoed) are reached through the console
+ *     driver directly (ConsolepGetMode/ConsolepSetMode over
+ *     NtDeviceIoControlFile, src/internal/condrv.h), with kernel32's
+ *     GetConsoleMode()/SetConsoleMode() kept only as the
+ *     NTLIBC_USE_KERNEL32 fallback for a host that does not speak that
+ *     protocol.
+ *   - tcflush()'s input side (TCIFLUSH/TCIOFLUSH): real, via the same
+ *     transport's ConsolepFlushInputBuffer (kernel32's
+ *     FlushConsoleInputBuffer() as the fallback) -- tcflush.html
+ *     DESCRIPTION "discard[s] data received but not read" is exactly
+ *     what that call does.
  *   - tcgetsid(): real in the same sense src/unistd/ttyname.c's
  *     tcgetpgrp() is -- the console is the only terminal a process here
  *     can have and the caller is the only user of it this library can
@@ -108,6 +112,10 @@
 #include <string.h>
 #include <errno.h>
 #include "libc.h"
+#ifndef __linux__
+#include "condrv.h"
+#include "conin.h"
+#endif
 #ifdef NTLIBC_USE_KERNEL32
 #include "kernel32.h"
 #endif
@@ -118,10 +126,9 @@
  * all (src/termios/linux/plat_termios.c supplies these same eleven
  * symbols there instead). */
 
-/* ---- the shadow: c_iflag/c_oflag/c_cflag/c_cc[]/speeds, plus (only
- * when NTLIBC_USE_KERNEL32 is not defined) c_lflag in full, since
- * there is then no real console mode to read ISIG/ICANON/ECHO from
- * at all. */
+/* ---- the shadow: c_iflag/c_oflag/c_cflag/c_cc[]/speeds, plus c_lflag
+ * as the last-known value ISIG/ICANON/ECHO fall back to when no real
+ * console mode can be reached. */
 static struct {
 	int inited;
 	tcflag_t iflag, oflag, cflag, lflag;
@@ -208,6 +215,90 @@ typedef BOOL (NTAPI *fn_SetConsoleMode)(HANDLE, ULONG);
 typedef BOOL (NTAPI *fn_FlushConsoleInputBuffer)(HANDLE);
 #endif
 
+/* ---- the three real console operations, ntdll first.
+ *
+ * Each drives the console driver directly (src/internal/condrv.h) and
+ * only falls back to kernel32 when that fails -- which it does on a
+ * console whose host does not speak this protocol, Wine's being the one
+ * that matters in practice (see condrv.h's banner). CONTRIBUTING.md's
+ * ordering, not a preference: ntdll where ntdll can do it, kernel32 as
+ * the guarded fallback. Each returns 0 on success and -1 when neither
+ * transport could act, leaving errno alone; the callers below decide
+ * what an unreachable console mode means for their own contract. */
+
+static int console_mode_get(HANDLE h, ULONG *mode)
+{
+	CONSOLE_MODE_MSG body;
+
+	body.Mode = 0;
+	if (__condrv_call(h, ConsolepGetMode, &body, sizeof body) == 0) {
+		*mode = body.Mode;
+		return 0;
+	}
+#ifdef NTLIBC_USE_KERNEL32
+	{
+		fn_GetConsoleMode fn = (fn_GetConsoleMode)k32_proc("GetConsoleMode");
+		if (fn && fn(h, mode)) return 0;
+	}
+#endif
+	return -1;
+}
+
+static int console_mode_set(HANDLE h, ULONG mode)
+{
+	CONSOLE_MODE_MSG body;
+
+	body.Mode = mode;
+	if (__condrv_call(h, ConsolepSetMode, &body, sizeof body) == 0) return 0;
+#ifdef NTLIBC_USE_KERNEL32
+	{
+		fn_SetConsoleMode fn = (fn_SetConsoleMode)k32_proc("SetConsoleMode");
+		if (fn && fn(h, mode)) return 0;
+	}
+#endif
+	return -1;
+}
+
+/* ConsolepFlushInputBuffer takes no descriptor at all (conhost's
+ * ApiSorter.cpp lists it as CONSOLE_API_NO_PARAMETER), so the message
+ * is the bare header and there is no output buffer. */
+static int console_flush_input(HANDLE h)
+{
+	if (__condrv_call(h, ConsolepFlushInputBuffer, 0, 0) == 0) return 0;
+#ifdef NTLIBC_USE_KERNEL32
+	{
+		fn_FlushConsoleInputBuffer fn = (fn_FlushConsoleInputBuffer)k32_proc("FlushConsoleInputBuffer");
+		if (fn && fn(h)) return 0;
+	}
+#endif
+	return -1;
+}
+
+/* Non-canonical mode is where a POSIX program expects the interrupt
+ * character to act the moment it is typed, and it is the only mode this
+ * library can honestly serve: with ENABLE_LINE_INPUT set, conhost holds
+ * the line in its own editor and would hand Ctrl-C over a whole line
+ * late (see src/internal/nt/conin.c's banner). So leaving canonical
+ * mode -- and only that -- hands the discipline to the reader thread:
+ * ENABLE_PROCESSED_INPUT comes off with ENABLE_LINE_INPUT so Ctrl-C
+ * arrives as a 0x03 byte, and the thread turns it into SIGINT itself
+ * whenever termios still says ISIG.
+ *
+ * *mode is left exactly as the caller computed it if the thread cannot
+ * be started: an unowned console must keep conhost's own Ctrl-C
+ * handling rather than lose it to a discipline that is not running. */
+static void take_over_line_discipline(HANDLE h, ULONG *mode, int want_isig)
+{
+	if (*mode & ENABLE_LINE_INPUT) {
+		/* Canonical mode, or back to it: the console keeps the job. */
+		if (__conin_owns(h)) __conin_set_isig(0);
+		return;
+	}
+	if (__conin_takeover(h) < 0) return;
+	*mode &= ~(ULONG)ENABLE_PROCESSED_INPUT;
+	__conin_set_isig(want_isig);
+}
+
 int tcgetattr(int fd, struct termios *t)
 {
 	struct __fd *f = get_console(fd);
@@ -220,31 +311,29 @@ int tcgetattr(int fd, struct termios *t)
 	memcpy(t->c_cc, shadow.cc, sizeof shadow.cc);
 	t->c_ispeed = shadow.ispeed;
 	t->c_ospeed = shadow.ospeed;
-#ifdef NTLIBC_USE_KERNEL32
 	{
-		fn_GetConsoleMode fn = (fn_GetConsoleMode)k32_proc("GetConsoleMode");
 		ULONG mode;
-		if (fn && fn(f->h, &mode)) {
+		if (console_mode_get(f->h, &mode) == 0) {
 			t->c_lflag = (shadow.lflag & ~(ISIG | ICANON | ECHO))
 				| (mode & ENABLE_PROCESSED_INPUT ? ISIG : 0)
 				| (mode & ENABLE_LINE_INPUT ? ICANON : 0)
 				| (mode & ENABLE_ECHO_INPUT ? ECHO : 0);
+			/* Once the reader thread owns the handle,
+			 * ENABLE_PROCESSED_INPUT is off by construction and
+			 * no longer describes ISIG -- the shadow does, and
+			 * it is what the thread was told to honour. */
+			if (__conin_owns(f->h))
+				t->c_lflag = (t->c_lflag & ~(tcflag_t)ISIG) | (shadow.lflag & ISIG);
 		}
-		/* fn == NULL or the call failed (e.g. no real console under
-		 * this process, as under `make check`'s Wine runner -- see
-		 * test/posix-termios.c): fall back to the shadow's own
-		 * c_lflag, same as the non-kernel32 build below. Not an
-		 * error -- ENOTTY was already the honest answer for "no
-		 * terminal at all" and get_console() already ruled that out;
-		 * this is "a terminal exists but its mode is unreadable",
-		 * which the shadow's last-known/default value covers. */
+		/* Neither transport could read the mode (no real console
+		 * under this process, as under `make check`'s Wine runner --
+		 * see test/posix-termios.c): fall back to the shadow's own
+		 * c_lflag. Not an error -- ENOTTY was already the honest
+		 * answer for "no terminal at all" and get_console() already
+		 * ruled that out; this is "a terminal exists but its mode is
+		 * unreadable", which the shadow's last-known/default value
+		 * covers. */
 	}
-#else
-	/* No ntdll path to console mode exists (CONTRIBUTING.md); ISIG/
-	 * ICANON/ECHO round-trip through the shadow like every other
-	 * field, but never reflect or change real console behaviour.
-	 * NTLIBC_USE_KERNEL32 is required for that. */
-#endif
 	return 0;
 }
 
@@ -255,16 +344,14 @@ int tcsetattr(int fd, int act, const struct termios *t) // NOLINT(bugprone-easil
 	if (act != TCSANOW && act != TCSADRAIN && act != TCSAFLUSH) { errno = EINVAL; return -1; }
 	shadow_init();
 
-#ifdef NTLIBC_USE_KERNEL32
 	{
-		fn_GetConsoleMode getfn = (fn_GetConsoleMode)k32_proc("GetConsoleMode");
-		fn_SetConsoleMode setfn = (fn_SetConsoleMode)k32_proc("SetConsoleMode");
 		ULONG mode;
-		if (getfn && setfn && getfn(f->h, &mode)) {
+		if (console_mode_get(f->h, &mode) == 0) {
 			mode = (mode & ~(ULONG)(ENABLE_PROCESSED_INPUT | ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT))
 				| (t->c_lflag & ISIG ? ENABLE_PROCESSED_INPUT : 0)
 				| (t->c_lflag & ICANON ? ENABLE_LINE_INPUT : 0)
 				| (t->c_lflag & ECHO ? ENABLE_ECHO_INPUT : 0);
+			take_over_line_discipline(f->h, &mode, !!(t->c_lflag & ISIG));
 			/* TCSAFLUSH: "all input so far received but not read
 			 * shall be discarded" (tcsetattr.html) -- do this before
 			 * installing the new mode, same ordering a real
@@ -272,25 +359,17 @@ int tcsetattr(int fd, int act, const struct termios *t) // NOLINT(bugprone-easil
 			 * only in output-drain timing, which is a no-op here
 			 * anyway (tcdrain() below) -- both are treated as
 			 * TCSANOW. */
-			if (act == TCSAFLUSH) {
-				fn_FlushConsoleInputBuffer flushfn = (fn_FlushConsoleInputBuffer)k32_proc("FlushConsoleInputBuffer");
-				if (flushfn) flushfn(f->h);
-			}
-			setfn(f->h, mode);
-			/* Whether or not SetConsoleMode() actually succeeded,
+			if (act == TCSAFLUSH) console_flush_input(f->h);
+			console_mode_set(f->h, mode);
+			/* Whether or not the mode change actually landed,
 			 * tcsetattr() "shall return successful completion if
 			 * ... able to perform any of the requested actions"
 			 * (tcsetattr.html) -- the shadow update below always
 			 * happens, so the store side of the contract is always
-			 * honoured even when this build/environment cannot
-			 * reach a real console mode to change. */
+			 * honoured even when this environment cannot reach a
+			 * real console mode to change. */
 		}
 	}
-#else
-	/* No ntdll path to console mode exists; ISIG/ICANON/ECHO are
-	 * accepted and stored below like every other field, with no real
-	 * effect. See tcgetattr()'s #else arm above. */
-#endif
 	shadow.iflag = t->c_iflag;
 	shadow.oflag = t->c_oflag;
 	shadow.cflag = t->c_cflag;
@@ -313,19 +392,13 @@ int tcflush(int fd, int queue) // NOLINT(bugprone-easily-swappable-parameters) -
 	if (!f) return -1;
 	if (queue != TCIFLUSH && queue != TCOFLUSH && queue != TCIOFLUSH) { errno = EINVAL; return -1; }
 	if (queue == TCOFLUSH) return 0;   /* N/A: no transmit queue, see file banner */
-#ifdef NTLIBC_USE_KERNEL32
-	{
-		fn_FlushConsoleInputBuffer fn = (fn_FlushConsoleInputBuffer)k32_proc("FlushConsoleInputBuffer");
-		if (fn) fn(f->h);
-	}
-#endif
-	/* Without kernel32, or if the real call above was unreachable:
-	 * honest no-op, not a fabricated success -- there is no ntdll
-	 * path to flushing a console's input buffer (CONTRIBUTING.md).
-	 * Still returns 0: tcflush() has no ENOTSUP-shaped error for "I
-	 * accepted the request but could not act on it", and returning
-	 * -1 here would be indistinguishable from the genuine failures
-	 * (EBADF/EINVAL/ENOTTY) already checked above. */
+	console_flush_input(f->h);
+	/* If neither transport could reach the console: honest no-op, not
+	 * a fabricated success. Still returns 0: tcflush() has no
+	 * ENOTSUP-shaped error for "I accepted the request but could not
+	 * act on it", and returning -1 here would be indistinguishable
+	 * from the genuine failures (EBADF/EINVAL/ENOTTY) already checked
+	 * above. */
 	return 0;
 }
 

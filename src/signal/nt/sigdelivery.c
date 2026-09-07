@@ -58,6 +58,7 @@
 #include "libc.h"
 #include "plat_signal.h"
 #include "plat_fd.h"
+#include "conin.h"
 
 /* One fixed-size NT message per signal. FILE_PIPE_MESSAGE_TYPE makes
  * "one NtWriteFile call == one NtReadFile call" an NT-enforced guarantee,
@@ -361,6 +362,7 @@ void __sig_delivery_reinit_after_fork(void)
 	send_mutant = 0;
 	__sig_pending_reset_after_fork();
 	__timer_reinit_after_fork();
+	__conin_reinit_after_fork();
 	__sig_delivery_init();
 }
 

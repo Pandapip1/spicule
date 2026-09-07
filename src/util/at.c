@@ -9,39 +9,19 @@
  *   at -l -q queuename
  *   at -l [at_job_id...]
  *
- * Fetched and checked directly against
  * https://pubs.opengroup.org/onlinepubs/9699919799/utilities/at.html
- * before writing this file (SYNOPSIS/OPTIONS/OPERANDS quoted in the
- * banner above and in src/util/attime.h's own header). Submission
- * (`timespec...` or `-t time_arg`) writes a job to the spool via
- * src/util/atbatch.c's __atbatch_submit(); the job actually runs
- * later, out-of-process, when src/util/atd.c's daemon notices it is
- * due -- see that file's own header for the daemon side of this
- * split, and bin/atd.c/src/sh/builtin.c for why atd is a standalone
- * executable only, never a shell builtin.
  *
- * `-t time_arg`: "has the format as specified by the touch -t time
- * utility" -- touch(1p)'s own `[[CC]YY]MMDDhhmm[.SS]`, parsed here by
- * the identical two-digit-field logic src/util/touch.c's own
- * parse_touch_t() uses (re-implemented rather than shared: it is
- * ~30 lines, entirely self-contained, and touch.c's version is
- * static -- not worth a third header for something this small, the
- * same judgment call src/internal/util.h's own comment on cp/mv/rm's
- * *shared* helpers draws the line against for genuinely small,
- * non-duplicated logic).
+ * Submission writes a job to the spool (__atbatch_submit(), see
+ * atbatch.c); atd.c's daemon runs it later, out-of-process, when due.
  *
- * -m: accepted (mail-on-completion is real at(1p) SYNOPSIS, so a
- * script using it must not fail with "unknown option"), but every
- * job's output is captured to `<id>.out` regardless of whether -m was
- * given -- see src/util/atbatch.h's own header for why there is no
- * mail transport to make -m's mail-vs-discard distinction meaningful
- * here, and why "always capture" is the honest single behaviour.
+ * -t time_arg uses touch -t's [[CC]YY]MMDDhhmm[.SS] format, parsed
+ * here rather than shared with touch.c's static parse_touch_t()
+ * since it's small and self-contained.
  *
- * EXIT STATUS: at.html "0 ... successfully submitted, removed, or
- * listed a job or jobs. >0 An error occurred." -- this file uses 1 for
- * every error case, the same "1 within the >0 the standard leaves to
- * the implementation" convention src/util/util_time.c and others in
- * this tree already use.
+ * -m is accepted but a no-op: every job's output is always captured
+ * to <id>.out regardless (no mail transport exists, see atbatch.h).
+ *
+ * Exit status is 1 for every error case, per at.html's ">0 on error".
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -64,9 +44,7 @@ static int read2(const char *s, int *out)
 	return 0;
 }
 
-/* touch(1p) -t: "[[CC]YY]MMDDhhmm[.SS]" -- see this file's own header
- * for why this is a self-contained re-implementation of
- * src/util/touch.c's parse_touch_t() rather than a shared function. */
+/* touch(1p) -t format: [[CC]YY]MMDDhhmm[.SS] (see file header). */
 static int parse_dash_t(const char *spec, time_t *out)
 {
 	size_t mainlen = strcspn(spec, ".");
@@ -162,9 +140,7 @@ static int do_list(const char *dir, const char *qfilter, char **ids, int nids)
 		DIR *dp = opendir(dir);
 		struct dirent *de;
 		if (!dp) {
-			/* No spool directory yet means no jobs at all -- not an
-			 * error (this is the ordinary "nothing has been
-			 * submitted yet" state, not a broken installation). */
+			/* Missing spool dir just means no jobs yet, not an error. */
 			return errno == ENOENT ? 0 : 1;
 		}
 		while ((de = readdir(dp)) != 0) {
@@ -182,7 +158,7 @@ static int do_list(const char *dir, const char *qfilter, char **ids, int nids)
 			if (job_path(dir, id, "job", path, sizeof path) < 0 ||
 			    __spool_job_header(path, &run_at, queue, sizeof queue) < 0)
 				continue;
-			__ownership_string_terminated(queue); /* __spool_job_header()'s own documented NUL-terminated contract */
+			__ownership_string_terminated(queue); /* __spool_job_header() contract */
 			if (qfilter && strcmp(queue, qfilter)) continue;
 			print_job_line(stdout, id, run_at, queue);
 		}

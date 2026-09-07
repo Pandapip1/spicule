@@ -1,91 +1,44 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * atd: the at(1p)/batch(1p) scheduling daemon. Not a POSIX utility --
- * there is no atd(1p)/atd(8) page to check against, the same way
- * src/util/timeout.c is not an XCU utility either -- but real,
- * necessary infrastructure: at(1p)/batch(1p) only *submit* jobs
- * (src/util/atbatch.c writes a job file into the spool and returns
- * immediately); something has to notice a due job and actually run
- * it, and this is that something.
+ * atd: the at(1p)/batch(1p) scheduling daemon. Not a POSIX utility
+ * (no atd(1p)/atd(8) page), but necessary: at(1p)/batch(1p) only
+ * submit jobs to the spool (atbatch.c) and return immediately; atd is
+ * what notices a due job and actually runs it.
  *
- * WHY A STANDALONE EXECUTABLE, NOT A SHELL BUILTIN
- * ----------------------------------------------------
- * Every other utility in src/util/ is deliberately both a shell
- * builtin (src/sh/builtin.c) and a standalone obj/bin/<name>.exe,
- * because both callers want the *same instantaneous* behaviour: run,
- * produce a result, return. atd is the opposite shape on purpose --
- * it runs forever, outliving the shell invocation that started it by
- * design -- so "run it in-process inside the interactive shell" would
- * either block that shell forever (an obviously wrong builtin) or
- * require the builtin to itself fork/spawn a detached copy of the
- * *shell*, which is not what a builtin is for. This is the same
- * "deliberate exception" shape this project's own POSIX-utilities
- * plan already uses for the builtin-only utilities (alias, cd, ...) --
- * just the mirror image: atd is standalone-only, never a builtin. See
- * bin/atd.c and the deliberate absence of a bi_atd() in
- * src/sh/builtin.c.
+ * Standalone executable only, never a shell builtin (unlike every
+ * other src/util/ utility): atd runs forever by design, so running it
+ * in-process would either block the shell forever or require the
+ * builtin to fork/spawn a detached shell copy. See bin/atd.c and the
+ * deliberate absence of a bi_atd() in src/sh/builtin.c.
  *
- * HOW A REAL BACKGROUND PROCESS IS BUILT ON EACH PLATFORM
- * -------------------------------------------------------------
- * Linux: this function itself IS the daemon loop; whether it also
- * detaches from its controlling terminal (fork()+setsid(), the real
- * daemon(3) idiom) is controlled by whether stdin/stdout/stderr look
- * like a terminal at all -- see daemonize_if_tty() below. NT has no
- * controlling-terminal/session concept to detach from in the same
- * sense, so daemonize_if_tty() is a no-op there; what makes an NT
- * invocation of atd "a background process" is simply that it is
- * spawned once (by whatever starts it -- see bin/atd.c) as an
- * ordinary long-running process, sleeping and polling, the same loop
- * shape as the Linux side. This is deliberately NOT a registered NT
- * service: Service Control Manager integration (a service host,
- * install/uninstall via `sc`, a ServiceMain entry point) is a real,
- * separate undertaking not attempted here -- an ordinary process
- * that a user (or a real service wrapper, should one ever be added)
- * starts once is the honest, working scope.
+ * Backgrounding per platform: on Linux this function is the daemon
+ * loop itself, detaching from a controlling terminal via
+ * daemonize_if_tty() only when one is attached. NT has no
+ * controlling-terminal concept, so that's a no-op there; an NT atd is
+ * just an ordinary long-running process someone starts once (see
+ * bin/atd.c) -- not a registered Service Control Manager service,
+ * which is out of scope here.
  *
- * THE POLL LOOP
- * ---------------
- * Once per tick (NTLIBC_ATD_POLL_MS milliseconds, default 1000 --
- * overridable via that environment variable purely as a test-speed
- * knob, documented here rather than left a magic undocumented
- * override: at(1p)/batch(1p) jobs have no spec-mandated latency, so
- * shortening the poll interval for a test is not a spec deviation the
- * way shortening cron's real per-minute granularity would be):
- *
- *   1. List the *.job files under $HOME/.ntlibc/atjobs/ (src/util/spool.h).
- *      For each whose "#run_at" header (src/util/atbatch.h's job file format)
- *      is <= now:
- *        a. If its queue is "b" (batch(1p)'s own queue), consult
- *           getloadavg(); a Linux host that is genuinely busy (1-
- *           minute average >= BATCH_LOAD_THRESHOLD) defers the job to
- *           a later tick, matching batch(1p)'s DESCRIPTION ("run ...
- *           using algorithms ... based on unspecified factors"). A
- *           host getloadavg() cannot answer for at all (NT, always --
- *           see src/stdlib/nt/plat_getloadavg.c) runs the job
- *           immediately instead of inventing a signal that is not
- *           there, which this file states here rather than leaving
- *           implicit in a comparison that happens to always be false.
- *        b. Otherwise, claim the job by rename()ing <id>.job to
- *           <id>.job.running (an atomic, single-syscall "I am the one
- *           executing this" mark -- see spool.h's own rename-publish
- *           idiom, used here in the opposite direction), then
- *           posix_spawn() `sh <path>` with stdin from /dev/null and
- *           stdout+stderr captured to <id>.out (src/util/atbatch.h's
- *           own documented "no mail transport, so capture to a file"
- *           choice). The child's pid is tracked, not waited on
- *           synchronously -- multiple due jobs in one tick all start
- *           without blocking each other or this loop.
- *   2. Reap every previously-spawned child that has since exited
- *      (waitpid(WNOHANG)), and unlink its <id>.job.running marker --
- *      the job is fully finished at that point, with <id>.out left
- *      behind for the user to read.
+ * Poll loop, once per tick (NTLIBC_ATD_POLL_MS ms, default 1000 --
+ * overridable as a test-speed knob since at/batch have no
+ * spec-mandated latency):
+ *   1. For each *.job file under the spool whose run_at header is due:
+ *      a. queue "b" (batch) jobs defer to next tick if getloadavg()'s
+ *         1-minute average is >= BATCH_LOAD_THRESHOLD; NT (no
+ *         getloadavg()) always runs immediately instead.
+ *      b. otherwise claim it by rename()ing <id>.job to
+ *         <id>.job.running (atomic ownership mark), then
+ *         posix_spawn() `sh <path>` with output captured to <id>.out
+ *         (no mail transport, see atbatch.h). The pid is tracked, not
+ *         waited on, so multiple due jobs start without blocking
+ *         each other.
+ *   2. Reap exited children (waitpid(WNOHANG)), unlinking their
+ *      .job.running marker; <id>.out is left for the user to read.
  *   3. Sleep one tick, repeat.
  *
- * This never blocks on a running job, so one long-running at(1p) job
- * can never delay another due job, or cron (a completely separate
- * process -- see src/util/crond.c) from noticing its own due
- * entries.
+ * Never blocking on a running job means one long at(1p) job can't
+ * delay another due job or cron (crond.c, a separate process).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -103,12 +56,9 @@
 #include "libc.h" /* __find_program() */
 #include "ownership_stubs.h"
 
-/* batch(1p) jobs defer while the 1-minute load average is at or above
- * this many runnable processes per core-equivalent -- the same
- * ballpark real BSD/GNU atd implementations default to (historically
- * 1.5, sometimes tunable via `atrun -l`); there is no POSIX-mandated
- * value to cite instead, since batch(1p) itself leaves the threshold
- * entirely to the implementation ("unspecified factors"). */
+/* batch(1p) defers above this 1-minute load average; matches the
+ * BSD/GNU atd default (1.5) since POSIX leaves the threshold
+ * unspecified. */
 #define BATCH_LOAD_THRESHOLD 1.5
 
 static volatile sig_atomic_t g_stop;
@@ -119,15 +69,9 @@ static void on_term(int sig)
 	g_stop = 1;
 }
 
-/* Linux only: detach from a controlling terminal via the real
- * fork()+setsid() daemon(3) idiom, but only when one is actually
- * attached (stdin looks like a tty) -- when atd is already started
- * detached (e.g. by a test harness redirecting stdin, or an init
- * system that already sessioned it), forking again would only lose
- * the parent's ability to see this process's own pid/exit status for
- * no benefit. NT has no controlling-terminal concept to detach from
- * in this sense at all (see this file's own header), so this is a
- * no-op there by construction: NTLIBC_PLATFORM_LINUX guards it. */
+/* Linux only: fork()+setsid() daemon(3) idiom, but only if stdin is a
+ * tty -- skip it if atd is already started detached (test harness,
+ * init system). No-op on NT (no controlling-terminal concept). */
 static void daemonize_if_tty(void)
 {
 #if defined(__linux__)
@@ -163,10 +107,8 @@ static void reap_finished(void)
 			if (unlink(g_running[i].running_path) < 0)
 				fprintf(stderr, "atd: cannot clean up %s: %s\n",
 				        g_running[i].running_path, strerror(errno));
-			/* ntlibc.ValidPointer: "dereference extent is not proven
-			 * sufficient" on this swap-with-last compaction -- left
-			 * open; src/util/crond.c's identical g_running[] idiom has
-			 * the same open finding. */
+			/* ntlibc.ValidPointer finding on this swap-with-last
+			 * compaction left open; crond.c's identical idiom too. */
 			g_running[i] = g_running[g_nrunning - 1];
 			g_nrunning--;
 			continue;
@@ -176,11 +118,9 @@ static void reap_finished(void)
 }
 
 /* Spawns `sh running_path`, output captured to `<dir>/<id>.out`.
- * Returns the child pid (>= 0) on success, or -1 (errno set) if the
- * job could not even be started (sh not found, or the file actions
- * themselves failed) -- the caller unlinks running_path itself in
- * that case, since there will be no waitpid() to trigger the normal
- * cleanup in reap_finished(). */
+ * Returns the child pid on success, or -1 if it never started (sh
+ * not found, spawn failed) -- caller must unlink running_path itself
+ * since there's no waitpid() to trigger reap_finished()'s cleanup. */
 static pid_t spawn_job(const char *dir, const char *id, const char *running_path)
 {
 	extern char **environ;
@@ -240,7 +180,7 @@ static void poll_once(const char *dir)
 
 		if (snprintf(path, sizeof path, "%s/%s.job", dir, id) >= (int)sizeof path) continue;
 		if (__spool_job_header(path, &run_at, queue, sizeof queue) < 0) continue;
-		__ownership_string_terminated(queue); /* __spool_job_header()'s own documented NUL-terminated contract */
+		__ownership_string_terminated(queue); /* __spool_job_header() contract */
 		if (run_at > now) continue;
 
 		if (!strcmp(queue, "b")) {
@@ -255,11 +195,7 @@ static void poll_once(const char *dir)
 		if (rename(path, running) < 0) continue; /* another instance claimed it first */
 
 		if (g_nrunning >= MAX_RUNNING) {
-			/* Bounded, not silently dropped: leave it claimed but
-			 * unstarted for next tick once a slot frees up, rather
-			 * than lose track of it. Re-claiming means renaming it
-			 * back so the next tick's own is-it-due scan finds it
-			 * again. */
+			/* No free slot: rename back so next tick's scan retries it. */
 			if (rename(running, path) < 0)
 				fprintf(stderr, "atd: cannot re-queue %s: %s\n", id, strerror(errno));
 			continue;

@@ -77,7 +77,7 @@ static void test_env(void)
 	CHECK(putenv(pe) == 0);
 	CHECK(getenv("SPICULE_PUTENV") && !strcmp(getenv("SPICULE_PUTENV"), "pv"));
 	CHECK(env_has("SPICULE_PUTENV=pv"));
-	pe[14] = 'q';  /* putenv strings are referenced, not copied */
+	strchr(pe, '=')[1] = 'q';  /* putenv strings are referenced, not copied */
 	CHECK(getenv("SPICULE_PUTENV") && !strcmp(getenv("SPICULE_PUTENV"), "qv"));
 	CHECK(unsetenv("SPICULE_PUTENV") == 0);
 	CHECK(getenv("SPICULE_PUTENV") == NULL);

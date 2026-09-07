@@ -5,59 +5,30 @@
  * to send messages, via write(1p) or similar, to a terminal device.
  * Bare `mesg` queries the current state without changing it.
  *
- * ---- what "other users" honestly means here --------------------------
+ * This library tracks only one real user identity (src/misc/pwd.c),
+ * but mesg's traditional mechanism -- toggling the group-write bit on
+ * a tty device node -- still has real, honest meaning: the bit is
+ * real, chmod() genuinely reads and writes it, and a future
+ * multi-session extension would see and honor the same bit unchanged.
  *
- * src/misc/pwd.c's own header comment already makes the load-bearing
- * argument this file inherits: ntlibc has exactly one real user
- * identity it can ever honestly report.  mesg's traditional mechanism
- * -- toggling the group-write bit on a tty device node so a *different*
- * real user's write(1p) can or cannot open it for writing -- still has
- * a real, honest meaning even with only one user, though: the bit is
- * real, this library's own chmod() genuinely reads and writes it (on
- * the one platform where it has anywhere real to live), and a future
- * multi-session extension would see and honour exactly the same bit
- * without this file changing at all.  This file does not fabricate a
- * second user to justify that; it implements the real, verifiable
- * mechanism honestly and lets its meaning follow from whatever else is
- * (or is not) on the system.
+ * Per platform (see src/util/termident.h for the full argument):
+ *   Linux: __util_find_terminal() resolves the calling terminal to a
+ *   real device-node path; chmod() on it is a real syscall, and
+ *   S_IWGRP genuinely gates whether another process can open the tty
+ *   for writing.
+ *   NT: a console is a real terminal but has no filesystem path to
+ *   chmod() -- fchmodat() returns EROFS on it and fchmod() is a silent
+ *   no-op, so no mechanism here gates writes to it. `mesg` and
+ *   `mesg y` honestly report/confirm the only state that has ever been
+ *   true (messages are never blocked); `mesg n` asks for enforcement
+ *   this library cannot provide and is refused loudly rather than
+ *   silently under-honored (same reasoning as src/misc/resource.c's
+ *   setrlimit()).
  *
- * ---- what is real, per platform, and why ------------------------------
- *
- * See src/util/termident.h's own banner for the full argument; the
- * short version:
- *
- *   Linux: __util_find_terminal() (termident.c) resolves the calling
- *   terminal to a real device-node path via fstat()+S_ISCHR() and
- *   readlink("/proc/self/fd/<fd>") -- procfs is the kernel's own,
- *   nothing ntlibc provides.  chmod() on that real path
- *   (src/stat/linux/plat_stat.c) is a real syscall: S_IWGRP genuinely
- *   gates whether a *different* real Linux process (any process, since
- *   this library tracks only one uid, but the OS-level permission bit
- *   itself does not know that) can open the tty for writing.  `mesg y`/
- *   `mesg n` here really do what mesg(1p) has always done.
- *
- *   NT: a console is a real, correctly-identified terminal
- *   (isatty()'s __FD_CONSOLE gate), but has no filesystem path this
- *   library can chmod() at all -- src/stat/chmod.c's fchmodat()
- *   returns EROFS off the synthetic /dev/console object, and
- *   fchmod() on it is a silent no-op.  There is, today, no NT
- *   mechanism this library reaches that gates whether another process
- *   can write to this console -- so nothing here is ever actually
- *   denying receipt of a message.  Per src/misc/resource.c's own
- *   setrlimit() precedent ("accepts a request only when it does not
- *   actually ask for stricter enforcement than the fixed value already
- *   in effect ... asking to genuinely lower it is rejected ... rather
- *   than silently accepted and then not honored"): `mesg` (query) and
- *   `mesg y` both honestly report/confirm the only state that has ever
- *   been true (messages are never blocked) and succeed; `mesg n` asks
- *   for an enforcement this library cannot provide and is refused
- *   loudly (a real, nonzero, diagnosed failure) rather than accepted
- *   and silently not honoured.
- *
- * EXIT STATUS (mesg(1p)): 0 "receiving messages is allowed", 1
- * "receiving messages is not allowed", >1 "an error occurred" -- note
- * this is the resulting *state*, not a plain success/failure code, so
- * `mesg n`'s own successful exit status is 1, not 0.
+ * EXIT STATUS (mesg(1p)): 0 = receiving messages is allowed, 1 = not
+ * allowed, >1 = an error occurred -- this is the resulting *state*,
+ * not a plain success/failure code, so `mesg n`'s own successful exit
+ * status is 1, not 0.
  */
 #include "util.h"
 #include "termident.h"
@@ -97,13 +68,11 @@ int __util_mesg_main(
 	}
 
 	if (strcmp(argv[1], "y") == 0) {
-		if (t.opaque) return 0; /* already, and always, true -- see banner */
-		/* fstat()/fchmod() on `fd` itself, not stat()/chmod() on the
-		 * re-resolved t.path: fd is the exact tty device
-		 * __util_find_terminal() already verified, so the mode bits
-		 * read here and the ones written below are guaranteed to be
-		 * the same object's, never a different device a path lookup
-		 * happened to re-resolve to in between. */
+		if (t.opaque) return 0; /* already, and always, true -- see header comment */
+		/* fstat()/fchmod() on `fd` itself, not stat()/chmod() on
+		 * t.path: guarantees the mode bits read and written below are
+		 * the same object's, never a path re-resolved to something
+		 * else in between. */
 		if (fstat(fd, &st) != 0) {
 			__util_diagf("mesg: %s: %s\n", t.path, strerror(errno));
 			return 2;

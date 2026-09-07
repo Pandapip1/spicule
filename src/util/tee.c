@@ -3,44 +3,25 @@
  *
  * tee(1p): `tee [-ai] [file...]`
  *
- * DESCRIPTION: "The tee utility shall copy standard input to standard
- * output, making a copy in zero or more files.  The tee utility shall
- * not buffer output." -- read/write below moves each block read
- * straight out to every destination with no interior buffering layer
- * that could hold data back, matching "not buffer output" the same way
- * cat's -u note in src/util/cat.c does.
+ * DESCRIPTION: copies standard input to standard output and to zero or
+ * more files, unbuffered -- read/write below moves each block straight
+ * out to every destination with no buffering layer that could hold
+ * data back, same as cat's -u note in src/util/cat.c.
  *
  * OPTIONS:
- *  -a  "Append the output to the files."  Without -a, each file operand
- *      is created or truncated, same as cp's destination-open call.
- *  -i  "Ignore the SIGINT signal."  This is real here, not faked: signal
- *      disposition is a genuine, tested part of this platform (see
- *      src/signal/signal.c's own header), so `signal(SIGINT, SIG_IGN)`
- *      before the copy loop is the whole of what -i asks for -- no
- *      polling loop, no approximation, nothing left refused.
+ *  -a  Append to the files instead of truncating them.
+ *  -i  Ignore SIGINT -- real signal disposition (src/signal/signal.c),
+ *      not an approximation.
  *
- * OPERANDS: "A pathname of an output file."  Per the spec's own note, a
- * file operand of '-' names a literal file called "-", *not* a second
- * alias for standard output -- unlike cat's OPERANDS clause, tee(1p)'s
- * does not carve out "-" as special, so it is opened just like any other
- * path here.
+ * OPERANDS: a file operand of '-' names a literal file called "-", not
+ * an alias for standard output -- unlike cat(1p), tee(1p) does not
+ * carve out "-" as special.
  *
- * DESCRIPTION continues: "If a write to any successfully opened file
- * operand fails, writes to other successfully opened file operands shall
- * continue, although the tee utility shall eventually exit with a
- * non-zero exit status" -- the diagnose-and-continue shape this project
- * already uses in rm/cp/mv/cat, applied per-destination instead of
- * per-operand: one broken output file does not stop the others from
- * still getting every remaining byte of stdin, and does not stop stdout
- * from getting it either.
- *
- * A file operand that fails to *open* at all is diagnosed and dropped
- * from the destination set before the copy loop starts (mirroring cp's
- * "cannot create" diagnostic in src/util/cp.c) -- there is nothing to
- * "continue" doing to a destination the loop was never able to add.
- *
- * EXIT STATUS: "0 The standard input was successfully copied to all
- * output files." ">0 An error occurred."
+ * A write failure on one already-open destination diagnoses it and
+ * drops it from the set; the rest keep getting every remaining byte of
+ * stdin, and the utility exits nonzero at the end. A file operand that
+ * fails to *open* at all is diagnosed and dropped before the copy loop
+ * starts (mirroring cp's "cannot create" diagnostic).
  *
  * Spec consulted: https://pubs.opengroup.org/onlinepubs/9699919799/utilities/tee.html
  */
@@ -80,10 +61,9 @@ int __util_tee_main(
 	}
 
 	if (opt_i) {
-		/* Real signal disposition, not a fake -- see this file's
-		 * header.  Failure here (an unsupported signal number, which
-		 * SIGINT never is on this platform) would be a build-time
-		 * bug, not a runtime condition worth diagnosing to the user. */
+		/* Failure here means an unsupported signal number, which
+		 * SIGINT never is on this platform -- a build-time bug, not
+		 * something worth diagnosing to the user. */
 		if (signal(SIGINT, SIG_IGN) == SIG_ERR) return 1;
 	}
 
@@ -98,11 +78,11 @@ int __util_tee_main(
 			return 1;
 		}
 		/* Checker gap (ntlibc.ResourceLeak): each open() below is stored
-		 * into fds[nfiles], a heap array indexed by a runtime loop
-		 * variable -- the checker can't correlate that store with the
-		 * fds[j] loads in the write-error and final close loops further
-		 * down, so every descriptor here is reported as never released
-		 * even on paths where those loops do close it. */
+		 * into fds[nfiles], a heap array indexed at runtime -- the
+		 * checker can't correlate that store with the fds[j] loads in
+		 * the write-error and final close loops below, so every
+		 * descriptor here is reported as never released even when
+		 * those loops do close it. */
 		for (; i < argc; i++) {
 			int flags = O_WRONLY | O_CREAT | (opt_a ? O_APPEND : O_TRUNC);
 			int fd = open(argv[i], flags, 0666);

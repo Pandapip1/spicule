@@ -161,3 +161,33 @@ char *struct_field_array_element_is_flagged_without_the_axiom(
 {
 	return slice->v[0]; /* ownership-expect: pointer-null */
 }
+
+/* The adversarial twin of pointer-safe.c's elements_withtok_array_and_
+ * element_need_no_axiom: the SAME elements_withtok(null_terminated, argc)
+ * contract, but indexed by `i` with no `i < argc` guard anywhere on this
+ * path. elementProvenNullTerminated's own in-bounds proof
+ * (aggregateIndexProven) must not grant nonnull for an index it cannot
+ * show is actually inside the described extent -- confirming the new
+ * per-element assertion is a real proof, not a blanket grant for any
+ * read off an elements_withtok-annotated parameter. */
+tokdef null_terminated l_unlimited implicit_drop string_literal;
+
+int elements_withtok_unproven_index_is_still_flagged(
+    int argc, char **argv elements_withtok(null_terminated, argc), int i)
+{
+	return argv[i][0] == '-'; /* ownership-expect: pointer-null */
+}
+
+/* The adversarial twin of pointer-safe.c's snprintf_with_proven_nonzero_
+ * size_needs_no_restatement: the identical snprintf() call, but with a
+ * caller-supplied size this path never proves nonzero.
+ * snprintfSizeProvenNonzero must not grant the destination buffer nonnull
+ * here -- confirming the grant really does require size to be provably
+ * nonzero, not merely not-yet-shown-zero. */
+int snprintf(char *s, size_t n, const char *fmt, ...) __attribute__((nonnull(3)));
+
+int snprintf_with_unproven_size_is_still_flagged(char *buf, size_t n)
+{
+	snprintf(buf, n, "%s", "hi");
+	return buf[0] == 'h'; /* ownership-expect: pointer-null */
+}

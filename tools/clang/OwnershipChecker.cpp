@@ -257,6 +257,23 @@ static std::optional<CapabilityKind> dialectTokenKind(ASTContext &Context,
              : CapabilityKind::Linear;
 }
 
+// qual:string_literal (see expressionProvidesStringLiteralToken below, its
+// other consumer) is this dialect's real, existing marker for "this token
+// means the pointer already refers to real, reachable content" -- null_
+// terminated's own tokdef, and nothing else built into this tree, carries
+// it. That is a strictly stronger claim than the other Duplicable string-
+// shaped families (readable_span/writable_span/disjoint_span in
+// memory_tokens.h): those carry qual:zero_vacuous instead, because a zero-
+// length span is a valid, vacuous grant even against a NULL pointer, so
+// Duplicable-ness alone does not imply nonnull. A token with qual:
+// string_literal has no such escape hatch, so granting it -- by any
+// mechanism: a scalar withtok(family), an elements_withtok(family, extent)
+// per-element read, or the manual __ownership_string_terminated() axiom --
+// also, definitionally, proves the pointer nonnull.
+static bool tokenImpliesNonNull(const TypedefNameDecl *Token) {
+  return hasQualifier(Token, "qual:string_literal");
+}
+
 static bool dialectTokenPermitsCarrierCopy(const TypedefNameDecl *Token) {
   return Token && hasQualifier(Token, "qual:l_permissive") &&
          !hasQualifier(Token, "qual:l_strict") &&
@@ -368,6 +385,67 @@ static bool expressionProvidesStringLiteralToken(
   if (const auto *Member = dyn_cast<MemberExpr>(Core))
     return initializedByStringLiteralMemberTable(Member, Context);
   return false;
+}
+
+// dirname()/basename() (src/misc/dirname.c, src/misc/basename.c): reading
+// both real bodies confirms each ALWAYS returns a live, NUL-terminated
+// string for ANY input `s` -- including NULL or empty `s`, which each maps
+// to the string literal "." -- never merely a copy of its own argument's
+// liveness. Recognized by name, the same way ValidPointerChecker's own
+// writesNonNullEndPointer() recognizes the strto* family: a small, fixed
+// set of real per-function contracts neither checker can derive from the
+// declaration alone (libgen.h declares plain `char *dirname(char *)`, with
+// no withtok/grant annotation to read), asserted once here instead of
+// requiring every call site's own __ownership_string_terminated()
+// restatement.
+static bool returnsNullTerminatedString(const CallEvent &Call) {
+  const auto *Function = dyn_cast_or_null<FunctionDecl>(Call.getDecl());
+  if (!Function || !Function->getIdentifier())
+    return false;
+  StringRef Name = Function->getName();
+  return Name == "dirname" || Name == "basename";
+}
+
+static bool isSnprintfFamily(const CallEvent &Call) {
+  const auto *Function = dyn_cast_or_null<FunctionDecl>(Call.getDecl());
+  if (!Function || !Function->getIdentifier())
+    return false;
+  StringRef Name = Function->getName();
+  return Name == "snprintf" || Name == "vsnprintf";
+}
+
+// snprintf()/vsnprintf() (src/stdio/printf.c's shared vxprintf_mem: `if
+// (cap) { ...; s[pos] = 0; }`) NUL-terminate their destination whenever
+// their size argument is nonzero, regardless of truncation -- the
+// standard C99/POSIX contract, and exactly why include/stdio.h's own
+// declarations deliberately do NOT carry a blanket withtok(null_
+// terminated) (vasprintf() genuinely calls this family with a NULL
+// destination and size 0 to measure a format's length). A per-call-site
+// proof is required instead of a declaration-wide grant: this returns the
+// size argument's own SVal only when the CURRENT path already makes "size
+// == 0" infeasible (the same "prove the negation is infeasible" idiom
+// OwnershipChecker::trackScanExtent uses for strlen()'s own nonempty
+// case above), so a genuinely unconstrained or zero size is correctly
+// left ungranted rather than guessed.
+static std::optional<DefinedOrUnknownSVal>
+snprintfSizeProvenNonzero(const CallEvent &Call, ProgramStateRef State,
+                          CheckerContext &C) {
+  if (!isSnprintfFamily(Call) || Call.getNumArgs() < 2)
+    return std::nullopt;
+  const Expr *SizeExpr = Call.getArgExpr(1);
+  std::optional<DefinedOrUnknownSVal> DefinedSize =
+      Call.getArgSVal(1).getAs<DefinedOrUnknownSVal>();
+  if (!SizeExpr || !DefinedSize)
+    return std::nullopt;
+  SValBuilder &Builder = C.getSValBuilder();
+  SVal IsZero = Builder.evalBinOp(State, BO_EQ, *DefinedSize,
+                                  Builder.makeZeroVal(SizeExpr->getType()),
+                                  Builder.getConditionType());
+  std::optional<DefinedOrUnknownSVal> ZeroCondition =
+      IsZero.getAs<DefinedOrUnknownSVal>();
+  if (!ZeroCondition || State->assume(*ZeroCondition, true))
+    return std::nullopt;
+  return Call.getArgSVal(0).getAs<DefinedOrUnknownSVal>();
 }
 
 static bool dialectTokenExcludes(const IdentifierInfo *Family,
@@ -1629,6 +1707,18 @@ public:
             &C.getASTContext().Idents.get(FamilyName);
         State = State->set<AggregateElementExtent>({Aggregate, Family}, Upper);
         Changed = true;
+        // The aggregate pointer itself (argv, not merely each in-bounds
+        // element) is definitionally live whenever its own elements are
+        // null_terminated-shaped -- assert it once, right where this
+        // relation is established, the same way ValidPointerChecker's own
+        // checkBeginFunction asserts a real NonNullAttr parameter once at
+        // entry rather than at every later dereference.
+        if (tokenImpliesNonNull(findTokenSort(C.getASTContext(), FamilyName))) {
+          if (std::optional<DefinedOrUnknownSVal> Defined =
+                  AggregateValue.getAs<DefinedOrUnknownSVal>())
+            if (ProgramStateRef NonNull = State->assume(*Defined, true))
+              State = NonNull;
+        }
       }
     if (Changed)
       C.addTransition(State);
@@ -1672,6 +1762,16 @@ public:
       if (SymbolRef ElementSymbol = Element.getAsSymbol(true))
         State = State->set<ElementTokenOrigin>({ElementSymbol, Family},
                                                Aggregate);
+      // Same "assert nonnull where the fact is granted, not at the later
+      // dereference" reasoning as checkBeginFunction above, applied to this
+      // element's own fresh symbol instead of the whole aggregate.
+      if (tokenImpliesNonNull(
+              findTokenSort(C.getASTContext(), Family->getName()))) {
+        if (std::optional<DefinedOrUnknownSVal> Defined =
+                Element.getAs<DefinedOrUnknownSVal>())
+          if (ProgramStateRef NonNull = State->assume(*Defined, true))
+            State = NonNull;
+      }
       Changed = true;
     }
     if (Changed)
@@ -2155,6 +2255,19 @@ public:
         State = setOperationToken(State, Carrier, Value, StateFamily,
                                   Kind);
         Changed = true;
+        // A scalar withtok(family) parameter (Require: the caller already
+        // holds the token on entry) is nonnull right here whenever family
+        // is null_terminated-shaped, for the same reason as the aggregate/
+        // element cases above -- Consume/Drop describe the token being
+        // taken away, not granted, so they say nothing new about liveness.
+        if (Protocol.Operation == CapabilityOperation::Require &&
+            tokenImpliesNonNull(findTokenSort(Function->getASTContext(),
+                                              Protocol.Family->getName()))) {
+          if (std::optional<DefinedOrUnknownSVal> Defined =
+                  Value.getAs<DefinedOrUnknownSVal>())
+            if (ProgramStateRef NonNull = State->assume(*Defined, true))
+              State = NonNull;
+        }
       } else if ((Protocol.Operation == CapabilityOperation::GrantLinear ||
                   Protocol.Operation == CapabilityOperation::GrantDuplicable) &&
                  !hasInputProtocol(Protocols, Protocol)) {
@@ -2203,7 +2316,41 @@ public:
       preconditionsHold(C.getState(), Call, Protocols, C, true);
   }
 
+  // dirname()/basename()/snprintf()-family: see returnsNullTerminatedString
+  // and snprintfSizeProvenNonzero's own comments (both file-scope, shared
+  // with ValidPointerChecker's identical name-based recognition below --
+  // this checker's pass never runs alongside that one, see
+  // isPointerNonNullAxiom's comment in ValidPointerChecker) for why these
+  // are granted by name/proof instead of through an AnnotateAttr this
+  // checker's generic protocolsFor() machinery would otherwise read. None
+  // of the three carries any withtok/grant annotation of its own, so this
+  // always returns before reaching the ordinary protocol-driven logic
+  // below.
+  static ProgramStateRef grantWellKnownNullTerminated(SVal Value,
+                                                       ProgramStateRef State,
+                                                       CheckerContext &C) {
+    const TypedefNameDecl *Token =
+        findTokenSort(C.getASTContext(), "null_terminated");
+    if (!tokenImpliesNonNull(Token))
+      return State;
+    const IdentifierInfo &Family = C.getASTContext().Idents.get("null_terminated");
+    return setUnderlyingToken(State, Value, &Family, CapabilityKind::Duplicable);
+  }
+
   void checkPostCall(const CallEvent &Call, CheckerContext &C) const {
+    if (returnsNullTerminatedString(Call)) {
+      if (std::optional<DefinedOrUnknownSVal> Return =
+              Call.getReturnValue().getAs<DefinedOrUnknownSVal>())
+        C.addTransition(
+            grantWellKnownNullTerminated(*Return, C.getState(), C));
+      return;
+    }
+    if (std::optional<DefinedOrUnknownSVal> Buffer =
+            snprintfSizeProvenNonzero(Call, C.getState(), C)) {
+      C.addTransition(
+          grantWellKnownNullTerminated(*Buffer, C.getState(), C));
+      return;
+    }
     const auto *Function = dyn_cast_or_null<FunctionDecl>(Call.getDecl());
     llvm::SmallVector<CapabilityProtocol, 6> Protocols = protocolsFor(Function);
     if (Protocols.empty() ||
@@ -3322,7 +3469,8 @@ class ValidPointerChecker
     : public Checker<check::PreStmt<UnaryOperator>,
                      check::PreStmt<ArraySubscriptExpr>,
                      check::PreStmt<MemberExpr>, check::Location,
-                     check::PostCall, check::BeginFunction> {
+                     check::PostCall, check::BeginFunction,
+                     check::PostStmt<ImplicitCastExpr>> {
   mutable std::unique_ptr<BugType> BT;
 
   // Functions this codebase itself guarantees always return a pointer to
@@ -3420,6 +3568,109 @@ class ValidPointerChecker
     if (!Function || !Function->getIdentifier())
       return false;
     return Function->getName() == "__ownership_pointer_nonnull";
+  }
+
+  // __ownership_string_terminated(object) (ownership_stubs.h) grants
+  // null_terminated on object through this project's own grant()/consume()
+  // token map (CapabilityTokenChecker's generic grant: protocol match --
+  // it is not otherwise special-cased by name anywhere), which is exactly
+  // the map isPointerNonNullAxiom's own comment above explains this
+  // checker's pass never shares. A pointer that is genuinely NUL-
+  // terminated right here is, by the same qual:string_literal reasoning as
+  // tokenImpliesNonNull, also genuinely live right here -- so this axiom
+  // is recognized by name, the same way isPointerNonNullAxiom is, rather
+  // than requiring a second, separate __ownership_pointer_nonnull() call
+  // at every one of this axiom's own call sites.
+  static bool isStringTerminatedAxiom(const CallEvent &Call) {
+    const auto *Function = dyn_cast_or_null<FunctionDecl>(Call.getDecl());
+    if (!Function || !Function->getIdentifier())
+      return false;
+    return Function->getName() == "__ownership_string_terminated";
+  }
+
+  // Mirrors CapabilityTokenChecker::protocolsFor's own "withtok:family"
+  // parsing for the Require case, but reads the annotation straight off
+  // the ParmVarDecl instead of through that checker's CapabilityMap (see
+  // isPointerNonNullAxiom's comment above for why this pass cannot see
+  // that map at all): a scalar withtok(family) parameter, when family is
+  // null_terminated-shaped, is exactly as live on entry as a real
+  // __attribute__((nonnull)) parameter, just declared through this
+  // dialect's own token syntax instead of GCC/Clang's. A parameter
+  // carrying elements_withtok(family, extent) instead (argv itself, not
+  // one of its elements) gets the identical benefit for the identical
+  // reason: a pointer described as having null_terminated-shaped elements
+  // is, itself, a real array -- this is AggregateElementTokenChecker::
+  // checkBeginFunction's own "aggregate pointer's own base region" fact,
+  // re-derived here for the same pass-visibility reason.
+  static bool parameterGrantsNullTerminatedScalar(const ParmVarDecl *Param,
+                                                   ASTContext &Context) {
+    for (const AnnotateAttr *Attr : Param->specific_attrs<AnnotateAttr>()) {
+      StringRef Text = Attr->getAnnotation();
+      if (Text.consume_front("withtok:")) {
+        if (!Text.empty() && !Text.contains(':') &&
+            tokenImpliesNonNull(findTokenSort(Context, Text)))
+          return true;
+        continue;
+      }
+      Text = Attr->getAnnotation();
+      if (Text.consume_front("elements_withtok:")) {
+        StringRef FamilyName = Text.split(':').first;
+        if (!FamilyName.empty() &&
+            tokenImpliesNonNull(findTokenSort(Context, FamilyName)))
+          return true;
+      }
+    }
+    return false;
+  }
+
+  // Same mirroring as parameterGrantsNullTerminatedScalar above, this time
+  // of AggregateElementTokenChecker::checkBeginFunction/checkPostStmt's
+  // "elements_withtok:family:extent" parsing: Access's base must be
+  // exactly a reference to a parameter of the CURRENTLY analyzed function
+  // carrying that annotation, with family null_terminated-shaped and the
+  // index provably below the named extent parameter -- the identical
+  // in-bounds proof aggregateIndexProven already performs for the sibling
+  // checker's own token grant, reused as-is (it depends on nothing but the
+  // AST and this path's own SVal/constraint state, never on the other
+  // checker's CapabilityMap).
+  static bool elementProvenNullTerminated(const ArraySubscriptExpr *Access,
+                                          CheckerContext &C) {
+    const auto *Function =
+        dyn_cast_or_null<FunctionDecl>(C.getLocationContext()->getDecl());
+    if (!Function)
+      return false;
+    const auto *Reference = dyn_cast<DeclRefExpr>(
+        Access->getBase()->IgnoreParenImpCasts());
+    const auto *Parameter =
+        Reference ? dyn_cast<ParmVarDecl>(Reference->getDecl()) : nullptr;
+    if (!Parameter || Parameter->getDeclContext() != Function)
+      return false;
+    for (const AnnotateAttr *Attr :
+         Parameter->specific_attrs<AnnotateAttr>()) {
+      StringRef Text = Attr->getAnnotation();
+      if (!Text.consume_front("elements_withtok:"))
+        continue;
+      auto [FamilyName, ExtentName] = Text.split(':');
+      if (FamilyName.empty() || ExtentName.empty() || ExtentName.contains(':'))
+        continue;
+      if (!tokenImpliesNonNull(findTokenSort(C.getASTContext(), FamilyName)))
+        continue;
+      const ParmVarDecl *Extent = nullptr;
+      for (const ParmVarDecl *Candidate : Function->parameters())
+        if (Candidate->getName() == ExtentName) {
+          Extent = Candidate;
+          break;
+        }
+      if (!Extent)
+        continue;
+      ProgramStateRef State = C.getState();
+      SVal ExtentValue =
+          State->getSVal(State->getLValue(Extent, C.getLocationContext()));
+      SymbolRef Upper = ExtentValue.getAsSymbol(true);
+      if (Upper && aggregateIndexProven(Access, Upper, State, C))
+        return true;
+    }
+    return false;
   }
 
   // __peb (src/internal/libc.h: `extern PPEB __peb;`) is a plain global
@@ -3994,6 +4245,30 @@ public:
       }
     }
 
+    // dirname()/basename(): see returnsNullTerminatedString's own comment
+    // (shared with CapabilityTokenChecker's identical name-based grant,
+    // which this pass never runs alongside) for why this is asserted
+    // directly by name rather than through a returns_nonnull attribute
+    // libgen.h does not declare.
+    if (returnsNullTerminatedString(Call)) {
+      if (std::optional<DefinedOrUnknownSVal> Defined =
+              Call.getReturnValue().getAs<DefinedOrUnknownSVal>()) {
+        if (ProgramStateRef NonNull = State->assume(*Defined, true)) {
+          State = NonNull;
+          Changed = true;
+        }
+      }
+    }
+
+    // snprintf()/vsnprintf(): see snprintfSizeProvenNonzero's own comment.
+    if (std::optional<DefinedOrUnknownSVal> Buffer =
+            snprintfSizeProvenNonzero(Call, State, C)) {
+      if (ProgramStateRef NonNull = State->assume(*Buffer, true)) {
+        State = NonNull;
+        Changed = true;
+      }
+    }
+
     // __ownership_pointer_nonnull(object): see isPointerNonNullAxiom's own
     // comment above for why this is asserted directly against Clang's
     // native nonnull constraint (the same mechanism isAlwaysNonNull and
@@ -4006,6 +4281,19 @@ public:
     // `if (object)` guard would -- the human caller is the one vouching
     // that the fact was already true before this call, not the checker.
     if (isPointerNonNullAxiom(Call) && Call.getNumArgs() > 0) {
+      if (std::optional<DefinedOrUnknownSVal> Defined =
+              Call.getArgSVal(0).getAs<DefinedOrUnknownSVal>()) {
+        if (ProgramStateRef NonNull = State->assume(*Defined, true)) {
+          State = NonNull;
+          Changed = true;
+        }
+      }
+    }
+
+    // __ownership_string_terminated(object): see isStringTerminatedAxiom's
+    // own comment above -- granting null_terminated is definitionally also
+    // granting nonnull, asserted the same way as the axiom just above.
+    if (isStringTerminatedAxiom(Call) && Call.getNumArgs() > 0) {
       if (std::optional<DefinedOrUnknownSVal> Defined =
               Call.getArgSVal(0).getAs<DefinedOrUnknownSVal>()) {
         if (ProgramStateRef NonNull = State->assume(*Defined, true)) {
@@ -4040,15 +4328,23 @@ public:
     if (!Function)
       return;
     const auto *NonNull = Function->getAttr<NonNullAttr>();
-    if (!NonNull)
-      return;
     ProgramStateRef State = C.getState();
     const LocationContext *LC = C.getLocationContext();
     bool Changed = false;
     unsigned Index = 0;
     for (const ParmVarDecl *Param : Function->parameters()) {
       unsigned ThisIndex = Index++;
-      if (!Param->getType()->isPointerType() || !NonNull->isNonNull(ThisIndex))
+      if (!Param->getType()->isPointerType())
+        continue;
+      // Either a real NonNullAttr slot, or this dialect's own scalar
+      // withtok(family) contract for a null_terminated-shaped family (see
+      // parameterGrantsNullTerminatedScalar's own comment) -- both mean
+      // the same thing to this checker: proven live on entry, asserted
+      // once, right here.
+      bool Proven = (NonNull && NonNull->isNonNull(ThisIndex)) ||
+                    parameterGrantsNullTerminatedScalar(Param,
+                                                        C.getASTContext());
+      if (!Proven)
         continue;
       SVal ParamValue = State->getSVal(State->getLValue(Param, LC));
       std::optional<DefinedOrUnknownSVal> Defined =
@@ -4062,6 +4358,30 @@ public:
     }
     if (Changed)
       C.addTransition(State);
+  }
+
+  // elements_withtok(family, extent)'s own per-element counterpart to the
+  // scalar case just above: AggregateElementTokenChecker performs the
+  // identical "prove this element's own token, then assert its nonnull-
+  // ness" pairing at the same ImplicitCastExpr materialization point, but
+  // in a checker/pass this one never shares state with (see
+  // isPointerNonNullAxiom's own comment). elementProvenNullTerminated
+  // re-derives the same fact directly from the AST and this pass's own
+  // path state, so the assertion lands where checkPointerExpression's
+  // isNonNull() check can actually see it.
+  void checkPostStmt(const ImplicitCastExpr *Cast, CheckerContext &C) const {
+    if (Cast->getCastKind() != CK_LValueToRValue)
+      return;
+    const auto *Access = dyn_cast<ArraySubscriptExpr>(
+        Cast->getSubExpr()->IgnoreParenImpCasts());
+    if (!Access || !elementProvenNullTerminated(Access, C))
+      return;
+    std::optional<DefinedOrUnknownSVal> Defined =
+        C.getSVal(Cast).getAs<DefinedOrUnknownSVal>();
+    if (!Defined)
+      return;
+    if (ProgramStateRef NonNull = C.getState()->assume(*Defined, true))
+      C.addTransition(NonNull);
   }
 
   void checkLocation(SVal Location, bool, const Stmt *Statement,

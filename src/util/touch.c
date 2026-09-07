@@ -15,23 +15,21 @@
  *  -t time  "[[CC]YY]MMDDhhmm[.SS]" -- CC the century, YY the year within
  *       it, MM/DD/hh/mm/SS the usual calendar fields.
  *
- * "Neither -a nor -m" and "both -a and -m" are the same case per the two
- * quotes above (each says the *other* time is left alone only when its
- * own flag is absent) -- both times get updated.
+ * "Neither -a nor -m" and "both -a and -m" are the same case: each quote
+ * above only excludes the *other* time, so both get updated either way.
  *
  * EXIT STATUS: "0 The utility executed successfully and all requested
  * changes were made." ">0 An error occurred." -- diagnose-and-continue,
  * same shape as this project's other utilities.
  *
  * -d date_time (ISO 8601, with optional fractional seconds and a
- * timezone offset) is a real touch(1p) option that is deliberately not
- * implemented -- refused loudly with a diagnostic and a nonzero exit,
- * per this project's "refuse rather than silently ignore" rule for
- * unsupported options (see bi_set's own comment on exactly this point),
- * rather than parsing only part of ISO 8601 and getting the unusual
- * cases (a timezone offset, a leap second, a truncated year) silently
- * wrong.  -t's fixed-width numeric format has no such open-ended
- * grammar and is implemented in full below.
+ * timezone offset) is a real touch(1p) option, deliberately not
+ * implemented: refused loudly rather than parsing only part of ISO 8601
+ * and getting the unusual cases (timezone offset, leap second, truncated
+ * year) silently wrong (see bi_set's comment for this project's general
+ * "refuse rather than silently ignore" rule). -t's fixed-width numeric
+ * format has no such open-ended grammar and is implemented in full
+ * below.
  */
 
 /* This translation unit implements ntlibc's freestanding -nostdinc

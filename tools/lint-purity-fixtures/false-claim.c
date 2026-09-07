@@ -129,10 +129,10 @@ int bad_array_param_write(int *out, int i, int v)
 
 /* 12. The analyzer-only ownership primitive is trusted by exact name, not
  * as a blanket exception for similarly named functions. */
-void __ownership_string_mutated(void *);
+void unsafe_assume_string_mutated(void *);
 int bad_ownership_name(int *p) __attribute__((pure));
 int bad_ownership_name(int *p)
 {
-	__ownership_string_mutated(p); /* purity-expect */
+	unsafe_assume_string_mutated(p); /* purity-expect */
 	return *p;
 }

@@ -113,7 +113,7 @@ int __util_copy_regular_file(const char *src, const char *dst, int force)
 
 	while ((n = read(in, buf, sizeof buf)) > 0) {
 		if ((size_t)n > sizeof buf) { errno = EIO; n = -1; break; }
-		__ownership_readable_span(buf, (size_t)n);
+		unsafe_assume_readable_span(buf, (size_t)n);
 		size_t off = 0;
 		while (off < (size_t)n) {
 			ssize_t w = write(out, buf + off, (size_t)n - off);
@@ -176,8 +176,8 @@ static char *cpt_dst_path(const char *srcpath withtok(null_terminated))
 	 * a static-global boundary or through pointer-offset arithmetic, so
 	 * both are restated here the same way src/util/find.c's argv-derived
 	 * locals restate theirs. */
-	__ownership_string_terminated(cpt_dst_root);
-	__ownership_string_terminated(rel);
+	unsafe_assume_string_terminated(cpt_dst_root);
+	unsafe_assume_string_terminated(rel);
 	dstlen = strlen(cpt_dst_root);
 
 	while (*rel == '/' || *rel == '\\') rel++;
@@ -331,7 +331,7 @@ char *__util_join_basename(const char *dir withtok(null_terminated), const char 
 	 * not visible to the checker since libgen.h's basename() is an
 	 * opaque external declaration with no ownership contract of its
 	 * own. */
-	__ownership_string_terminated(base);
+	unsafe_assume_string_terminated(base);
 	dirlen = strlen(dir);
 	need_slash = dirlen > 0 && dir[dirlen - 1] != '/' && dir[dirlen - 1] != '\\';
 
@@ -350,7 +350,7 @@ char *__util_join_basename(const char *dir withtok(null_terminated), const char 
 			 * non-truncated call like this one always NUL-terminates --
 			 * restate that fact the same way src/util/pax.c's namebuf
 			 * does after its own snprintf() success check. */
-			__ownership_string_terminated(out);
+			unsafe_assume_string_terminated(out);
 		}
 	}
 	free(srccopy);
@@ -405,7 +405,7 @@ int __util_cp_main(
 		 * of an elements_withtok(null_terminated, argc)-carrying array
 		 * -- a plain local like `a` reused across loop iterations is
 		 * not something the checker can see through automatically. */
-		__ownership_string_terminated(a);
+		unsafe_assume_string_terminated(a);
 
 		if (a[0] != '-' || a[1] == 0) break;
 		if (!strcmp(a, "--")) { i++; break; }
@@ -436,7 +436,7 @@ int __util_cp_main(
 	 * same reason `a` above is -- it later crosses into
 	 * __util_join_basename()'s and cp_one()'s own null_terminated
 	 * parameters. */
-	__ownership_string_terminated(target);
+	unsafe_assume_string_terminated(target);
 	target_is_dir = stat(target, &tst) == 0 && S_ISDIR(tst.st_mode);
 
 	if (noperands > 2 && !target_is_dir) {
@@ -453,7 +453,7 @@ int __util_cp_main(
 		/* Same argv-element restatement as `a`/`target` above: src
 		 * crosses into __util_join_basename()'s and cp_one()'s own
 		 * null_terminated parameters below. */
-		__ownership_string_terminated(src);
+		unsafe_assume_string_terminated(src);
 
 		if (target_is_dir) {
 			char *dst = __util_join_basename(target, src);

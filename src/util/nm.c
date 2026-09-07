@@ -201,8 +201,8 @@ static int cmp_by_name(const void *a, const void *b)
 	 * elements. The restatement below closes null-termination but
 	 * leaves a weaker "not proven nonnull" finding on sa->name -- still
 	 * a net improvement over the three findings with no annotation. */
-	__ownership_string_terminated(sa->name);
-	__ownership_string_terminated(sb->name);
+	unsafe_assume_string_terminated(sa->name);
+	unsafe_assume_string_terminated(sb->name);
 	return strcmp(sa->name, sb->name);
 }
 
@@ -223,8 +223,8 @@ static int cmp_by_value(const void *a, const void *b)
 	if (sa->value < sb->value) return -1;
 	if (sa->value > sb->value) return 1;
 	/* See cmp_by_name()'s identical comment. */
-	__ownership_string_terminated(sa->name);
-	__ownership_string_terminated(sb->name);
+	unsafe_assume_string_terminated(sa->name);
+	unsafe_assume_string_terminated(sb->name);
 	return strcmp(sa->name, sb->name);
 }
 
@@ -260,7 +260,7 @@ static unsigned char *read_whole_file(int fd, size_t *out_size)
 		got += (size_t)n;
 	}
 	*out_size = got;
-	__ownership_readable_span(buf, got);
+	unsafe_assume_readable_span(buf, got);
 	return buf;
 }
 
@@ -361,7 +361,7 @@ static int process_file(const char *path, int opt_g, int opt_u, int opt_p, int o
 	/* read_whole_file() only ever returns a non-NULL buf together with
 	 * exactly `size` readable bytes -- true by construction, but not a
 	 * fact that survives across the call for this checker. */
-	__ownership_readable_span(buf, size);
+	unsafe_assume_readable_span(buf, size);
 
 	if (size >= 8 && memcmp(buf, "!<arch>\n", 8) == 0) {
 		__util_diagf("nm: %s: archive member listing is not implemented by this "
@@ -393,7 +393,7 @@ static int process_file(const char *path, int opt_g, int opt_u, int opt_p, int o
 		return 1;
 	}
 	shdrs = (const Elf64_Shdr *)(buf + eh->e_shoff);
-	__ownership_readable_span(shdrs, (size_t)eh->e_shnum * sizeof(Elf64_Shdr));
+	unsafe_assume_readable_span(shdrs, (size_t)eh->e_shnum * sizeof(Elf64_Shdr));
 
 	if (!find_symtab(buf, size, eh, shdrs, &symtab, &nsyms, &strtab, &strtab_size)) {
 		__util_diagf("nm: %s: no symbols\n", path);
@@ -410,7 +410,7 @@ static int process_file(const char *path, int opt_g, int opt_u, int opt_p, int o
 
 	{
 		const Elf64_Sym *syms = (const Elf64_Sym *)(buf + symtab->sh_offset);
-		__ownership_readable_span(syms, nsyms * sizeof(Elf64_Sym));
+		unsafe_assume_readable_span(syms, nsyms * sizeof(Elf64_Sym));
 
 		for (i = 0; i < nsyms; i++) {
 			const Elf64_Sym *s = &syms[i];

@@ -11,7 +11,7 @@ __wraps static int mark_if_disjoint(void *a, const void *b, size_t n)
 {
 	uintptr_t distance = (uintptr_t)b - (uintptr_t)a;
 	if (distance - n > -2*n) return 0;
-	__ownership_disjoint_span(a, b, n);
+	unsafe_assume_disjoint_span(a, b, n);
 	return 1;
 }
 

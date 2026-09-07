@@ -336,7 +336,7 @@ int pthread_rwlock_init(pthread_rwlock_t *__restrict lock construct(pthread_rwlo
 	data = rwlock_data(lock);
 	data->magic = RWLOCK_MAGIC;
 	data->pshared = attributes ? attributes->pshared : PTHREAD_PROCESS_PRIVATE;
-	__ownership_pthread_rwlock_initialized(lock);
+	unsafe_assume_pthread_rwlock_initialized(lock);
 	return 0;
 }
 
@@ -350,14 +350,14 @@ int pthread_rwlock_destroy(pthread_rwlock_t *lock destroy(pthread_rwlock) static
 	if (data->pshared == PTHREAD_PROCESS_SHARED) {
 		if (data->shared_state) return EBUSY;
 		data->magic = RWLOCK_DEAD;
-		__ownership_pthread_rwlock_destroyed(lock);
+		unsafe_assume_pthread_rwlock_destroyed(lock);
 		return 0;
 	}
 	__plat_fast_lock();
 	if (data->writer || data->readers || data->head) error = EBUSY;
 	else data->magic = RWLOCK_DEAD;
 	__plat_fast_unlock();
-	if (!error) __ownership_pthread_rwlock_destroyed(lock);
+	if (!error) unsafe_assume_pthread_rwlock_destroyed(lock);
 	return error;
 }
 
@@ -366,7 +366,7 @@ int pthread_rwlock_rdlock(pthread_rwlock_t *lock handle(pthread_rwlock) static_h
 {
 	struct timespec forever = {(time_t)0x7fffffff, 0};
 	int error = rwlock_acquire(lock, &forever, 0, 0);
-	if (!error) __ownership_pthread_rwlock_read_locked(lock);
+	if (!error) unsafe_assume_pthread_rwlock_read_locked(lock);
 	return error;
 }
 
@@ -374,7 +374,7 @@ int pthread_rwlock_rdlock(pthread_rwlock_t *lock handle(pthread_rwlock) static_h
 int pthread_rwlock_tryrdlock(pthread_rwlock_t *lock handle(pthread_rwlock) static_handle(pthread_rwlock) consume_any(pthread_rwlock_unlocked) consume_any(pthread_rwlock_shared) grant(pthread_rwlock_shared))
 {
 	int error = rwlock_acquire(lock, 0, 1, 0);
-	if (!error) __ownership_pthread_rwlock_read_locked(lock);
+	if (!error) unsafe_assume_pthread_rwlock_read_locked(lock);
 	return error;
 }
 
@@ -383,7 +383,7 @@ int pthread_rwlock_timedrdlock(pthread_rwlock_t *__restrict lock handle(pthread_
 	const struct timespec *__restrict absolute)
 {
 	int error = rwlock_acquire(lock, absolute, 0, 0);
-	if (!error) __ownership_pthread_rwlock_read_locked(lock);
+	if (!error) unsafe_assume_pthread_rwlock_read_locked(lock);
 	return error;
 }
 
@@ -392,7 +392,7 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *lock handle(pthread_rwlock) static_h
 {
 	struct timespec forever = {(time_t)0x7fffffff, 0};
 	int error = rwlock_acquire(lock, &forever, 0, 1);
-	if (!error) __ownership_pthread_rwlock_write_locked(lock);
+	if (!error) unsafe_assume_pthread_rwlock_write_locked(lock);
 	return error;
 }
 
@@ -400,7 +400,7 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *lock handle(pthread_rwlock) static_h
 int pthread_rwlock_trywrlock(pthread_rwlock_t *lock handle(pthread_rwlock) static_handle(pthread_rwlock) consume(pthread_rwlock_unlocked) grant(pthread_rwlock_exclusive))
 {
 	int error = rwlock_acquire(lock, 0, 1, 1);
-	if (!error) __ownership_pthread_rwlock_write_locked(lock);
+	if (!error) unsafe_assume_pthread_rwlock_write_locked(lock);
 	return error;
 }
 
@@ -409,7 +409,7 @@ int pthread_rwlock_timedwrlock(pthread_rwlock_t *__restrict lock handle(pthread_
 	const struct timespec *__restrict absolute)
 {
 	int error = rwlock_acquire(lock, absolute, 0, 1);
-	if (!error) __ownership_pthread_rwlock_write_locked(lock);
+	if (!error) unsafe_assume_pthread_rwlock_write_locked(lock);
 	return error;
 }
 
@@ -427,7 +427,7 @@ int pthread_rwlock_unlock(pthread_rwlock_t *lock handle(pthread_rwlock) static_h
 			if (!state) return EINVAL;
 			if (compare_exchange(&data->shared_state, state,
 				state < 0 ? 0 : state - 1) == state) {
-				__ownership_pthread_rwlock_unlocked(lock);
+				unsafe_assume_pthread_rwlock_unlocked(lock);
 				return 0;
 			}
 		}
@@ -438,7 +438,7 @@ int pthread_rwlock_unlock(pthread_rwlock_t *lock handle(pthread_rwlock) static_h
 	else error = EINVAL;
 	if (!error) wake_waiters(data);
 	__plat_fast_unlock();
-	if (!error) __ownership_pthread_rwlock_unlocked(lock);
+	if (!error) unsafe_assume_pthread_rwlock_unlocked(lock);
 	return error;
 }
 

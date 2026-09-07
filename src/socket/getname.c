@@ -88,8 +88,8 @@ int getpeername(int fd, struct sockaddr *__restrict addr, socklen_t *__restrict 
 	if (!(f->pad & __SOCK_ST_CONNECTED)) { errno = ENOTCONN; return -1; }
 	if (!f->peer_len) { errno = ENOTCONN; return -1; }
 	n = *len < f->peer_len ? *len : f->peer_len;
-	__ownership_writable_span(addr, n);
-	__ownership_readable_span(f->peer, n);
+	unsafe_assume_writable_span(addr, n);
+	unsafe_assume_readable_span(f->peer, n);
 	memcpy(addr, f->peer, n);
 	*len = f->peer_len;
 	return 0;

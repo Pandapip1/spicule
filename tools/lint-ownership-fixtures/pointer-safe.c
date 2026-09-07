@@ -400,7 +400,7 @@ char *doubled_extent_via_multiplication_index(size_t n)
 	return d;
 }
 
-/* __ownership_pointer_nonnull(): the leaf axiom src/internal/
+/* unsafe_assume_pointer_nonnull(): the leaf axiom src/internal/
  * ownership_stubs.h declares for exactly this gap, pinned end to end
  * here the way every other axiom in this file is. struct argv_slice
  * mirrors src/util/test.c's real struct texpr (`char **v`, sliced out of
@@ -419,7 +419,7 @@ char *doubled_extent_via_multiplication_index(size_t n)
  * CapabilityTokenChecker) that checkPointerExpression's native-
  * constraint proof never consults -- confirmed by
  * struct_field_array_element_is_flagged_without_the_axiom below, the
- * identical shape with the __ownership_pointer_nonnull() call removed,
+ * identical shape with the unsafe_assume_pointer_nonnull() call removed,
  * which still reports.
  *
  * The element index is deliberately the literal 0, not a second struct
@@ -441,9 +441,9 @@ char *doubled_extent_via_multiplication_index(size_t n)
 struct argv_slice { char **v; size_t i; };
 
 #ifdef __clang_analyzer__
-void __ownership_pointer_nonnull(const void *object);
+void unsafe_assume_pointer_nonnull(const void *object);
 #else
-#define __ownership_pointer_nonnull(object) ((void)0)
+#define unsafe_assume_pointer_nonnull(object) ((void)0)
 #endif
 
 char *struct_field_array_element_nonnull_axiom_is_trusted(
@@ -451,7 +451,7 @@ char *struct_field_array_element_nonnull_axiom_is_trusted(
 char *struct_field_array_element_nonnull_axiom_is_trusted(
     struct argv_slice *slice)
 {
-	__ownership_pointer_nonnull(slice->v);
+	unsafe_assume_pointer_nonnull(slice->v);
 	return slice->v[0];
 }
 
@@ -465,12 +465,12 @@ char *struct_field_array_element_nonnull_axiom_is_trusted(
  * isStringTerminatedAxiom, needed because that checker never shares a
  * pass with the CapabilityToken family; see isPointerNonNullAxiom's own
  * comment). Before this fix, each case below needed its own manual
- * __ownership_pointer_nonnull()/__ownership_string_terminated() restatement
+ * unsafe_assume_pointer_nonnull()/unsafe_assume_string_terminated() restatement
  * the way struct_field_array_element_nonnull_axiom_is_trusted above still
  * does for the genuinely unrelated struct-field-capture shape. */
 tokdef null_terminated l_unlimited implicit_drop string_literal;
 
-void __ownership_string_terminated(const void * grant(null_terminated));
+void unsafe_assume_string_terminated(const void * grant(null_terminated));
 
 /* A scalar withtok(null_terminated) parameter's own nonnull-ness needs no
  * separate axiom or __attribute__((nonnull)). */
@@ -482,7 +482,7 @@ int scalar_withtok_null_terminated_needs_no_axiom(
 
 /* elements_withtok(null_terminated, argc): the aggregate pointer itself
  * (argv) and each in-bounds element (argv[i]) are both nonnull with no
- * separate __ownership_pointer_nonnull() call, directly inside a loop
+ * separate unsafe_assume_pointer_nonnull() call, directly inside a loop
  * condition/body -- the src/util/find.c __util_find_main() shape this
  * fixture mirrors. */
 int elements_withtok_array_and_element_need_no_axiom(
@@ -496,11 +496,11 @@ int elements_withtok_array_and_element_need_no_axiom(
 	return i;
 }
 
-/* The manual __ownership_string_terminated() axiom itself also proves
- * nonnull, with no separate __ownership_pointer_nonnull() call. */
+/* The manual unsafe_assume_string_terminated() axiom itself also proves
+ * nonnull, with no separate unsafe_assume_pointer_nonnull() call. */
 int string_terminated_axiom_also_proves_nonnull(const char *p)
 {
-	__ownership_string_terminated(p);
+	unsafe_assume_string_terminated(p);
 	return p[0] == '/';
 }
 
@@ -541,7 +541,7 @@ int snprintf_with_proven_nonzero_size_needs_no_restatement(void)
  * could invalidate the slot, is guaranteed to find it -- ValidPointer
  * Checker's own by-name PendingInstalledFd tracking (isFdInstall/isFdGet/
  * fdGetArgProvenLive) proves this without a manual
- * __ownership_pointer_nonnull() restatement, closing the gap
+ * unsafe_assume_pointer_nonnull() restatement, closing the gap
  * src/socket/{socket,accept,socketpair}.c (commit 3dd52b7a) previously had
  * to work around by hand at every call site. */
 struct __fd { int state; };

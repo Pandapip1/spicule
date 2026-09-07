@@ -545,7 +545,7 @@ static int ntpath_at_impl(int dirfd, const char *path, struct __ntpath *out,
 			}
 			/* "C:\\" already ends in one */
 			if (dl && dir[dl-1] != '\\' && dir[dl-1] != '/') joined[dl++] = '\\';
-			__ownership_writable_span(joined + dl, pl + 1);
+			unsafe_assume_writable_span(joined + dl, pl + 1);
 			memcpy(joined + dl, path, pl + 1);
 			__free(dir);
 			rc = ntpath_impl(joined, out, attributes, overlay);

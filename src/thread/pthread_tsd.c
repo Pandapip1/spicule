@@ -184,7 +184,7 @@ static void reset_once(void *argument)
 	/* cleanup->control is pthread_once()'s own control parameter, already
 	 * dereferenced by that function before this cleanup handler could
 	 * ever run -- not visible here across the struct field. */
-	__ownership_pointer_nonnull(cleanup->control);
+	unsafe_assume_pointer_nonnull(cleanup->control);
 	*cleanup->control = PTHREAD_ONCE_INIT;
 	wake_once_waiters_locked(cleanup->control);
 	__plat_fast_unlock();

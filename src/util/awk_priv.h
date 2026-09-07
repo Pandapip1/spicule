@@ -429,9 +429,9 @@ struct awk_parser {
 	 * withtok(...) qualifier expresses this (that machinery tracks a
 	 * linear ownership/family fact, not a static non-null promise);
 	 * instead, parse_function_def()/parse_rule() each restate the fact
-	 * with ownership_stubs.h's __ownership_pointer_nonnull(p->prog)
+	 * with ownership_stubs.h's unsafe_assume_pointer_nonnull(p->prog)
 	 * right before dereferencing it, the same leaf-axiom idiom
-	 * __ownership_string_terminated() already uses nearby for a
+	 * unsafe_assume_string_terminated() already uses nearby for a
 	 * different property a struct field read can't otherwise carry. */
 	struct awk_program *prog;
 	int suppress_gt;        /* inside a print/printf argument list, outside

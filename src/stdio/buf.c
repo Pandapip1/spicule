@@ -183,7 +183,7 @@ int __fflush_locked(FILE *f)
 		size_t end = f->wpos;
 		unsigned char *pending = f->buf;
 		if (end > f->bufsz) { errno = EIO; f->err = 1; f->wpos = 0; return -1; }
-		__ownership_readable_span(pending, end);
+		unsafe_assume_readable_span(pending, end);
 		while (off < end) {
 			ssize_t n = __file_write(f, pending + off, end - off);
 			if (n <= 0) { f->err = 1; f->wpos = 0; return -1; }

@@ -18,7 +18,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <limits.h>
-#include "ownership_stubs.h" /* __ownership_pointer_nonnull() */
+#include "ownership_stubs.h" /* unsafe_assume_pointer_nonnull() */
 
 int daylight;
 long timezone;
@@ -94,7 +94,7 @@ void tzset(void)
 	read_name(&tz, __tzname_std, sizeof __tzname_std);
 	/* read_name() only ever advances *input from its own live starting
 	 * position; it never stores NULL back through input. */
-	__ownership_pointer_nonnull(tz);
+	unsafe_assume_pointer_nonnull(tz);
 	if (!__tzname_std[0]) memcpy(__tzname_std, "UTC", sizeof "UTC");
 	tzname[0] = __tzname_std;
 

@@ -54,7 +54,7 @@
 #include <errno.h>
 #include <limits.h>
 #include "util.h"
-#include "ownership_stubs.h" /* __ownership_pointer_nonnull() */
+#include "ownership_stubs.h" /* unsafe_assume_pointer_nonnull() */
 
 struct field { size_t start, end; };
 
@@ -175,12 +175,12 @@ static size_t key_start_off(const char *line withtok(readable_span(len)), size_t
 
 	/* line is always a struct line's own text field -- see
 	 * compare_by_key()'s call site. */
-	__ownership_pointer_nonnull(line);
+	unsafe_assume_pointer_nonnull(line);
 	if (f < 1) f = 1;
 	if ((size_t)(f - 1) >= nf) return len;
 	/* nf > 0 here; split_fields() never returns a count without a
 	 * backing fields array. */
-	__ownership_pointer_nonnull(fields);
+	unsafe_assume_pointer_nonnull(fields);
 	/* OPEN LINT FINDING (spicule.ValidPointer): fields[f-1].end <= len
 	 * always holds, since split_fields() never records an end beyond
 	 * the line's len -- but the checker can't correlate a struct field
@@ -204,11 +204,11 @@ static size_t key_end_off(const char *line withtok(readable_span(len)), size_t l
 
 	(void)len;
 	/* line -- see key_start_off()'s identical note. */
-	__ownership_pointer_nonnull(line);
+	unsafe_assume_pointer_nonnull(line);
 	if (f < 1) f = 1;
 	if ((size_t)(f - 1) >= nf) return len;
 	/* nf > 0 -- see key_start_off()'s identical fields/nfields note. */
-	__ownership_pointer_nonnull(fields);
+	unsafe_assume_pointer_nonnull(fields);
 	/* OPEN LINT FINDING -- see key_start_off()'s identical note above. */
 	fl = fields[f - 1];
 	fstart = fl.start;
@@ -307,10 +307,10 @@ static int compare_by_key(const struct sort_opts *o, const struct sort_key *k, c
 
 	/* o/a/b -- see line_compare()'s identical note, one call up. k is
 	 * always &o->keys[i] for some i < o->nkeys, never NULL. */
-	__ownership_pointer_nonnull(o);
-	__ownership_pointer_nonnull(a);
-	__ownership_pointer_nonnull(b);
-	__ownership_pointer_nonnull(k);
+	unsafe_assume_pointer_nonnull(o);
+	unsafe_assume_pointer_nonnull(a);
+	unsafe_assume_pointer_nonnull(b);
+	unsafe_assume_pointer_nonnull(k);
 	if (k->has_mod) {
 		bflag = k->mb; dflag = k->md; fflag = k->mf;
 		iflag = k->mi; nflag = k->mn; rflag = k->mr;
@@ -321,12 +321,12 @@ static int compare_by_key(const struct sort_opts *o, const struct sort_key *k, c
 
 	/* a->text has exactly a->len readable bytes -- see
 	 * read_all_lines()'s struct line construction. */
-	__ownership_readable_span(a->text, a->len);
+	unsafe_assume_readable_span(a->text, a->len);
 	as = key_start_off(a->text, a->len, a->fields, a->nfields, k->f1, k->c1, bflag);
 	ae = k->has_end ? key_end_off(a->text, a->len, a->fields, a->nfields, k->f2, k->c2, bflag) : a->len;
 	if (ae < as) ae = as;
 
-	__ownership_readable_span(b->text, b->len);
+	unsafe_assume_readable_span(b->text, b->len);
 	bs = key_start_off(b->text, b->len, b->fields, b->nfields, k->f1, k->c1, bflag);
 	be = k->has_end ? key_end_off(b->text, b->len, b->fields, b->nfields, k->f2, k->c2, bflag) : b->len;
 	if (be < bs) be = bs;
@@ -341,8 +341,8 @@ static int line_compare(const struct sort_opts *o, const struct line *a, const s
 
 	/* a and b are always &lines[i] within a live lines[] array
 	 * (__util_sort_main's nlines/lines invariant), never NULL. */
-	__ownership_pointer_nonnull(a);
-	__ownership_pointer_nonnull(b);
+	unsafe_assume_pointer_nonnull(a);
+	unsafe_assume_pointer_nonnull(b);
 	if (o->nkeys) {
 		size_t i;
 		c = 0;
@@ -377,7 +377,7 @@ static void merge_sort(struct line *lines, size_t n, const struct sort_opts *o)
 	if (n < 2) return;
 	/* n >= 2 here, and read_all_lines() never leaves nlines nonzero
 	 * without a matching heap-allocated lines array. */
-	__ownership_pointer_nonnull(lines);
+	unsafe_assume_pointer_nonnull(lines);
 	tmp = __util_mallocarray(n, sizeof *tmp);
 	if (!tmp) return; /* input stays in original (still-valid) order */
 
@@ -442,7 +442,7 @@ static int parse_keydef(const char *spec, struct sort_key *k)
 	p = end;
 	/* end is strtol()'s endptr output: never NULL when p was nonnull
 	 * (C11 7.22.1.4p8) -- restated at every p = end below. */
-	__ownership_pointer_nonnull(p);
+	unsafe_assume_pointer_nonnull(p);
 	k->c1 = 1;
 	if (*p == '.') {
 		p++;
@@ -451,11 +451,11 @@ static int parse_keydef(const char *spec, struct sort_key *k)
 		if (v < 1) return -1;
 		k->c1 = (int)v;
 		p = end;
-		__ownership_pointer_nonnull(p);
+		unsafe_assume_pointer_nonnull(p);
 	}
 	parse_key_mods(&p, k);
 	/* parse_key_mods() only advances *pp, never assigns NULL. */
-	__ownership_pointer_nonnull(p);
+	unsafe_assume_pointer_nonnull(p);
 	if (*p == ',') {
 		p++;
 		if (!isdigit((unsigned char)*p)) return -1;
@@ -463,7 +463,7 @@ static int parse_keydef(const char *spec, struct sort_key *k)
 		if (v < 1) return -1;
 		k->f2 = (int)v;
 		p = end;
-		__ownership_pointer_nonnull(p);
+		unsafe_assume_pointer_nonnull(p);
 		k->c2 = 0;
 		if (*p == '.') {
 			p++;
@@ -472,11 +472,11 @@ static int parse_keydef(const char *spec, struct sort_key *k)
 			if (v < 0) return -1;
 			k->c2 = (int)v;
 			p = end;
-			__ownership_pointer_nonnull(p);
+			unsafe_assume_pointer_nonnull(p);
 		}
 		parse_key_mods(&p, k);
 		/* see the first parse_key_mods() call's identical note above. */
-		__ownership_pointer_nonnull(p);
+		unsafe_assume_pointer_nonnull(p);
 		k->has_end = 1;
 	}
 	if (*p) return -1;
@@ -530,7 +530,7 @@ static void free_lines(struct line *lines, size_t n)
 	size_t i;
 	for (i = 0; i < n; i++) {
 		/* i < n -- see merge_sort()'s identical lines/n note. */
-		__ownership_pointer_nonnull(lines);
+		unsafe_assume_pointer_nonnull(lines);
 		free(lines[i].text);
 		free(lines[i].fields);
 	}
@@ -680,7 +680,7 @@ int __util_sort_main(
 	if (o.nkeys) {
 		for (li = 0; li < nlines; li++) {
 			/* li < nlines -- see merge_sort()'s identical lines/n note. */
-			__ownership_pointer_nonnull(lines);
+			unsafe_assume_pointer_nonnull(lines);
 			lines[li].fields = split_fields(lines[li].text, lines[li].len, &o, &lines[li].nfields);
 		}
 	}
@@ -689,7 +689,7 @@ int __util_sort_main(
 		const char *srcname = nfiles ? files[0] : "-";
 		int result = 0;
 		for (li = 1; li < nlines; li++) {
-			__ownership_pointer_nonnull(lines);
+			unsafe_assume_pointer_nonnull(lines);
 			int cmp = line_compare(&o, &lines[li - 1], &lines[li]);
 			if (cmp > 0) {
 				if (!opt_C)
@@ -726,14 +726,14 @@ int __util_sort_main(
 		for (write_i = 0; write_i < nlines; write_i++) {
 			/* write_i < nlines -- see the o.nkeys loop's identical
 			 * lines/nlines note above. */
-			__ownership_pointer_nonnull(lines);
+			unsafe_assume_pointer_nonnull(lines);
 			if (o.u && keep > 0 && line_compare(&o, &lines[keep - 1], &lines[write_i]) == 0)
 				continue;
 			lines[keep++] = lines[write_i];
 		}
 		for (write_i = 0; write_i < keep; write_i++) {
 			/* keep <= nlines, so keep > 0 implies lines is live. */
-			__ownership_pointer_nonnull(lines);
+			unsafe_assume_pointer_nonnull(lines);
 			if (fprintf(outf, "%s\n", lines[write_i].text) < 0) {
 				/* The output error fixes the result; close only releases outf. */
 				if (outfile) (void)fclose(outf);

@@ -30,7 +30,7 @@
 #include <string.h>
 #include <limits.h>
 #include "time_impl.h"
-#include "ownership_stubs.h" /* __ownership_pointer_nonnull() */
+#include "ownership_stubs.h" /* unsafe_assume_pointer_nonnull() */
 
 /* out is required: `out[n++] = ...`/`out[n] = 0;` are unconditional
  * whenever the computed digit count fits (`needed < out_size`), with no
@@ -93,7 +93,7 @@ static size_t do_strftime(char *restrict s withtok(writable_span(max)), size_t m
 /* _s is always one of __spicule_day_name[_abbr]/__spicule_month_name[_abbr]'s
  * fixed, non-null string-literal elements (names.c) or the literal
  * "AM"/"PM"; the checker can't see into a global array's initializer. */
-#define PUT_STR(str) do { const char *_s = (str); __ownership_pointer_nonnull(_s); while (*_s) PUT_CH(*_s++); } while (0)
+#define PUT_STR(str) do { const char *_s = (str); unsafe_assume_pointer_nonnull(_s); while (*_s) PUT_CH(*_s++); } while (0)
 #define PUT_NUM(v, w, pad) do { \
 		long long _v = (long long)(v); \
 		unsigned long _mag = _v < 0 \

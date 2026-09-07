@@ -276,7 +276,7 @@ static struct m4_macro *lookup(struct m4_state *st, const char *name)
 	 * capability token is not held"): callers pass a NUL-terminated
 	 * name, but adding withtok(null_terminated) here cascades the
 	 * Require obligation to this helper's many unrelated callers, and
-	 * a local __ownership_string_terminated(name) restatement instead
+	 * a local unsafe_assume_string_terminated(name) restatement instead
 	 * trips a spurious "token already moved" on m->name's read just
 	 * below. Left open. */
 	for (m = st->macros; m; m = m->next)
@@ -1310,7 +1310,7 @@ static char *bi_traceoff(struct m4_state *st, char **args, int nargs)
  * Require contract to any one of these ~30 helpers only pushes the same
  * obligation onto call_builtin()'s generic dispatch, which can't prove
  * any more than each callee already could (verified empirically to net
- * MORE findings, not fewer). A local __ownership_string_terminated()
+ * MORE findings, not fewer). A local unsafe_assume_string_terminated()
  * restatement (tried in lookup()) instead mistrained OwnershipType into
  * a spurious "token already moved". Left open across this whole call
  * tree rather than papered over with either. */
@@ -1756,7 +1756,7 @@ int __util_m4_main(
 	 * performed regardless of how this run ended -- see header comment. */
 	for (i = 1; i <= 9; i++) {
 		if (st.div[i].len) {
-			__ownership_readable_span(st.div[i].data, st.div[i].len);
+			unsafe_assume_readable_span(st.div[i].data, st.div[i].len);
 			if (fwrite(st.div[i].data, 1, st.div[i].len, stdout) != st.div[i].len) st.had_error = 1;
 			st.div[i].len = 0;
 		}

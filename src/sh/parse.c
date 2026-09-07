@@ -81,7 +81,7 @@ static int gbuf_push(struct gbuf *b, char c)
 	 * prior call and never reset), hence b->d != NULL -- the same
 	 * cross-call growable-array invariant as this project's other
 	 * growable arrays (e.g. src/util/find.c's g_find.pruned). */
-	__ownership_pointer_nonnull(b->d);
+	unsafe_assume_pointer_nonnull(b->d);
 	b->d[b->n++] = c;
 	return 0;
 }
@@ -104,7 +104,7 @@ static char *xstrndup(const char *s, size_t n)
 		 * established by the allocation above), which already proves
 		 * an n-byte writable span without restating it by hand -- the
 		 * manual axiom here was redundant scaffolding. */
-		__ownership_readable_span(s, n);
+		unsafe_assume_readable_span(s, n);
 		memcpy(p, s, n);
 		p[n] = 0;
 	}
@@ -121,7 +121,7 @@ static char *xstrdup(const char *s)
 	 * cannot trace it through the struct token field it flows through
 	 * (scan_word()'s return -> next_raw_token()'s local tok.text ->
 	 * advance()'s p->cur.text) to here. */
-	__ownership_string_terminated(s);
+	unsafe_assume_string_terminated(s);
 	n = strlen(s) + 1;
 	p = __malloc(n);
 	if (p) {
@@ -155,7 +155,7 @@ static int copy_squoted(const char **pp, struct gbuf *b)
 	 * genuinely never NULL, but that fact does not survive the T**
 	 * parameter's own pointee, which __attribute__((nonnull(1))) above
 	 * does not cover (it only proves pp itself nonnull, not *pp). */
-	__ownership_pointer_nonnull(p);
+	unsafe_assume_pointer_nonnull(p);
 	if (gbuf_push(b, *p)) return -1;
 	p++;
 	while (*p && *p != '\'') { if (gbuf_push(b, *p)) return -1; p++; }
@@ -171,7 +171,7 @@ static int copy_dquoted(const char **pp, struct gbuf *b)
 {
 	const char *p = *pp;
 	/* see copy_squoted()'s own comment on *pp's pointee. */
-	__ownership_pointer_nonnull(p);
+	unsafe_assume_pointer_nonnull(p);
 	if (gbuf_push(b, *p)) return -1;
 	p++;
 	while (*p && *p != '"') {
@@ -196,7 +196,7 @@ static int copy_balanced(const char **pp, struct gbuf *b, char open, char close)
 	const char *p = *pp;
 	int depth = 1;
 	/* see copy_squoted()'s own comment on *pp's pointee. */
-	__ownership_pointer_nonnull(p);
+	unsafe_assume_pointer_nonnull(p);
 	if (gbuf_push(b, *p)) return -1;
 	p++;
 	while (depth > 0) {
@@ -207,7 +207,7 @@ static int copy_balanced(const char **pp, struct gbuf *b, char open, char close)
 		 * point in this loop -- restated each iteration since neither
 		 * the loop's own back-edge nor the copy_squoted()/copy_dquoted()
 		 * calls below (which take p's address) let that fact survive. */
-		__ownership_pointer_nonnull(p);
+		unsafe_assume_pointer_nonnull(p);
 		c = *p;
 		if (!c) return -1;
 		if (c == '\\' && p[1]) { if (gbuf_push(b, c) || gbuf_push(b, p[1])) return -1; p += 2; continue; }
@@ -229,7 +229,7 @@ static int copy_backquoted(const char **pp, struct gbuf *b)
 {
 	const char *p = *pp;
 	/* see copy_squoted()'s own comment on *pp's pointee. */
-	__ownership_pointer_nonnull(p);
+	unsafe_assume_pointer_nonnull(p);
 	if (gbuf_push(b, *p)) return -1;
 	p++;
 	while (*p && *p != '`') {
@@ -305,7 +305,7 @@ static void format_parse_error(char *dst, size_t size, const char *fmt, va_list 
 	int n = vsnprintf(dst, size, fmt, ap);
 	if (n < 0 && size) {
 		size_t copy = sizeof fallback < size ? sizeof fallback : size;
-		__ownership_writable_span(dst, copy - 1);
+		unsafe_assume_writable_span(dst, copy - 1);
 		memcpy(dst, fallback, copy - 1);
 		dst[copy - 1] = 0;
 	}
@@ -359,7 +359,7 @@ static char *strip_delim(const char *raw, int *quoted)
 	 * scan_word() does for its own return value: drain_heredocs()'s
 	 * immediate strlen(lit) on this exact return value is a separately
 	 * analyzed function. */
-	__ownership_string_terminated(b.d);
+	unsafe_assume_string_terminated(b.d);
 	return b.d;
 oom:
 	__free(b.d);
@@ -381,7 +381,7 @@ static int drain_heredocs(struct lexer *lx)
 		 * NULL for any node reachable from lx->pending_head, but that
 		 * fact does not survive the struct field chain this
 		 * per-function analysis cannot see through. */
-		__ownership_pointer_nonnull(h->redir);
+		unsafe_assume_pointer_nonnull(h->redir);
 		lit = strip_delim(h->redir->word, &h->redir->heredoc_quoted);
 		size_t litlen;
 		struct gbuf body = {0, 0, 0};
@@ -389,7 +389,7 @@ static int drain_heredocs(struct lexer *lx)
 		/* strip_delim()'s own doc comment: a non-NULL return is a
 		 * NUL-terminated delimiter -- restate here for the same reason
 		 * scan_word()'s callers do. */
-		__ownership_string_terminated(lit);
+		unsafe_assume_string_terminated(lit);
 		litlen = strlen(lit);
 		for (;;) {
 			const char *line = lx->p;
@@ -401,17 +401,17 @@ static int drain_heredocs(struct lexer *lx)
 			 * forward within that same buffer -- restated at loop entry
 			 * since the loop's own back-edge does not carry the fact
 			 * forward. */
-			__ownership_pointer_nonnull(eol);
+			unsafe_assume_pointer_nonnull(eol);
 			while (*eol && *eol != '\n') {
 				eol++;
-				__ownership_pointer_nonnull(eol);
+				unsafe_assume_pointer_nonnull(eol);
 			}
 			linelen = (size_t)(eol - line);
 			cmp = line; cmplen = linelen;
 			if (h->dash) while (cmplen && *cmp == '\t') { cmp++; cmplen--; }
 			if (cmplen == litlen) {
-				__ownership_readable_span(cmp, litlen);
-				__ownership_readable_span(lit, litlen);
+				unsafe_assume_readable_span(cmp, litlen);
+				unsafe_assume_readable_span(lit, litlen);
 				if (memcmp(cmp, lit, litlen) == 0) {
 					lx->p = (*eol == '\n') ? eol + 1 : eol;
 					break;
@@ -471,7 +471,7 @@ static char *scan_word(struct lexer *lx)
 		 * NUL-terminated buffer (see next_raw_token()'s own comment on
 		 * lx->p) -- genuinely never NULL at any point in this loop,
 		 * a fact that does not survive the loop's own back-edge. */
-		__ownership_pointer_nonnull(p);
+		unsafe_assume_pointer_nonnull(p);
 		c = *p;
 		if (q == Q_NONE) {
 			if (c == 0 || c == '\n' || c == ' ' || c == '\t' || strchr("|&;()<>{}", c)) break;
@@ -524,7 +524,7 @@ static char *scan_word(struct lexer *lx)
 	 * that here since next_raw_token()'s immediate strlen(w) on this
 	 * same return value is a different function the checker analyzes
 	 * separately. */
-	__ownership_string_terminated(b.d);
+	unsafe_assume_string_terminated(b.d);
 	return b.d;
 oom:
 	lex_errf(lx, "out of memory");
@@ -548,7 +548,7 @@ static struct token next_raw_token(struct lexer *lx)
 		 * genuinely never NULL for this lexer's whole lifetime -- a fact
 		 * that does not survive a struct field read this per-function
 		 * analysis cannot see through. */
-		__ownership_pointer_nonnull(lx->p);
+		unsafe_assume_pointer_nonnull(lx->p);
 		char c = lx->p[0];
 		if (c == ' ' || c == '\t') { lx->p++; continue; }
 		if (c == '\\' && lx->p[1] == '\n') { lx->p += 2; continue; }
@@ -598,7 +598,7 @@ static struct token next_raw_token(struct lexer *lx)
 			 * "NUL-terminated" -- restate that here since a fact
 			 * established inside a separately analyzed callee's own
 			 * body does not itself cross back into this function. */
-			__ownership_string_terminated(w);
+			unsafe_assume_string_terminated(w);
 			len = strlen(w);
 			alldig = len > 0;
 			for (i = 0; i < len; i++) if (!isdigit((unsigned char)w[i])) { alldig = 0; break; }
@@ -606,7 +606,7 @@ static struct token next_raw_token(struct lexer *lx)
 			 * again here since the scan_word(lx) call just above takes
 			 * lx itself by pointer, which does not let that earlier fact
 			 * survive. */
-			__ownership_pointer_nonnull(lx->p);
+			unsafe_assume_pointer_nonnull(lx->p);
 			if (alldig && (*lx->p == '<' || *lx->p == '>')) {
 				/* 2.10.1 puts no length limit on an IO_NUMBER, but the value
 				 * has to fit a redirection's `fd`, an int. Accumulating it
@@ -786,7 +786,7 @@ static int is_resword(struct parser *p, const char *w withtok(null_terminated))
 	 * ->text is a live, non-freed WORD text established null-terminated
 	 * by scan_word() -- restate that fact here since the checker cannot
 	 * trace it through the struct token field it flows through. */
-	__ownership_string_terminated(p->cur.text);
+	unsafe_assume_string_terminated(p->cur.text);
 	return strcmp(p->cur.text, w) == 0;
 }
 
@@ -1122,11 +1122,11 @@ static struct sh_command *parse_funcdef(struct parser *p, struct sh_command *cmd
 	 * so both start and end (each just a local copy of p->cur.start at
 	 * a different point) are never NULL either, but that fact does not
 	 * survive this loop's own back-edge. */
-	__ownership_pointer_nonnull(end);
+	unsafe_assume_pointer_nonnull(end);
 	while (unsafe_assume_shared_provenance(end > start) &&
 	      isspace((unsigned char)end[-1])) {
 		end--;
-		__ownership_pointer_nonnull(end);
+		unsafe_assume_pointer_nonnull(end);
 	}
 
 	cmd->u.funcdef.name = fname;
@@ -1161,14 +1161,14 @@ static struct sh_command *parse_command(struct parser *p)
 			/* Same invariant is_resword() itself restates: p->cur.type
 			 * == T_WORD here (this whole branch is gated on it above)
 			 * means ->text is a live, null-terminated WORD text. */
-			__ownership_string_terminated(p->cur.text);
+			unsafe_assume_string_terminated(p->cur.text);
 			for (i = 0; misplaced_reswords[i]; i++) {
 				/* misplaced_reswords[] is a fixed array of string
 				 * literals, but the literal-ness the checker relies
 				 * on elsewhere is lost once read back out through an
 				 * array index rather than appearing directly in the
 				 * call -- restate it the same way. */
-				__ownership_string_terminated(misplaced_reswords[i]);
+				unsafe_assume_string_terminated(misplaced_reswords[i]);
 				if (strcmp(p->cur.text, misplaced_reswords[i]) == 0) {
 					perr(p, "unexpected reserved word `%s'", misplaced_reswords[i]);
 					return 0;
@@ -1304,7 +1304,7 @@ static int parse_pipeline(struct parser *p, struct sh_pipeline *out)
 	if (p->cur.type == T_WORD) {
 		/* Same invariant is_resword() restates: a live T_WORD's ->text
 		 * is null-terminated. */
-		__ownership_string_terminated(p->cur.text);
+		unsafe_assume_string_terminated(p->cur.text);
 		if (strcmp(p->cur.text, "!") == 0) { out->bang = 1; advance(p); }
 	}
 	for (;;) {
@@ -1324,8 +1324,8 @@ static int parse_pipeline(struct parser *p, struct sh_pipeline *out)
 				goto fail;
 			}
 			if (arr) {
-				__ownership_writable_span(na, n * sizeof *na);
-				__ownership_readable_span(arr, n * sizeof *na);
+				unsafe_assume_writable_span(na, n * sizeof *na);
+				unsafe_assume_readable_span(arr, n * sizeof *na);
 				memcpy(na, arr, n * sizeof *na);
 			}
 			__free(arr);
@@ -1431,8 +1431,8 @@ struct sh_list *__sh_parse(const char *src, char *errbuf, size_t errbuflen)
 		if (errbuf && errbuflen) {
 			size_t n = strnlen(p.lx.errbuf, sizeof p.lx.errbuf);
 			if (n >= errbuflen) n = errbuflen - 1;
-			__ownership_writable_span(errbuf, n);
-			__ownership_readable_span(p.lx.errbuf, n);
+			unsafe_assume_writable_span(errbuf, n);
+			unsafe_assume_readable_span(p.lx.errbuf, n);
 			memcpy(errbuf, p.lx.errbuf, n);
 			errbuf[n] = 0;
 		}

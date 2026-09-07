@@ -1,6 +1,6 @@
 /* This internal header, like the public C library headers, must use the
- * implementation-reserved namespace for its guard and its leaf-axiom
- * declarations so they cannot collide with user code.
+ * implementation-reserved namespace for its guard so it cannot collide
+ * with user code.
  */
 // NOLINTBEGIN(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 
@@ -16,43 +16,47 @@
 /* These declarations are the leaf axioms used to connect a concrete state
  * transition in a function body to its ownership-token contract.  They are
  * visible only to the static analyzer; ordinary builds erase each proof call
- * and therefore gain neither a runtime dependency nor a private ABI. */
+ * and therefore gain neither a runtime dependency nor a private ABI.
+ *
+ * Each is named unsafe_assume_*, the same convention src/internal/
+ * unsafe_pointer.h uses, so every call site reads as an unverified human
+ * assumption rather than an ordinary helper. */
 #ifdef __clang_analyzer__
 
 
-void __ownership_pthread_mutex_initialized(void * grant(pthread_mutex_unlocked));
+void unsafe_assume_pthread_mutex_initialized(void * grant(pthread_mutex_unlocked));
 
-void __ownership_pthread_mutex_locked(void * consume(pthread_mutex_unlocked) grant(pthread_mutex_locked));
+void unsafe_assume_pthread_mutex_locked(void * consume(pthread_mutex_unlocked) grant(pthread_mutex_locked));
 
-void __ownership_pthread_mutex_unlocked(void * consume(pthread_mutex_locked) grant(pthread_mutex_unlocked));
+void unsafe_assume_pthread_mutex_unlocked(void * consume(pthread_mutex_locked) grant(pthread_mutex_unlocked));
 
-void __ownership_pthread_mutex_destroyed(void * consume(pthread_mutex_unlocked));
+void unsafe_assume_pthread_mutex_destroyed(void * consume(pthread_mutex_unlocked));
 
-void __ownership_pthread_spin_initialized(void * grant(pthread_spin_unlocked));
-void __ownership_pthread_spin_locked(void * consume(pthread_spin_unlocked) grant(pthread_spin_locked));
-void __ownership_pthread_spin_unlocked(void * consume(pthread_spin_locked) grant(pthread_spin_unlocked));
-void __ownership_pthread_spin_destroyed(void * consume(pthread_spin_unlocked));
+void unsafe_assume_pthread_spin_initialized(void * grant(pthread_spin_unlocked));
+void unsafe_assume_pthread_spin_locked(void * consume(pthread_spin_unlocked) grant(pthread_spin_locked));
+void unsafe_assume_pthread_spin_unlocked(void * consume(pthread_spin_locked) grant(pthread_spin_unlocked));
+void unsafe_assume_pthread_spin_destroyed(void * consume(pthread_spin_unlocked));
 
-void __ownership_pthread_rwlock_initialized(void * grant(pthread_rwlock_unlocked));
-void __ownership_pthread_rwlock_read_locked(void *
+void unsafe_assume_pthread_rwlock_initialized(void * grant(pthread_rwlock_unlocked));
+void unsafe_assume_pthread_rwlock_read_locked(void *
 	consume_any(pthread_rwlock_unlocked) consume_any(pthread_rwlock_shared)
 	grant(pthread_rwlock_shared));
-void __ownership_pthread_rwlock_write_locked(void *
+void unsafe_assume_pthread_rwlock_write_locked(void *
 	consume(pthread_rwlock_unlocked) grant(pthread_rwlock_exclusive));
-void __ownership_pthread_rwlock_unlocked(void *
+void unsafe_assume_pthread_rwlock_unlocked(void *
 	consume_any(pthread_rwlock_shared) consume_any(pthread_rwlock_exclusive)
 	grant(pthread_rwlock_unlocked));
-void __ownership_pthread_rwlock_destroyed(void *
+void unsafe_assume_pthread_rwlock_destroyed(void *
 	consume(pthread_rwlock_unlocked));
 
-void __ownership_string_terminated(const void * grant(null_terminated));
-void __ownership_string_invalidated(void * drop(null_terminated));
+void unsafe_assume_string_terminated(const void * grant(null_terminated));
+void unsafe_assume_string_invalidated(void * drop(null_terminated));
 /* Leaf axiom: object is a real, live, nonnull pointer value right here,
  * a fact this checker's own reasoning cannot derive for a struct field
  * or array element read (e.g. one of argv's own entries, sliced into a
  * still-live parser-context struct field, read back out through that
  * struct's own accessor) even though it is genuinely always true by
- * construction -- the same shape __ownership_string_terminated above
+ * construction -- the same shape unsafe_assume_string_terminated above
  * already restates for that same kind of read's NUL-termination, just
  * for a different property (liveness, not termination) that needs its
  * own separate assertion.
@@ -70,36 +74,36 @@ void __ownership_string_invalidated(void * drop(null_terminated));
  * tools/lint.sh's stage_ownership never loads spicule.CapabilityToken (the
  * checker that maintains that token map) in the same analysis pass as
  * spicule.ValidPointer. */
-void __ownership_pointer_nonnull(const void *object);
-void __ownership_readable_span(
+void unsafe_assume_pointer_nonnull(const void *object);
+void unsafe_assume_readable_span(
 	const void *data grant(readable_span(length)), size_t length);
-void __ownership_writable_span(
+void unsafe_assume_writable_span(
 	void *data grant(writable_span(length)), size_t length);
-void __ownership_disjoint_span(
+void unsafe_assume_disjoint_span(
 	void *first grant(disjoint_span(second, length)), const void *second,
 	size_t length);
 
 #else
 
-#define __ownership_pthread_mutex_initialized(object) ((void)0)
-#define __ownership_pthread_mutex_locked(object) ((void)0)
-#define __ownership_pthread_mutex_unlocked(object) ((void)0)
-#define __ownership_pthread_mutex_destroyed(object) ((void)0)
-#define __ownership_pthread_spin_initialized(object) ((void)0)
-#define __ownership_pthread_spin_locked(object) ((void)0)
-#define __ownership_pthread_spin_unlocked(object) ((void)0)
-#define __ownership_pthread_spin_destroyed(object) ((void)0)
-#define __ownership_pthread_rwlock_initialized(object) ((void)0)
-#define __ownership_pthread_rwlock_read_locked(object) ((void)0)
-#define __ownership_pthread_rwlock_write_locked(object) ((void)0)
-#define __ownership_pthread_rwlock_unlocked(object) ((void)0)
-#define __ownership_pthread_rwlock_destroyed(object) ((void)0)
-#define __ownership_string_terminated(object) ((void)0)
-#define __ownership_string_invalidated(object) ((void)0)
-#define __ownership_pointer_nonnull(object) ((void)0)
-#define __ownership_readable_span(object, length) ((void)0)
-#define __ownership_writable_span(object, length) ((void)0)
-#define __ownership_disjoint_span(first, second, length) ((void)0)
+#define unsafe_assume_pthread_mutex_initialized(object) ((void)0)
+#define unsafe_assume_pthread_mutex_locked(object) ((void)0)
+#define unsafe_assume_pthread_mutex_unlocked(object) ((void)0)
+#define unsafe_assume_pthread_mutex_destroyed(object) ((void)0)
+#define unsafe_assume_pthread_spin_initialized(object) ((void)0)
+#define unsafe_assume_pthread_spin_locked(object) ((void)0)
+#define unsafe_assume_pthread_spin_unlocked(object) ((void)0)
+#define unsafe_assume_pthread_spin_destroyed(object) ((void)0)
+#define unsafe_assume_pthread_rwlock_initialized(object) ((void)0)
+#define unsafe_assume_pthread_rwlock_read_locked(object) ((void)0)
+#define unsafe_assume_pthread_rwlock_write_locked(object) ((void)0)
+#define unsafe_assume_pthread_rwlock_unlocked(object) ((void)0)
+#define unsafe_assume_pthread_rwlock_destroyed(object) ((void)0)
+#define unsafe_assume_string_terminated(object) ((void)0)
+#define unsafe_assume_string_invalidated(object) ((void)0)
+#define unsafe_assume_pointer_nonnull(object) ((void)0)
+#define unsafe_assume_readable_span(object, length) ((void)0)
+#define unsafe_assume_writable_span(object, length) ((void)0)
+#define unsafe_assume_disjoint_span(first, second, length) ((void)0)
 
 #endif
 #endif

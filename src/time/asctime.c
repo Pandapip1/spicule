@@ -8,7 +8,7 @@
 #include <time.h>
 #include <string.h>
 #include "time_impl.h"
-#include "ownership_stubs.h" /* __ownership_pointer_nonnull(), __ownership_writable_span() */
+#include "ownership_stubs.h" /* unsafe_assume_pointer_nonnull(), unsafe_assume_writable_span() */
 
 /* Widened to hold up to 8 year digits (see the tm_year comment below),
  * one byte more than the classic 26-byte "Www Mmm dd hh:mm:ss yyyy\n\0". */
@@ -16,14 +16,14 @@ char *asctime_r(const struct tm *tm, char *buf withtok(writable_span(30)))
 {
 	char *p = buf;
 	int n;
-	__ownership_writable_span(p, 30);
+	unsafe_assume_writable_span(p, 30);
 	const char *wd = (unsigned)tm->tm_wday < 7 ? __spicule_day_name_abbr[tm->tm_wday] : "???";
 	const char *mo = (unsigned)tm->tm_mon < 12 ? __spicule_month_name_abbr[tm->tm_mon] : "???";
 	/* Both branches are always a real string literal (either "???" or one
 	 * of names.c's fixed tables); the checker can't see into a global
 	 * array's initializer. */
-	__ownership_pointer_nonnull(wd);
-	__ownership_pointer_nonnull(mo);
+	unsafe_assume_pointer_nonnull(wd);
+	unsafe_assume_pointer_nonnull(mo);
 
 	*p++ = wd[0]; *p++ = wd[1]; *p++ = wd[2]; *p++ = ' ';
 	*p++ = mo[0]; *p++ = mo[1]; *p++ = mo[2]; *p++ = ' ';

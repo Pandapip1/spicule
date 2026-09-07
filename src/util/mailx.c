@@ -175,7 +175,7 @@ static int slurp_fd(int fd, char **outbuf withtok(heap_allocated), size_t *outle
 			buf = nb;
 			cap = ncap;
 		}
-		__ownership_writable_span(buf + len, cap - len - 1);
+		unsafe_assume_writable_span(buf + len, cap - len - 1);
 		n = read(fd, buf + len, cap - len - 1);
 		if (n < 0) { free(buf); return -1; }
 		if (n == 0) break;
@@ -198,7 +198,7 @@ static int join_path(const char *dir, const char *leaf, char *out, size_t outsz)
 	/* struct passwd (include/pwd.h) is a shared, foreign type with no
 	 * withtok(null_terminated) of its own on pw_dir, so it's restated
 	 * here by hand rather than by touching that shared header. */
-	__ownership_string_terminated(dir);
+	unsafe_assume_string_terminated(dir);
 	dl = strlen(dir);
 	int need_slash = dl > 0 && dir[dl - 1] != '/' && dir[dl - 1] != '\\';
 	int n = snprintf(out, outsz, need_slash ? "%s/%s" : "%s%s", dir, leaf);
@@ -226,7 +226,7 @@ static int addr_is_current_user(const struct passwd *pw, const char *addr)
 	size_t namelen = at ? (size_t)(at - addr) : strlen(addr);
 	/* pw->pw_name: same foreign-struct restatement as join_path()'s
 	 * pw->pw_dir above. */
-	__ownership_string_terminated(pw->pw_name);
+	unsafe_assume_string_terminated(pw->pw_name);
 	return strlen(pw->pw_name) == namelen && strncmp(pw->pw_name, addr, namelen) == 0;
 }
 
@@ -253,7 +253,7 @@ static int system_mailbox_path(const struct passwd *pw, char *out, size_t outsz)
 	if (mail && *mail) {
 		/* getenv()'s null_terminated contract isn't carried across the
 		 * assignment into this local; restated here by hand. */
-		__ownership_string_terminated(mail);
+		unsafe_assume_string_terminated(mail);
 		if (strlen(mail) >= outsz) return -1;
 		strcpy(out, mail);
 		return 0;
@@ -270,7 +270,7 @@ static int secondary_mailbox_path(const struct passwd *pw, char *out, size_t out
 	if (mbox && *mbox) {
 		/* Same getenv() return-contract restatement as
 		 * system_mailbox_path() above. */
-		__ownership_string_terminated(mbox);
+		unsafe_assume_string_terminated(mbox);
 		if (strlen(mbox) >= outsz) return -1;
 		strcpy(out, mbox);
 		return 0;
@@ -359,7 +359,7 @@ static int ensure_blank_terminated(int fd, const char *label)
 	/* pad is one of the two literals above, but the checker's
 	 * string-literal recognition doesn't look through the if/else
 	 * assignment to either arm. */
-	__ownership_string_terminated(pad);
+	unsafe_assume_string_terminated(pad);
 	return write_all(fd, pad, strlen(pad), label);
 }
 
@@ -430,7 +430,7 @@ static int deliver_message(const char *path, const char *login, const char *to_h
 		return -1;
 	}
 
-	__ownership_readable_span(msg, msglen);
+	unsafe_assume_readable_span(msg, msglen);
 	if (ensure_blank_terminated(fd, path) == 0 && write_all(fd, msg, msglen, path) == 0)
 		rc = 0;
 
@@ -734,7 +734,7 @@ static int cmd_is(const char *cmd, int cmdlen,
 	/* b is genuinely NULL at one call site ("x" has no second spelling),
 	 * so it can't be declared withtok(null_terminated) on the parameter
 	 * itself; restated here on the branch that has proven it non-NULL. */
-	__ownership_string_terminated(b);
+	unsafe_assume_string_terminated(b);
 	return cmdlen == (int)strlen(b) && !strncmp(cmd, b, (size_t)cmdlen);
 }
 
@@ -775,7 +775,7 @@ static int interactive_loop(int fd, const char *label, char *buf, size_t len, st
 			 * a distinct pointer value (pointer arithmetic off line),
 			 * so line's own token doesn't propagate to them; restated
 			 * on arg, which strcmp() below needs terminated. */
-			__ownership_string_terminated(arg);
+			unsafe_assume_string_terminated(arg);
 
 			if (cmdlen == 0) {
 				/* blank line: same as `next` */
@@ -892,7 +892,7 @@ static int do_receive(const struct passwd *me, const char *path, int headers_onl
 		 * `nb ? nb : 1` reallocarray() count) whenever it returns
 		 * success, so msgs is unconditionally non-NULL here -- a fact
 		 * that does not survive that call's own out-parameter return. */
-		__ownership_pointer_nonnull(msgs);
+		unsafe_assume_pointer_nonnull(msgs);
 		printf("Mailbox %s: %zu message%s\n", path, n, n == 1 ? "" : "s");
 		for (i = 1; i <= n; i++) print_summary_line(buf, &msgs[i - 1], i, 1);
 	}

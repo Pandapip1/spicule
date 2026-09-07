@@ -81,15 +81,15 @@ static int fill_current(struct passwd *pw, char *buf, size_t bufsz, size_t *need
 	need = nl + dl + sl;
 	if (need > bufsz) { if (needp) *needp = need; return ERANGE; }
 
-	__ownership_writable_span(buf, nl);
+	unsafe_assume_writable_span(buf, nl);
 	memmove(buf, name, nl);
 	pw->pw_name = buf;
 	buf += nl;
-	__ownership_writable_span(buf, dl);
+	unsafe_assume_writable_span(buf, dl);
 	memmove(buf, dir, dl);
 	pw->pw_dir = buf;
 	buf += dl;
-	__ownership_writable_span(buf, sl);
+	unsafe_assume_writable_span(buf, sl);
 	memmove(buf, shell, sl);
 	pw->pw_shell = buf;
 

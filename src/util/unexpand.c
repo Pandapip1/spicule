@@ -106,7 +106,7 @@ static void unexpand_stream(FILE *f, const struct tablist *tl, int effective_a)
 				}
 			}
 		} else {
-			__ownership_readable_span(line + i, n - i);
+			unsafe_assume_readable_span(line + i, n - i);
 			fwrite(line + i, 1, n - i, stdout);
 		}
 		if (had_nl) fputc('\n', stdout);

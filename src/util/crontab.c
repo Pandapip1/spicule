@@ -54,7 +54,7 @@ static int split_field(const char **pp, char *out, size_t outsz)
 	const char *p = *pp;
 	size_t n;
 	/* spicule.ValidPointer: open finding on this walk (cursor into a
-	 * NUL-terminated fgets() buffer); __ownership_string_terminated()
+	 * NUL-terminated fgets() buffer); unsafe_assume_string_terminated()
 	 * doesn't close it (tried) -- crond.c's identical split_field() too. */
 	while (*p == ' ' || *p == '\t') p++;
 	n = strcspn(p, " \t\n");
@@ -108,7 +108,7 @@ static int do_list(void)
 	int c;
 
 	if (!__spool_crontab_path(path, sizeof path)) { __util_diagf("crontab: cannot access crontab spool\n"); return 1; }
-	__ownership_string_terminated(path); /* __spool_crontab_path()'s own snprintf() contract */
+	unsafe_assume_string_terminated(path); /* __spool_crontab_path()'s own snprintf() contract */
 	f = fopen(path, "r");
 	if (!f) {
 		__util_diagf("crontab: no crontab for current user\n");
@@ -146,7 +146,7 @@ static int install_crontab(FILE *src, long *bad_line)
 	if (!__spool_crontab_path(path, sizeof path)) { errno = ENOENT; return -1; }
 	if (snprintf(tmp, sizeof tmp, "%s.tmp", path) >= (int)sizeof tmp) { errno = ENAMETOOLONG; return -1; }
 
-	__ownership_string_terminated(tmp); /* the snprintf() length check above */
+	unsafe_assume_string_terminated(tmp); /* the snprintf() length check above */
 	out = fopen(tmp, "w");
 	if (!out) return -1;
 	while ((c = fgetc(src)) != EOF) {
@@ -219,7 +219,7 @@ static int do_edit(void)
 
 	tf = fdopen(fd, "w");
 	if (!tf) { (void)close(fd); (void)unlink(tmpl); return 1; }
-	__ownership_string_terminated(path); /* __spool_crontab_path()'s own snprintf() contract */
+	unsafe_assume_string_terminated(path); /* __spool_crontab_path()'s own snprintf() contract */
 	cur = fopen(path, "r");
 	if (cur) {
 		int c;
@@ -262,7 +262,7 @@ static int do_edit(void)
 		return 1;
 	}
 
-	__ownership_string_terminated(tmpl); /* mkstemp() fills XXXXXX in place, length check above still holds */
+	unsafe_assume_string_terminated(tmpl); /* mkstemp() fills XXXXXX in place, length check above still holds */
 	tf = fopen(tmpl, "r");
 	if (!tf) { __util_diagf("crontab: cannot reopen %s: %s\n", tmpl, strerror(errno)); return 1; }
 	if (install_crontab(tf, &bad_line) < 0) {

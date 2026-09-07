@@ -11,11 +11,11 @@ char *strchrnul(const char *s withtok(null_terminated), int c)
 	c = (unsigned char)c;
 	if (!c) {
 		result = (char *)s + strlen(s);
-		__ownership_string_terminated(result);
+		unsafe_assume_string_terminated(result);
 		return result;
 	}
 	while (*s && *(unsigned char *)s != c) s++;
 	result = (char *)s;
-	__ownership_string_terminated(result);
+	unsafe_assume_string_terminated(result);
 	return result;
 }

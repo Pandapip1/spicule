@@ -114,7 +114,7 @@
 #include <errno.h>
 #include "awk_priv.h"
 #include "util.h"
-#include "ownership_stubs.h" /* __ownership_string_terminated(), __ownership_pointer_nonnull() */
+#include "ownership_stubs.h" /* unsafe_assume_string_terminated(), unsafe_assume_pointer_nonnull() */
 
 struct vassign { char *name, *val; };
 
@@ -178,7 +178,7 @@ static char *load_progfiles(char **files elements_withtok(null_terminated, nfile
 		char chunk[4096];
 		size_t n;
 
-		__ownership_string_terminated(fname);
+		unsafe_assume_string_terminated(fname);
 		if (!f) {
 			__util_diagf("awk: %s: %s\n", fname, strerror(errno));
 			free(buf);
@@ -194,12 +194,12 @@ static char *load_progfiles(char **files elements_withtok(null_terminated, nfile
 			 * branch always leaves *buf non-null before *len advances --
 			 * a cross-call invariant this checker can't derive on its
 			 * own. */
-			__ownership_pointer_nonnull(buf);
+			unsafe_assume_pointer_nonnull(buf);
 			/* ValidPointer still can't prove buf's extent covers index
 			 * len-1: the real extent buf_grow_append()'s realloc()
 			 * establishes doesn't survive back out through its char**
 			 * parameter. No annotation narrows extent state the way
-			 * __ownership_pointer_nonnull() narrows nonnull state; left
+			 * unsafe_assume_pointer_nonnull() narrows nonnull state; left
 			 * open. */
 			if (buf[len - 1] != '\n') buf_grow_append(&buf, &len, &cap, "\n", 1);
 		}
@@ -269,7 +269,7 @@ int __util_awk_main(
 		char *arg = argv[i];
 		const char *val;
 
-		__ownership_string_terminated(arg);
+		unsafe_assume_string_terminated(arg);
 		if (!strcmp(arg, "--")) { i++; break; }
 		if (arg[0] != '-' || arg[1] == 0) break;
 
@@ -284,7 +284,7 @@ int __util_awk_main(
 			char *dup;
 			val = opt_value(argv, argc, &i, 'v', arg);
 			if (!val) return 2;
-			__ownership_string_terminated(val);
+			unsafe_assume_string_terminated(val);
 			dup = strdup(val);
 			if (!dup) { __util_diagf("awk: out of memory\n"); return 2; }
 			if (!split_assignment(dup, &name, &v2)) {

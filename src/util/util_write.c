@@ -44,7 +44,7 @@
  */
 #include "util.h"
 #include "termident.h"
-#include "ownership_stubs.h" /* __ownership_string_terminated() */
+#include "ownership_stubs.h" /* unsafe_assume_string_terminated() */
 #include <pwd.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -112,8 +112,8 @@ int __util_write_main(
 	/* ttyop: argv element read through const char * (AggregateElementToken
 	 * gap, same idiom as tail.c/head.c/cksum.c). t.shortname: struct field
 	 * __util_find_terminal() always NUL-terminates on success. */
-	if (ttyop) __ownership_string_terminated(ttyop);
-	__ownership_string_terminated(t.shortname);
+	if (ttyop) unsafe_assume_string_terminated(ttyop);
+	unsafe_assume_string_terminated(t.shortname);
 	if (ttyop && strcmp(ttyop, t.shortname) != 0) {
 		__util_diagf("write: %s is not logged in on %s\n", user, ttyop);
 		return 1;
@@ -139,14 +139,14 @@ int __util_write_main(
 		tbuf[sizeof tbuf - 1] = 0;
 		/* strncpy() only proves extent; the explicit assignment above
 		 * is what actually NUL-terminates tbuf. */
-		__ownership_string_terminated(tbuf);
+		unsafe_assume_string_terminated(tbuf);
 		tlen = strlen(tbuf);
 		/* KNOWN CHECKER GAP (spicule.ValidPointer on tbuf[tlen-1]/
 		 * tbuf[--tlen] below): tlen <= sizeof tbuf - 1 always holds, from
 		 * the fixed NUL just written above, but OwnershipChecker.cpp's
 		 * trackScanExtent declines to correlate strlen()'s return with a
 		 * fixed local array's already-stronger extent, and a manual
-		 * __ownership_writable_span/readable_span restatement here is
+		 * unsafe_assume_writable_span/readable_span restatement here is
 		 * rejected by spicule.MemoryContract as narrowing an
 		 * already-proven-stronger fact. Left open rather than worked
 		 * around. */
@@ -156,7 +156,7 @@ int __util_write_main(
 		pw->pw_name, t.shortname, tbuf);
 	/* snprintf() isn't itself annotated to grant null_terminated, but it
 	 * always NUL-terminates a nonzero-size buffer. */
-	__ownership_string_terminated(banner);
+	unsafe_assume_string_terminated(banner);
 
 	if (send_all(wfd, banner, strlen(banner)) != 0) {
 		__util_diagf("write: %s\n", strerror(errno));
@@ -166,7 +166,7 @@ int __util_write_main(
 
 	while (fgets(line, sizeof line, stdin)) {
 		/* fgets() always NUL-terminates on a non-NULL return. */
-		__ownership_string_terminated(line);
+		unsafe_assume_string_terminated(line);
 		if (send_all(wfd, line, strlen(line)) != 0) {
 			__util_diagf("write: %s\n", strerror(errno));
 			status = 1;

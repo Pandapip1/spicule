@@ -222,7 +222,7 @@ static int ustar_split_name(const char *restrict path withtok(null_terminated),
 			size_t nlen = len - i;
 			if (plen < prefixcap && nlen > 0 && nlen < namecap) {
 				memcpy(prefix, path, plen); prefix[plen] = 0;
-				__ownership_readable_span(path + i, nlen);
+				unsafe_assume_readable_span(path + i, nlen);
 				memcpy(name, path + i, nlen); name[nlen] = 0;
 				return 0;
 			}
@@ -236,8 +236,8 @@ static void ustar_put_oct(unsigned char *field, int width, unsigned long value)
 {
 	char tmp[24];
 	snprintf(tmp, sizeof tmp, "%0*lo", width - 1, value);
-	__ownership_writable_span(field, (size_t)(width - 1));
-	__ownership_readable_span(tmp, (size_t)(width - 1));
+	unsafe_assume_writable_span(field, (size_t)(width - 1));
+	unsafe_assume_readable_span(tmp, (size_t)(width - 1));
 	{
 		size_t i;
 		for (i = 0; i < (size_t)(width - 1); i++) field[i] = tmp[i];
@@ -263,14 +263,14 @@ static int write_ustar_header(FILE *out, const struct pax_member *m)
 	 * every populator (parse_ustar_block(), read_cpio_header(),
 	 * build_member_from_stat(), write_cpio_trailer()) NUL-terminates it
 	 * via snprintf()/strcpy(). */
-	__ownership_string_terminated(m->name);
+	unsafe_assume_string_terminated(m->name);
 	if (m->type == PAX_DIR) {
 		size_t l = strlen(m->name);
 		if (l == 0 || m->name[l - 1] != '/') {
 			snprintf(namebuf, sizeof namebuf, "%s/", m->name);
 			/* snprintf() isn't itself annotated to grant null_terminated,
 			 * but it always NUL-terminates a nonzero-size buffer. */
-			__ownership_string_terminated(namebuf);
+			unsafe_assume_string_terminated(namebuf);
 			use_name = namebuf;
 		}
 	}
@@ -283,8 +283,8 @@ static int write_ustar_header(FILE *out, const struct pax_member *m)
 	}
 	/* ustar_split_name() always NUL-terminates both out-parameters on a
 	 * 0 return; writable_span() only proves extent, not termination. */
-	__ownership_string_terminated(prefix);
-	__ownership_string_terminated(name);
+	unsafe_assume_string_terminated(prefix);
+	unsafe_assume_string_terminated(name);
 	if (!fits_octal(m->mode & 07777, 7)) {
 		__util_diagf("pax: %s: mode does not fit a ustar header\n", use_name);
 		return -1;
@@ -406,7 +406,7 @@ static int cpio_put_field(char *field, int width __arith_range(6, 11),
 		return -1;
 	}
 	snprintf(tmp, sizeof tmp, "%0*lo", width, value);
-	__ownership_writable_span(field, (size_t)width);
+	unsafe_assume_writable_span(field, (size_t)width);
 	/* width's __arith_range(6, 11) above is proven at every call site by
 	 * the arithub lint stage, so this is never negative. */
 	for (size_t i = 0; i < (size_t)width; i++) field[i] = tmp[i];
@@ -556,7 +556,7 @@ static int pax_reader_open(struct pax_reader *r, const char *path)
 		for (i = 0; i < got; i++) r->first_block[i] = magic[i];
 	}
 	if (got < USTAR_BLOCK) {
-		__ownership_writable_span(r->first_block + got, USTAR_BLOCK - got);
+		unsafe_assume_writable_span(r->first_block + got, USTAR_BLOCK - got);
 		size_t more = fread(r->first_block + got, 1, USTAR_BLOCK - got, r->f);
 		got += more;
 	}
@@ -688,7 +688,7 @@ static int pax_write_member(FILE *out, enum pax_format fmt, const struct pax_mem
 		if (write_cpio_header(out, m, &datasize) < 0) return -1;
 		if (m->type == PAX_SYMLINK) {
 			const char *linkname = m->linkname;
-			__ownership_readable_span(linkname, datasize);
+			unsafe_assume_readable_span(linkname, datasize);
 			return fwrite(linkname, 1, datasize, out) == datasize ? 0 : -1;
 		}
 		if (m->type == PAX_REG && datasize)
@@ -903,7 +903,7 @@ static int materialize(const struct pax_member *m, const char *destpath,
 			while ((n = read(srcfd, buf, sizeof buf)) > 0) {
 				char *p = buf; ssize_t left = n;
 				while (left > 0) {
-					__ownership_readable_span(p, (size_t)left);
+					unsafe_assume_readable_span(p, (size_t)left);
 					ssize_t w = write(fd, p, (size_t)left);
 					if (w < 0) { __util_diagf("pax: %s: %s\n", destpath, strerror(errno)); (void)close(fd); return -1; }
 					p += w; left -= w;
@@ -1057,7 +1057,7 @@ static char **read_stdin_file_list(int *out_n)
 		char *dup;
 		/* fgets() NUL-terminates on success; stdio.h's declaration
 		 * doesn't grant that fact, so restate it. */
-		__ownership_string_terminated(line);
+		unsafe_assume_string_terminated(line);
 		len = strlen(line);
 		if (len && line[len - 1] == '\n') line[--len] = 0;
 		if (!len) continue;
@@ -1173,8 +1173,8 @@ static int do_list_or_read(const char *archive,
 		/* m.name/m.linkname are struct fields, so null_terminated can't
 		 * attach directly; pax_reader_next() always populates both via
 		 * snprintf()/an explicit NUL. */
-		__ownership_string_terminated(m.name);
-		__ownership_string_terminated(m.linkname);
+		unsafe_assume_string_terminated(m.name);
+		unsafe_assume_string_terminated(m.linkname);
 
 		if (!pax_name_matches(m.name, patterns, npat, complement)) {
 			reader_skip_data(&r, &m);

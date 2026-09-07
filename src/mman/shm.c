@@ -134,14 +134,14 @@ static char *shm_mode_path(const char *path)
 	if (!__size_add_checked(len, sizeof "-mode", &bytes)) return NULL;
 	modepath = malloc(bytes);
 	if (!modepath) return NULL;
-	__ownership_writable_span(modepath, prefix);
-	__ownership_readable_span(path, prefix);
+	unsafe_assume_writable_span(modepath, prefix);
+	unsafe_assume_readable_span(path, prefix);
 	memcpy(modepath, path, prefix);
-	__ownership_writable_span(modepath + prefix, sizeof "-mode" - 1);
+	unsafe_assume_writable_span(modepath + prefix, sizeof "-mode" - 1);
 	memcpy(modepath + prefix, "-mode", sizeof "-mode" - 1);
-	__ownership_writable_span(modepath + prefix + sizeof "-mode" - 1,
+	unsafe_assume_writable_span(modepath + prefix + sizeof "-mode" - 1,
 	                          len - prefix + 1);
-	__ownership_readable_span(slash, len - prefix + 1);
+	unsafe_assume_readable_span(slash, len - prefix + 1);
 	memcpy(modepath + prefix + sizeof "-mode" - 1, slash,
 	       len - prefix + 1);
 	return modepath;

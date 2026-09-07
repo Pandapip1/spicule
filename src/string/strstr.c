@@ -9,7 +9,7 @@ char *strstr(const char *h withtok(null_terminated),
 {
 	size_t l;
 	if (!n[0]) {
-		__ownership_string_terminated(h);
+		unsafe_assume_string_terminated(h);
 		return (char *)h;
 	}
 	h = strchr(h, *n);
@@ -17,7 +17,7 @@ char *strstr(const char *h withtok(null_terminated),
 	l = strlen(n);
 	for (; *h; h++) {
 		if (*h == *n && !strncmp(h+1, n+1, l-1)) {
-			__ownership_string_terminated(h);
+			unsafe_assume_string_terminated(h);
 			return (char *)h;
 		}
 	}

@@ -9,7 +9,7 @@ size_t strlcpy(char *restrict d, const char *restrict s, size_t n)
 	size_t l = strlen(s);
 	if (n) {
 		size_t c = l < n-1 ? l : n-1;
-		__ownership_writable_span(d, c);
+		unsafe_assume_writable_span(d, c);
 		memcpy(d, s, c);
 		d[c] = 0;
 	}

@@ -1709,7 +1709,7 @@ static void run_ctors(struct dlobj *obj, Elf_Dyn *dyn)
  * withtok(null_terminated), see that function's own declaration).  buf
  * is an out parameter: uninitialized on entry, always left holding a
  * genuine null-terminated string on return (both exit paths below store
- * a literal NUL; __ownership_string_terminated() restates each as an
+ * a literal NUL; unsafe_assume_string_terminated() restates each as an
  * axiom the same way put_field()/strcpy() do for their own raw stores,
  * since a raw indexed store is not something this checker's syntactic
  * walk proves on its own). */
@@ -1723,14 +1723,14 @@ static void dirname_of(const char *path withtok(null_terminated),
 	size_t len, i;
 	if (!slash) {
 		buf[0] = 0;
-		__ownership_string_terminated(buf);
+		unsafe_assume_string_terminated(buf);
 		return;
 	}
 	len = (size_t)(slash - path) + 1; /* keep the slash itself */
 	if (len >= bufsz) len = bufsz - 1;
 	for (i = 0; i < len; i++) buf[i] = path[i];
 	buf[len] = 0;
-	__ownership_string_terminated(buf);
+	unsafe_assume_string_terminated(buf);
 }
 
 /* dir is deliberately NOT withtok(null_terminated)/nonnull: this function
@@ -1741,7 +1741,7 @@ static void dirname_of(const char *path withtok(null_terminated),
  * null-terminated string at that call site (see load_object()'s own
  * needed_name axiom); pathbuf is an out parameter, uninitialized on
  * entry and always left null-terminated by the time any successful
- * return is reached (see the two __ownership_string_terminated() calls
+ * return is reached (see the two unsafe_assume_string_terminated() calls
  * below) -- the one early failure return (ENAMETOOLONG) leaves it
  * untouched, which is fine, since load_object()'s own caller never reads
  * pathbuf after a negative return. */
@@ -1759,7 +1759,7 @@ static int open_needed(const char *dir, const char *name withtok(null_terminated
 		 * construction and not otherwise visible to the checker
 		 * across this call -- same restatement put_field() (src/util/
 		 * ar.c) already makes for its own snprintf() call. */
-		__ownership_string_terminated(pathbuf);
+		unsafe_assume_string_terminated(pathbuf);
 		fd = open(pathbuf, O_RDONLY);
 	}
 	if (fd >= 0) return fd;
@@ -1770,7 +1770,7 @@ static int open_needed(const char *dir, const char *name withtok(null_terminated
 		/* The loop above copies name[length] == name's own NUL
 		 * terminator (length == strlen(name)) into pathbuf -- true by
 		 * construction, not provable from a raw indexed-copy loop. */
-		__ownership_string_terminated(pathbuf);
+		unsafe_assume_string_terminated(pathbuf);
 	}
 	return open(name, O_RDONLY);
 }
@@ -2136,7 +2136,7 @@ static struct dlobj *load_object(const char *file withtok(null_terminated), int 
 				 * own ADDR() reconstructions already rely on
 				 * throughout this file, just restated here as an
 				 * axiom since open_needed() below requires it. */
-				__ownership_string_terminated(needed_name);
+				unsafe_assume_string_terminated(needed_name);
 				nfd = open_needed(dir, needed_name, pathbuf, sizeof pathbuf);
 				if (nfd < 0) {
 					seterr("dlopen: %s: cannot find DT_NEEDED dependency \"%s\": %s (searched \"%s\" and the bare name -- no DT_RPATH/DT_RUNPATH/LD_LIBRARY_PATH support, see this file's own DT_NEEDED banner)",
@@ -2279,8 +2279,8 @@ void *__plat_dlopen(const char *file, int mode)
 	 * dlfcn.c/plat_dlfcn.h boundary this parameter crosses. Established
 	 * only in this branch (never for the NULL/MAIN_IMAGE_HANDLE case
 	 * just above), the same conditional-axiom shape src/env/getenv.c's
-	 * own `if (result) __ownership_string_terminated(result);` uses. */
-	__ownership_string_terminated(file);
+	 * own `if (result) unsafe_assume_string_terminated(result);` uses. */
+	unsafe_assume_string_terminated(file);
 	return load_object(file, 0);
 }
 

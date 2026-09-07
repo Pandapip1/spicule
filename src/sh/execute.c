@@ -236,8 +236,8 @@ static int split_assignment(const char *raw, char **name, char **val) // NOLINT(
 		char *allocated_name = __size_add_checked(nlen, 1, &namebytes) ?
 			__malloc(namebytes) : 0;
 		if (!allocated_name) return -1;
-		__ownership_writable_span(allocated_name, nlen);
-		__ownership_readable_span(raw, nlen);
+		unsafe_assume_writable_span(allocated_name, nlen);
+		unsafe_assume_readable_span(raw, nlen);
 		memcpy(allocated_name, raw, nlen);
 		allocated_name[nlen] = 0;
 		*name = allocated_name;
@@ -346,10 +346,10 @@ static char **build_child_envp(const struct sh_word *assigns, size_t *out_n)
 			entry = __malloc(entrybytes);
 		}
 		if (!entry) { __free(name); __free(val); free_strv(v, n); return 0; }
-		__ownership_writable_span(entry, nlen);
+		unsafe_assume_writable_span(entry, nlen);
 		memcpy(entry, name, nlen);
 		entry[nlen] = '=';
-		__ownership_writable_span(entry + nlen + 1, vlen + 1);
+		unsafe_assume_writable_span(entry + nlen + 1, vlen + 1);
 		memcpy(entry + nlen + 1, val, vlen + 1);
 		__free(name);
 		__free(val);
@@ -1252,8 +1252,8 @@ static int env_snapshot_take(struct env_snapshot *es)
 		char *name = __size_add_checked(nlen, 1, &namebytes) ?
 			__malloc(namebytes) : 0;
 		if (name) {
-			__ownership_writable_span(name, nlen);
-			__ownership_readable_span(e, nlen);
+			unsafe_assume_writable_span(name, nlen);
+			unsafe_assume_readable_span(e, nlen);
 			memcpy(name, e, nlen);
 			name[nlen] = 0;
 		}
@@ -1297,8 +1297,8 @@ static void env_snapshot_restore(const struct env_snapshot *es)
 			char *nm = __size_add_checked(nlen, 1, &nmbytes) ?
 				__malloc(nmbytes) : 0;
 			if (nm) {
-				__ownership_writable_span(nm, nlen);
-				__ownership_readable_span(e, nlen);
+				unsafe_assume_writable_span(nm, nlen);
+				unsafe_assume_readable_span(e, nlen);
 				memcpy(nm, e, nlen);
 				nm[nlen] = 0;
 			}
@@ -1648,7 +1648,7 @@ static char *slurp_fd(int fd, size_t *out_len)
 			buf = nb;
 			cap = nc;
 		}
-		__ownership_writable_span(buf + len, 4096);
+		unsafe_assume_writable_span(buf + len, 4096);
 		n = read(fd, buf + len, 4096);
 		if (n < 0) { __free(buf); return 0; }
 		if (n == 0) break;

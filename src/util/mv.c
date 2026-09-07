@@ -104,11 +104,11 @@ int __util_mv_main(
 		/* a is argv[i], i < nargs <= argc; restated since a plain local
 		 * isn't traceable back to argv on its own (same as
 		 * src/util/cp.c's identical loop). The raw a[0] read below
-		 * stays open: __ownership_pointer_nonnull() instead was tried
+		 * stays open: unsafe_assume_pointer_nonnull() instead was tried
 		 * and reverted -- it reopened the strcmp() finding below and
 		 * broke the unrelated target = argv[nargs - 1] read further
 		 * down. */
-		__ownership_string_terminated(a);
+		unsafe_assume_string_terminated(a);
 
 		if (a[0] != '-' || a[1] == 0) break;
 		if (!strcmp(a, "--")) { i++; break; }
@@ -135,7 +135,7 @@ int __util_mv_main(
 
 	target = argv[nargs - 1];
 	/* Restated for the same reason as `a` above (`nargs`, not `argc`). */
-	__ownership_string_terminated(target);
+	unsafe_assume_string_terminated(target);
 	target_is_dir = stat(target, &tst) == 0 && S_ISDIR(tst.st_mode);
 
 	if (noperands > 2 && !target_is_dir) {
@@ -147,7 +147,7 @@ int __util_mv_main(
 		const char *src = argv[i];
 
 		/* Same restatement as above (`nargs` loop bound). */
-		__ownership_string_terminated(src);
+		unsafe_assume_string_terminated(src);
 
 		if (target_is_dir) {
 			char *dst = __util_join_basename(target, src);

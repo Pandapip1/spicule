@@ -90,7 +90,7 @@ static int find_node(const char *name withtok(null_terminated))
 		 * Read through a local rather than restating directly on
 		 * nodes[i].name: `nodes` is a file-scope global, and the
 		 * checker's own conservative call-invalidation rule for an
-		 * opaque call (which __ownership_string_terminated() itself
+		 * opaque call (which unsafe_assume_string_terminated() itself
 		 * is, from the analyzer's point of view) re-widens anything
 		 * reachable through a global pointer immediately afterward --
 		 * so a restatement written directly against nodes[i].name
@@ -99,7 +99,7 @@ static int find_node(const char *name withtok(null_terminated))
 		 * sees it. A local variable is not reachable through the
 		 * global, so it is not subject to that widening. */
 		char *nm = nodes[i].name;
-		__ownership_string_terminated(nm);
+		unsafe_assume_string_terminated(nm);
 		if (!strcmp(nm, name)) return (int)i;
 	}
 	return -1;
@@ -166,7 +166,7 @@ static char *slurp(FILE *f, size_t *outlen)
 				cap = newcap;
 			}
 		}
-		__ownership_writable_span(buf + len, cap - len);
+		unsafe_assume_writable_span(buf + len, cap - len);
 		got = fread(buf + len, 1, cap - len, f);
 		len += got;
 		if (got == 0) break;
@@ -198,7 +198,7 @@ int __util_tsort_main(
 		 * comparison just taken on its own -- restate the contract at
 		 * this one now-in-range index, the same way src/util/test.c's
 		 * __util_test_main() restates it for argv[0]. */
-		__ownership_string_terminated(argv[1]);
+		unsafe_assume_string_terminated(argv[1]);
 		if (!strcmp(argv[1], "-")) {
 			f = stdin;
 		} else {
@@ -266,8 +266,8 @@ int __util_tsort_main(
 		 * this call site the same way src/util/test.c's
 		 * __util_test_main() re-proves argv[0]/argv[n] at its own use
 		 * sites. */
-		__ownership_string_terminated(tok[2 * i]);
-		__ownership_string_terminated(tok[2 * i + 1]);
+		unsafe_assume_string_terminated(tok[2 * i]);
+		unsafe_assume_string_terminated(tok[2 * i + 1]);
 		a = get_or_add(tok[2 * i]);
 		b = get_or_add(tok[2 * i + 1]);
 		if (a < 0 || b < 0) { __util_diagf("tsort: out of memory\n"); free((void *)tok); free(buf); return 1; }

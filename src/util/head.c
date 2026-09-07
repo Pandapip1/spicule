@@ -128,7 +128,7 @@ int __util_head_main(
 			/* Restate the null-terminated contract on argv[i]: it
 			 * doesn't survive the argv[i] -> const char * read this
 			 * checker can trace on its own. */
-			__ownership_string_terminated(path);
+			unsafe_assume_string_terminated(path);
 
 			if (noperands > 1) {
 				printf("%s==> %s <==\n", first_banner ? "" : "\n", path);

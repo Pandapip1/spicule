@@ -121,7 +121,7 @@ int __util_ln_main(
 		/* argv[i] is NUL-terminated per argv's own
 		 * elements_withtok(null_terminated, argc) contract -- restated
 		 * since that token doesn't survive a direct argv[i] read. */
-		__ownership_string_terminated(argv[i]);
+		unsafe_assume_string_terminated(argv[i]);
 		sn = strlen(argv[i]);
 
 		if (sn >= sizeof base_copy) {

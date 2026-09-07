@@ -15,6 +15,6 @@ char *strdup(const char *s withtok(null_terminated))
 	d = malloc(bytes);
 	if (!d) return 0;
 	memcpy(d, s, bytes);
-	__ownership_string_terminated(d);
+	unsafe_assume_string_terminated(d);
 	return d;
 }

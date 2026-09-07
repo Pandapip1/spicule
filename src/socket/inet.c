@@ -235,10 +235,10 @@ const char *inet_ntop(int af, const void *__restrict src,
 
 	b = (const unsigned char *)src;
 	if (af == AF_INET) {
-		__ownership_readable_span(src, 4);
+		unsafe_assume_readable_span(src, 4);
 		n = snprintf(buf, sizeof buf, "%u.%u.%u.%u", b[0], b[1], b[2], b[3]);
 	} else if (af == AF_INET6) {
-		__ownership_readable_span(src, 16);
+		unsafe_assume_readable_span(src, 16);
 		unsigned words[8];
 		int i, steps, best = -1, bestlen = 0;
 		char *q = buf;
@@ -301,12 +301,12 @@ int inet_pton(int af, const char *__restrict src, void *__restrict dst)
 	if (!src) return 0;
 	if (af == AF_INET) {
 		if (!pton4(src, tmp)) return 0;
-		__ownership_writable_span(dst, 4);
+		unsafe_assume_writable_span(dst, 4);
 		memcpy(dst, tmp, 4);
 		return 1;
 	}
 	if (!pton6(src, tmp)) return 0;
-	__ownership_writable_span(dst, 16);
+	unsafe_assume_writable_span(dst, 16);
 	memcpy(dst, tmp, 16);
 	return 1;
 }

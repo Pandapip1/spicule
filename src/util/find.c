@@ -100,7 +100,7 @@
 #include "util.h"
 #include "find.h"
 #include "libc.h" /* __find_program()/__spawn() -- src/process/ */
-#include "ownership_stubs.h" /* __ownership_string_terminated(): restates argv's null-termination where the checker can't trace it */
+#include "ownership_stubs.h" /* unsafe_assume_string_terminated(): restates argv's null-termination where the checker can't trace it */
 
 enum ntype {
 	N_NOT, N_AND, N_OR,
@@ -174,7 +174,7 @@ static void free_node(struct node *n consume(find_expression_allocated))
 	 * increments n->acc_n -- so n->acc_n > 0 here means n->acc was
 	 * already set, a fact this per-function analysis can't see across
 	 * the call boundary. */
-	if (n->acc_n > 0) __ownership_pointer_nonnull(n->acc);
+	if (n->acc_n > 0) unsafe_assume_pointer_nonnull(n->acc);
 	for (i = 0; i < n->acc_n; i++) free(n->acc[i]);
 	free(n->acc);
 	free(n);
@@ -196,7 +196,7 @@ static const char *peek(struct find_ctx *c)
 	 * reassigned -- genuinely never NULL for this find_ctx's whole
 	 * lifetime, but that fact does not survive a struct field read this
 	 * per-function analysis cannot see through. */
-	__ownership_pointer_nonnull(c->v);
+	unsafe_assume_pointer_nonnull(c->v);
 	return c->i < c->n ? c->v[c->i] : NULL;
 }
 
@@ -209,7 +209,7 @@ static const char *consume_arg(struct find_ctx *c, const char *name)
 		ferr(c, msg);
 		return "";
 	}
-	__ownership_pointer_nonnull(c->v); /* see peek()'s own comment above */
+	unsafe_assume_pointer_nonnull(c->v); /* see peek()'s own comment above */
 	return c->v[c->i++];
 }
 
@@ -249,9 +249,9 @@ static struct node *parse_primary(struct find_ctx *c)
 	const char *t;
 
 	if (c->i >= c->n) { ferr(c, "expression expected"); return alloc_node(P_PRINT); }
-	__ownership_pointer_nonnull(c->v); /* see peek()'s own comment */
+	unsafe_assume_pointer_nonnull(c->v); /* see peek()'s own comment */
 	t = c->v[c->i];
-	__ownership_string_terminated(t);
+	unsafe_assume_string_terminated(t);
 
 	if (!strcmp(t, "(")) {
 		struct node *inner;
@@ -260,7 +260,7 @@ static struct node *parse_primary(struct find_ctx *c)
 		inner = parse_or(c);
 		if (c->err) return inner;
 		close = peek(c);
-		if (close) __ownership_string_terminated(close);
+		if (close) unsafe_assume_string_terminated(close);
 		if (!close || strcmp(close, ")")) { ferr(c, "expected ')'"); return inner; } // NOLINT(bugprone-suspicious-string-compare) -- nonzero intentionally detects a missing/mismatched ')'
 		c->i++;
 		return inner;
@@ -277,7 +277,7 @@ static struct node *parse_primary(struct find_ctx *c)
 		const char *arg;
 		c->i++;
 		arg = consume_arg(c, t);
-		__ownership_string_terminated(arg); /* consume_arg() returns either an argv element or "" -- both null-terminated */
+		unsafe_assume_string_terminated(arg); /* consume_arg() returns either an argv element or "" -- both null-terminated */
 		if (c->err) return n;
 		if (strlen(arg) != 1 || !strchr("bcdlpfs", arg[0])) { ferr(c, "-type: unknown type"); return n; }
 		n->type_char = arg[0];
@@ -338,7 +338,7 @@ static struct node *parse_primary(struct find_ctx *c)
 		size_t len;
 		c->i++;
 		arg = consume_arg(c, t);
-		__ownership_string_terminated(arg); /* consume_arg() returns either an argv element or "" -- both null-terminated */
+		unsafe_assume_string_terminated(arg); /* consume_arg() returns either an argv element or "" -- both null-terminated */
 		if (c->err) return n;
 		len = strlen(arg);
 		if (len > 0 && arg[len - 1] == 'c') { n->size_bytes = 1; len--; }
@@ -389,9 +389,9 @@ static struct node *parse_primary(struct find_ctx *c)
 		start = c->i;
 		for (;;) {
 			if (c->i >= c->n) break;
-			__ownership_pointer_nonnull(c->v); /* see peek()'s own comment */
+			unsafe_assume_pointer_nonnull(c->v); /* see peek()'s own comment */
 			term = c->v[c->i];
-			__ownership_string_terminated(term);
+			unsafe_assume_string_terminated(term);
 			if (!strcmp(term, ";") || !strcmp(term, "+")) break;
 			c->i++;
 		}
@@ -401,7 +401,7 @@ static struct node *parse_primary(struct find_ctx *c)
 		n->exec_argv = (const char **)&c->v[start];
 		if (!strcmp(term, "+")) {
 			const char *last = n->exec_argv[n->exec_argc - 1];
-			__ownership_string_terminated(last);
+			unsafe_assume_string_terminated(last);
 			if (strcmp(last, "{}")) { // NOLINT(bugprone-suspicious-string-compare) -- nonzero intentionally detects a missing "{}" marker
 				ferr(c, "-exec/-ok ... {} +: '{}' must be the last argument before '+'");
 				c->i++;
@@ -428,7 +428,7 @@ withtok(find_expression_allocated)
 static struct node *parse_not(struct find_ctx *c)
 {
 	const char *t = peek(c);
-	if (t) __ownership_string_terminated(t);
+	if (t) unsafe_assume_string_terminated(t);
 	if (t && !strcmp(t, "!")) {
 		struct node *n = alloc_node(N_NOT);
 		c->i++;
@@ -447,7 +447,7 @@ static struct node *parse_and(struct find_ctx *c)
 		const char *t;
 		if (c->err) break;
 		t = peek(c);
-		if (t) __ownership_string_terminated(t);
+		if (t) unsafe_assume_string_terminated(t);
 		if (!t || !strcmp(t, ")") || !strcmp(t, "-o")) break;
 		if (!strcmp(t, "-a")) c->i++; /* explicit -a; otherwise implicit juxtaposition */
 		{
@@ -469,7 +469,7 @@ static struct node *parse_or(struct find_ctx *c)
 		const char *t;
 		if (c->err) break;
 		t = peek(c);
-		if (t) __ownership_string_terminated(t);
+		if (t) unsafe_assume_string_terminated(t);
 		if (!t || strcmp(t, "-o")) break;
 		{
 			struct node *n = alloc_node(N_OR);
@@ -553,7 +553,7 @@ static void add_pruned(const char *path withtok(null_terminated))
 		 * g_find.pruned is only ever non-NULL exactly when
 		 * g_find.pruned_cap > 0 -- a whole-program invariant this
 		 * per-function analysis cannot see across earlier calls. */
-		__ownership_pointer_nonnull(pr);
+		unsafe_assume_pointer_nonnull(pr);
 		pr[g_find.pruned_n++] = copy;
 	}
 }
@@ -572,8 +572,8 @@ static int under_pruned(const char *path)
 	char **pr = g_find.pruned;
 	for (i = 0; i < g_find.pruned_n; i++) {
 		size_t pl;
-		__ownership_pointer_nonnull(pr);
-		__ownership_string_terminated(pr[i]);
+		unsafe_assume_pointer_nonnull(pr);
+		unsafe_assume_string_terminated(pr[i]);
 		pl = strlen(pr[i]);
 		if (!strncmp(path, pr[i], pl) && path[pl] == '/') return 1;
 	}
@@ -589,7 +589,7 @@ static void clear_pruned_from(size_t first)
 		/* g_find.pruned_n > first >= 0 here implies g_find.pruned_n > 0,
 		 * hence g_find.pruned != NULL -- see add_pruned()'s own comment
 		 * above. */
-		__ownership_pointer_nonnull(pr);
+		unsafe_assume_pointer_nonnull(pr);
 		free(pr[--g_find.pruned_n]);
 	}
 }
@@ -658,8 +658,8 @@ static int do_exec_semi(struct node *n, const char *path)
 		 * calloc()'d 0) -- so exec_argc > 0 here genuinely implies
 		 * exec_argv != NULL, a fact that does not survive the struct
 		 * field read across this function boundary. */
-		__ownership_pointer_nonnull(n->exec_argv);
-		__ownership_string_terminated(n->exec_argv[i]);
+		unsafe_assume_pointer_nonnull(n->exec_argv);
+		unsafe_assume_string_terminated(n->exec_argv[i]);
 		argv2[i] = !strcmp(n->exec_argv[i], "{}") ? (char *)path : (char *)n->exec_argv[i];
 	}
 	argv2[n->exec_argc] = 0;
@@ -695,7 +695,7 @@ static int do_exec_plus_accumulate(struct node *n, const char *path withtok(null
 		 * ever non-NULL exactly when n->acc_cap > 0 -- a fact that does
 		 * not survive across those earlier calls in this per-function
 		 * analysis. */
-		__ownership_pointer_nonnull(n->acc);
+		unsafe_assume_pointer_nonnull(n->acc);
 		n->acc[n->acc_n++] = copy;
 	}
 	return 1; /* "{} +" always evaluates true */
@@ -777,12 +777,12 @@ static void flush_plus(struct node *n)
 		size_t i = 0;
 		/* n->acc_n > 0 here implies n->acc_cap > 0 implies n->acc != NULL
 		 * -- see do_exec_plus_accumulate()'s own comment. */
-		__ownership_pointer_nonnull(n->acc);
+		unsafe_assume_pointer_nonnull(n->acc);
 		while (i < n->acc_n) {
 			size_t j = i, bytes = 0, k;
 			char **argv2;
 			while (j < n->acc_n && (j - i) < 1000 && bytes < 131072) {
-				__ownership_string_terminated(n->acc[j]); /* stored by do_exec_plus_accumulate() via malloc()+memcpy() */
+				unsafe_assume_string_terminated(n->acc[j]); /* stored by do_exec_plus_accumulate() via malloc()+memcpy() */
 				bytes += strlen(n->acc[j]) + 1;
 				j++;
 			}
@@ -793,7 +793,7 @@ static void flush_plus(struct node *n)
 			 * parse_primary()'s own -exec/-ok "+" handling -- see
 			 * do_exec_semi()'s own comment on that same exec_argc/
 			 * exec_argv invariant. */
-			__ownership_pointer_nonnull(n->exec_argv);
+			unsafe_assume_pointer_nonnull(n->exec_argv);
 			for (k = 0; k < fixed_argc; k++) argv2[k] = (char *)n->exec_argv[k];
 			for (k = 0; k < j - i; k++) argv2[fixed_argc + k] = n->acc[i + k];
 			argv2[fixed_argc + (j - i)] = 0;

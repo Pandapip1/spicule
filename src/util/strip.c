@@ -557,7 +557,7 @@ static int read_whole_file(const char *path,
 		free(buf); (void)fclose(f); errno = EIO; return -1;
 	}
 	(void)fclose(f);
-	__ownership_readable_span(buf, (size_t)sz);
+	unsafe_assume_readable_span(buf, (size_t)sz);
 	*out = buf;
 	*outsize = (size_t)sz;
 	return 0;

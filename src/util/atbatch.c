@@ -74,7 +74,7 @@ int __atbatch_submit(const char *queue, time_t run_at, const char *srcfile,
 		size_t namelen = strcspn(*e, "=");
 		if (!(*e)[namelen]) continue; /* malformed entry, no '=' -- nothing to export */
 		if (fputs("export ", f) == EOF) goto fail;
-		__ownership_readable_span(*e, namelen);
+		unsafe_assume_readable_span(*e, namelen);
 		if (fwrite(*e, 1, namelen, f) != namelen) goto fail;
 		if (fputc('=', f) == EOF) goto fail;
 		if (write_quoted(f, *e + namelen + 1) < 0) goto fail;
@@ -82,7 +82,7 @@ int __atbatch_submit(const char *queue, time_t run_at, const char *srcfile,
 	}
 
 	if (srcfile) {
-		__ownership_string_terminated(srcfile); /* an argv element (src/util/at.c's opt_f) */
+		unsafe_assume_string_terminated(srcfile); /* an argv element (src/util/at.c's opt_f) */
 		src = fopen(srcfile, "r");
 		if (!src) goto fail;
 	}

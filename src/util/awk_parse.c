@@ -450,7 +450,7 @@ static struct awk_node *parse_primary_impl(struct awk_parser *p)
 		 * local -- restated here the same way expr.c/test.c/find.c's
 		 * own header comments document for an argv-derived element
 		 * crossing the same boundary. */
-		__ownership_string_terminated(name);
+		unsafe_assume_string_terminated(name);
 		advance(p);
 		n = mknode(N_CALL);
 		n->str = name;
@@ -1081,7 +1081,7 @@ static void parse_function_def(struct awk_parser *p)
 		 * parser's whole lifetime (see struct awk_parser's own
 		 * awk_priv.h comment), but that fact does not survive a struct
 		 * field read this per-function analysis cannot see through. */
-		__ownership_pointer_nonnull(p->prog);
+		unsafe_assume_pointer_nonnull(p->prog);
 		struct awk_func *g = __util_reallocarray(p->prog->funcs, (size_t)p->prog->nfuncs + 1, sizeof *g);
 		if (!g) oom();
 		p->prog->funcs = g;
@@ -1127,7 +1127,7 @@ static void parse_rule(struct awk_parser *p)
 		 * parser's whole lifetime (see struct awk_parser's own
 		 * awk_priv.h comment), but that fact does not survive a struct
 		 * field read this per-function analysis cannot see through. */
-		__ownership_pointer_nonnull(p->prog);
+		unsafe_assume_pointer_nonnull(p->prog);
 		struct awk_rule *g = __util_reallocarray(p->prog->rules, (size_t)p->prog->nrules + 1, sizeof *g);
 		if (!g) oom();
 		p->prog->rules = g;

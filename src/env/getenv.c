@@ -46,6 +46,6 @@ char *getenv(const char *name withtok(null_terminated))
 	if (!l || name[l]) return 0;
 	e = __env_find(name, l);
 	result = e ? *e + l + 1 : 0;
-	if (result) __ownership_string_terminated(result);
+	if (result) unsafe_assume_string_terminated(result);
 	return result;
 }

@@ -65,7 +65,7 @@ static const struct ls_opts *g_time_opts;
 /* g_time_opts/g_sort_opts are always set to &o in __util_ls_main before
  * any sorting or printing runs -- never read while still NULL.
  * spicule.ValidPointer can't close this for a file-scope static set once
- * by a separately-analyzed function; __ownership_pointer_nonnull only
+ * by a separately-analyzed function; unsafe_assume_pointer_nonnull only
  * narrows up to the next opaque call, and asserting it here invalidates
  * other nearby proofs instead of net-fixing anything. Left open, same
  * class as src/util/du.c's argv[i][0] gap. */
@@ -188,7 +188,7 @@ static char *build_display_name(const struct ls_opts *o, const struct entry *e)
 	size_t i;
 	/* e->name is always NUL-terminated by construction -- see
 	 * cmp_entries()'s identical restatement. */
-	__ownership_string_terminated(e->name);
+	unsafe_assume_string_terminated(e->name);
 	len = strlen(e->name);
 	if (!__util_size_add(len, 2, &bytes)) return NULL;
 	out = malloc(bytes);
@@ -199,7 +199,7 @@ static char *build_display_name(const struct ls_opts *o, const struct entry *e)
 	}
 	if (ind) out[len++] = ind;
 	out[len] = 0;
-	__ownership_string_terminated(out);
+	unsafe_assume_string_terminated(out);
 	return out;
 }
 
@@ -289,7 +289,7 @@ static void print_comma(const struct ls_opts *o, struct entry *ent, size_t n)
 		 * doesn't survive this copy into a plain local -- restate it,
 		 * same AggregateElementToken gap as the argv-element read
 		 * elsewhere. */
-		__ownership_string_terminated(disp);
+		unsafe_assume_string_terminated(disp);
 		l = strlen(disp) + (i + 1 < n ? 2 : 0);
 		if (col > 0 && col + (int)l > tw) { putchar('\n'); col = 0; }
 		col += printf("%s%s", disp, i + 1 < n ? ", " : "");
@@ -352,8 +352,8 @@ static char *join_path(const char *dir, const char *name)
 	/* Every caller passes a genuinely NUL-terminated C string: an argv
 	 * element, a struct entry.name (see cmp_entries()'s identical
 	 * restatement), or a dirent's own d_name. */
-	__ownership_string_terminated(dir);
-	__ownership_string_terminated(name);
+	unsafe_assume_string_terminated(dir);
+	unsafe_assume_string_terminated(name);
 	dl = strlen(dir);
 	nl = strlen(name);
 	/* dir[dl - 1] (guarded by dl > 0 below) is always within dir's
@@ -370,7 +370,7 @@ static char *join_path(const char *dir, const char *name)
 	/* bytes is exactly dl + need_slash + nl + 1, so this snprintf() never
 	 * truncates -- restate its NUL-termination the same way
 	 * src/util/cp.c's __util_join_basename() does after its own. */
-	__ownership_string_terminated(p);
+	unsafe_assume_string_terminated(p);
 	return p;
 }
 
@@ -456,7 +456,7 @@ static int list_dir(const struct ls_opts *o, const char *path, int print_header,
 			int is_dot;
 			/* ent[i].name is always NUL-terminated -- see cmp_entries()'s
 			 * identical restatement. */
-			__ownership_string_terminated(ent[i].name);
+			unsafe_assume_string_terminated(ent[i].name);
 			is_dot = !strcmp(ent[i].name, ".") || !strcmp(ent[i].name, "..");
 			if (is_dot || !ent[i].stat_ok || !S_ISDIR(ent[i].st.st_mode)) continue;
 			{

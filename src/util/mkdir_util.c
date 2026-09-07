@@ -45,7 +45,7 @@
 #include "libc.h"
 #include "util.h"
 #include "modeparse.h"
-#include "ownership_stubs.h" /* __ownership_string_terminated(): dirname() has no ownership annotations of its own, but always returns "." or a NUL it just wrote into its argument -- see src/misc/dirname.c */
+#include "ownership_stubs.h" /* unsafe_assume_string_terminated(): dirname() has no ownership annotations of its own, but always returns "." or a NUL it just wrote into its argument -- see src/misc/dirname.c */
 
 /* Creates `path`, and with -p, any missing intermediate components too.
  * `leaf_mode` applies only to `path` itself; an intermediate gets the
@@ -74,7 +74,7 @@ static int mkdir_p(char *path withtok(null_terminated), mode_t leaf_mode, int is
 		if (n >= sizeof parent) { errno = ENAMETOOLONG; return -1; }
 		memcpy(parent, path, n + 1);
 		p = dirname(parent);
-		__ownership_string_terminated(p);
+		unsafe_assume_string_terminated(p);
 		if (!strcmp(p, path)) return -1; /* dirname made no progress: true root, ENOENT stands */
 		/* "." is the current directory, which always exists; anything
 		 * else needs the same treatment, recursively. */
@@ -125,7 +125,7 @@ int __util_mkdir_main(
 	for (; i < argc; i++) {
 		char path[PATH_MAX];
 		size_t n;
-		__ownership_string_terminated(argv[i]); /* elements_withtok's grant doesn't survive into this second loop */
+		unsafe_assume_string_terminated(argv[i]); /* elements_withtok's grant doesn't survive into this second loop */
 		n = strlen(argv[i]);
 		if (n >= sizeof path) {
 			__util_diagf("mkdir: %s: %s\n", argv[i], strerror(ENAMETOOLONG));
@@ -133,7 +133,7 @@ int __util_mkdir_main(
 			continue;
 		}
 		memcpy(path, argv[i], n + 1);
-		__ownership_string_terminated(path); /* memcpy just copied argv[i]'s own NUL (n + 1 bytes) into path */
+		unsafe_assume_string_terminated(path); /* memcpy just copied argv[i]'s own NUL (n + 1 bytes) into path */
 		if (mkdir_p(path, leaf_mode, 1, opt_p) < 0) {
 			int saved = errno;
 			__util_diagf("mkdir: %s: %s\n", argv[i], strerror(saved));

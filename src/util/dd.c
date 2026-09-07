@@ -93,7 +93,7 @@ static int parse_dd_num(const char *s withtok(null_terminated), uintmax_t *out)
 	if (v == UINTMAX_MAX && errno == ERANGE) return -1;
 	/* end is within (or at the NUL of) s per strtoumax()'s endptr
 	 * contract, but the plain char * type doesn't carry that fact. */
-	__ownership_string_terminated(end);
+	unsafe_assume_string_terminated(end);
 	s = end;
 
 	if (*s == 'b') { if (dd_mul_overflows(v, 512, &v) < 0) return -1; s++; }
@@ -104,7 +104,7 @@ static int parse_dd_num(const char *s withtok(null_terminated), uintmax_t *out)
 		uintmax_t rhs;
 		/* s+1 stays inside the same NUL-terminated string, but the
 		 * checker can't trace that through the pointer arithmetic. */
-		__ownership_string_terminated(s + 1);
+		unsafe_assume_string_terminated(s + 1);
 		if (parse_dd_num(s + 1, &rhs) < 0) return -1;
 		if (dd_mul_overflows(v, rhs, &v) < 0) return -1;
 		*out = v;
@@ -135,14 +135,14 @@ static int parse_conv(const char *val, int *notrunc, int *sync, int *noerror)
 	size_t n = strlen(val);
 
 	if (n >= sizeof buf) { __util_diagf("dd: conv=%s: too long\n", val); return -1; }
-	__ownership_readable_span(val, n + 1);
+	unsafe_assume_readable_span(val, n + 1);
 	memcpy(buf, val, n + 1);
 
 	*notrunc = *sync = *noerror = 0;
 	for (tok = strtok(buf, ","); tok; tok = strtok(0, ",")) {
 		/* strtok() returns NULL or a NUL-terminated token carved out
 		 * of buf; strtok()'s own declaration doesn't say so. */
-		__ownership_string_terminated(tok);
+		unsafe_assume_string_terminated(tok);
 		if (!strcmp(tok, "notrunc")) *notrunc = 1;
 		else if (!strcmp(tok, "sync")) *sync = 1;
 		else if (!strcmp(tok, "noerror")) *noerror = 1;
@@ -159,7 +159,7 @@ static int write_all(int fd, const char *buf, size_t n, const char *what)
 {
 	size_t off = 0;
 	while (off < n) {
-		__ownership_readable_span(buf + off, n - off);
+		unsafe_assume_readable_span(buf + off, n - off);
 		ssize_t w = write(fd, buf + off, n - off);
 		if (w < 0) {
 			if (errno == EINTR) continue;
@@ -209,7 +209,7 @@ static int dd_copy_direct(int ifd, int ofd, const struct dd_opts *o,
 		blocks++;
 		if ((uintmax_t)n == o->ibs) (*in_full)++; else (*in_partial)++;
 		if (o->sync && (uintmax_t)n < o->ibs) {
-			__ownership_writable_span(buf + n,
+			unsafe_assume_writable_span(buf + n,
 			                          (size_t)(o->ibs - (uintmax_t)n));
 			memset(buf + n, 0, (size_t)(o->ibs - (uintmax_t)n));
 			n = (ssize_t)o->ibs;
@@ -262,7 +262,7 @@ static int dd_copy_blocked(int ifd, int ofd, const struct dd_opts *o,
 			blocks++;
 			if ((uintmax_t)n == o->ibs) (*in_full)++; else (*in_partial)++;
 			if (o->sync && (uintmax_t)n < o->ibs) {
-				__ownership_writable_span(ibuf + n,
+				unsafe_assume_writable_span(ibuf + n,
 				                          (size_t)(o->ibs - (uintmax_t)n));
 				memset(ibuf + n, 0,
 				       (size_t)(o->ibs - (uintmax_t)n));

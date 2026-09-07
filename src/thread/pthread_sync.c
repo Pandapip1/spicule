@@ -90,7 +90,7 @@ int pthread_spin_init(pthread_spinlock_t *lock construct(pthread_spin) grant(pth
 	if (!lock || (pshared != PTHREAD_PROCESS_PRIVATE &&
 	    pshared != PTHREAD_PROCESS_SHARED)) return EINVAL;
 	lock->__value = SPIN_UNLOCKED;
-	__ownership_pthread_spin_initialized(lock);
+	unsafe_assume_pthread_spin_initialized(lock);
 	return 0;
 }
 
@@ -98,7 +98,7 @@ int pthread_spin_destroy(pthread_spinlock_t *lock destroy(pthread_spin) consume(
 {
 	if (!lock || lock->__value != SPIN_UNLOCKED) return EBUSY;
 	lock->__value = 0;
-	__ownership_pthread_spin_destroyed(lock);
+	unsafe_assume_pthread_spin_destroyed(lock);
 	return 0;
 }
 
@@ -111,7 +111,7 @@ int pthread_spin_lock(pthread_spinlock_t *lock handle(pthread_spin) consume(pthr
 		if (state == SPIN_UNLOCKED &&
 		    compare_exchange(&lock->__value, SPIN_UNLOCKED,
 			SPIN_LOCKED) == SPIN_UNLOCKED) {
-			__ownership_pthread_spin_locked(lock);
+			unsafe_assume_pthread_spin_locked(lock);
 			return 0;
 		}
 		alertable_yield();
@@ -127,7 +127,7 @@ int pthread_spin_trylock(pthread_spinlock_t *lock handle(pthread_spin) consume(p
 	if (state == SPIN_UNLOCKED &&
 	    compare_exchange(&lock->__value, SPIN_UNLOCKED,
 		SPIN_LOCKED) == SPIN_UNLOCKED) {
-		__ownership_pthread_spin_locked(lock);
+		unsafe_assume_pthread_spin_locked(lock);
 		return 0;
 	}
 	return EBUSY;
@@ -138,7 +138,7 @@ int pthread_spin_unlock(pthread_spinlock_t *lock handle(pthread_spin) consume(pt
 	if (!lock || lock->__value != SPIN_LOCKED) return EINVAL;
 	__asm__ __volatile__("" : : : "memory");
 	lock->__value = SPIN_UNLOCKED;
-	__ownership_pthread_spin_unlocked(lock);
+	unsafe_assume_pthread_spin_unlocked(lock);
 	return 0;
 }
 

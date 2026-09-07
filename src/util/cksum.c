@@ -112,7 +112,7 @@ static int cksum_one(const char *path, uint32_t *out_crc, uintmax_t *out_len)
 		/* path, when non-NULL, is always one of __util_cksum_main's own
 		 * argv elements -- genuinely null-terminated, but that fact does
 		 * not survive across cksum_one's own unannotated parameter. */
-		__ownership_string_terminated(path);
+		unsafe_assume_string_terminated(path);
 		f = fopen(path, "rb");
 		if (!f) {
 			int saved = errno;
@@ -173,7 +173,7 @@ int __util_cksum_main(
 		 * contract on argv -- restated here since that token does not
 		 * survive the argv[i] use inline below this checker can trace on
 		 * its own. */
-		__ownership_string_terminated(arg);
+		unsafe_assume_string_terminated(arg);
 		/* A lone "-" conventionally means stdin, matching this
 		 * project's other utilities (see pathchk.c's own comment on
 		 * the same convention). */

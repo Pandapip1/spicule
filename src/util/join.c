@@ -140,7 +140,7 @@ static void free_jlines(struct jline *l, size_t n)
 	for (i = 0; i < n; i++) {
 		/* l is read_all()'s non-NULL output whenever n > 0 (an empty
 		 * input file leaves it NULL, always paired with n == 0). */
-		__ownership_pointer_nonnull(l);
+		unsafe_assume_pointer_nonnull(l);
 		free(l[i].text);
 		free(l[i].fields);
 	}
@@ -156,7 +156,7 @@ static void join_putc(int ch)
 
 static void join_write(const char *p, size_t len)
 {
-	__ownership_readable_span(p, len);
+	unsafe_assume_readable_span(p, len);
 	if (!join_output_failed && fwrite(p, 1, len, stdout) != len)
 		join_output_failed = 1;
 }
@@ -249,8 +249,8 @@ static const char *field_ptr(const struct jline *l, int field1based, size_t *out
 		 * (field_reserve() never lets nfields exceed tracked capacity) --
 		 * restated since neither fact is expressible as a struct-field
 		 * invariant in ownership.h's vocabulary. */
-		__ownership_pointer_nonnull(l->fields);
-		__ownership_readable_span(l->fields, l->nfields * sizeof *l->fields);
+		unsafe_assume_pointer_nonnull(l->fields);
+		unsafe_assume_readable_span(l->fields, l->nfields * sizeof *l->fields);
 		/* OPEN LINT FINDING: still reported as "dereference extent not
 		 * proven sufficient" on all arches despite the restatement above
 		 * -- same accepted class as src/util/du.c's residual findings;
@@ -271,10 +271,10 @@ static int keys_equal(const struct jline *a, int fa, const struct jline *b, int 
 	/* field_ptr() returns either "" with *outlen == 0, or a real slice
 	 * of a->text/b->text with *outlen its byte count -- restated the
 	 * same way join_write() restates this for fwrite(). */
-	__ownership_pointer_nonnull(pa);
-	__ownership_pointer_nonnull(pb);
-	__ownership_readable_span(pa, la);
-	__ownership_readable_span(pb, lb);
+	unsafe_assume_pointer_nonnull(pa);
+	unsafe_assume_pointer_nonnull(pb);
+	unsafe_assume_readable_span(pa, la);
+	unsafe_assume_readable_span(pb, lb);
 	for (size_t i = 0; i < la; i++) if (pa[i] != pb[i]) return 0;
 	return 1;
 }
@@ -301,7 +301,7 @@ static void put_field_raw(const char *p, size_t len, const char *empty_repl)
 		 * elements_withtok(null_terminated, argc) contract -- restated
 		 * since the checker doesn't trace that through plain
 		 * `const char *` parameters. */
-		__ownership_string_terminated(empty_repl);
+		unsafe_assume_string_terminated(empty_repl);
 		join_write(empty_repl, strlen(empty_repl));
 	}
 	else join_write(p, len);
@@ -358,7 +358,7 @@ static void print_o(const struct outspec *specs, size_t nspecs, const struct jli
 		size_t len; const char *p;
 		/* specs is parse_o_list()'s non-NULL output whenever nspecs > 0
 		 * (left NULL only alongside nspecs == 0). */
-		__ownership_pointer_nonnull(specs);
+		unsafe_assume_pointer_nonnull(specs);
 		if (i) join_putc(outsep);
 		if (specs[i].file == 0) {
 			if (l1) p = field_ptr(l1, jf1, &len);
@@ -534,8 +534,8 @@ int __util_join_main(
 			 * always paired with n == 0); i1 < n1 and i2 < n2 already
 			 * hold here, and every index derived from them below stays
 			 * within [0, n1) / [0, n2). */
-			__ownership_pointer_nonnull(L1);
-			__ownership_pointer_nonnull(L2);
+			unsafe_assume_pointer_nonnull(L1);
+			unsafe_assume_pointer_nonnull(L2);
 			cmp = keys_cmp(&L1[i1], jf1, &L2[i2], jf2);
 			if (cmp == 0) {
 				size_t g1s = i1, g2s = i2, g1e, g2e, x, y;

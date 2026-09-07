@@ -54,7 +54,7 @@ static int write_all(const char *buf withtok(readable_span(len)), size_t len)
 {
 	size_t off = 0;
 	while (off < len) {
-		__ownership_readable_span(buf + off, len - off);
+		unsafe_assume_readable_span(buf + off, len - off);
 		ssize_t w = write(STDOUT_FILENO, buf + off, len - off);
 		if (w < 0) return -1;
 		if (!w || (size_t)w > len - off) { errno = EIO; return -1; }
@@ -87,7 +87,7 @@ static size_t read_all(int fd, char **out withtok(heap_allocated))
 			buf = nb;
 			cap = newcap;
 		}
-		__ownership_writable_span(buf + len, cap - len);
+		unsafe_assume_writable_span(buf + len, cap - len);
 		r = read(fd, buf + len, cap - len);
 		if (r < 0) { free(buf); *out = 0; return (size_t)-1; }
 		if (r == 0) break;
@@ -136,7 +136,7 @@ static int tail_one(int fd, enum tail_mode mode, int from_end, long long number,
 	/* read_all() only ever returns a length other than (size_t)-1
 	 * together with a non-NULL *out -- true by construction, but not a
 	 * fact that survives across the call for this checker. */
-	__ownership_pointer_nonnull(buf);
+	unsafe_assume_pointer_nonnull(buf);
 
 	/* Clamp to len+1 (the largest value that can change the outcome:
 	 * "at least the whole file") before any (size_t) cast below -- a
@@ -175,7 +175,7 @@ static int tail_one(int fd, enum tail_mode mode, int from_end, long long number,
 		}
 	}
 
-	__ownership_readable_span(buf + start, len - start);
+	unsafe_assume_readable_span(buf + start, len - start);
 	if (write_all(buf + start, len - start) < 0) {
 		int saved = errno;
 		__util_diagf("tail: %s: %s\n", label, strerror(saved));
@@ -218,7 +218,7 @@ static int tail_follow_drain(struct tail_follow_target *t, off_t new_size)
 			return -1;
 		}
 		if (r == 0) break;   /* raced with a truncation; next poll catches up */
-		__ownership_readable_span(buf, (size_t)r);
+		unsafe_assume_readable_span(buf, (size_t)r);
 		if (write_all(buf, (size_t)r) < 0) {
 			__util_diagf("tail: %s: %s\n", t->label, strerror(errno));
 			return -1;
@@ -254,7 +254,7 @@ static int tail_follow(struct tail_follow_target *targets, int ntargets)
 				return -1;
 			}
 			if (r == 0) return 0;   /* writer closed: input exhausted */
-			__ownership_readable_span(buf, (size_t)r);
+			unsafe_assume_readable_span(buf, (size_t)r);
 			if (write_all(buf, (size_t)r) < 0) {
 				__util_diagf("tail: %s: %s\n", targets[0].label, strerror(errno));
 				return -1;
@@ -403,7 +403,7 @@ int __util_tail_main(
 			/* Restate the null-terminated contract on argv[i]: it
 			 * doesn't survive the argv[i] -> const char * read this
 			 * checker can trace on its own. */
-			__ownership_string_terminated(path);
+			unsafe_assume_string_terminated(path);
 			is_stdin = !strcmp(path, "-");
 
 			if (noperands > 1) {

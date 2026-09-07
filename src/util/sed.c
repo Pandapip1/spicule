@@ -125,7 +125,7 @@
 #include <errno.h>
 #include <regex.h>
 #include "util.h"
-#include "ownership_stubs.h" /* __ownership_string_terminated(): a struct-field or array-slot
+#include "ownership_stubs.h" /* unsafe_assume_string_terminated(): a struct-field or array-slot
                               * string read doesn't carry the null_terminated capability
                               * forward, so it's restated at each strcmp()/fopen() use site. */
 
@@ -186,7 +186,7 @@ struct sed_cmd {
 	long occurrence;   /* 1-based, default 1 */
 	int flag_p;
 	/* wfile/text/filename/label are also null-terminated but not declared
-	 * so; restated with __ownership_string_terminated() at each use site
+	 * so; restated with unsafe_assume_string_terminated() at each use site
 	 * instead. */
 	char *wfile withtok(heap_allocated);
 
@@ -241,9 +241,9 @@ static FILE *wfile_get(struct wfile_table *t, const char *name withtok(null_term
 	 * here implies t->entries != NULL, a whole-program invariant this
 	 * per-function analysis cannot see across the earlier call that grew
 	 * it. */
-	__ownership_pointer_nonnull(t->entries);
+	unsafe_assume_pointer_nonnull(t->entries);
 	for (i = 0; i < t->n; i++) {
-		__ownership_string_terminated(t->entries[i].name);
+		unsafe_assume_string_terminated(t->entries[i].name);
 		if (!strcmp(t->entries[i].name, name)) return t->entries[i].f;
 	}
 
@@ -259,7 +259,7 @@ static FILE *wfile_get(struct wfile_table *t, const char *name withtok(null_term
 	/* t->cap > 0 at this point (just grown above, or already grown by a
 	 * prior call and never reset), hence t->entries != NULL -- see this
 	 * function's own comment above. */
-	__ownership_pointer_nonnull(t->entries);
+	unsafe_assume_pointer_nonnull(t->entries);
 
 	{
 		/* is_special decides the fclose() below, not `f != stdout &&
@@ -303,7 +303,7 @@ static int wfile_table_close(struct wfile_table *t) __attribute__((nonnull(1)))
 	int had_error = 0;
 	/* t->n > i here implies t->entries != NULL -- see wfile_get()'s own
 	 * comment above. */
-	__ownership_pointer_nonnull(t->entries);
+	unsafe_assume_pointer_nonnull(t->entries);
 	for (i = 0; i < t->n; i++) {
 		if (t->entries[i].f != stdout && t->entries[i].f != stderr &&
 		    fclose(t->entries[i].f) != 0) {
@@ -353,7 +353,7 @@ static int queue_append(struct append_queue *q, enum append_kind kind, const cha
 	 * cross-call growable-array invariant as wfile_get()'s own
 	 * t->entries, this per-function analysis cannot see across the
 	 * earlier call that grew it. */
-	__ownership_pointer_nonnull(q->entries);
+	unsafe_assume_pointer_nonnull(q->entries);
 	q->entries[q->n].kind = kind;
 	q->entries[q->n].text_or_file = s;
 	q->n++;
@@ -365,9 +365,9 @@ static void flush_appends(struct append_queue *q) __attribute__((nonnull(1)))
 	size_t i;
 	/* q->n > i here implies q->entries != NULL -- see queue_append()'s
 	 * own comment above. */
-	__ownership_pointer_nonnull(q->entries);
+	unsafe_assume_pointer_nonnull(q->entries);
 	for (i = 0; i < q->n; i++) {
-		__ownership_string_terminated(q->entries[i].text_or_file);
+		unsafe_assume_string_terminated(q->entries[i].text_or_file);
 		if (q->entries[i].kind == APPEND_TEXT) {
 			fputs(q->entries[i].text_or_file, stdout);
 		} else {
@@ -717,7 +717,7 @@ static int parse_text_arg(struct parser *ps, struct buf *out) __attribute__((non
  * not also null_terminated: since these are static and get inlined into
  * callers, a combined return contract was seen as already spent by the
  * time it reached the destination struct field a statement later.
- * Null-termination is restated with __ownership_string_terminated() at
+ * Null-termination is restated with unsafe_assume_string_terminated() at
  * each use site instead. */
 withtok(heap_allocated)
 static char *dup_rest_of_line(struct parser *ps) __attribute__((nonnull(1)))
@@ -738,7 +738,7 @@ static char *dup_rest_of_line(struct parser *ps) __attribute__((nonnull(1)))
 	if (!out) return 0;
 	for (size_t i = 0; i < n; i++) out[i] = start[i];
 	out[n] = 0;
-	__ownership_string_terminated(out);
+	unsafe_assume_string_terminated(out);
 	return out;
 }
 
@@ -767,7 +767,7 @@ static char *dup_label(struct parser *ps) __attribute__((nonnull(1)))
 	if (!out) return 0;
 	for (size_t i = 0; i < n; i++) out[i] = start[i];
 	out[n] = 0;
-	__ownership_string_terminated(out);
+	unsafe_assume_string_terminated(out);
 	return out;
 }
 
@@ -796,7 +796,7 @@ static struct sed_cmd *prog_push(struct program *pr) __attribute__((nonnull(1)))
 	 * prior call and never reset), hence pr->cmds != NULL -- the same
 	 * cross-call growable-array invariant as wfile_get()'s own
 	 * t->entries. */
-	__ownership_pointer_nonnull(pr->cmds);
+	unsafe_assume_pointer_nonnull(pr->cmds);
 	memset(&pr->cmds[pr->n], 0, sizeof pr->cmds[pr->n]);
 	return &pr->cmds[pr->n++];
 }
@@ -1081,7 +1081,7 @@ static int resolve_program(struct parser *ps, struct program *pr) __attribute__(
 	stack = 0;
 	/* pr->n > i here implies pr->cmds != NULL -- see prog_push()'s own
 	 * comment above. */
-	__ownership_pointer_nonnull(pr->cmds);
+	unsafe_assume_pointer_nonnull(pr->cmds);
 	for (i = 0; i < pr->n; i++) {
 		if (pr->cmds[i].kind == CMD_BLOCK_START) {
 			if (sp >= cap) {
@@ -1109,11 +1109,11 @@ static int resolve_program(struct parser *ps, struct program *pr) __attribute__(
 		if (cmd->kind != CMD_BRANCH && cmd->kind != CMD_TEST) continue;
 		if (!cmd->label || !cmd->label[0]) { cmd->target = (long)pr->n; continue; }
 
-		__ownership_string_terminated(cmd->label);
+		unsafe_assume_string_terminated(cmd->label);
 		found = 0;
 		for (j = 0; j < pr->n; j++) {
 			if (pr->cmds[j].kind == CMD_LABEL && pr->cmds[j].label) {
-				__ownership_string_terminated(pr->cmds[j].label);
+				unsafe_assume_string_terminated(pr->cmds[j].label);
 				if (!strcmp(pr->cmds[j].label, cmd->label)) {
 					cmd->target = (long)j;
 					found = 1;
@@ -1136,7 +1136,7 @@ static void free_program(struct program *pr) __attribute__((nonnull(1)))
 	size_t i, j;
 	/* pr->n > i here implies pr->cmds != NULL -- see prog_push()'s own
 	 * comment above. */
-	__ownership_pointer_nonnull(pr->cmds);
+	unsafe_assume_pointer_nonnull(pr->cmds);
 	for (i = 0; i < pr->n; i++) {
 		struct sed_cmd *cmd = &pr->cmds[i];
 		free_addr(&cmd->a1);
@@ -1144,7 +1144,7 @@ static void free_program(struct program *pr) __attribute__((nonnull(1)))
 		if (cmd->have_re) regfree(&cmd->re);
 		/* cmd->nrepl > j here implies cmd->repl != NULL -- see
 		 * expand_replacement()'s own comment. */
-		__ownership_pointer_nonnull(cmd->repl);
+		unsafe_assume_pointer_nonnull(cmd->repl);
 		for (j = 0; j < cmd->nrepl; j++)
 			if (cmd->repl[j].kind == REPL_LITERAL) free(cmd->repl[j].lit);
 		free(cmd->repl);
@@ -1217,7 +1217,7 @@ static void free_input(struct input_set *in) __attribute__((nonnull(1)))
 	 * growable-array invariant as wfile_get()'s own t->entries, this
 	 * per-function analysis cannot see across input_push()'s own earlier
 	 * growth. */
-	__ownership_pointer_nonnull(in->lines);
+	unsafe_assume_pointer_nonnull(in->lines);
 	for (i = 0; i < in->n; i++) free(in->lines[i].text);
 	free(in->lines);
 	in->lines = 0; in->n = 0; in->cap = 0;
@@ -1289,7 +1289,7 @@ static void expand_replacement(struct sed_cmd *cmd, const char *text, size_t pos
 	 * cmd->repl, exactly once at the end) together with *nout, with the
 	 * same 0-capacity-forces-first-growth pattern as wfile_get()'s own
 	 * t->entries. */
-	__ownership_pointer_nonnull(cmd->repl);
+	unsafe_assume_pointer_nonnull(cmd->repl);
 	for (i = 0; i < cmd->nrepl; i++) {
 		struct repl_seg *s = &cmd->repl[i];
 		if (s->kind == REPL_LITERAL) {
@@ -1378,7 +1378,7 @@ static void do_list(const struct buf *ps) __attribute__((nonnull(1)))
 	 * 0-capacity-forces-first-growth pattern (see buf_append()'s own
 	 * comment) means ps->cap > 0 whenever anything has ever been
 	 * appended, and ps->len <= ps->cap always. */
-	__ownership_pointer_nonnull(ps->data);
+	unsafe_assume_pointer_nonnull(ps->data);
 	for (i = 0; i < ps->len; i++) {
 		unsigned char ch = (unsigned char)ps->data[i];
 		char out[8];
@@ -1429,7 +1429,7 @@ static int run_program(struct sed_state *st, struct program *pr, int opt_n)
 			 * struct input_set's own in.lines/in.n -- see input_push()'s
 			 * own cross-call growable-array invariant (the same shape
 			 * as wfile_get()'s t->entries). */
-			__ownership_pointer_nonnull(st->lines);
+			unsafe_assume_pointer_nonnull(st->lines);
 			struct input_line *ln = &st->lines[st->cursor++];
 			buf_assign(&st->pattern, ln->text, ln->len);
 			st->line_number++;
@@ -1446,7 +1446,7 @@ static int run_program(struct sed_state *st, struct program *pr, int opt_n)
 
 				/* pc < (long)pr->n here implies pr->n > 0, hence
 				 * pr->cmds != NULL -- see prog_push()'s own comment. */
-				__ownership_pointer_nonnull(pr->cmds);
+				unsafe_assume_pointer_nonnull(pr->cmds);
 				while (pc < (long)pr->n) {
 					struct sed_cmd *cmd = &pr->cmds[(size_t)pc];
 					int sel;
@@ -1469,7 +1469,7 @@ static int run_program(struct sed_state *st, struct program *pr, int opt_n)
 							t_flag = 1;
 							if (cmd->flag_p) { fwrite(st->pattern.data, 1, st->pattern.len, stdout); fputc('\n', stdout); }
 							if (cmd->wfile) {
-								__ownership_string_terminated(cmd->wfile);
+								unsafe_assume_string_terminated(cmd->wfile);
 								wfile_write_line(&st->wtab, cmd->wfile, st->pattern.data, st->pattern.len);
 							}
 						}
@@ -1524,7 +1524,7 @@ static int run_program(struct sed_state *st, struct program *pr, int opt_n)
 						} else {
 							/* see run_program()'s own comment above on
 							 * st->lines/st->nlines. */
-							__ownership_pointer_nonnull(st->lines);
+							unsafe_assume_pointer_nonnull(st->lines);
 							struct input_line *ln = &st->lines[st->cursor++];
 							buf_assign(&st->pattern, ln->text, ln->len);
 							st->line_number++;
@@ -1540,7 +1540,7 @@ static int run_program(struct sed_state *st, struct program *pr, int opt_n)
 						} else {
 							/* see run_program()'s own comment above on
 							 * st->lines/st->nlines. */
-							__ownership_pointer_nonnull(st->lines);
+							unsafe_assume_pointer_nonnull(st->lines);
 							struct input_line *ln = &st->lines[st->cursor++];
 							buf_append_char(&st->pattern, '\n');
 							buf_append(&st->pattern, ln->text, ln->len);
@@ -1572,7 +1572,7 @@ static int run_program(struct sed_state *st, struct program *pr, int opt_n)
 					}
 					case CMD_READ: queue_append(&st->aq, APPEND_RFILE, cmd->filename); pc++; break;
 					case CMD_WRITE:
-						__ownership_string_terminated(cmd->filename);
+						unsafe_assume_string_terminated(cmd->filename);
 						wfile_write_line(&st->wtab, cmd->filename, st->pattern.data, st->pattern.len);
 						pc++;
 						break;
@@ -1728,7 +1728,7 @@ int __util_sed_main(
 			/* use_stdin, not `f != stdin` below, decides the fclose() --
 			 * same opaque-pointer-comparison limitation as
 			 * script_buf_append_file()'s use_stdin above. */
-			__ownership_string_terminated(files[fi]);
+			unsafe_assume_string_terminated(files[fi]);
 			int use_stdin = !strcmp(files[fi], "-");
 			FILE *f = use_stdin ? stdin : fopen(files[fi], "rb");
 			if (!f) {

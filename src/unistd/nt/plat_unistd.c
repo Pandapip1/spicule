@@ -457,8 +457,8 @@ int __plat_link(int olddirfd, const char *oldpath, int newdirfd, const char *new
 	li->ReplaceIfExists = 0;
 	li->RootDirectory = np.oa.RootDirectory;
 	li->FileNameLength = np.nt.Length;
-	__ownership_writable_span(li->FileName, np.nt.Length);
-	__ownership_readable_span(np.nt.Buffer, np.nt.Length);
+	unsafe_assume_writable_span(li->FileName, np.nt.Length);
+	unsafe_assume_readable_span(np.nt.Buffer, np.nt.Length);
 	memcpy(li->FileName, np.nt.Buffer, np.nt.Length);
 	st = NtSetInformationFile(h, &io, li, (ULONG)sz, FileLinkInformation);
 	__free(li);
@@ -539,8 +539,8 @@ ssize_t __plat_readlink(int dirfd, const char *path, char *buf, size_t bufsz)
 		const char *t = (const char *)r->GenericReparseBuffer.DataBuffer + 4;
 		size_t tl = r->ReparseDataLength - 4;
 		if (tl > bufsz) tl = bufsz;
-		__ownership_writable_span(buf, tl);
-		__ownership_readable_span(t, tl);
+		unsafe_assume_writable_span(buf, tl);
+		unsafe_assume_readable_span(t, tl);
 		memcpy(buf, t, tl);
 		return (ssize_t)tl;
 	} else {
@@ -565,7 +565,7 @@ ssize_t __plat_readlink(int dirfd, const char *path, char *buf, size_t bufsz)
 		if (!u) return -1;
 		n = (int)strlen(u);
 		if ((size_t)n > bufsz) n = (int)bufsz;
-		__ownership_writable_span(buf, (size_t)n);
+		unsafe_assume_writable_span(buf, (size_t)n);
 		memcpy(buf, u, n);
 		__free(u);
 	}
@@ -727,8 +727,8 @@ static int sid_in_domain(const SID *sid, const SID *domain)
 	           sizeof sid->IdentifierAuthority) != 0)
 		return 0;
 	n = (size_t)domain->SubAuthorityCount * sizeof(ULONG);
-	__ownership_readable_span(sid->SubAuthority, n);
-	__ownership_readable_span(domain->SubAuthority, n);
+	unsafe_assume_readable_span(sid->SubAuthority, n);
+	unsafe_assume_readable_span(domain->SubAuthority, n);
 	return memcmp(sid->SubAuthority, domain->SubAuthority, n) == 0;
 }
 

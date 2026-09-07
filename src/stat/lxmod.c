@@ -38,11 +38,11 @@ unsigned __lxmod_create_buffer(
 {
 	unsigned char *b = buffer;
 	__NT_FILE_FULL_EA_INFORMATION *ea = (__NT_FILE_FULL_EA_INFORMATION *)b;
-	__ownership_writable_span(b, LXMOD_EA_LEN);
+	unsafe_assume_writable_span(b, LXMOD_EA_LEN);
 	memset(b, 0, LXMOD_EA_LEN);
 	ea->EaNameLength = LXMOD_NAME_LEN;
 	ea->EaValueLength = LXMOD_VALUE_LEN;
-	__ownership_writable_span(ea->EaName, LXMOD_NAME_LEN + 1);
+	unsafe_assume_writable_span(ea->EaName, LXMOD_NAME_LEN + 1);
 	memcpy(ea->EaName, LXMOD_NAME, LXMOD_NAME_LEN + 1);
 	putle32((unsigned char *)ea->EaName + LXMOD_NAME_LEN + 1, mode);
 	return LXMOD_EA_LEN;

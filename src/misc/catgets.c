@@ -198,7 +198,7 @@ static nl_catd read_catalog(const char *path)
 			buf = nbuf;
 			cap = newcap;
 		}
-		__ownership_writable_span(buf + len, cap - len);
+		unsafe_assume_writable_span(buf + len, cap - len);
 		n = read(fd, buf + len, cap - len);
 		if (n < 0) {
 			/* catopen.html lists no [EINTR], but read() can

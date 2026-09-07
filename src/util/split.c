@@ -117,7 +117,7 @@ static int split_by_lines(FILE *in, const char *prefix, int suflen, long lcount)
 			inpiece = 0;
 			had_output = 1;
 		}
-		__ownership_readable_span(line, (size_t)n);
+		unsafe_assume_readable_span(line, (size_t)n);
 		if (fwrite(line, 1, (size_t)n, out) != (size_t)n) {
 			/* The write failure is primary; close only releases the piece. */
 			(void)fclose(out);

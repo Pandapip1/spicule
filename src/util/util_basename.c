@@ -42,12 +42,12 @@ int __util_basename_main(
 	base = basename(argv[1]);
 	/* basename() is an opaque external decl with no ownership contract;
 	 * base is a real C string either way (into argv[1], or a static "."). */
-	__ownership_string_terminated(base);
+	unsafe_assume_string_terminated(base);
 	if (argc == 3) {
 		const char *suffix = argv[2];
 		/* suffix = argv[2]; null-terminated per argv's own contract, but
 		 * that token doesn't survive the argv[2] read -- restated. */
-		__ownership_string_terminated(suffix);
+		unsafe_assume_string_terminated(suffix);
 		blen = strlen(base);
 		slen = strlen(suffix);
 		/* "is not identical to the characters remaining" (slen < blen,

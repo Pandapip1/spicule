@@ -23,7 +23,7 @@ int gethostname(char *name withtok(writable_span(len)), size_t len)
 	__plat_hostname(h, sizeof h);
 	/* __plat_hostname() always NUL-terminates h (see its own contract in
 	 * plat_unistd.h); the checker can't see across the backend call. */
-	__ownership_string_terminated(h);
+	unsafe_assume_string_terminated(h);
 	n = strlen(h);
 	if (n >= len) {
 		if (len) memmove(name, h, len);

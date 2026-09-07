@@ -226,7 +226,7 @@ static int file_one(const char *path, const struct file_opts *o)
 
 	/* path = one of argv's elements; null-terminated per argv's own
 	 * contract, but that token doesn't survive the parameter read -- restated. */
-	__ownership_string_terminated(path);
+	unsafe_assume_string_terminated(path);
 
 	if (strcmp(path, "-") == 0) {
 		printf("%s: %s\n", path, classify_stdin(o));

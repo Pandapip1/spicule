@@ -45,7 +45,7 @@ static int copy_stream(int in, const char *label)
 
 	while ((n = read(in, buf, sizeof buf)) > 0) {
 		if ((size_t)n > sizeof buf) { errno = EIO; return -1; }
-		__ownership_readable_span(buf, (size_t)n);
+		unsafe_assume_readable_span(buf, (size_t)n);
 		size_t off = 0;
 		while (off < (size_t)n) {
 			ssize_t w = write(STDOUT_FILENO, buf + off, (size_t)n - off);

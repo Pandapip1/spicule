@@ -14,7 +14,7 @@
 #include <stdlib.h>
 #include "modeparse.h"
 #include "util.h"
-#include "ownership_stubs.h" /* __ownership_pointer_nonnull(): *pp advances from a nonnull spec through a T** the checker can't trace -- see call site below */
+#include "ownership_stubs.h" /* unsafe_assume_pointer_nonnull(): *pp advances from a nonnull spec through a T** the checker can't trace -- see call site below */
 
 static int is_octal_digit(char c) { return c >= '0' && c <= '7'; }
 
@@ -116,7 +116,7 @@ int __util_parse_mode(const char *prog, const char *spec, mode_t base, // NOLINT
 			if (parse_clause(&c, &cur, umask_bits) < 0) goto bad;
 			/* *pp only ever advances from a nonnull start; the T**
 			 * out-param loses that fact for the checker. */
-			__ownership_pointer_nonnull(c);
+			unsafe_assume_pointer_nonnull(c);
 			if (*c == ',') { c++; continue; }
 			if (*c == 0) break;
 			goto bad;

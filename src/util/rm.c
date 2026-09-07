@@ -162,7 +162,7 @@ int __util_rm_main(
 		/* a is one of argv's own elements; restate the null-terminated
 		 * guarantee since the checker can't trace a plain local back
 		 * to argv on its own (same as cp.c's identical loop). */
-		__ownership_string_terminated(a);
+		unsafe_assume_string_terminated(a);
 
 		if (a[0] != '-' || a[1] == 0) break;   /* not an option; a bare "-" is an operand */
 		if (!strcmp(a, "--")) { i++; break; }
@@ -193,7 +193,7 @@ int __util_rm_main(
 		/* Restate the null-terminated contract on argv[i]: it does not
 		 * survive the direct argv[i] read this checker can trace on
 		 * its own. */
-		__ownership_string_terminated(argv[i]);
+		unsafe_assume_string_terminated(argv[i]);
 		if (rm_one(argv[i], recursive, force) < 0) had_error = 1;
 	}
 

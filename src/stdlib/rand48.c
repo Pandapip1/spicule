@@ -46,7 +46,7 @@ unsigned short *seed48(unsigned short s[3])
 {
 	static unsigned short old[3];
 	memcpy(old, xsubi_default, sizeof old);
-	__ownership_readable_span(s, sizeof old);
+	unsafe_assume_readable_span(s, sizeof old);
 	memcpy(xsubi_default, s, sizeof old);
 	a_[0] = 0xe66d; a_[1] = 0xdeec; a_[2] = 0x5; c_ = 0xb;
 	return old;
@@ -54,9 +54,9 @@ unsigned short *seed48(unsigned short s[3])
 
 void lcong48(unsigned short p[7])
 {
-	__ownership_readable_span(p, 3 * sizeof(unsigned short));
+	unsafe_assume_readable_span(p, 3 * sizeof(unsigned short));
 	memcpy(xsubi_default, p, 3 * sizeof(unsigned short));
-	__ownership_readable_span(p + 3, 3 * sizeof(unsigned short));
+	unsafe_assume_readable_span(p + 3, 3 * sizeof(unsigned short));
 	memcpy(a_, p + 3, 3 * sizeof(unsigned short));
 	c_ = p[6];
 }

@@ -109,7 +109,7 @@ withtok(null_terminated)
 char *strerror(int e)
 {
 	char *result = (char *)__strerror_msg(e);
-	__ownership_string_terminated(result);
+	unsafe_assume_string_terminated(result);
 	return result;
 }
 

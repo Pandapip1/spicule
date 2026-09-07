@@ -145,7 +145,7 @@ char **element_width_leftover_margin_not_provably_bounded(size_t n, char *s)
 /* The adversarial twin of pointer-safe.c's struct_field_array_element_
  * nonnull_axiom_is_trusted: the identical struct argv_slice shape and
  * the identical fixed-offset element read, with the
- * __ownership_pointer_nonnull() call removed. This is the other half of
+ * unsafe_assume_pointer_nonnull() call removed. This is the other half of
  * that fixture's own proof obligation -- confirming the new axiom did
  * not accidentally widen ValidPointerChecker::checkPointerExpression's
  * proof for every struct-field array read regardless of whether the

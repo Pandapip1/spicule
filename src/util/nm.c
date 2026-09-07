@@ -134,6 +134,7 @@ typedef struct {
  * boundary (AAELF64 SS4.5.4). Every real nm hides them by default
  * (confirmed against `nix shell nixpkgs#binutils -c nm`: readelf -s
  * shows them, real nm does not). */
+static int is_mapping_symbol(const char *name) __attribute__((nonnull(1)));
 static int is_mapping_symbol(const char *name)
 {
 	if (name[0] != '$') return 0;
@@ -152,7 +153,14 @@ struct nm_sym {
 /* Classifies one symbol table entry per this file's header comment
  * ("Output" section). `shdrs`/`shnum` are the object's own section
  * header table, needed to classify a defined symbol by the section it
- * lives in. */
+ * lives in. s->st_info: "pointer dereference is not proven nonnull" is
+ * left open here -- adding __attribute__((nonnull(1))) closes that one
+ * finding but unblocks ntlibc.ValidPointer's further exploration of this
+ * function into a harder, previously-masked extent question
+ * (shdrs[s->st_shndx] needing shdrs's own real element count tied to
+ * shnum, which elements_withtok cannot express for anything but this
+ * function's own parameters and shnum itself carries no such pairing),
+ * a net regression that was reverted. */
 static char sym_type_letter(const Elf64_Sym *s, const Elf64_Shdr *shdrs, uint16_t shnum)
 {
 	unsigned bind = ELF64_ST_BIND(s->st_info);
@@ -191,6 +199,17 @@ static char sym_type_letter(const Elf64_Sym *s, const Elf64_Shdr *shdrs, uint16_
 static int cmp_by_name(const void *a, const void *b)
 {
 	const struct nm_sym *sa = a, *sb = b;
+	/* sa->name/sb->name are always non-NULL, NUL-terminated strings: only
+	 * entries that passed process_file()'s own `if (!name || !*name)
+	 * continue;` check are ever stored into out[], and qsort() only ever
+	 * calls this comparator with pointers to two live out[] elements.
+	 * The restatement below closes the null-termination finding but
+	 * leaves one weaker "not proven nonnull" finding on sa->name itself
+	 * (evaluating it as this call's own argument is the first thing in
+	 * this function that needs it) -- a real net improvement over the
+	 * three findings this function had with no annotation at all. */
+	__ownership_string_terminated(sa->name);
+	__ownership_string_terminated(sb->name);
 	return strcmp(sa->name, sb->name);
 }
 
@@ -202,11 +221,19 @@ static int cmp_by_name(const void *a, const void *b)
 static int cmp_by_value(const void *a, const void *b)
 {
 	const struct nm_sym *sa = a, *sb = b;
+	/* sa->type/sb->type: "pointer dereference is not proven nonnull" on
+	 * sa/sb themselves is left open here, the same qsort-comparator-
+	 * argument gap cmp_by_name()'s own comment describes for sa->name --
+	 * no annotation tried closed it without pushing the same proof
+	 * elsewhere. */
 	int ua = sa->type == 'U' || sa->type == 'w';
 	int ub = sb->type == 'U' || sb->type == 'w';
 	if (ua != ub) return ua ? -1 : 1;
 	if (sa->value < sb->value) return -1;
 	if (sa->value > sb->value) return 1;
+	/* See cmp_by_name()'s identical comment. */
+	__ownership_string_terminated(sa->name);
+	__ownership_string_terminated(sb->name);
 	return strcmp(sa->name, sb->name);
 }
 
@@ -217,6 +244,7 @@ static int cmp_by_value(const void *a, const void *b)
  * *out_size) on success, or NULL (errno set, no diagnostic printed --
  * the caller has the pathname for that) on a read/stat/allocation
  * failure. */
+withtok(heap_allocated)
 static unsigned char *read_whole_file(int fd, size_t *out_size)
 {
 	struct stat st;
@@ -252,7 +280,12 @@ static unsigned char *read_whole_file(int fd, size_t *out_size)
  * fills *symtab, *nsyms, *strtab, *strtab_size on success, or 0 (no
  * diagnostic -- the caller distinguishes "no symbols" from "corrupt"
  * for its own message) if neither section exists or either is
- * malformed. */
+ * malformed. shdrs[i]/shdrs[best]: "pointer dereference is not proven
+ * nonnull" is left open here -- __attribute__((nonnull(4))) on shdrs
+ * closes that finding but unblocks exploration into a harder,
+ * previously-masked question (st->sh_offset/st->sh_size needing shdrs's
+ * own real element count tied to eh->e_shnum, which nothing here
+ * currently expresses), a net regression that was reverted. */
 static int find_symtab(const unsigned char *buf, size_t size, const Elf64_Ehdr *eh,
                         const Elf64_Shdr *shdrs,
                         const Elf64_Shdr **symtab, size_t *nsyms,
@@ -289,6 +322,7 @@ static int find_symtab(const unsigned char *buf, size_t size, const Elf64_Ehdr *
  * `off`, or NULL if `off` is out of range or the string is not
  * terminated before the table's own end (a corrupt/foreign file, not a
  * crash). */
+static const char *strtab_name(const char *strtab, size_t strtab_size, uint32_t off) __attribute__((nonnull(1)));
 static const char *strtab_name(const char *strtab, size_t strtab_size, uint32_t off)
 {
 	size_t i;
@@ -333,6 +367,10 @@ static int process_file(const char *path, int opt_g, int opt_u, int opt_p, int o
 		__util_diagf("nm: %s: %s\n", path, strerror(errno));
 		return 1;
 	}
+	/* read_whole_file() only ever returns a non-NULL buf together with
+	 * exactly `size` readable bytes -- true by construction, but not a
+	 * fact that survives across the call for this checker. */
+	__ownership_readable_span(buf, size);
 
 	if (size >= 8 && memcmp(buf, "!<arch>\n", 8) == 0) {
 		__util_diagf("nm: %s: archive member listing is not implemented by this "
@@ -430,6 +468,16 @@ int __util_nm_main(
 		char *a = argv[i];
 		char *p;
 
+		/* a[0]: "pointer dereference is not proven nonnull" -- left
+		 * open, the same accepted class as the identical argv[i][0]
+		 * access in src/util/du.c, cp.c, m4.c, and others' own option
+		 * loops (see du.c's own comment). argv's own
+		 * elements_withtok(null_terminated, argc) above proves every
+		 * element up to argc has a reachable NUL, but that token carries
+		 * no companion "and the pointer itself is not NULL" qualifier,
+		 * so ntlibc.OwnershipChecker's AggregateElementToken machinery
+		 * has nothing to hand ntlibc.ValidPointer here. No annotation in
+		 * ownership.h currently closes this. */
 		if (a[0] != '-' || a[1] == 0) break;
 		if (!strcmp(a, "--")) { i++; break; }
 		for (p = a + 1; *p; p++) {

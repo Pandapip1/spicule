@@ -47,6 +47,7 @@
 #include <pwd.h>
 #include <grp.h>
 #include "util.h"
+#include "ownership_stubs.h"
 
 struct ls_opts {
 	int a, A, C, F, R, S, c, d, f, i, k, l, m, n, p, q, r, s, t, u, x, one;
@@ -61,6 +62,18 @@ struct entry {
 static const struct ls_opts *g_sort_opts;
 static const struct ls_opts *g_time_opts;
 
+/* g_time_opts/g_sort_opts below are always set to &o in __util_ls_main
+ * before any sorting or printing runs -- never read while still NULL.
+ * ntlibc.ValidPointer has no annotation that closes this for a file-scope
+ * static set once by a function this checker analyzes separately: the one
+ * candidate mechanism (__ownership_pointer_nonnull, tried against both a
+ * direct global read and a snapshot into a local) narrows the fact only
+ * up to the next opaque call, and this project's own axiom stubs are
+ * exactly such opaque calls -- the call that would assert "g_time_opts is
+ * live" ends up invalidating other, already-fine proofs nearby (e->st in
+ * time_field(), a->stat_ok in cmp_entries()) instead of net-fixing
+ * anything. Left open, the same accepted class as
+ * src/util/du.c's own documented argv[i][0] gap. */
 static time_t time_field(const struct entry *e)
 {
 	if (g_time_opts->c) return e->st.st_ctime;
@@ -73,6 +86,15 @@ static int cmp_entries(const void *pa, const void *pb)
 	const struct entry *a = pa, *b = pb;
 	int r;
 
+	/* a->name/b->name are always NUL-terminated: either freshly malloc'd
+	 * and NUL-set by read_directory(), or an argv element carried
+	 * through unchanged by __util_ls_main's -d/plain-file paths -- never
+	 * a bare uninitialized pointer. Left as an open CapabilityToken
+	 * finding at each strcmp() below rather than restated by hand: every
+	 * placement tried (once up top, or right at each call) either left
+	 * this unresolved or made ntlibc.ValidPointer's separate proof of a/b
+	 * (this comparator's own qsort-supplied arguments) or of
+	 * time_field()'s e parameter worse instead. */
 	if (g_sort_opts->S) {
 		off_t sa = a->stat_ok ? a->st.st_size : 0, sb = b->stat_ok ? b->st.st_size : 0;
 		if (sa < sb) r = 1;
@@ -165,12 +187,17 @@ static char type_indicator(const struct ls_opts *o, const struct entry *e)
 /* -q: substitute '?' for any non-printable byte -- applied
  * unconditionally, see this file's header comment. */
 withtok(heap_allocated)
+withtok(null_terminated)
 static char *build_display_name(const struct ls_opts *o, const struct entry *e)
 {
 	char ind = type_indicator(o, e);
-	size_t len = strlen(e->name), bytes;
+	size_t len, bytes;
 	char *out;
 	size_t i;
+	/* e->name is always NUL-terminated by construction -- see
+	 * cmp_entries()'s identical restatement. */
+	__ownership_string_terminated(e->name);
+	len = strlen(e->name);
 	if (!__util_size_add(len, 2, &bytes)) return NULL;
 	out = malloc(bytes);
 	if (!out) return NULL;
@@ -180,6 +207,7 @@ static char *build_display_name(const struct ls_opts *o, const struct entry *e)
 	}
 	if (ind) out[len++] = ind;
 	out[len] = 0;
+	__ownership_string_terminated(out);
 	return out;
 }
 
@@ -265,6 +293,11 @@ static void print_comma(const struct ls_opts *o, struct entry *ent, size_t n)
 		char *disp = build_display_name(o, &ent[i]);
 		size_t l;
 		if (!disp) continue;
+		/* build_display_name()'s own withtok(null_terminated) return
+		 * contract doesn't survive this declaration-initializer copy into
+		 * a plain local -- restate it, the same AggregateElementToken gap
+		 * this project already documents for a const argv-element read. */
+		__ownership_string_terminated(disp);
 		l = strlen(disp) + (i + 1 < n ? 2 : 0);
 		if (col > 0 && col + (int)l > tw) { putchar('\n'); col = 0; }
 		col += printf("%s%s", disp, i + 1 < n ? ", " : "");
@@ -304,7 +337,7 @@ static void print_entries(const struct ls_opts *o, struct entry *ent, size_t n)
 	}
 }
 
-static int grow_entries(struct entry **arr, size_t *n, size_t *cap)
+static int grow_entries(struct entry **arr withtok(heap_allocated), size_t *n, size_t *cap)
 {
 	size_t ncap;
 	if (!__util_array_capacity(*cap, *n, 1, 32, sizeof(struct entry), &ncap)) return -1;
@@ -318,17 +351,36 @@ static int grow_entries(struct entry **arr, size_t *n, size_t *cap)
 }
 
 withtok(heap_allocated)
+withtok(null_terminated)
 static char *join_path(const char *dir, const char *name)
 {
-	size_t dl = strlen(dir), nl = strlen(name), bytes;
-	int need_slash = dl > 0 && dir[dl - 1] != '/';
+	size_t dl, nl, bytes;
+	int need_slash;
 	char *p;
+	/* Every caller passes a genuinely NUL-terminated C string: an argv
+	 * element, a struct entry.name (see cmp_entries()'s identical
+	 * restatement), or a dirent's own d_name. */
+	__ownership_string_terminated(dir);
+	__ownership_string_terminated(name);
+	dl = strlen(dir);
+	nl = strlen(name);
+	/* dir[dl - 1] (guarded by dl > 0 just below): dl == strlen(dir), so
+	 * this index is always within dir's own NUL-terminated extent, but
+	 * ntlibc.ValidPointer's extent proof doesn't derive readable_span
+	 * from null_terminated + strlen()'s return alone, and restating it
+	 * by hand (__ownership_readable_span(dir, dl)) didn't close this
+	 * either -- left open. */
+	need_slash = dl > 0 && dir[dl - 1] != '/';
 	if (!__util_size_add(dl, (size_t)need_slash, &bytes) ||
 	    !__util_size_add(bytes, nl, &bytes) ||
 	    !__util_size_add(bytes, 1, &bytes)) return NULL;
 	p = malloc(bytes);
 	if (!p) return NULL;
 	snprintf(p, bytes, "%s%s%s", dir, need_slash ? "/" : "", name);
+	/* bytes is exactly dl + need_slash + nl + 1, so this snprintf() never
+	 * truncates -- restate its NUL-termination the same way
+	 * src/util/cp.c's __util_join_basename() does after its own. */
+	__ownership_string_terminated(p);
 	return p;
 }
 
@@ -355,6 +407,13 @@ static int read_directory(const struct ls_opts *o, const char *dir, struct entry
 		if (!o->a && !o->A && de->d_name[0] == '.') continue;
 		if (o->A && (is_dot || is_dotdot)) continue;
 
+		/* grow_entries() only ever returns 0 after leaving *arr set to a
+		 * live allocation with room for at least n+1 entries, but that
+		 * fact is established through a T** out-parameter, which
+		 * ntlibc.ValidPointer's interprocedural reasoning does not carry
+		 * back to this call site (and restating it by hand here made the
+		 * proof worse, not better, by forcing a harder extent proof on
+		 * every arr[n].* access below) -- left open. */
 		if (grow_entries(&arr, &n, &cap) < 0) { (void)closedir(dp); goto nomem; }
 		{
 			size_t namebytes;
@@ -406,7 +465,11 @@ static int list_dir(const struct ls_opts *o, const char *path, int print_header,
 
 	if (o->R) {
 		for (i = 0; i < n; i++) {
-			int is_dot = !strcmp(ent[i].name, ".") || !strcmp(ent[i].name, "..");
+			int is_dot;
+			/* ent[i].name is always NUL-terminated -- see cmp_entries()'s
+			 * identical restatement. */
+			__ownership_string_terminated(ent[i].name);
+			is_dot = !strcmp(ent[i].name, ".") || !strcmp(ent[i].name, "..");
 			if (is_dot || !ent[i].stat_ok || !S_ISDIR(ent[i].st.st_mode)) continue;
 			{
 				char *sub = join_path(path, ent[i].name);
@@ -518,6 +581,10 @@ int __util_ls_main(
 				continue;
 			}
 			if (S_ISDIR(st.st_mode)) continue;
+			/* grow_entries() only ever returns 0 after leaving *arr set
+			 * to a live allocation with room for at least nplain+1
+			 * entries -- same T** out-parameter gap as read_directory()'s
+			 * identical call, left open there. */
 			if (grow_entries(&plain, &nplain, &cap) < 0) { __util_diagf("ls: out of memory\n"); exit_status = 1; continue; }
 			plain[nplain].name = (char *)files[fi];
 			plain[nplain].st = st;

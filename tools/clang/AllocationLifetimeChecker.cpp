@@ -12,7 +12,9 @@
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/MemRegion.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramStateTrait.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/SymbolManager.h"
 #include "clang/StaticAnalyzer/Frontend/CheckerRegistry.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/raw_ostream.h"
@@ -34,6 +36,22 @@ REGISTER_MAP_WITH_PROGRAMSTATE(AllocationLifecycle, SymbolRef,
                                ntlibc::algebra::LifecycleState)
 REGISTER_MAP_WITH_PROGRAMSTATE(FreerObligation, SymbolRef, bool)
 REGISTER_MAP_WITH_PROGRAMSTATE(ReplacedBy, SymbolRef, SymbolRef)
+/* elements_withtok(family, extent)'s caller-side obligation: a call whose
+ * callee parameter carries this annotation hands the caller an array whose
+ * [0, extent) elements are each an independent dynamic-storage allocation,
+ * the same shape argv/argc already gets from OwnershipChecker's
+ * AggregateElementTokenChecker -- proved here for THIS checker's leak
+ * obligation instead of that one's borrow/duplicate proof. Keyed by the
+ * array's own MemRegion (not a SymbolRef): the common case is a caller-owned
+ * array object (a local array or an already-tracked heap block), which has
+ * no symbolic base for aggregateBaseSymbol-style extraction to find. Each
+ * element's own obligation is minted lazily, on its first read (see
+ * checkPostStmt(ImplicitCastExpr) below) -- an opaque call's own body isn't
+ * visible here, so there is no way to hand out N distinct symbols for N
+ * elements before something actually loads one. */
+using AggregateObligationKey = std::pair<const MemRegion *, const IdentifierInfo *>;
+REGISTER_MAP_WITH_PROGRAMSTATE(AggregateObligationExtent, AggregateObligationKey,
+                               SymbolRef)
 
 namespace {
 
@@ -121,6 +139,98 @@ static const IdentifierInfo *annotationFamily(const Decl *Declaration,
       return &Declaration->getASTContext().Idents.get(Text);
   }
   return nullptr;
+}
+
+/* Sibling of annotationFamily() above for the per-element shape: an
+ * elements_withtok(family, extent) destination is exactly as good a proof
+ * of ownership transfer as a scalar withtok(family) one is, just one more
+ * subscript of indirection down -- the extent name itself is not needed
+ * here, only the family, since checkPostStmt(BinaryOperator)'s discharge
+ * doesn't reason about which index was written. */
+static const IdentifierInfo *elementDestinationFamily(const Decl *Declaration) {
+  if (!Declaration)
+    return nullptr;
+  for (const AnnotateAttr *Attribute :
+       Declaration->specific_attrs<AnnotateAttr>()) {
+    StringRef Text = Attribute->getAnnotation();
+    if (!Text.consume_front("elements_withtok:"))
+      continue;
+    StringRef Family = Text.split(':').first;
+    if (Family.empty() ||
+        !isDynamicStorageToken(Declaration->getASTContext(), Family))
+      continue;
+    return &Declaration->getASTContext().Idents.get(Family);
+  }
+  return nullptr;
+}
+
+/* The call-boundary half of elements_withtok: does Parameter carry
+ * elements_withtok(family, extent), with a real dynamic-storage family and
+ * a syntactically well-formed extent name? Mirrors
+ * OwnershipChecker.cpp's AggregateElementTokenChecker::checkBeginFunction
+ * parse, but that copy is `static` in a different translation unit and so
+ * not reachable from here. */
+static bool elementsWithtokParameter(const ParmVarDecl *Parameter,
+                                     const IdentifierInfo *&Family,
+                                     StringRef &ExtentName) {
+  for (const AnnotateAttr *Attribute :
+       Parameter->specific_attrs<AnnotateAttr>()) {
+    StringRef Text = Attribute->getAnnotation();
+    if (!Text.consume_front("elements_withtok:"))
+      continue;
+    auto [FamilyName, Extent] = Text.split(':');
+    if (FamilyName.empty() || Extent.empty() || Extent.contains(':') ||
+        !isDynamicStorageToken(Parameter->getASTContext(), FamilyName))
+      continue;
+    Family = &Parameter->getASTContext().Idents.get(FamilyName);
+    ExtentName = Extent;
+    return true;
+  }
+  return false;
+}
+
+/* Adapted from OwnershipChecker.cpp's aggregateIndexProven() (also
+ * unreachable across the translation-unit boundary, see above): Upper must
+ * be a real symbol (a literal extent such as a constant is not supported,
+ * the same limitation that reference implementation accepts), and Index's
+ * width/signedness must match it, since SVal::getType() reconstructs a
+ * representative type from a concrete integer's bit pattern rather than
+ * recovering its real declared type. */
+static bool indexBelowExtent(const ArraySubscriptExpr *Access, SymbolRef Upper,
+                             ProgramStateRef State, CheckerContext &C) {
+  if (!Upper)
+    return false;
+  std::optional<DefinedOrUnknownSVal> Index =
+      C.getSVal(Access->getIdx()).getAs<DefinedOrUnknownSVal>();
+  if (!Index)
+    return false;
+  QualType IndexType = Index->getType(C.getASTContext());
+  QualType UpperType = Upper->getType();
+  if (IndexType.isNull() || UpperType.isNull() ||
+      !IndexType->isIntegralOrEnumerationType() ||
+      !UpperType->isIntegralOrEnumerationType() ||
+      C.getASTContext().getIntWidth(IndexType) !=
+          C.getASTContext().getIntWidth(UpperType) ||
+      IndexType->isUnsignedIntegerOrEnumerationType() !=
+          UpperType->isUnsignedIntegerOrEnumerationType())
+    return false;
+  SValBuilder &Builder = C.getSValBuilder();
+  SVal Below = Builder.evalBinOp(State, BO_LT, *Index, nonloc::SymbolVal(Upper),
+                                 Builder.getConditionType());
+  std::optional<DefinedOrUnknownSVal> BelowCondition =
+      Below.getAs<DefinedOrUnknownSVal>();
+  if (!BelowCondition || State->assume(*BelowCondition, false))
+    return false;
+  if (IndexType->isSignedIntegerOrEnumerationType()) {
+    SVal NonNegative = Builder.evalBinOp(State, BO_GE, *Index,
+                                         Builder.makeIntVal(0, IndexType),
+                                         Builder.getConditionType());
+    std::optional<DefinedOrUnknownSVal> Condition =
+        NonNegative.getAs<DefinedOrUnknownSVal>();
+    if (!Condition || State->assume(*Condition, false))
+      return false;
+  }
+  return true;
 }
 
 static std::optional<TokenContract>
@@ -230,7 +340,9 @@ class AllocationLifetimeChecker
     : public Checker<check::ASTDecl<FunctionDecl>,
                      check::ASTDecl<TypedefNameDecl>, check::BeginFunction,
                      check::PreCall, check::PostCall,
-                     check::PostStmt<BinaryOperator>, check::EndFunction> {
+                     check::PostStmt<BinaryOperator>,
+                     check::PostStmt<ImplicitCastExpr>, check::LiveSymbols,
+                     check::EndFunction> {
   mutable std::unique_ptr<BugType> BT;
 
   static LifecycleFamilyId familyId(const IdentifierInfo *Family) {
@@ -312,6 +424,44 @@ class AllocationLifetimeChecker
         absentLifecycle(), familyId(Family), LifecycleOperation::Acquire);
     State = State->set<AllocationLifecycle>(Symbol, Acquired.After.State);
     return State->set<FreerObligation>(Symbol, IsFreerObligation);
+  }
+
+  /* Records the caller-side elements_withtok(family, extent) fact for one
+   * call (see AggregateObligationExtent's own comment above): no obligation
+   * for any individual element is minted here, only the (aggregate region,
+   * family) -> extent relation checkPostStmt(ImplicitCastExpr) later reads
+   * back at each element's own first load. */
+  static ProgramStateRef trackAggregateObligations(const CallEvent &Call,
+                                                    ProgramStateRef State) {
+    const FunctionDecl *Function = functionOf(Call);
+    if (!Function)
+      return State;
+    unsigned ArgumentIndex = 0;
+    for (const ParmVarDecl *Parameter : Function->parameters()) {
+      unsigned Argument = ArgumentIndex++;
+      const IdentifierInfo *Family = nullptr;
+      StringRef ExtentName;
+      if (!elementsWithtokParameter(Parameter, Family, ExtentName) ||
+          Argument >= Call.getNumArgs())
+        continue;
+      unsigned ExtentIndex = 0;
+      bool FoundExtent = false;
+      for (const ParmVarDecl *Candidate : Function->parameters()) {
+        if (Candidate->getName() == ExtentName) {
+          FoundExtent = true;
+          break;
+        }
+        ++ExtentIndex;
+      }
+      if (!FoundExtent || ExtentIndex >= Call.getNumArgs())
+        continue;
+      const MemRegion *Aggregate = Call.getArgSVal(Argument).getAsRegion();
+      SymbolRef Extent = Call.getArgSVal(ExtentIndex).getAsSymbol(true);
+      if (!Aggregate || !Extent)
+        continue;
+      State = State->set<AggregateObligationExtent>({Aggregate, Family}, Extent);
+    }
+    return State;
   }
 
   static bool belongsToFrame(ProgramStateRef State, SymbolRef Symbol,
@@ -630,19 +780,28 @@ public:
   }
 
   void checkPostCall(const CallEvent &Call, CheckerContext &C) const {
+    ProgramStateRef State = trackAggregateObligations(Call, C.getState());
     const FunctionDecl *Function = functionOf(Call);
     std::optional<TokenContract> Returns = returnsOwnership(Function);
-    if (!Returns)
+    if (!Returns) {
+      if (State != C.getState())
+        C.addTransition(State);
       return;
-    ProgramStateRef State = C.getState();
+    }
     if (std::optional<unsigned> Argument =
             returnedArgument(Function, Returns->Family)) {
-      if (*Argument >= Call.getNumArgs())
+      if (*Argument >= Call.getNumArgs()) {
+        if (State != C.getState())
+          C.addTransition(State);
         return;
+      }
       std::optional<DefinedOrUnknownSVal> ArgumentValue =
           Call.getArgSVal(*Argument).getAs<DefinedOrUnknownSVal>();
-      if (!ArgumentValue)
+      if (!ArgumentValue) {
+        if (State != C.getState())
+          C.addTransition(State);
         return;
+      }
       auto [ArgumentNonNullState, ArgumentNullState] =
           State->assume(*ArgumentValue);
       if (ArgumentNonNullState)
@@ -653,12 +812,18 @@ public:
     }
     SVal ReturnValue = Call.getReturnValue();
     SymbolRef Result = ReturnValue.getAsLocSymbol(true);
-    if (!Result)
+    if (!Result) {
+      if (State != C.getState())
+        C.addTransition(State);
       return;
+    }
     std::optional<DefinedOrUnknownSVal> Defined =
         ReturnValue.getAs<DefinedOrUnknownSVal>();
-    if (!Defined)
+    if (!Defined) {
+      if (State != C.getState())
+        C.addTransition(State);
       return;
+    }
     if (std::optional<int64_t> Sentinel = excludedSentinel(findTokenSort(
             Function->getASTContext(), Returns->Family->getName()))) {
       SentinelSplit Split = splitOnExcludedSentinel(
@@ -731,6 +896,14 @@ public:
     const ValueDecl *Destination = destinationDeclaration(Statement->getLHS());
     const IdentifierInfo *DestinationFamily =
         annotationFamily(Destination, "withtok:");
+    /* elements_withtok(family, extent) is only a valid destination through
+     * an actual subscript: `arr[i] = value` writes one element, but `arr =
+     * value` (no subscript) would reassign the whole array pointer, which
+     * elements_withtok says nothing about owning by itself (a real field
+     * commonly carries both annotations, one for each level). */
+    if (!DestinationFamily &&
+        isa<ArraySubscriptExpr>(Statement->getLHS()->IgnoreParenImpCasts()))
+      DestinationFamily = elementDestinationFamily(Destination);
     if (!DestinationFamily)
       return;
     SymbolRef Source = C.getSVal(Statement->getRHS()).getAsLocSymbol(true);
@@ -749,6 +922,64 @@ public:
     if (!Transfer.permitted())
       return;
     C.addTransition(forget(State, Source));
+  }
+
+  /* Mints one element's own allocation obligation the first time it is
+   * read out of an elements_withtok(family, extent) aggregate (see
+   * AggregateObligationExtent's comment above for why this has to happen
+   * lazily, on read, rather than eagerly for all extent elements right
+   * after the populating call returns). Once minted, the element is an
+   * ordinary tracked allocation like any other: free()'s existing
+   * consume(family) contract discharges it, an assignment into another
+   * withtok(family) slot transfers it, and checkEndFunction's own
+   * end-of-frame scan already catches it if it is never released. */
+  void checkPostStmt(const ImplicitCastExpr *Cast, CheckerContext &C) const {
+    if (Cast->getCastKind() != CK_LValueToRValue)
+      return;
+    const auto *Access = dyn_cast<ArraySubscriptExpr>(
+        Cast->getSubExpr()->IgnoreParenImpCasts());
+    if (!Access)
+      return;
+    const MemRegion *Aggregate = C.getSVal(Access->getBase()).getAsRegion();
+    if (!Aggregate)
+      return;
+    ProgramStateRef State = C.getState();
+    bool Changed = false;
+    for (const auto &Relation : State->get<AggregateObligationExtent>()) {
+      if (Relation.first.first != Aggregate ||
+          !indexBelowExtent(Access, Relation.second, State, C))
+        continue;
+      SymbolRef Element = C.getSVal(Cast).getAsLocSymbol(true);
+      if (!Element || hasLifecycleFact(State, Element))
+        continue;
+      State = track(State, Element, Cast, C.getStackFrame(),
+                    Relation.first.second, false);
+      Changed = true;
+    }
+    if (Changed)
+      C.addTransition(State);
+  }
+
+  /* Without this, ProgramState::cleanupState/SymbolReaper prunes the
+   * ConstraintRangeTy range facts for an elements_withtok extent symbol as
+   * soon as nothing in the AST references it again -- exactly
+   * MemoryContractChecker.cpp's own checkLiveSymbols situation (see its
+   * comment for the confirmed minimal reproduction): a still-open
+   * AggregateObligationExtent obligation holds the SYMBOL, but holding a
+   * symbol inside a checker's own private GDM map is not, by itself, what
+   * keeps its range alive. Both the aggregate's own MemRegion key
+   * and the extent SymbolRef value need the vote: reaping the region would
+   * make indexBelowExtent's later region-identity match fail to find this
+   * entry at all, and reaping the symbol's range would make the bound
+   * itself unprovable again exactly as observed without this. */
+  void checkLiveSymbols(ProgramStateRef State, SymbolReaper &SR) const {
+    for (const auto &Entry : State->get<AggregateObligationExtent>()) {
+      if (const MemRegion *Aggregate = Entry.first.first)
+        SR.markLive(Aggregate);
+      if (SymbolRef Extent = Entry.second)
+        for (const SymExpr *Leaf : Extent->symbols())
+          SR.markLive(Leaf);
+    }
   }
 
   void checkEndFunction(const ReturnStmt *Return, CheckerContext &C) const {

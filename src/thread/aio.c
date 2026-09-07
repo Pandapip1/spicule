@@ -25,6 +25,7 @@
 #include "plat_thread.h"
 #include "plat_fd.h"
 #include "unsafe_pointer.h"
+#include "ownership_stubs.h"
 
 enum request_state {
 	REQ_FREE,
@@ -105,6 +106,11 @@ static void wake_waiters_locked(const struct aio_request *request)
 	struct aio_waiter *waiter;
 	int i;
 	for (waiter = waiters; waiter; waiter = waiter->next) {
+		/* waiter->list is aio_suspend()'s own list parameter, already
+		 * indexed at this same count by that function's two
+		 * suspend_list_ready() calls before this waiter was ever
+		 * registered -- not visible here across the struct field. */
+		__ownership_pointer_nonnull(waiter->list);
 		for (i = 0; i < waiter->count; i++) {
 			if (waiter->list[i] != request->cb) continue;
 			waiter->triggered = 1;
@@ -178,11 +184,20 @@ static void finish_locked(struct aio_request *request, int error, ssize_t result
 	struct sigevent *individual, int *have_individual,
 	struct sigevent *list, int *have_list)
 {
+	struct aiocb *cb = request->cb;
 	request->error = error;
 	request->result = result;
 	request->state = REQ_DONE;
-	wake_waiters_locked(request);
-	*individual = request->cb->aio_sigevent;
+	/* Every caller (aio_worker, submit()'s synchronous path, aio_cancel())
+	 * only reaches this with a queued or running request, whose cb was
+	 * already set by submit() -- not visible here across the struct
+	 * field. Read into a local once: re-reading request->cb after any of
+	 * this function's own callers passed request through another call
+	 * (perform(), in submit()'s synchronous path) makes the checker treat
+	 * each re-read as a fresh, unrelated value. wake_waiters_locked() runs
+	 * last since it doesn't need any of this. */
+	__ownership_pointer_nonnull(cb);
+	*individual = cb->aio_sigevent;
 	*have_individual = event_wants_notify(individual);
 	*have_list = 0;
 	if (request->group && request->group->active && --request->group->remaining == 0) {
@@ -190,6 +205,7 @@ static void finish_locked(struct aio_request *request, int error, ssize_t result
 		*have_list = event_wants_notify(list);
 		request->group->active = 0;
 	}
+	wake_waiters_locked(request);
 }
 
 static ssize_t perform(struct aio_request *request, int *error)
@@ -200,6 +216,11 @@ static ssize_t perform(struct aio_request *request, int *error)
 	struct __fd *fd;
 	ssize_t result;
 
+	/* request is always REQ_QUEUED/REQ_RUNNING here (next_queued() and
+	 * submit()'s synchronous path both only reach this with cb already
+	 * set), an invariant established in those other functions that this
+	 * one can't see through the struct field. */
+	__ownership_pointer_nonnull(cb);
 	errno = 0;
 	if (request->op == OP_SYNC) {
 		result = fsync(cb->aio_fildes);
@@ -207,15 +228,25 @@ static ssize_t perform(struct aio_request *request, int *error)
 		fd = __fd_get(cb->aio_fildes);
 		if (!fd) result = -1;
 		else if (fd->type == __FD_FILE) {
-			if (request->op == OP_READ)
+			if (request->op == OP_READ) {
+				/* cb->aio_buf/cb->aio_nbytes are the application's own
+				 * request buffer and length, POSIX's aio_read() contract
+				 * (mirroring read()'s own withtok(writable_span(count))
+				 * on its buffer parameter) -- not locally derivable from
+				 * these struct fields alone. */
+				__ownership_writable_span(cb->aio_buf, cb->aio_nbytes);
 				result = pread(cb->aio_fildes, (void *)cb->aio_buf,
 				               cb->aio_nbytes, cb->aio_offset);
-			else
+			} else {
+				__ownership_readable_span(cb->aio_buf, cb->aio_nbytes);
 				result = pwrite(cb->aio_fildes, (const void *)cb->aio_buf,
 				                cb->aio_nbytes, cb->aio_offset);
+			}
 		} else if (request->op == OP_READ) {
+			__ownership_writable_span(cb->aio_buf, cb->aio_nbytes);
 			result = read(cb->aio_fildes, (void *)cb->aio_buf, cb->aio_nbytes);
 		} else {
+			__ownership_readable_span(cb->aio_buf, cb->aio_nbytes);
 			result = write(cb->aio_fildes, (const void *)cb->aio_buf, cb->aio_nbytes);
 		}
 	}
@@ -510,6 +541,8 @@ static int suspend_list_ready(const struct aiocb *const list[], int count,
  * timeout -- saturating at LLONG_MAX rather than overflowing, both when
  * converting the timespec itself to ticks and when adding it to `now`. */
 static long long timeout_deadline(const struct timespec *timeout, long long now)
+    __attribute__((nonnull(1)));
+static long long timeout_deadline(const struct timespec *timeout, long long now)
 {
 	long long subsecond = (timeout->tv_nsec + 99) / 100;
 	long long ticks;
@@ -627,10 +660,20 @@ int aio_cancel(int fd, struct aiocb *cb)
 	__sig_lock();
 	for (i = 0; i < AIO_MAX; i++) {
 		struct aio_request *request = &requests[i];
+		struct aiocb *req_cb;
 		struct sigevent individual, group;
 		int have_individual, have_group;
-		if (request->state == REQ_FREE || request->cb->aio_fildes != fd ||
-		    (cb && request->cb != cb)) continue;
+		if (request->state == REQ_FREE) continue;
+		req_cb = request->cb;
+		/* req_cb is set together with leaving REQ_FREE in submit(), and
+		 * cleared together with returning to it -- not visible here
+		 * across the struct field. Read into a local once: re-reading
+		 * request->cb after finish_locked() (below) has already taken
+		 * request through another call makes the checker treat each
+		 * re-read as a fresh, unrelated value. */
+		__ownership_pointer_nonnull(req_cb);
+		if (req_cb->aio_fildes != fd || (cb && req_cb != cb))
+			continue;
 		matched = 1;
 		if (request->state == REQ_RUNNING) { running = 1; continue; }
 		if (request->state == REQ_DONE) continue;

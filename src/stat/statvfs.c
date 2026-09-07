@@ -10,10 +10,10 @@
  * MFT grows on demand and exposes no inode-pool count, so a nonzero
  * value would be fabricated. f_fsid is the same VolumeSerialNumber
  * stat.c uses for st_dev. ST_NOSUID is set unconditionally since no NT
- * file system honors setuid/setgid bits and ntlibc never produces them.
+ * file system honors setuid/setgid bits and spicule never produces them.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)

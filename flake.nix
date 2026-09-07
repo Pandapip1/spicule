@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: (C) 2026 Gavin John
 # SPDX-License-Identifier: GPL-3.0-or-later
 {
-  description = "ntlibc build and lint tooling";
+  description = "spicule build and lint tooling";
 
   # This flake exists to replace tribal knowledge, not to add to it: every
   # package here was pulled directly from the `nix shell nixpkgs#... --command
@@ -49,7 +49,7 @@
           # neither the arm64 target nor --delay-all support exists in
           # what it produces.
           tcc = pkgs.stdenv.mkDerivation {
-            pname = "ntlibc-tcc";
+            pname = "spicule-tcc";
             # This `version`, the `rev`/`hash` below, and the patch below
             # are the sole pin for tinycc now -- .github/actions/setup-
             # tinycc has no copy of its own to drift out of sync with.
@@ -129,18 +129,18 @@
             enableParallelBuilding = true;
 
             # No `make test`/`make check`: the pinned tinycc build has
-            # never run one, and ntlibc's own gate.sh/CI matrix is what
+            # never run one, and spicule's own gate.sh/CI matrix is what
             # actually exercises these cross compilers (against real
-            # ntlibc sources), not tinycc's own bundled test suite.
+            # spicule sources), not tinycc's own bundled test suite.
             doCheck = false;
 
             meta = {
-              description = "ntlibc's pinned tinycc cross toolchain (i386/x86_64/arm64 win32); .github/actions/setup-tinycc just runs `nix build .#tcc`";
+              description = "spicule's pinned tinycc cross toolchain (i386/x86_64/arm64 win32); .github/actions/setup-tinycc just runs `nix build .#tcc`";
               mainProgram = "x86_64-win32-tcc";
             };
           };
 
-          # ntlibc's patched Wine fork (with RtlCloneUserProcess), built
+          # spicule's patched Wine fork (with RtlCloneUserProcess), built
           # through Nix instead of .github/actions/setup-wine's own `git
           # clone`/`checkout`/`configure`/`make install` sequence. That
           # action's apt packages (gcc-mingw-w64-i686,
@@ -167,7 +167,7 @@
           # forced off below, the same way --enable-archs is forced,
           # rather than silently gaining a capability CI has never
           # validated. It also builds both i386 and x86_64 PE guest archs
-          # (WoW64), which is what ntlibc-suite/libc-test/posix-optsrun's
+          # (WoW64), which is what spicule-suite/libc-test/posix-optsrun's
           # i386-win32/x86_64-win32 matrix legs need `wine <exe>.exe` to
           # run. Only `src`/`version`/`patches` change below; every
           # buildInput/configureFlag/support-flag decision still comes
@@ -257,7 +257,7 @@
           # cc-wrapper-mediated, so -resource-dir and the C/C++ standard
           # library header search path it needs to compile
           # tools/clang/*.cpp (an ordinary hosted C++ program, unlike the
-          # -nostdinc freestanding ntlibc sources cppflags_for() feeds it)
+          # -nostdinc freestanding spicule sources cppflags_for() feeds it)
           # are already handled the same way they would be by a Debian
           # clang-18 package -- clang-unwrapped on its own knows neither.
           versionedLlvm18 = pkgs.runCommand "llvm18-versioned-names" { } ''
@@ -366,7 +366,7 @@ EOF
             shellHook = ''
               export CPATH="${llvm18.clang-unwrapped.dev}/include''${CPATH:+:$CPATH}"
               export LD_LIBRARY_PATH="${llvm18.clang-unwrapped.lib}/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-              echo "ntlibc dev shell: gnumake, tcc (i386/x86_64/arm64-win32-tcc), clang/lld/qemu-user, the clang-18/llvm-18/z3 lint toolchain, python3, cppcheck, shellcheck, gh." >&2
+              echo "spicule dev shell: gnumake, tcc (i386/x86_64/arm64-win32-tcc), clang/lld/qemu-user, the clang-18/llvm-18/z3 lint toolchain, python3, cppcheck, shellcheck, gh." >&2
             '';
           };
 

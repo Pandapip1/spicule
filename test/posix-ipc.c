@@ -83,7 +83,7 @@ static int fails;
  * is a pure function of the file's identity.  Two distinct pathnames
  * that resolve to one file (here, "f" and "./f") must agree.
  * ------------------------------------------------------------------ */
-#if NTLIBC_TEST(PASS, posix_ipc_ftok_same_file_same_key) /* PASS: <sys/ipc.h> now exists (include/sys/ipc.h) and
+#if SPICULE_TEST(PASS, posix_ipc_ftok_same_file_same_key) /* PASS: <sys/ipc.h> now exists (include/sys/ipc.h) and
        * ftok() (src/ipc/ftok.c, platform-independent -- see that file's
        * own banner) is a pure function of stat()'s (st_dev, st_ino),
        * identical on both backends. */
@@ -136,7 +136,7 @@ static void test_ftok_same_file_same_key(void)
  * set before any function behind it works, and that intermediate state
  * is worth being able to see.
  * ------------------------------------------------------------------ */
-#if NTLIBC_TEST(PASS, posix_ipc_header_types_and_constants) /* PASS: include/sys/ipc.h now defines struct ipc_perm and
+#if SPICULE_TEST(PASS, posix_ipc_header_types_and_constants) /* PASS: include/sys/ipc.h now defines struct ipc_perm and
        * the seven IPC_* constants, matching the Linux kernel's own
        * <linux/ipc.h> bit patterns (see that header's own comment). */
 #include <sys/ipc.h>
@@ -191,7 +191,7 @@ static void test_ipc_header_types_and_constants(void)
  * IPC_PRIVATE is used so the test needs no key coordination and cannot
  * collide with another run.
  * ------------------------------------------------------------------ */
-#if NTLIBC_TEST(PASS, posix_ipc_shm_get_attach_detach) /* PASS: <sys/shm.h> now exists. Linux: real shmget(2)/
+#if SPICULE_TEST(PASS, posix_ipc_shm_get_attach_detach) /* PASS: <sys/shm.h> now exists. Linux: real shmget(2)/
        * shmat(2)/shmdt(2)/shmctl(2) syscalls (src/ipc/linux/
        * plat_sysvipc.c). NT: a genuine emulation over a private-
        * namespace backing file plus this library's own already-real
@@ -261,7 +261,7 @@ static void test_shm_get_attach_detach(void)
  * for, the creator PID must be this process, and shm_nattch must track
  * the attach/detach that brackets the query.
  * ------------------------------------------------------------------ */
-#if NTLIBC_TEST(PASS, posix_ipc_shmctl_stat_reports_segment) /* PASS: shmctl(IPC_STAT) is implemented on both
+#if SPICULE_TEST(PASS, posix_ipc_shmctl_stat_reports_segment) /* PASS: shmctl(IPC_STAT) is implemented on both
        * backends -- see the fence above for where. */
 #include <sys/ipc.h>
 #include <sys/shm.h>
@@ -333,7 +333,7 @@ static void test_shmctl_stat_reports_segment(void)
  * that only ever returns the head is a pipe -- so it is asserted here
  * rather than only the round trip.
  * ------------------------------------------------------------------ */
-#if NTLIBC_TEST(PASS, posix_ipc_msg_send_receive_by_type) /* PASS: <sys/msg.h> now exists. Linux: real msgget(2)/
+#if SPICULE_TEST(PASS, posix_ipc_msg_send_receive_by_type) /* PASS: <sys/msg.h> now exists. Linux: real msgget(2)/
        * msgsnd(2)/msgrcv(2) syscalls (src/ipc/linux/plat_sysvipc.c). NT:
        * a genuine emulation over a shared backing-file slot table
        * (src/ipc/nt/plat_msg.c -- see that file's own banner for why
@@ -404,7 +404,7 @@ static void test_msg_send_receive_by_type(void)
  * msg_qnum is the member that makes IPC_STAT worth a test of its own:
  * it must track the sends and receives performed either side of it.
  * ------------------------------------------------------------------ */
-#if NTLIBC_TEST(PASS, posix_ipc_msgctl_stat_tracks_queue_depth) /* PASS: msgctl(IPC_STAT) is implemented on both
+#if SPICULE_TEST(PASS, posix_ipc_msgctl_stat_tracks_queue_depth) /* PASS: msgctl(IPC_STAT) is implemented on both
        * backends -- see the fence above for where. */
 #include <sys/ipc.h>
 #include <sys/msg.h>
@@ -471,7 +471,7 @@ static void test_msgctl_stat_tracks_queue_depth(void)
  * assertion that can be made single-threaded without hanging the suite
  * -- a blocking decrement with nobody to post would never return.
  * ------------------------------------------------------------------ */
-#if NTLIBC_TEST(PASS, posix_ipc_semop_adjusts_and_nowait_eagain) /* PASS: <sys/sem.h> now exists. Linux: a real
+#if SPICULE_TEST(PASS, posix_ipc_semop_adjusts_and_nowait_eagain) /* PASS: <sys/sem.h> now exists. Linux: a real
        * semop(2) syscall (src/ipc/linux/plat_sysvipc.c). NT: a genuine
        * emulation storing each set's values in a shared backing file
        * (src/ipc/nt/plat_sem.c -- see that file's own banner for why
@@ -538,7 +538,7 @@ static void test_semop_adjusts_and_nowait_eagain(void)
  * GETALL/SETALL over a multi-semaphore set is what separates semctl()
  * from a single counter, so the set here has three members.
  * ------------------------------------------------------------------ */
-#if NTLIBC_TEST(PASS, posix_ipc_semctl_getall_setall) /* PASS: semctl() (GETALL/SETALL/GETVAL/SETVAL/GETZCNT/
+#if SPICULE_TEST(PASS, posix_ipc_semctl_getall_setall) /* PASS: semctl() (GETALL/SETALL/GETVAL/SETVAL/GETZCNT/
        * GETNCNT/IPC_STAT/IPC_RMID) is implemented on both backends --
        * see the fence above for where. NT's GETNCNT/GETZCNT always
        * report 0 (nobody is registered as waiting, matching this

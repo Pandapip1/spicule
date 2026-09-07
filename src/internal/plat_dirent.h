@@ -29,8 +29,8 @@
  * chained by NextEntryOffset; Linux: linux_dirent64 records chained by
  * d_reclen) -- nothing outside a backend's own plat_dirent.c ever looks
  * at those bytes directly anymore. */
-#ifndef _NTLIBC_PLAT_DIRENT_H
-#define _NTLIBC_PLAT_DIRENT_H
+#ifndef _SPICULE_PLAT_DIRENT_H
+#define _SPICULE_PLAT_DIRENT_H
 
 #include <stddef.h>
 #include <sys/types.h>

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: (C) 2026 Gavin John
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef NTLIBC_TOKEN_ALGEBRA_H
-#define NTLIBC_TOKEN_ALGEBRA_H
+#ifndef SPICULE_TOKEN_ALGEBRA_H
+#define SPICULE_TOKEN_ALGEBRA_H
 
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Attr.h"
@@ -16,7 +16,7 @@
 #include <cstdint>
 #include <optional>
 
-namespace ntlibc::algebra {
+namespace spicule::algebra {
 
 /* Unknown is abstract knowledge, not a fourth runtime multiplicity.  It is
  * the havoc state used after a policy-violating edge, which remains a real C
@@ -405,7 +405,7 @@ inline std::optional<int64_t> excludedSentinel(const TokenSort *Token) {
  * shape: one macro in ownership.h emitting its own "qual:..._sentinel="
  * prefix, one thin wrapper here, and one entry in scalarSentinel's list
  * below -- no change to the shared parser or to the enforcing checker.
- * tools/clang/SizeCastChecker.cpp's ntlibc.IntegerSentinel is the one
+ * tools/clang/SizeCastChecker.cpp's spicule.IntegerSentinel is the one
  * checker that reads any of these back, always through scalarSentinel. */
 inline std::optional<int64_t> integerSentinel(const clang::Decl *Declaration) {
   return sentinelFromQualifier(Declaration, "qual:integer_sentinel=");
@@ -415,7 +415,7 @@ inline std::optional<int64_t> longSentinel(const clang::Decl *Declaration) {
   return sentinelFromQualifier(Declaration, "qual:long_sentinel=");
 }
 
-/* The single entry point ntlibc.IntegerSentinel actually calls: every
+/* The single entry point spicule.IntegerSentinel actually calls: every
  * scalar-sentinel spelling recognized anywhere, tried in turn. A Decl only
  * ever carries one such qualifier in practice (a return value or parameter
  * has exactly one real declared scalar type to name), but nothing here
@@ -458,6 +458,6 @@ inline SentinelSplit splitOnExcludedSentinel(
   return {SentinelState, NonSentinelState};
 }
 
-} // namespace ntlibc::algebra
+} // namespace spicule::algebra
 
 #endif

@@ -42,7 +42,7 @@ int __util_readlink_main(
 		/* readlink() doesn't NUL-terminate: buf[n] is the first byte
 		 * past what it wrote, in bounds since n <= "sizeof buf - 1"
 		 * per readlink()'s own contract. Left open as an
-		 * ntlibc.ValidPointer finding: no annotation exists for a
+		 * spicule.ValidPointer finding: no annotation exists for a
 		 * return value bounded by a parameter (unlike, say,
 		 * endptr_advances for strtol()) -- a vocabulary gap, not a
 		 * bug. */

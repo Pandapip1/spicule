@@ -219,7 +219,7 @@ static const struct dc doserror_table[] = {
  * followed by a list of 81 names.  The list is unconditional -- no
  * option-group margin marker guards any of them -- so all 81 are
  * mandatory for a conforming <errno.h>.  EBADMSG, EMULTIHOP, ENETRESET,
- * ENOLINK and EPROTO were the five ntlibc did not define, and a
+ * ENOLINK and EPROTO were the five spicule did not define, and a
  * consumer met that as a compile error rather than a wrong answer:
  * gnulib's errno/strerror-override modules name four of the five
  * directly, but only after its configure probe has already decided
@@ -233,7 +233,7 @@ static void test_errno_mandatory_macros(void)
 	 * usable as switch labels. */
 	static const int mandatory[] = {
 		EBADMSG, EMULTIHOP, ENETRESET, ENOLINK, EPROTO,
-		/* the ones ntlibc already has, for the distinctness check */
+		/* the ones spicule already has, for the distinctness check */
 		E2BIG, EACCES, EADDRINUSE, EADDRNOTAVAIL, EAFNOSUPPORT,
 		EALREADY, EBADF, EBUSY, ECANCELED, ECHILD, ECONNABORTED,
 		ECONNREFUSED, ECONNRESET, EDEADLK, EDESTADDRREQ, EDOM,

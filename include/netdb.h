@@ -6,7 +6,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * ntlibc implements its own statically-linked "files"/"dns" NSS
+ * spicule implements its own statically-linked "files"/"dns" NSS
  * services (src/netdb/linux/nsswitch.c) rather than dlopen()ing
  * glibc's libnss_*.so.2. gethostbyname() is kept as a disclosed
  * legacy/XSI extension, a thin front door onto the same

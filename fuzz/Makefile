@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: (C) 2026 Gavin John
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# libFuzzer harnesses for ntlibc.  See ../CONTRIBUTING.md.
+# libFuzzer harnesses for spicule.  See ../CONTRIBUTING.md.
 #
 #   make -C fuzz            build every harness
 #   make -C fuzz run        build and run each for $(FUZZ_TIME) seconds
@@ -57,7 +57,7 @@ CC := afl-clang-fast
 # The archive providing main() and ExecuteFilesOnyByOne() -- AFL++'s own
 # driver, deliberately kept rather than replaced with a smaller one that
 # would dodge the persistent-mode/forkserver path: that path is the one
-# that actually drives ntlibc's fork() and signal delivery under load,
+# that actually drives spicule's fork() and signal delivery under load,
 # and a harness that avoided it would stop testing that part of the ntdll
 # shim rather than fixing what was wrong with it.  See fuzz/aflshim.c for
 # what "wrong with it" turned out to mean and how it is fixed.
@@ -77,10 +77,10 @@ ENGINESUF   = -afl
 # to afl-fuzz and to run the persistent-mode fast path (fork a fresh
 # child per test case, in this very process, rather than paying
 # execve() each time).  Every one of those names is also a strong
-# symbol in ntlibc, which wins the link -- the same class of bug, and
+# symbol in spicule, which wins the link -- the same class of bug, and
 # the same fix, STATRENAME already applies to stat().  See
 # fuzz/aflshim.c for which of them actually needed it (measured, not
-# assumed: several of AFL++'s own calls tolerate ntlibc's versions well
+# assumed: several of AFL++'s own calls tolerate spicule's versions well
 # enough to still work) and what each fix cost.  AFL_RTDIR is a local
 # copy of $(AFL_SYSDIR) with those symbols in afl-compiler-rt*.o (and,
 # separately, in a patched copy of aflpp_driver.o repackaged as
@@ -95,7 +95,7 @@ AFL_DRIVER = $(AFL_RTDIR)/libAFLDriver.a
 AFL_RTDIR := $(abspath $(srcdir)/obj/afl-rt)
 export AFL_PATH := $(AFL_RTDIR)
 # The library build (below) is told to instrument for libFuzzer's
-# SanitizerCoverage via NTLIBC_ASAN_EXTRA; afl-clang-fast instruments
+# SanitizerCoverage via SPICULE_ASAN_EXTRA; afl-clang-fast instruments
 # every object it compiles on its own; this flag is unneeded for it
 # and unrelated to it, so it is empty in this engine.
 LIBCOV_EXTRA =
@@ -197,7 +197,7 @@ else ifeq ($(SAN_MODE),ubsan)
 # rather than -fsanitize=fuzzer.  WITHOUT AddressSanitizer the driver
 # adds libclang_rt.fuzzer_interceptors, which carries its own
 # definitions of strcmp/strncmp/strstr for comparison feedback -- and
-# ntlibc defines all three in this same link, so the link fails with
+# spicule defines all three in this same link, so the link fails with
 # "multiple definition of `strncmp'".  Naming libclang_rt.fuzzer
 # directly gets libFuzzer without the interceptors and the collision
 # does not arise.  The alternative, -Wl,--allow-multiple-definition,
@@ -212,7 +212,7 @@ ifeq ($(ENGINE),afl)
 # collision to route around: this mode links AFL++'s driver archive, not
 # a libFuzzer runtime, and the archive defines no strcmp/strncmp/strstr
 # of its own (confirmed with `nm` -- it references them as undefined,
-# same as any other caller of ntlibc).
+# same as any other caller of spicule).
 SAN        = -fsanitize=undefined -fno-sanitize-recover=undefined
 FUZZER_LIB = $(AFL_DRIVER)
 else
@@ -221,7 +221,7 @@ FUZZER_LIB = $(dir $(SAN_SO))libclang_rt.fuzzer-$(ARCH).a -lstdc++
 endif
 SAN_RT    = libclang_rt.ubsan_standalone-$(ARCH).so
 # -shared-libsan is not optional.  With the static UBSan runtime, its
-# start-up call to sysconf(_SC_SIGSTKSZ) binds at link time to ntlibc's
+# start-up call to sysconf(_SC_SIGSTKSZ) binds at link time to spicule's
 # sysconf, which answers 0, and the runtime dies in
 # SetAlternateSignalStack before the program starts.  Same failure, same
 # cause, as the -shared-libasan note in ../tools/asan-build.sh.
@@ -245,21 +245,21 @@ endif
 INC  = -I$(srcdir)/src/internal -I$(srcdir)/obj/include -I$(srcdir)/include \
        -I$(srcdir)/arch/$(ARCH) -I$(srcdir)/arch/generic
 CFLAGS_HARNESS = $(SAN) -g -O1 -std=c99 -nostdinc -fno-builtin -w \
-                 -D_XOPEN_SOURCE=700 -D_NTLIBC_INTERNAL $(INC)
+                 -D_XOPEN_SOURCE=700 -D_SPICULE_INTERNAL $(INC)
 # host_oracle.c and ubsanshim.c are the two files built against the host
 # headers; CFLAGS_ORACLE is set per mode above.
 SAN_SO  = $(shell $(CC) -print-file-name=$(SAN_RT))
 RPATH   = -Wl,-rpath,$(dir $(SAN_SO))
 # libFuzzer calls stat() to decide whether the corpus path is a directory,
-# and it was compiled against the host's struct stat, which is not ntlibc's.
+# and it was compiled against the host's struct stat, which is not spicule's.
 # See fuzz/statshim.h -- without the seam every corpus directory looks absent.
 #
 # The seam used to be -Wl,--wrap=stat.  It is not any more, and the reason
 # is a measured defect, not a preference: --wrap is a LINK-WIDE rename.  It
-# redirects every undefined reference named `stat` in the link, and ntlibc's
+# redirects every undefined reference named `stat` in the link, and spicule's
 # own objects are in that link -- src/glob/glob.c calls stat() at four
 # sites, src/ftw/ftw.c and src/stdlib/mktemp.c at one each.  Each was being
-# handed a 144-byte host `struct stat` in the 120-byte ntlibc one it had on
+# handed a 144-byte host `struct stat` in the 120-byte spicule one it had on
 # its stack: a 24-byte overrun, with st_mode and st_nlink transposed, so
 # glob() silently stopped recognising directories.  fuzz_glob reported it as
 # "stack-buffer-overflow ... WRITE of size 144" on its first run; no harness
@@ -269,13 +269,13 @@ RPATH   = -Wl,-rpath,$(dir $(SAN_SO))
 # STATRENAME fixes the cause instead.  objcopy renames `stat` to
 # __real_stat throughout the *library* objects only -- the definition in
 # src/stat/stat.o and every internal reference to it move together, so
-# ntlibc's callers reach ntlibc's stat() directly and no rename can come
+# spicule's callers reach spicule's stat() directly and no rename can come
 # between them.  The compiler runtime's objects are untouched, so
 # libFuzzer's `stat` still binds to the host-layout shim ntstubs.c defines
 # under that name.
 #
 # ONE RULE FOR HARNESS AUTHORS, because this cannot be enforced by the
-# build: a harness is compiled against ntlibc's headers but is NOT part of
+# build: a harness is compiled against spicule's headers but is NOT part of
 # the renamed set, so a plain stat() call from fuzz_*.c reaches the
 # host-layout shim and overruns the caller's buffer exactly as glob did.
 # Call __real_stat() instead; fuzz/fuzz_glob.c declares it and says so.
@@ -336,10 +336,10 @@ all: $(EXES)
 # corrupt -- the inputs are the same files the script itself reads, and
 # the only way to fool the stamp is to `touch` it by hand.
 $(LIBDIR)/.built: $(LIBDEP)
-	NTLIBC_CC=$(CC) \
-	NTLIBC_SAN_MODE=$(SAN_MODE) \
-	NTLIBC_ASAN_OBJ=$(abspath $(LIBDIR)) \
-	NTLIBC_ASAN_EXTRA=$(LIBCOV_EXTRA) \
+	SPICULE_CC=$(CC) \
+	SPICULE_SAN_MODE=$(SAN_MODE) \
+	SPICULE_ASAN_OBJ=$(abspath $(LIBDIR)) \
+	SPICULE_ASAN_EXTRA=$(LIBCOV_EXTRA) \
 	$(srcdir)/tools/asan-build.sh --objects-only
 	for o in $(LIBDIR)/obj/*.o; do objcopy --redefine-sym $(STATRENAME) "$$o"; done
 	touch $@
@@ -416,16 +416,16 @@ $(AFL_RTDIR)/.built:
 	ar rcs "$(AFL_RTDIR)/libAFLDriver.a" "$(AFL_RTDIR)/aflpp_driver.o"
 	touch $@
 
-# -DNTLIBC_FUZZ_STATWRAP turns on the struct stat seam (fuzz/statshim.h).
+# -DSPICULE_FUZZ_STATWRAP turns on the struct stat seam (fuzz/statshim.h).
 # Only here: tools/asan-build.sh compiles its own copy of ntstubs.c for the
-# test binaries, and those must keep seeing ntlibc's stat() as it is.
+# test binaries, and those must keep seeing spicule's stat() as it is.
 $(OUT)/ntstubs.o: ntstubs.c statshim.h $(LIBHDR) $(LIBDIR)/.built | $(OUT)
-	$(CC) $(CFLAGS_HARNESS) -DNTLIBC_FUZZ_STATWRAP -c $< -o $@
+	$(CC) $(CFLAGS_HARNESS) -DSPICULE_FUZZ_STATWRAP -c $< -o $@
 
 # The library objects are globbed by the shell, at recipe time.  $(wildcard)
 # would be expanded by make against a directory it may have cached before
 # the stamp rule refilled it, and an empty expansion links a harness with
-# no ntlibc in it at all.
+# no spicule in it at all.
 $(OUT)/fuzz_%: fuzz_%.c $(LIBHDR) $(OUT)/host_oracle.o $(SHIM_OBJ) $(AFLSHIM_OBJ) $(OUT)/ntstubs.o $(LIBDIR)/.built | $(OUT) $(AFLRT_DEP)
 	$(CC) $(CFLAGS_HARNESS) $(SAN_LINK) $(RPATH) \
 	  $(SAN_SO) $< $(OUT)/ntstubs.o $(OUT)/host_oracle.o $(SHIM_OBJ) $(AFLSHIM_OBJ) \
@@ -467,9 +467,9 @@ LEAKS ?= 1
 #   $(CORPUS)/<h>/corpus    libFuzzer's minimized corpus, re-read next run
 #   $(CORPUS)/<h>/crashes   crash-<sha1> / leak-<sha1>, feedable to --repro
 #
-# NTLIBC_FUZZ_MIRROR makes that subtree, and only that subtree, visible in
+# SPICULE_FUZZ_MIRROR makes that subtree, and only that subtree, visible in
 # ntstubs.c's simulated volume, so libFuzzer's own file I/O -- which goes
-# through ntlibc, not the host -- can see and add to it.  See the block
+# through spicule, not the host -- can see and add to it.  See the block
 # comment above mirror_init() in ntstubs.c.  Point CORPUS somewhere
 # persistent (or let CI cache it) and each night resumes where the last
 # one stopped instead of starting from random bytes.
@@ -494,7 +494,7 @@ CORPUS ?= $(abspath $(srcdir)/obj/fuzzcorpus$(MODESUF))
 # profile to declare unavailable.
 TEST_PROFILE ?= $(shell $(MAKE) -s -C $(srcdir) print-test-profile 2>/dev/null)
 ifeq ($(SAN_MODE),asan)
-CHECK_SAN = NTLIBC_TEST_PROFILE="$(TEST_PROFILE)" $(srcdir)/tools/asan-available.sh || exit $$?;
+CHECK_SAN = SPICULE_TEST_PROFILE="$(TEST_PROFILE)" $(srcdir)/tools/asan-available.sh || exit $$?;
 else
 CHECK_SAN = :;
 endif
@@ -511,7 +511,7 @@ run: all
 	   mkdir -p $(CORPUS)/$$h/corpus $(CORPUS)/$$h/crashes; \
 	   before=$$(ls -1 $(CORPUS)/$$h/corpus | wc -l); \
 	   echo "== fuzz_$$h ($(FUZZ_TIME)s, corpus $$before)"; \
-	   NTLIBC_FUZZ_MIRROR=$(CORPUS)/$$h DEBUGINFOD_URLS= \
+	   SPICULE_FUZZ_MIRROR=$(CORPUS)/$$h DEBUGINFOD_URLS= \
 	   LD_PRELOAD=$(SAN_SO) ASAN_OPTIONS=detect_leaks=$(LEAKS):handle_abort=1 \
 	   UBSAN_OPTIONS=print_stacktrace=1 \
 	   $(OUT)/fuzz_$$h $(RUNFLAGS) -max_total_time=$(FUZZ_TIME) -max_len=256 \
@@ -545,13 +545,13 @@ run: all
 #
 #   1. LLVM's profile runtime picks its output path in an .init_array
 #      constructor, from getenv("LLVM_PROFILE_FILE").  getenv() in this
-#      link is *ntlibc's*, reading ntlibc's `environ`, which ntstubs.c's
+#      link is *spicule's*, reading spicule's `environ`, which ntstubs.c's
 #      own constructor deliberately replaces with an empty one (see the
 #      comment above that loop: a native test must not inherit the
 #      harness's real environment).  So LLVM_PROFILE_FILE is invisible
 #      no matter how it is set, and the runtime falls back to its
 #      built-in default name, "default.profraw".
-#   2. It then opens that name with fopen() -- again ntlibc's, which
+#   2. It then opens that name with fopen() -- again spicule's, which
 #      goes to NtCreateFile in ntstubs.c, i.e. into the *simulated*
 #      volume, which is ordinary process memory and evaporates on exit.
 #      The profile is written every time; it is written into a file
@@ -561,13 +561,13 @@ run: all
 #
 #   -fprofile-instr-generate=<path> bakes the output path into the
 #   binary (__llvm_profile_filename), so no getenv is needed; and the
-#   path is put inside NTLIBC_FUZZ_MIRROR, the seam ntstubs.c already
+#   path is put inside SPICULE_FUZZ_MIRROR, the seam ntstubs.c already
 #   provides for exactly this -- one host directory made visible in the
 #   simulated volume so libFuzzer's own file I/O can reach the host.
 #
 # What this deliberately does NOT do: it does not stop the harness
 # linking src/exit/exit.c, and does not intercept NtTerminateProcess.
-# ntlibc's exit() is entered (measured: libFuzzer's FuzzerDriver calls
+# spicule's exit() is entered (measured: libFuzzer's FuzzerDriver calls
 # exit(0), not _Exit()), runs __funcs_on_exit(), and the profile
 # runtime's atexit handler fires from there.  exit(), atexit() and
 # __stdio_exit() stay under test, unchanged, in the coverage build as
@@ -580,9 +580,9 @@ PROF      = -fprofile-instr-generate -fcoverage-mapping
 COVEXES   = $(HARNESSES:%=$(COVOUT)/fuzz_%)
 
 $(COVLIB)/.built: $(LIBDEP)
-	NTLIBC_SAN_MODE=$(SAN_MODE) \
-	NTLIBC_ASAN_OBJ=$(abspath $(COVLIB)) \
-	NTLIBC_ASAN_EXTRA='-fsanitize=fuzzer-no-link $(PROF)' \
+	SPICULE_SAN_MODE=$(SAN_MODE) \
+	SPICULE_ASAN_OBJ=$(abspath $(COVLIB)) \
+	SPICULE_ASAN_EXTRA='-fsanitize=fuzzer-no-link $(PROF)' \
 	$(srcdir)/tools/asan-build.sh --objects-only
 	for o in $(COVLIB)/obj/*.o; do objcopy --redefine-sym $(STATRENAME) "$$o"; done
 	touch $@
@@ -597,10 +597,10 @@ $(COVOUT)/ubsanshim.o: ubsanshim.c | $(COVOUT)
 	$(CC) $(CFLAGS_ORACLE) $(PROF) -c $< -o $@
 
 $(COVOUT)/ntstubs.o: ntstubs.c statshim.h $(LIBHDR) $(COVLIB)/.built | $(COVOUT)
-	$(CC) $(CFLAGS_HARNESS) $(PROF) -DNTLIBC_FUZZ_STATWRAP -c $< -o $@
+	$(CC) $(CFLAGS_HARNESS) $(PROF) -DSPICULE_FUZZ_STATWRAP -c $< -o $@
 
 # The baked-in profile path is per harness and lives under COVDATA/<h>,
-# which coverage.sh hands to NTLIBC_FUZZ_MIRROR as that run's mirror
+# which coverage.sh hands to SPICULE_FUZZ_MIRROR as that run's mirror
 # root.  A per-harness subdirectory, not one shared one: ntstubs.c
 # imports the whole mirror directory into the volume at start-up, so a
 # shared one would make every run slurp in every other run's profraw.

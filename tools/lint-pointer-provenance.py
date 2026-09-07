@@ -23,7 +23,7 @@ DIAGNOSTIC = re.compile(
     r"\w+\(\) is no longer necessary here: this conversion is now provable "
     r"without it; consider removing the marker); "
     r"origin '(.*)'; context '(.*)'; expression '(.*)' "
-    r"\[ntlibc\.PointerProvenance\]$"
+    r"\[spicule\.PointerProvenance\]$"
 )
 
 

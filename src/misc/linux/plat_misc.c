@@ -25,7 +25,7 @@
  * misinterpreting an arbitrary integer as a pidfd.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -105,7 +105,7 @@
 /* A genuine raw syscall trampoline, NOT a call through the host's own
  * glibc syscall(2) wrapper: glibc's OWN syscall() translates a kernel
  * failure into the ISO C convention (-1, with the real code left in
- * GLIBC's own errno, a different storage location from ntlibc's own
+ * GLIBC's own errno, a different storage location from spicule's own
  * <errno.h>), so `errno = (int)-ret` below would misdecode any failure
  * as EPERM regardless. This function issues the raw `svc #0`/`syscall`
  * instruction directly, so `ret` really is the kernel's own
@@ -311,7 +311,7 @@ int __plat_process_times_self(unsigned long long *user100ns, unsigned long long 
 {
 	/* struct rusage's timeval fields (usec resolution) are this file's
 	 * portable stand-in for KERNEL_USER_TIMES's 100ns fields, so this only
-	 * needs to scale usec up by 10. ntlibc's own struct rusage is
+	 * needs to scale usec up by 10. spicule's own struct rusage is
 	 * bit-identical to the raw getrusage(2) kernel ABI's own layout, so it
 	 * can be handed straight to the syscall with no translation struct. */
 	struct rusage ru;
@@ -417,7 +417,7 @@ void __plat_job_apply_limits(rlim_t nproc_cur, rlim_t cpu_cur, rlim_t as_cur, rl
 
 /* RLIMIT_STACK/CORE/RSS/MEMLOCK are, like the four above, already the
  * real Linux kernel ABI's own numbering, so apply_one() above is reused
- * directly with ntlibc's own public RLIMIT_* constants. */
+ * directly with spicule's own public RLIMIT_* constants. */
 void __plat_rlimit_apply_extra(rlim_t stack_cur, rlim_t core_cur, rlim_t rss_cur, rlim_t memlock_cur)
 {
 	if (stack_cur != RLIM_INFINITY) apply_one(RLIMIT_STACK, stack_cur);
@@ -429,7 +429,7 @@ void __plat_rlimit_apply_extra(rlim_t stack_cur, rlim_t core_cur, rlim_t rss_cur
 /* ======================================================================
  * sched.c: real sched_setscheduler(2)/sched_getscheduler(2)/
  * sched_setparam(2)/sched_getparam(2)/sched_rr_get_interval(2). struct
- * sched_param is a single `int sched_priority` on both ntlibc's own ABI
+ * sched_param is a single `int sched_priority` on both spicule's own ABI
  * and the raw kernel one, so it is handed straight to/from the syscall
  * with no translation struct.
  * ====================================================================== */
@@ -476,7 +476,7 @@ int __plat_sched_rr_get_interval(pid_t pid, struct timespec *interval)
  * ====================================================================== */
 
 /* The raw kernel ABI's own struct new_utsname: six 65-byte NUL-terminated
- * fields, confirmed against this host's own <sys/utsname.h>. ntlibc's own
+ * fields, confirmed against this host's own <sys/utsname.h>. spicule's own
  * struct utsname is a different, wider shape (256-byte fields, no
  * domainname), so the raw syscall cannot write directly into the
  * caller's own `u` and needs this local buffer as an intermediate. */
@@ -511,7 +511,7 @@ int __plat_uname(struct utsname *u)
 	copy_field(u->release, sizeof u->release, raw.release, sizeof raw.release);
 	copy_field(u->version, sizeof u->version, raw.version, sizeof raw.version);
 	copy_field(u->machine, sizeof u->machine, raw.machine, sizeof raw.machine);
-	/* ntlibc's own struct utsname has no domainname member at all, so
+	/* spicule's own struct utsname has no domainname member at all, so
 	 * raw.domainname is read by the syscall but has nowhere to go here. */
 	return 0;
 }

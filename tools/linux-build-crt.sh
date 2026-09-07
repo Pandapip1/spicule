@@ -15,7 +15,7 @@
 # setup via the dynamic linker) for everything this script's own
 # crt/linux/crt1.c + crt/linux/aarch64/start.S now do from scratch.
 # That is *why* errno (a __thread variable) always worked in those
-# pilots despite no ntlibc code anywhere setting up TPIDR_EL0: glibc's
+# pilots despite no spicule code anywhere setting up TPIDR_EL0: glibc's
 # own crt already had. This script is the first one that does not
 # borrow that -- $(CC) links -nostdlib -static -no-pie against nothing
 # but this build's own lib/crt1.o, lib/start.o and lib/libc.a-shaped
@@ -56,13 +56,13 @@
 # linux-build-*.sh pilot already uses.
 #
 # Usage: tools/linux-build-crt.sh
-# Env:   NTLIBC_CC (default clang)
+# Env:   SPICULE_CC (default clang)
 
 set -eu
 
 srcdir=$(cd "$(dirname "$0")/.." && pwd)
-CC=${NTLIBC_CC:-clang}
-BUILD=${NTLIBC_LINUX_CRT_BUILD:-$srcdir/obj/linux-crt-build}
+CC=${SPICULE_CC:-clang}
+BUILD=${SPICULE_LINUX_CRT_BUILD:-$srcdir/obj/linux-crt-build}
 TAG=linux-build-crt
 
 cd "$srcdir"
@@ -194,7 +194,7 @@ INC="-I$srcdir/src/internal -I$BUILD/obj/include -I$srcdir/include -I$srcdir/arc
 # atomics avoids the outlined helpers entirely. Found empirically, not
 # anticipated.
 CFLAGS="-std=c99 -nostdinc -fno-builtin -fno-stack-protector -mno-outline-atomics -g -O0 -ffunction-sections -fdata-sections \
-$INC -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_NTLIBC_INTERNAL -Wall -Wno-unused-function"
+$INC -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_SPICULE_INTERNAL -Wall -Wno-unused-function"
 
 echo "$TAG: compiling ($CC, native ELF)..."
 objs="$BUILD/lib/crt1.o $BUILD/lib/start.o"

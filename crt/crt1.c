@@ -21,7 +21,7 @@
  * so that main's return value becomes the process's exit status.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -35,7 +35,7 @@
  * the traditional unprototyped `int main();' into an implicit `(void)',
  * which would stop this call from compiling, so the widest prototype is
  * declared instead (mingw-w64 does the same). Passing extra arguments a
- * narrower main ignores is harmless under both ABIs ntlibc targets:
+ * narrower main ignores is harmless under both ABIs spicule targets:
  * i386 __cdecl (caller pops the stack) and x86_64 Microsoft x64 (caller
  * owns the shadow space) both let a callee read fewer args/registers
  * than were passed for free. C99 5.1.2.2.1 only requires main be
@@ -209,7 +209,7 @@ void __libc_start_main(void)
 	 * an ABI mismatch, the same category of failure as this one. */
 	if (!__verify_ldbl_layout()) {
 		static const char msg[] =
-			"ntlibc: long double bit-layout assumption failed at startup\r\n";
+			"spicule: long double bit-layout assumption failed at startup\r\n";
 		IO_STATUS_BLOCK io;
 		if (pp->StandardError)
 			NtWriteFile(pp->StandardError, 0, 0, 0, &io, msg,

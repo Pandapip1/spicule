@@ -20,7 +20,7 @@
  * both (double/float arguments arrive in xmm registers on x86_64, so
  * they are moved via these long double temporaries anyway).
  *
- * ntlibc targets Windows NT only, but it is built with two different
+ * spicule targets Windows NT only, but it is built with two different
  * compilers with two different, incompatible ideas of what "long
  * double" is:
  *
@@ -40,7 +40,7 @@
  *    the 80-bit tbyte opcodes (fldt/fstpt); the 8-byte ones would
  *    truncate/misread the value.
  *
- * NTLIBC_LDBL_EXTENDED (defined below) selects between the two at
+ * SPICULE_LDBL_EXTENDED (defined below) selects between the two at
  * compile time, and is the one test every long double bit-layout
  * assumption in src/math should use - see fpclassify.c, frexp.c,
  * copysign.c and fabs.c.  It is driven by __SIZEOF_LONG_DOUBLE__,
@@ -75,12 +75,12 @@
 
 #include "ldbl_format.h"
 
-#if NTLIBC_LDBL_EXTENDED
-#define NTLIBC_FLDL "fldt"
-#define NTLIBC_FSTPL "fstpt"
+#if SPICULE_LDBL_EXTENDED
+#define SPICULE_FLDL "fldt"
+#define SPICULE_FSTPL "fstpt"
 #else
-#define NTLIBC_FLDL "fldl"
-#define NTLIBC_FSTPL "fstpl"
+#define SPICULE_FLDL "fldl"
+#define SPICULE_FSTPL "fstpl"
 #endif
 
 #if !defined(__i386__) && !defined(__x86_64__)
@@ -88,7 +88,7 @@
  * see src/math/aarch64_math.h's own banner for the real algorithms and
  * the double-precision-quality scope boundary every one of these
  * wrappers inherits by narrowing long double to double at the call
- * boundary. NTLIBC_LDBL_EXTENDED is still meaningful here (this arch's
+ * boundary. SPICULE_LDBL_EXTENDED is still meaningful here (this arch's
  * real long double is IEEE binary128, __SIZEOF_LONG_DOUBLE__==16, so
  * it reads as 1) -- it is fpclassify.c/frexp.c/copysign.c/fabs.c's
  * concern, about long double's STORAGE layout, entirely orthogonal to
@@ -111,7 +111,7 @@ static long double __x87_scalbn(long double x, int n) { return (long double)__aa
 
 static long double __x87_sqrt(long double x)
 {
-	__asm__ __volatile__(NTLIBC_FLDL " (%0)\n\tfsqrt\n\t" NTLIBC_FSTPL " (%0)" : : "r"(&x) : "memory");
+	__asm__ __volatile__(SPICULE_FLDL " (%0)\n\tfsqrt\n\t" SPICULE_FSTPL " (%0)" : : "r"(&x) : "memory");
 	return x;
 }
 
@@ -121,7 +121,7 @@ static long double __x87_rndint(long double x, int rc) // NOLINT(bugprone-easily
 {
 	unsigned short cw, cw2;
 	if (rc < 0) {
-		__asm__ __volatile__(NTLIBC_FLDL " (%0)\n\tfrndint\n\t" NTLIBC_FSTPL " (%0)" : : "r"(&x) : "memory");
+		__asm__ __volatile__(SPICULE_FLDL " (%0)\n\tfrndint\n\t" SPICULE_FSTPL " (%0)" : : "r"(&x) : "memory");
 		return x;
 	}
 	/* A real "=m" output rather than the pointer-in-a-register shape the
@@ -131,7 +131,7 @@ static long double __x87_rndint(long double x, int rc) // NOLINT(bugprone-easily
 	 * what initialises cw. */
 	__asm__ __volatile__("fnstcw %0" : "=m"(cw));
 	cw2 = (unsigned short)((cw & ~0x0c00) | (rc << 10));
-	__asm__ __volatile__("fldcw (%0)\n\t" NTLIBC_FLDL " (%1)\n\tfrndint\n\t" NTLIBC_FSTPL " (%1)\n\tfldcw (%2)"
+	__asm__ __volatile__("fldcw (%0)\n\t" SPICULE_FLDL " (%1)\n\tfrndint\n\t" SPICULE_FSTPL " (%1)\n\tfldcw (%2)"
 		: : "r"(&cw2), "r"(&x), "r"(&cw) : "memory");
 	return x;
 }
@@ -139,14 +139,14 @@ static long double __x87_rndint(long double x, int rc) // NOLINT(bugprone-easily
 static long double __x87_fmod(long double x, long double y) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
 	__asm__ __volatile__(
-		NTLIBC_FLDL " (%1)\n\t"
-		NTLIBC_FLDL " (%0)\n\t"
+		SPICULE_FLDL " (%1)\n\t"
+		SPICULE_FLDL " (%0)\n\t"
 		"1:\n\t"
 		"fprem\n\t"
 		"fnstsw %%ax\n\t"
 		"testb $4, %%ah\n\t"
 		"jnz 1b\n\t"
-		NTLIBC_FSTPL " (%0)\n\t"
+		SPICULE_FSTPL " (%0)\n\t"
 		"fstp %%st(0)"
 		: : "r"(&x), "r"(&y) : "ax", "memory");
 	return x;
@@ -158,14 +158,14 @@ static long double __x87_remainder(long double x, long double y, int *quo) // NO
 {
 	unsigned short sw;
 	__asm__ __volatile__(
-		NTLIBC_FLDL " (%2)\n\t"
-		NTLIBC_FLDL " (%1)\n\t"
+		SPICULE_FLDL " (%2)\n\t"
+		SPICULE_FLDL " (%1)\n\t"
 		"1:\n\t"
 		"fprem1\n\t"
 		"fnstsw %%ax\n\t"
 		"testb $4, %%ah\n\t"
 		"jnz 1b\n\t"
-		NTLIBC_FSTPL " (%1)\n\t"
+		SPICULE_FSTPL " (%1)\n\t"
 		"fstp %%st(0)"
 		: "=&a"(sw) : "r"(&x), "r"(&y) : "memory");
 	if (quo)
@@ -175,33 +175,33 @@ static long double __x87_remainder(long double x, long double y, int *quo) // NO
 
 static long double __x87_sin(long double x)
 {
-	__asm__ __volatile__(NTLIBC_FLDL " (%0)\n\tfsin\n\t" NTLIBC_FSTPL " (%0)" : : "r"(&x) : "memory");
+	__asm__ __volatile__(SPICULE_FLDL " (%0)\n\tfsin\n\t" SPICULE_FSTPL " (%0)" : : "r"(&x) : "memory");
 	return x;
 }
 
 static long double __x87_cos(long double x)
 {
-	__asm__ __volatile__(NTLIBC_FLDL " (%0)\n\tfcos\n\t" NTLIBC_FSTPL " (%0)" : : "r"(&x) : "memory");
+	__asm__ __volatile__(SPICULE_FLDL " (%0)\n\tfcos\n\t" SPICULE_FSTPL " (%0)" : : "r"(&x) : "memory");
 	return x;
 }
 
 static long double __x87_tan(long double x)
 {
-	__asm__ __volatile__(NTLIBC_FLDL " (%0)\n\tfptan\n\tfstp %%st(0)\n\t" NTLIBC_FSTPL " (%0)" : : "r"(&x) : "memory");
+	__asm__ __volatile__(SPICULE_FLDL " (%0)\n\tfptan\n\tfstp %%st(0)\n\t" SPICULE_FSTPL " (%0)" : : "r"(&x) : "memory");
 	return x;
 }
 
 /* fpatan: atan2(y, x), full quadrant handling in hardware. */
 static long double __x87_atan2(long double y, long double x) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
-	__asm__ __volatile__(NTLIBC_FLDL " (%0)\n\t" NTLIBC_FLDL " (%1)\n\tfpatan\n\t" NTLIBC_FSTPL " (%0)" : : "r"(&y), "r"(&x) : "memory");
+	__asm__ __volatile__(SPICULE_FLDL " (%0)\n\t" SPICULE_FLDL " (%1)\n\tfpatan\n\t" SPICULE_FSTPL " (%0)" : : "r"(&y), "r"(&x) : "memory");
 	return y;
 }
 
 /* y * log2(x) via fyl2x. */
 static long double __x87_yl2x(long double x, long double y) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
-	__asm__ __volatile__(NTLIBC_FLDL " (%0)\n\t" NTLIBC_FLDL " (%1)\n\tfyl2x\n\t" NTLIBC_FSTPL " (%0)" : : "r"(&y), "r"(&x) : "memory");
+	__asm__ __volatile__(SPICULE_FLDL " (%0)\n\t" SPICULE_FLDL " (%1)\n\tfyl2x\n\t" SPICULE_FSTPL " (%0)" : : "r"(&y), "r"(&x) : "memory");
 	return y;
 }
 
@@ -211,7 +211,7 @@ static long double __x87_yl2x(long double x, long double y) // NOLINT(bugprone-e
 static long double __x87_exp2(long double t)
 {
 	__asm__ __volatile__(
-		NTLIBC_FLDL " (%0)\n\t"
+		SPICULE_FLDL " (%0)\n\t"
 		"fld %%st(0)\n\t"
 		"frndint\n\t"
 		"fxch %%st(1)\n\t"
@@ -221,7 +221,7 @@ static long double __x87_exp2(long double t)
 		"faddp\n\t"
 		"fscale\n\t"
 		"fstp %%st(1)\n\t"
-		NTLIBC_FSTPL " (%0)"
+		SPICULE_FSTPL " (%0)"
 		: : "r"(&t) : "memory");
 	return t;
 }
@@ -231,10 +231,10 @@ static long double __x87_scalbn(long double x, int n) // NOLINT(bugprone-easily-
 {
 	long double d = (long double)n;
 	__asm__ __volatile__(
-		NTLIBC_FLDL " (%1)\n\t"
-		NTLIBC_FLDL " (%0)\n\t"
+		SPICULE_FLDL " (%1)\n\t"
+		SPICULE_FLDL " (%0)\n\t"
 		"fscale\n\t"
-		NTLIBC_FSTPL " (%0)\n\t"
+		SPICULE_FSTPL " (%0)\n\t"
 		"fstp %%st(0)"
 		: : "r"(&x), "r"(&d) : "memory");
 	return x;

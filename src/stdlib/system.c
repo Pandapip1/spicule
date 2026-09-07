@@ -57,7 +57,7 @@
  *     for the duration, as POSIX requires.  Ignoring SIGINT/SIGQUIT is
  *     fully meaningful here: this library's signal() really does
  *     suppress delivery of a signal it can raise (the Ctrl-C/Ctrl-Break
- *     path under NTLIBC_USE_KERNEL32, or a synchronous raise()).
+ *     path under SPICULE_USE_KERNEL32, or a synchronous raise()).
  *     Blocking SIGCHLD, by contrast, protects against nothing real: per
  *     src/signal/signal.c's header comment, this library never delivers
  *     any signal asynchronously from another thread or process, so there

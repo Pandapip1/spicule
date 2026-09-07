@@ -23,8 +23,8 @@
  * These names are deliberately not in any public header: a program that
  * calls __divdi3 or _start by hand is doing something wrong.
  */
-#ifndef _NTLIBC_RTLIB_H
-#define _NTLIBC_RTLIB_H
+#ifndef _SPICULE_RTLIB_H
+#define _SPICULE_RTLIB_H
 
 /* ---- 64-bit integer helpers (arch/i386/src/int64.c) -------------------- */
 /* tcc's i386 code generator calls these for /, % and variable-count
@@ -89,7 +89,7 @@ double complex __divdc3(double, double, double, double);
  * are the entry-argument measurement and its control, captured into
  * __entry_arg0/__entry_arg1 and never used for anything else -- in
  * particular never as the source of __peb, which is the whole point.
- * Reading them is safe under both calling conventions ntlibc targets (a
+ * Reading them is safe under both calling conventions spicule targets (a
  * register on x86_64, a caller-owned stack slot on i386, and _start never
  * returns).  See crt/crt1.c and test/entry-arg.c. */
 void __libc_start_main(void);
@@ -111,7 +111,7 @@ void _start(void *arg0, void *arg1);
  * platform contract" class as src/signal/signal.c's own
  * exception_handler(). piat is left unmarked: its own dereference
  * (`*piat >= rstart`) is reached only inside a short-circuited `&&`
- * chain gated on `dll` and a successful ntlibc_pe_dll_range() call, a
+ * chain gated on `dll` and a successful spicule_pe_dll_range() call, a
  * genuinely conditional path, not an unconditional one. */
 void *__delayLoadHelper2(void *descr, void **piat)
     __attribute__((nonnull(1)));

@@ -29,7 +29,7 @@
  *      ULONG_PTR     Exclusive;    +12 on i386, +16 on x86_64
  *      AFD_HANDLE    Handles[1];   +16 on i386, +24 on x86_64
  *
- * and ntlibc followed it.  The AFD driver's own source says that
+ * and spicule followed it.  The AFD driver's own source says that
  * middle field is not pointer-sized -- afd.h, "Structures for
  * IOCTL_AFD_POLL" (Copyright (c) 1992 Microsoft Corporation;
  * sources.inc MAJORCOMP=ntos MINORCOMP=afd):
@@ -63,7 +63,7 @@
  * Those sources do disagree about that field's *type* (BOOLEAN Unique
  * for Microsoft and phnt, ULONG Exclusive for wepoll and libuv).  This
  * test does not resolve that and does not need to: all of them put
- * four bytes at +12 before an 8-aligned Handles, and ntlibc always
+ * four bytes at +12 before an 8-aligned Handles, and spicule always
  * sends zero there, which is the same four zero bytes either way.
  * What is asserted is the four bytes and the zero.
  *
@@ -285,7 +285,7 @@ static int verify_image(const unsigned char *buf, size_t size,
 }
 
 /* The image ReactOS's AFD_POLL_INFO would have produced, built here by
- * hand so the control does not depend on ntlibc ever having contained
+ * hand so the control does not depend on spicule ever having contained
  * it: ULONG_PTR Exclusive, hence Handles at +24 on x86_64. */
 static void build_reactos_image(unsigned char *buf, long long timeout, size_t n)
 {

@@ -251,7 +251,7 @@ int __util_awk_main(
 	/* vassigns/progfiles and each -v's strdup() are freed once applied
 	 * below, but only on the path that reaches that point -- every
 	 * early usage-error return leaves them unfreed.
-	 * ntlibc.AllocationLifetime flags those returns; left open rather
+	 * spicule.AllocationLifetime flags those returns; left open rather
 	 * than threading cleanup through every CLI usage error, same
 	 * rationale as this file's tail comment on the parsed program. */
 	struct vassign *vassigns = NULL;

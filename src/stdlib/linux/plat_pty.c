@@ -11,7 +11,7 @@
  * five for real (same NT-reasoning-stays-Linux-gets-real-code split as
  * this tree's own syscall()/setresuid()/euidaccess() precedent).
  *
- * posix_openpt() is a plain open("/dev/ptmx", oflag) -- ntlibc's own
+ * posix_openpt() is a plain open("/dev/ptmx", oflag) -- spicule's own
  * public open() front door (src/fcntl/open.c) already resolves that
  * path through a real openat(2) on this backend (Linux has real native
  * devices, no VFS-overlay resolution needed -- see src/unistd/linux/
@@ -55,7 +55,7 @@
  * fd+1 encoding (src/unistd/linux/plat_fd.c's own banner).
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -163,7 +163,7 @@ static int unbox(__plat_handle_t h)
 }
 
 /* -1 with errno=EBADF (from __fd_get()) for an fd this process never
- * opened; ntlibc's own fd+1 boxing otherwise unwrapped into the raw
+ * opened; spicule's own fd+1 boxing otherwise unwrapped into the raw
  * Linux fd every ioctl(2) below actually needs. */
 static int raw_fd(int fd)
 {

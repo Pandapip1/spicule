@@ -3,7 +3,7 @@
  *
  * A clean "correctly guarded" case for tools/lint.sh's `lockset` stage:
  * every touch of the guarded global happens while the lock that guards it
- * is held.  Self-contained -- its own local attribute macros, no ntlibc
+ * is held.  Self-contained -- its own local attribute macros, no spicule
  * headers -- so this is a fixture on Clang's -Wthread-safety feature
  * itself, not on src/internal/thread_annotations.h.
  */

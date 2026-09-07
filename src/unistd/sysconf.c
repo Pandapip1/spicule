@@ -30,7 +30,7 @@ long sysconf(int name)
 	case _SC_CHILD_MAX: return CHILD_CAP_LIMIT_;
 	case _SC_CLK_TCK: return 100;
 	case _SC_NGROUPS_MAX: return NGROUPS_MAX;
-	case _SC_OPEN_MAX: return FD_MAX; // NOLINT(bugprone-branch-clone) -- OPEN_MAX and STREAM_MAX are independent POSIX limits even though ntlibc currently gives both the descriptor-table bound
+	case _SC_OPEN_MAX: return FD_MAX; // NOLINT(bugprone-branch-clone) -- OPEN_MAX and STREAM_MAX are independent POSIX limits even though spicule currently gives both the descriptor-table bound
 	case _SC_STREAM_MAX: return FD_MAX;
 	case _SC_TZNAME_MAX: return TZNAME_MAX;
 	case _SC_VERSION: return _POSIX_VERSION; // NOLINT(bugprone-branch-clone) -- POSIX and POSIX.2 version selectors must remain tied to their distinct standard macros even when this release implements the same revision
@@ -108,7 +108,7 @@ long sysconf(int name)
 	case _SC_XOPEN_UNIX: return _XOPEN_UNIX; // NOLINT(bugprone-branch-clone) -- UNIX and enhanced-I18N are independent XSI option selectors even though their macros currently have the same supported value
 	case _SC_XOPEN_ENH_I18N: return _XOPEN_ENH_I18N;
 
-	/* ---- ntlibc extensions ------------------------------------ */
+	/* ---- spicule extensions ------------------------------------ */
 	case _SC_NPROCESSORS_CONF:
 	case _SC_NPROCESSORS_ONLN: return __plat_nprocessors();
 	case _SC_PHYS_PAGES: return __plat_phys_pages();

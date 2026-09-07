@@ -272,7 +272,7 @@ struct m4_state {
 static struct m4_macro *lookup(struct m4_state *st, const char *name)
 {
 	struct m4_macro *m;
-	/* OPEN LINT FINDING (ntlibc.CapabilityToken, "required ownership
+	/* OPEN LINT FINDING (spicule.CapabilityToken, "required ownership
 	 * capability token is not held"): callers pass a NUL-terminated
 	 * name, but adding withtok(null_terminated) here cascades the
 	 * Require obligation to this helper's many unrelated callers, and
@@ -364,7 +364,7 @@ static void pop_one(struct m4_state *st, const char *name)
 /* buf is always consumed (freed directly, or stored into the pushed
  * frame's own withtok(heap_allocated) buf field for getc_raw() to free
  * later), but declaring `buf consume(heap_allocated)` here mistrains
- * ntlibc.Ownership: it starts reporting getc_raw()'s later, unrelated
+ * spicule.Ownership: it starts reporting getc_raw()'s later, unrelated
  * `free(f->buf)` as a double-free once a scalar consume() parameter and
  * a heap_allocated struct field alias the same value. Left unannotated;
  * callers passing a fresh allocation (ungetc_raw(), dispatch_macro())
@@ -1276,7 +1276,7 @@ static char *bi_m4wrap(struct m4_state *st, char **args, int nargs) __attribute_
 		if (!g) { free(copy); st->had_error = 1; return strdup(""); }
 		st->wraps = g; st->wraps_cap = newcap;
 	}
-	/* OPEN LINT FINDING (ntlibc.ValidPointer, "pointer dereference is
+	/* OPEN LINT FINDING (spicule.ValidPointer, "pointer dereference is
 	 * not proven nonnull"): on the fast path, st->wraps was allocated by
 	 * a prior, separate bi_m4wrap() call -- a fact this checker's
 	 * per-call analysis can't see across distinct calls into the same
@@ -1301,7 +1301,7 @@ static char *bi_traceoff(struct m4_state *st, char **args, int nargs)
 	return strdup("");
 }
 
-/* OPEN LINT FINDINGS (ntlibc.CapabilityToken, "required ownership
+/* OPEN LINT FINDINGS (spicule.CapabilityToken, "required ownership
  * capability token is not held", ~45 sites across every bi_*() builtin
  * down through build_user_expansion()/scan()): args[] elements,
  * st->lq/rq/bc/ec, and every builtin's string parameters are all
@@ -1526,7 +1526,7 @@ static char **collect_args(struct m4_state *st, int *out_nargs)
 			if (!g) { free(b.data); st->had_error = 1; break; }
 			args = g; cap = newcap;
 		}
-		/* OPEN LINT FINDING (ntlibc.AllocationLifetime, "returned
+		/* OPEN LINT FINDING (spicule.AllocationLifetime, "returned
 		 * allocation has no dynamic-storage token contract"): args[] is
 		 * a plain local char **, so storing strbuf_finalize()'s result
 		 * into an element isn't a recognized transfer the way a struct

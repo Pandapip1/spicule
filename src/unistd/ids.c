@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -11,7 +11,7 @@
  * SAM account and an AD account can share one -- so uid mapping follows
  * Cygwin's scheme: local domain = 0x30000+RID, machine's primary domain =
  * 0x100000+RID, other/trusted domain = 0xfe500000+RID. Which domain a SID
- * belongs to is decided via LSA (NTLIBC_USE_KERNEL32 build) or by
+ * belongs to is decided via LSA (SPICULE_USE_KERNEL32 build) or by
  * comparing USERDOMAIN/COMPUTERNAME (ntdll-only build, no LSA access).
  * Well-known SIDs use Cygwin's fixed mappings; a token query failure
  * falls back to uid 1000, since getuid() has no POSIX error return.

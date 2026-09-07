@@ -41,7 +41,7 @@
  *     TaLengthOfTransportAddress() == 4 + 4 + 14 == 22.  WSPGetPeerName
  *     declares its buffer PTRANSPORT_ADDRESS, not PTDI_ADDRESS_INFO.
  *
- * Section 4 below is the assertion that ntlibc distinguishes them: the
+ * Section 4 below is the assertion that spicule distinguishes them: the
  * same 26-byte sock-name image, handed to the peer-name reader, must
  * NOT yield the address it carries.
  *
@@ -51,7 +51,7 @@
  * locally, the same way test/posix-socket-bind.c does.  That is
  * deliberate rather than merely accepted: a layout test that included
  * the header it is checking would agree with it by construction.  The
- * numbers below come from the references named above, not from ntlibc.
+ * numbers below come from the references named above, not from spicule.
  *
  * What this file CANNOT check, stated rather than left implied: the two
  * ioctl *codes* (0x1202F and 0x12033).  Neither is reachable from a

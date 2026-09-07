@@ -20,7 +20,7 @@
  * bin/atd.c) -- not a registered Service Control Manager service,
  * which is out of scope here.
  *
- * Poll loop, once per tick (NTLIBC_ATD_POLL_MS ms, default 1000 --
+ * Poll loop, once per tick (SPICULE_ATD_POLL_MS ms, default 1000 --
  * overridable as a test-speed knob since at/batch have no
  * spec-mandated latency):
  *   1. For each *.job file under the spool whose run_at header is due:
@@ -90,7 +90,7 @@ static void daemonize_if_tty(void)
 
 struct running_job {
 	pid_t pid;
-	char running_path[NTLIBC_SPOOL_PATH_MAX];
+	char running_path[SPICULE_SPOOL_PATH_MAX];
 };
 
 #define MAX_RUNNING 128
@@ -107,7 +107,7 @@ static void reap_finished(void)
 			if (unlink(g_running[i].running_path) < 0)
 				fprintf(stderr, "atd: cannot clean up %s: %s\n",
 				        g_running[i].running_path, strerror(errno));
-			/* ntlibc.ValidPointer finding on this swap-with-last
+			/* spicule.ValidPointer finding on this swap-with-last
 			 * compaction left open; crond.c's identical idiom too. */
 			g_running[i] = g_running[g_nrunning - 1];
 			g_nrunning--;
@@ -126,7 +126,7 @@ static pid_t spawn_job(const char *dir, const char *id, const char *running_path
 	extern char **environ;
 	posix_spawn_file_actions_t fa;
 	char *sh_path;
-	char outpath[NTLIBC_SPOOL_PATH_MAX];
+	char outpath[SPICULE_SPOOL_PATH_MAX];
 	char *argv2[3];
 	pid_t pid;
 	int rc;
@@ -164,8 +164,8 @@ static void poll_once(const char *dir)
 	if (!dp) return;
 	while ((de = readdir(dp)) != 0) {
 		size_t l;
-		char path[NTLIBC_SPOOL_PATH_MAX];
-		char running[NTLIBC_SPOOL_PATH_MAX];
+		char path[SPICULE_SPOOL_PATH_MAX];
+		char running[SPICULE_SPOOL_PATH_MAX];
 		char id[64];
 		time_t run_at;
 		char queue[32];
@@ -216,9 +216,9 @@ static void poll_once(const char *dir)
 int __util_atd_main(
 	int argc, char **argv elements_withtok(null_terminated, argc))
 {
-	char dir[NTLIBC_SPOOL_PATH_MAX];
+	char dir[SPICULE_SPOOL_PATH_MAX];
 	long poll_ms = 1000;
-	const char *env_poll = getenv("NTLIBC_ATD_POLL_MS");
+	const char *env_poll = getenv("SPICULE_ATD_POLL_MS");
 
 	(void)argc; (void)argv;
 	if (env_poll && *env_poll) {

@@ -72,7 +72,7 @@
  *    goes on to set the end of file, which is a plain ftruncate() and
  *    reserves nothing.  POSIX supplies the honest answer for exactly
  *    this case -- "[EINVAL] ... or the underlying file system does not
- *    support this operation" -- and ntlibc returns zero instead.  See
+ *    support this operation" -- and spicule returns zero instead.  See
  *    the fence over test_posix_fallocate_reserves_storage().
  *
  * Everything else in this slice came back clean or N/A; the ledger
@@ -83,7 +83,7 @@
  * posix_fadvise.html and posix_fallocate.html each say in APPLICATION
  * USAGE that the function "is part of the Advisory Information option
  * and need not be provided on all implementations", and both NAME lines
- * are tagged (ADVANCED REALTIME).  ntlibc provides them anyway, so the
+ * are tagged (ADVANCED REALTIME).  spicule provides them anyway, so the
  * clauses below apply in full -- an implementation that ships an
  * optional interface is held to that interface's specification.
  *
@@ -242,7 +242,7 @@ static void test_statvfs_flag_bits(void)
 
 	/* Same volume through the path entry point, and no bit outside the
 	 * two the header defines.  POSIX permits an implementation to
-	 * report further bits of its own, so this is an ntlibc invariant
+	 * report further bits of its own, so this is an spicule invariant
 	 * rather than a clause -- pinned so that a later change which
 	 * starts reporting an NT-specific flag has to say so here first,
 	 * the way test/posix-sysmisc.c pins the f_files zeros. */
@@ -412,7 +412,7 @@ static void test_posix_fallocate_inside_file(void)
 /* --------------------------------------------------------------------
  * statvfs() and [ELOOP].
  * ------------------------------------------------------------------ */
-#if NTLIBC_TEST(PASS, posix_statvfs_statvfs_eloop) /* FIXED: statvfs.html ERRORS, statvfs() *shall fail* -- "[ELOOP]
+#if SPICULE_TEST(PASS, posix_statvfs_statvfs_eloop) /* FIXED: statvfs.html ERRORS, statvfs() *shall fail* -- "[ELOOP]
 	A loop exists in symbolic links encountered during resolution
 	of the path argument."  (And the *may fail* companion, "[ELOOP]
 	More than {SYMLOOP_MAX} symbolic links were encountered during
@@ -571,7 +571,7 @@ static void test_statvfs_eloop(void)
 /* --------------------------------------------------------------------
  * posix_fallocate() and the storage it promises.
  * ------------------------------------------------------------------ */
-#if NTLIBC_TEST(PASS, posix_statvfs_posix_fallocate_reserves_storage) /* FIXED (see the FIXED SINCE section below) -- ORIGINAL FINDING, against
+#if SPICULE_TEST(PASS, posix_statvfs_posix_fallocate_reserves_storage) /* FIXED (see the FIXED SINCE section below) -- ORIGINAL FINDING, against
 	the code as it stood when this fence was written, preserved
 	because it is what the fix below was written to answer.
 	posix_fallocate.html DESCRIPTION -- "The
@@ -630,7 +630,7 @@ static void test_statvfs_eloop(void)
 	good; it is still an under-delivered clause -- a deliberate
 	"I chose not to", which is nonetheless a clause this library
 	does not deliver.  No
-	assertion is written for that arm: ntlibc has no FSCTL_SET_SPARSE
+	assertion is written for that arm: spicule has no FSCTL_SET_SPARSE
 	and Wine's FSCTL_SET_ZERO_DATA answers STATUS_NOT_SUPPORTED, so
 	a sparse file cannot be built from inside this tree to test it
 	on -- the same "no assertion to write" situation
@@ -760,12 +760,12 @@ int main(void)
 	test_statvfs_flag_bits();
 	test_posix_fadvise_no_effect();
 	test_posix_fallocate_inside_file();
-#if NTLIBC_TEST(PASS, posix_statvfs_statvfs_eloop) /* PASS: see the fence above test_statvfs_eloop.  The call site
+#if SPICULE_TEST(PASS, posix_statvfs_statvfs_eloop) /* PASS: see the fence above test_statvfs_eloop.  The call site
 	carries the same case id, because the function it names is inside
 	that fence. */
 	test_statvfs_eloop();
 #endif
-#if NTLIBC_TEST(PASS, posix_statvfs_posix_fallocate_reserves_storage) /* PASS: see the fence above test_posix_fallocate_reserves_storage,
+#if SPICULE_TEST(PASS, posix_statvfs_posix_fallocate_reserves_storage) /* PASS: see the fence above test_posix_fallocate_reserves_storage,
 	same reason as the call site just above. */
 	test_posix_fallocate_reserves_storage();
 #endif

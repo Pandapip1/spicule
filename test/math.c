@@ -12,11 +12,11 @@
 static int fails;
 #define CHECK(cond) do { if (!(cond)) { fails++; printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); } } while (0)
 
-/* src/math/ldbl_math.h's own NTLIBC_LDBL_EXTENDED test, reused here rather
+/* src/math/ldbl_math.h's own SPICULE_LDBL_EXTENDED test, reused here rather
  * than <float.h>'s LDBL_MANT_DIG: this tcc's bundled <float.h>
  * unconditionally reports LDBL_MANT_DIG==64 (extended) on i386/x86_64
  * even though tcc's own "long double" is really just a 64-bit double in
- * PE mode -- ldbl_math.h's comment above NTLIBC_LDBL_EXTENDED has the full
+ * PE mode -- ldbl_math.h's comment above SPICULE_LDBL_EXTENDED has the full
  * story. __SIZEOF_LONG_DOUBLE__ is the one both compilers get right:
  * this tcc never predefines it (confirmed empirically), gcc/mingw/clang
  * predefine it to the true sizeof (8 here, 12 or 16 there). */

@@ -22,8 +22,8 @@
  * src/unistd/sleep.c's alarm_due/alarm_seq generation counter -- is NOT
  * part of this interface and stays in the front door, unchanged.
  */
-#ifndef _NTLIBC_PLAT_UNISTD_H
-#define _NTLIBC_PLAT_UNISTD_H
+#ifndef _SPICULE_PLAT_UNISTD_H
+#define _SPICULE_PLAT_UNISTD_H
 
 #include <stddef.h>
 #include <sys/types.h>
@@ -306,7 +306,7 @@ int __plat_fchown(__plat_handle_t h, uid_t uid, gid_t gid);
  * 0 on success, -1/errno on failure. buflen is never more than 256 here
  * -- src/unistd/getentropy.c's front door enforces getentropy(3)'s own
  * [EIO] limit before calling this. On NT, only compiled in under
- * NTLIBC_USE_KERNEL32 (see src/unistd/nt/plat_unistd.c and
+ * SPICULE_USE_KERNEL32 (see src/unistd/nt/plat_unistd.c and
  * src/internal/kernel32.h's banner); with no real entropy source
  * reachable from pure ntdll at all, getentropy() itself (this
  * function's front door) reports ENOSYS without it. */

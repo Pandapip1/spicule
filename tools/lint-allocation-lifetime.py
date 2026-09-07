@@ -26,10 +26,10 @@ DIAGNOSTIC = re.compile(
     r"allocation family does not match operation|"
     r"allocation family morphism is not proven|"
     r"allocation family morphism does not match operation); "
-    r"context '(.*)'; allocation '(.*)' \[ntlibc\.AllocationLifetime\]$"
+    r"context '(.*)'; allocation '(.*)' \[spicule\.AllocationLifetime\]$"
 )
 CONTRACT = re.compile(
-    r"^ntlibc-allocation-contract: "
+    r"^spicule-allocation-contract: "
     r"(returns-declaration|returns-definition-explicit|"
     r"returns-definition-inherited|definition|takes-declaration|"
     r"takes-definition-explicit|takes-definition-inherited|"

@@ -8,7 +8,7 @@
  * the actual NT target, while the mingw-w64/gcc fallback compiler (and
  * a native gcc/clang for `make asan`) gives it the genuine 80-bit x87
  * extended format. __SIZEOF_LONG_DOUBLE__ tells the two apart exactly
- * as src/math/ldbl_math.h's NTLIBC_LDBL_EXTENDED does. Before this fix these
+ * as src/math/ldbl_math.h's SPICULE_LDBL_EXTENDED does. Before this fix these
  * macros were hardcoded to the 80-bit values even for the tcc/NT
  * build, where they described a range and precision the actual 8-byte
  * object does not have. */

@@ -19,7 +19,7 @@
  * linux/i386/clone.S are this file's siblings for the other two arches
  * this tree targets, each following its own arch's calling convention
  * and clone(2) register ABI (see their own banners) but implementing
- * the identical __ntlibc_linux_clone() contract documented below.
+ * the identical __spicule_linux_clone() contract documented below.
  *
  * Validated standalone, outside this tree, before being wired in here:
  * a byte-identical copy of this trampoline, called from a throwaway
@@ -29,7 +29,7 @@
  * child once the SIGCHLD exit-signal bit was added to the flags word
  * passed in from plat_thread.c -- see that file's own banner for why.
  *
- *   long __ntlibc_linux_clone(unsigned (*fn)(void *), void *stack_top,
+ *   long __spicule_linux_clone(unsigned (*fn)(void *), void *stack_top,
  *                             long flags, void *arg, void *tls);
  *   x0 = fn, x1 = stack_top, x2 = flags, x3 = arg, x4 = tls
  *
@@ -53,9 +53,9 @@
  * convention).
  */
 	.text
-	.global __ntlibc_linux_clone
-	.type __ntlibc_linux_clone,%function
-__ntlibc_linux_clone:
+	.global __spicule_linux_clone
+	.type __spicule_linux_clone,%function
+__spicule_linux_clone:
 	and	x1, x1, #-16		// stack pointers must stay 16-byte aligned
 	stp	x0, x3, [x1, #-16]!	// push {fn, arg} onto the child's own stack
 	mov	x0, x2			// flags (clone(2)'s first kernel argument)
@@ -89,4 +89,4 @@ __ntlibc_linux_clone:
 					// banner -- so a plain per-thread exit
 					// is also this process's exit)
 	svc	#0
-	.size __ntlibc_linux_clone, . - __ntlibc_linux_clone
+	.size __spicule_linux_clone, . - __spicule_linux_clone

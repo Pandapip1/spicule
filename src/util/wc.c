@@ -48,7 +48,7 @@
  * Spec consulted: https://pubs.opengroup.org/onlinepubs/9699919799/utilities/wc.html
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)

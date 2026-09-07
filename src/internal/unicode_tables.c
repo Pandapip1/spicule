@@ -9,7 +9,7 @@
  * Unicode property backs each table below and why.
  *
  * Every table is restricted to U+0000..U+FFFF (the Basic
- * Multilingual Plane) because ntlibc's wchar_t is a single
+ * Multilingual Plane) because spicule's wchar_t is a single
  * 16-bit UTF-16 code unit -- see include/wctype.h.
  */
 

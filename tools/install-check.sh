@@ -8,20 +8,20 @@
 # Every other gate in this tree (`make check`, `make asan`, `tools/lint.sh`)
 # builds straight out of the source tree, with -I./include -I./arch/$(ARCH)
 # -Iobj/include and -Llib hand-assembled by the Makefile. That is not how a
-# real consumer uses ntlibc: they install it to a prefix and reach it
-# through the installed layout, ideally through tools/ntlibc-tcc's
-# installed wrapper (the "compile and link a program against ntlibc" entry
+# real consumer uses spicule: they install it to a prefix and reach it
+# through the installed layout, ideally through tools/spicule-tcc's
+# installed wrapper (the "compile and link a program against spicule" entry
 # point the wrapper's own header comment describes, the same role
 # musl-gcc plays for musl). A full-source bootstrap building Make against
-# ntlibc once found two gaps nothing in-tree could see this way: a
+# spicule once found two gaps nothing in-tree could see this way: a
 # generated include/alloca.h that #define'd alloca to a builtin tcc does
 # not have (every call failed to link), and a missing header. Neither
 # in-tree gate could ever have caught either, because neither gate ever
-# consumes ntlibc the way that bootstrap did.
+# consumes spicule the way that bootstrap did.
 #
 # This script:
 #
-#   1. Configures and builds ntlibc *out of tree*, in a scratch build
+#   1. Configures and builds spicule *out of tree*, in a scratch build
 #      directory that is not this source tree, using the srcdir= support
 #      configure and the Makefile already have (see configure's --srcdir
 #      and the Makefile's own srcdir variable) -- the same mechanism a
@@ -30,14 +30,14 @@
 #      (mktemp -d), never the real one and never DESTDIR-staged under a
 #      path that still needs moving: the wrapper bakes an absolute
 #      @PREFIX@/@INCDIR@/@LIBDIR@ into itself at build time (see
-#      tools/ntlibc-tcc.in), so the tree has to be *configured* with the
+#      tools/spicule-tcc.in), so the tree has to be *configured* with the
 #      temporary prefix, not just DESTDIR-installed under it, or the
 #      wrapper it produces points at the wrong (real) prefix and this
 #      whole gate would silently test nothing.
 #   3. Compiles and links test programs against *only* that prefix, in a
 #      scratch working directory that is neither the source tree nor the
 #      build directory, using nothing but the installed
-#      $PREFIX/bin/ntlibc-tcc wrapper -- no -I or -L of our own pointing
+#      $PREFIX/bin/spicule-tcc wrapper -- no -I or -L of our own pointing
 #      anywhere. That is the whole point: if a source-tree path leaked
 #      into the compile line, this would prove nothing. The wrapper is
 #      invoked by absolute path from a working directory unrelated to
@@ -155,11 +155,11 @@ done
 [ "$missing_hdrs" -ne 0 ] && fail=1
 
 # --- installed libs/tools completeness: everything the wrapper's own
-# generated command line (tools/ntlibc-tcc.in) references by path.
+# generated command line (tools/spicule-tcc.in) references by path.
 hdr "installed libs/tools"
 for f in lib/crt1.o lib/libc.a lib/ntdll.def lib/libm.a lib/librt.a \
 	lib/libpthread.a lib/libcrypt.a lib/libutil.a lib/libxnet.a \
-	lib/libresolv.a lib/libdl.a bin/ntlibc-tcc; do
+	lib/libresolv.a lib/libdl.a bin/spicule-tcc; do
 	if [ ! -f "$prefix/$f" ]; then
 		note "MISSING: $f not installed"
 		fail=1
@@ -170,9 +170,9 @@ if [ "$delay_all" = yes ] && [ ! -f "$prefix/lib/delayload2.o" ]; then
 	note "MISSING: lib/delayload2.o not installed (DELAY_ALL=yes)"
 	fail=1
 fi
-[ "$fail" -eq 0 ] && note "lib/crt1.o, libc.a, ntdll.def, the empty stub libs and bin/ntlibc-tcc are all present"
+[ "$fail" -eq 0 ] && note "lib/crt1.o, libc.a, ntdll.def, the empty stub libs and bin/spicule-tcc are all present"
 
-wrapper="$prefix/bin/ntlibc-tcc"
+wrapper="$prefix/bin/spicule-tcc"
 if [ ! -x "$wrapper" ]; then
 	note "FAIL: $wrapper missing or not executable, cannot continue"
 	exit 1
@@ -290,7 +290,7 @@ else
 
 	# Defense in depth: nothing about the compile above should ever have
 	# been able to see $srcdir or $build (the wrapper's own command line
-	# never mentions them -- see tools/ntlibc-tcc.in), but confirm it,
+	# never mentions them -- see tools/spicule-tcc.in), but confirm it,
 	# rather than merely asserting it in a comment.
 	if command -v strings >/dev/null 2>&1 &&
 		strings "$rundir/broad.exe" | grep -qF -e "$srcdir" -e "$build"; then

@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -51,9 +51,9 @@ float frexpf(float x, int *e)
 	return u.f;
 }
 
-/* ntlibc is built with three different `long double` bit layouts - see
+/* spicule is built with three different `long double` bit layouts - see
  * src/math/fabs.c's own fabsl() banner for why this is a three-way
- * split (NTLIBC_LDBL_EXTENDED alone, and no architecture check,
+ * split (SPICULE_LDBL_EXTENDED alone, and no architecture check,
  * conflates x87 and aarch64's binary128 -- exactly the bug that
  * banner describes finding, here too before this fix).
  *
@@ -86,7 +86,7 @@ float frexpf(float x, int *e)
  * aarch64_math.h's banner) verified rather than re-derived. */
 long double frexpl(long double x, int *e)
 {
-#if !NTLIBC_LDBL_EXTENDED
+#if !SPICULE_LDBL_EXTENDED
 	union { long double f; uint64_t i; } u = { x };
 	int ee = (int)(u.i >> 52 & 0x7ff);
 

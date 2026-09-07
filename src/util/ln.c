@@ -63,7 +63,7 @@ int __util_ln_main(
 	struct stat dst_st;
 	int dir_form;
 
-	/* OPEN LINT FINDING: ntlibc.ValidPointer can't prove argv[i][0]
+	/* OPEN LINT FINDING: spicule.ValidPointer can't prove argv[i][0]
 	 * nonnull here -- the elements_withtok(null_terminated, argc) fact
 	 * it uses elsewhere only reaches a local bound to argv[i] before
 	 * dereference, not a raw subscript inside the loop header itself.

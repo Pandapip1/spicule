@@ -2,13 +2,13 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Implementation of the $ORIGIN-relative DLL search declared in
- * include/ntlibc/rpath.h -- see that file for the design, search order
- * and threat model, and include/ntlibc/delayload.h for the delay-load
+ * include/spicule/rpath.h -- see that file for the design, search order
+ * and threat model, and include/spicule/delayload.h for the delay-load
  * mechanism built on top of it.
  *
  * This file only ever runs code when something calls
- * ntlibc_rpath_load()/_sym() -- which happens only from
- * ntlibc_delayLoadHelper2() (src/internal/delayload.c), which itself
+ * spicule_rpath_load()/_sym() -- which happens only from
+ * spicule_delayLoadHelper2() (src/internal/delayload.c), which itself
  * only runs on the first call through a generated delay-load stub.
  * Nothing here is reached from crt1.c or any other startup path, so a
  * program that never delay-loads anything never pays for it.
@@ -38,12 +38,12 @@
  * this is the native compile-and-link, which is the one situation this
  * file cannot survive.
  *
- * THE SECOND HALF IS NOW ASKED DIRECTLY, via -D_NTLIBC_NATIVE_BUILD,
+ * THE SECOND HALF IS NOW ASKED DIRECTLY, via -D_SPICULE_NATIVE_BUILD,
  * which tools/asan-build.sh passes in every mode.  It used to be
  * inferred from AddressSanitizer being active (__SANITIZE_ADDRESS__ for
  * gcc, __has_feature(address_sanitizer) for clang), on the reasoning
  * that asan-build.sh always passes -fsanitize=address.  That stopped
- * being true when that script gained NTLIBC_SAN_MODE=ubsan -- a native
+ * being true when that script gained SPICULE_SAN_MODE=ubsan -- a native
  * build with no ASan in it -- and the proxy failed silently in the worst
  * direction: this file compiled, and then broke the link of every test
  * and every fuzz harness in that mode with an undefined
@@ -63,14 +63,14 @@
  * this change's scope) to name this file specifically.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
 #ifndef __has_feature
 #define __has_feature(x) 0 /* not clang: never claim a clang-only feature */
 #endif
-#if !defined(_WIN32) && (defined(_NTLIBC_NATIVE_BUILD) || \
+#if !defined(_WIN32) && (defined(_SPICULE_NATIVE_BUILD) || \
                         defined(__SANITIZE_ADDRESS__) || __has_feature(address_sanitizer))
 #error "rpath.c is NT-only (LdrLoadDll/LdrGetProcedureAddress have no native stand-in); see the comment above"
 #endif
@@ -79,7 +79,7 @@
 #include <limits.h>
 #include <stdlib.h>
 #include "libc.h"
-#include "ntlibc/rpath.h"
+#include "spicule/rpath.h"
 #include "ownership_stubs.h"
 
 /* ---- the image's own directory ($ORIGIN) ------------------------------ */
@@ -156,7 +156,7 @@ static struct rpath_error {
 	int valid;
 	NTSTATUS status;
 	char what[1024];
-	unsigned long seq; /* bumped on every set_err(); see ntlibc_rpath_error_seq() */
+	unsigned long seq; /* bumped on every set_err(); see spicule_rpath_error_seq() */
 } last_err;
 
 static void set_err(NTSTATUS st, const char *what)
@@ -175,16 +175,16 @@ static void set_err(NTSTATUS st, const char *what)
  * the only one today -- can tell "this is the same failure I already
  * reported" from "a new failure has happened since", by remembering the
  * seq value it last consumed, without this file's own sticky
- * ntlibc_rpath_error() (which intentionally keeps returning the same
+ * spicule_rpath_error() (which intentionally keeps returning the same
  * string on repeated calls, per its own doc comment and
  * test/posix-dl.c's test_dl_underlying_mechanism()) having to change
  * shape or ever go quiet on its own callers. */
-unsigned long ntlibc_rpath_error_seq(void)
+unsigned long spicule_rpath_error_seq(void)
 {
 	return last_err.seq;
 }
 
-const char *ntlibc_rpath_error(void)
+const char *spicule_rpath_error(void)
 {
 	static char buf[1200];
 	const char *reason;
@@ -242,7 +242,7 @@ static NTSTATUS try_load(const char *path, PVOID *handle)
 	return st;
 }
 
-ntlibc_dll_t *ntlibc_rpath_load(const char *dllname)
+spicule_dll_t *spicule_rpath_load(const char *dllname)
 {
 	PVOID handle;
 	NTSTATUS st;
@@ -297,7 +297,7 @@ ntlibc_dll_t *ntlibc_rpath_load(const char *dllname)
 	}
 }
 
-void *ntlibc_rpath_sym(ntlibc_dll_t *dll, const char *symbol)
+void *spicule_rpath_sym(spicule_dll_t *dll, const char *symbol)
 {
 	ANSI_STRING name;
 	PVOID proc;
@@ -316,7 +316,7 @@ void *ntlibc_rpath_sym(ntlibc_dll_t *dll, const char *symbol)
 	return proc;
 }
 
-/* Symmetrical with ntlibc_rpath_load(): decrements the loader's own
+/* Symmetrical with spicule_rpath_load(): decrements the loader's own
  * LoadCount for `dll` and unloads it once that count reaches zero.
  * LdrUnloadDll() (src/internal/nt.h) already does both the decrement
  * and the conditional unload itself -- confirmed against Wine's
@@ -326,10 +326,10 @@ void *ntlibc_rpath_sym(ntlibc_dll_t *dll, const char *symbol)
  * import_dll()/load_dll()) and LdrUnloadDll() itself decrements that
  * same field and only calls free_modref() when it hits zero -- so
  * nothing here needs its own refcount; this is a thin call-and-
- * translate wrapper, the same shape as ntlibc_rpath_sym(). Returns 0
- * on success; on failure returns nonzero and ntlibc_rpath_error()
+ * translate wrapper, the same shape as spicule_rpath_sym(). Returns 0
+ * on success; on failure returns nonzero and spicule_rpath_error()
  * describes why. */
-int ntlibc_rpath_unload(ntlibc_dll_t *dll)
+int spicule_rpath_unload(spicule_dll_t *dll)
 {
 	NTSTATUS st;
 
@@ -339,12 +339,12 @@ int ntlibc_rpath_unload(ntlibc_dll_t *dll)
 	return 0;
 }
 
-_Noreturn void ntlibc_rpath_fail(const char *dllfile, const char *symbol)
+_Noreturn void spicule_rpath_fail(const char *dllfile, const char *symbol)
 {
 	/* This is the final fatal diagnostic; abort is unconditional and a
 	 * secondary stderr failure cannot be reported through another channel. */
 	(void)fprintf(stderr, "%s: delay-load of %s!%s failed: %s\n",
-	        __progname ? __progname : "?", dllfile, symbol, ntlibc_rpath_error());
+	        __progname ? __progname : "?", dllfile, symbol, spicule_rpath_error());
 	abort();
 }
 

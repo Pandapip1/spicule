@@ -37,7 +37,7 @@
  *
  *   __plat_wait_one() below understands two, structurally distinguished
  *   handle domains rather than unifying every waitable kind the way NT's
- *   HANDLE does: a struct ntlibc_linux_sync* this file produced via
+ *   HANDLE does: a struct spicule_linux_sync* this file produced via
  *   __plat_semaphore_create()/__plat_event_create() (always mmap(2)-page-
  *   aligned), or a boxed pid+1 thread handle from __plat_thread_spawn()
  *   (essentially never page-aligned) -- pthread_join()'s own generic
@@ -46,7 +46,7 @@
  *   spawned "threads" are wait4()-joinable in the first place).
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -180,7 +180,7 @@ static long raw_syscall(long nr, long a1, long a2, long a3, long a4, long a5, lo
  * genuinely-different-per-arch CLONE_BACKWARDS argument-ordering split
  * this needed, confirmed against the kernel's own arch/x86/Kconfig and
  * kernel/fork.c source rather than assumed. */
-extern long __ntlibc_linux_clone(__plat_thread_entry_t fn, void *stack_top, // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- libc-internal name is intentionally reserved against application collision
+extern long __spicule_linux_clone(__plat_thread_entry_t fn, void *stack_top, // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- libc-internal name is intentionally reserved against application collision
                                  long flags, void *arg, void *tls);
 
 static int is_sys_error(long ret)
@@ -189,7 +189,7 @@ static int is_sys_error(long ret)
 }
 
 /* The raw kernel `struct timespec` shape (two `long`s, seconds then
- * nanoseconds) -- defined locally rather than pulling in ntlibc's own
+ * nanoseconds) -- defined locally rather than pulling in spicule's own
  * <time.h> type, since this is what the futex(2) syscall ABI expects. */
 struct linux_timespec { long tv_sec; long tv_nsec; };
 
@@ -228,18 +228,18 @@ static long futex_wake(int *uaddr, int count)
  * scale, a real port would suballocate. `kind` distinguishes a counting
  * semaphore (P/V, __plat_wait_one decrements) from a manual-reset event
  * (__plat_wait_one only checks nonzero, never consumes). struct
- * ntlibc_linux_sync itself lives in src/internal/linux/sync.h, shared with
+ * spicule_linux_sync itself lives in src/internal/linux/sync.h, shared with
  * named semaphores and stop-events. */
-static int alloc_sync(struct ntlibc_linux_sync **out)
+static int alloc_sync(struct spicule_linux_sync **out)
 {
-	long ret = raw_syscall(SYS_mmap, 0, (long)sizeof(struct ntlibc_linux_sync),
+	long ret = raw_syscall(SYS_mmap, 0, (long)sizeof(struct spicule_linux_sync),
 	                       PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
 	                       -1, 0);
 	if (is_sys_error(ret)) { errno = (int)-ret; return -1; }
 	/* mmap(2) returns the mapped address in a signed machine-word
 	 * syscall register; this page's whole point is being reinterpreted
-	 * as struct ntlibc_linux_sync. */
-	*out = unsafe_assume_valid_pointer((struct ntlibc_linux_sync *)ret);
+	 * as struct spicule_linux_sync. */
+	*out = unsafe_assume_valid_pointer((struct spicule_linux_sync *)ret);
 	return 0;
 }
 
@@ -249,18 +249,18 @@ static int alloc_sync(struct ntlibc_linux_sync **out)
  * canonical owner is thread, not signal). */
 int __plat_event_create(__plat_handle_t *out)
 {
-	struct ntlibc_linux_sync *obj;
+	struct spicule_linux_sync *obj;
 	if (alloc_sync(&obj)) return -1;
 	obj->futex = 0;
 	obj->max = 0;
-	obj->kind = NTLIBC_LX_SYNC_EVENT;
+	obj->kind = SPICULE_LX_SYNC_EVENT;
 	*out = (__plat_handle_t)obj;
 	return 0;
 }
 
 int __plat_event_set(__plat_handle_t h)
 {
-	struct ntlibc_linux_sync *obj = (struct ntlibc_linux_sync *)h;
+	struct spicule_linux_sync *obj = (struct spicule_linux_sync *)h;
 	__atomic_store_n(&obj->futex, 1, __ATOMIC_RELEASE);
 	/* Manual-reset, unlike NT's auto-reset SynchronizationEvent, so every
 	 * current waiter must wake here, not just one. */
@@ -275,19 +275,19 @@ int __plat_event_set(__plat_handle_t h)
 int __plat_semaphore_create(long initial, long maximum, int inheritable, // NOLINT(bugprone-easily-swappable-parameters) -- fixed platform-backend contract; initial, maximum, and inheritance values have distinct roles
                             __plat_handle_t *out)
 {
-	struct ntlibc_linux_sync *obj;
+	struct spicule_linux_sync *obj;
 	(void)inheritable;
 	if (alloc_sync(&obj)) return -1;
 	obj->futex = (int)initial;
 	obj->max = (int)maximum;
-	obj->kind = NTLIBC_LX_SYNC_SEMAPHORE;
+	obj->kind = SPICULE_LX_SYNC_SEMAPHORE;
 	*out = (__plat_handle_t)obj;
 	return 0;
 }
 
 int __plat_semaphore_post(__plat_handle_t h)
 {
-	struct ntlibc_linux_sync *obj = (struct ntlibc_linux_sync *)h;
+	struct spicule_linux_sync *obj = (struct spicule_linux_sync *)h;
 	int cur = __atomic_load_n(&obj->futex, __ATOMIC_RELAXED);
 	for (;;) {
 		if (cur >= obj->max) {
@@ -308,7 +308,7 @@ int __plat_semaphore_post(__plat_handle_t h)
 
 int __plat_semaphore_getvalue(__plat_handle_t h, int *value)
 {
-	struct ntlibc_linux_sync *obj = (struct ntlibc_linux_sync *)h;
+	struct spicule_linux_sync *obj = (struct spicule_linux_sync *)h;
 	*value = __atomic_load_n(&obj->futex, __ATOMIC_ACQUIRE);
 	return 0;
 }
@@ -320,13 +320,13 @@ int __plat_semaphore_getvalue(__plat_handle_t h, int *value)
 int __plat_wait_one(__plat_handle_t h, int alertable, int has_timeout, // NOLINT(bugprone-easily-swappable-parameters) -- fixed platform-backend contract; alert and timeout flags have distinct roles
                     long long relative_ticks)
 {
-	struct ntlibc_linux_sync *obj;
+	struct spicule_linux_sync *obj;
 	struct linux_timespec ts, *tsp = 0;
 	(void)alertable; /* Linux has no APC-alertable-wait concept; every wait
 	                  * here is non-alertable, so __PLAT_WAIT_INTR is never
 	                  * produced. */
 	/* A boxed pid+1 thread handle from __plat_thread_spawn(), not a
-	 * struct ntlibc_linux_sync* -- pthread_join() (src/thread/pthread.c)
+	 * struct spicule_linux_sync* -- pthread_join() (src/thread/pthread.c)
 	 * calls this same generic front door on a THREAD handle exactly the
 	 * way it does for a mutex/cond/rwlock wait object, but this backend's
 	 * thread handle is a different domain (see this file's banner).
@@ -346,7 +346,7 @@ int __plat_wait_one(__plat_handle_t h, int alertable, int has_timeout, // NOLINT
 		if (is_sys_error(r)) { errno = (int)-r; return __PLAT_WAIT_ERROR; }
 		return __PLAT_WAIT_OK;
 	}
-	obj = (struct ntlibc_linux_sync *)h;
+	obj = (struct spicule_linux_sync *)h;
 	if (has_timeout) {
 		long long ticks = relative_ticks < 0 ? -relative_ticks : relative_ticks;
 		ts.tv_sec = (long)(ticks / 10000000LL);
@@ -355,7 +355,7 @@ int __plat_wait_one(__plat_handle_t h, int alertable, int has_timeout, // NOLINT
 	}
 	for (;;) {
 		long r;
-		if (obj->kind == NTLIBC_LX_SYNC_EVENT) {
+		if (obj->kind == SPICULE_LX_SYNC_EVENT) {
 			if (__atomic_load_n(&obj->futex, __ATOMIC_ACQUIRE) != 0)
 				return __PLAT_WAIT_OK;
 		} else {
@@ -426,7 +426,7 @@ int __plat_wait_one(__plat_handle_t h, int alertable, int has_timeout, // NOLINT
  *
  * Fixed by giving every spawned thread its own real TCB, the same shape
  * (and same code path -- src/internal/linux/tls_setup.c's
- * __ntlibc_linux_tls_block_create(), see that file's own banner) that
+ * __spicule_linux_tls_block_create(), see that file's own banner) that
  * crt/linux/crt1.c already builds for the initial thread, then passing
  * its `tp` as clone(2)'s tls argument with CLONE_SETTLS set: the kernel
  * installs it as the child's TPIDR_EL0 before the child ever executes
@@ -436,7 +436,7 @@ int __plat_wait_one(__plat_handle_t h, int alertable, int has_timeout, // NOLINT
 struct linux_thread_start {
 	__plat_thread_entry_t entry;
 	void *arg;
-	struct ntlibc_linux_sync *gate; /* NULL: run immediately, not suspended */
+	struct spicule_linux_sync *gate; /* NULL: run immediately, not suspended */
 };
 
 static unsigned __PLAT_APC_CALL start_trampoline(void *argument)
@@ -444,7 +444,7 @@ static unsigned __PLAT_APC_CALL start_trampoline(void *argument)
 	struct linux_thread_start *start = argument;
 	__plat_thread_entry_t entry = start->entry;
 	void *arg = start->arg;
-	struct ntlibc_linux_sync *gate = start->gate;
+	struct spicule_linux_sync *gate = start->gate;
 	/* Every field is copied out to locals before this waits (or, on the
 	 * un-suspended path, before entry() ever touches the stack): the
 	 * header lives at the LOW end of this thread's own mmap()'d stack
@@ -455,10 +455,10 @@ static unsigned __PLAT_APC_CALL start_trampoline(void *argument)
 }
 
 #define SUSPEND_SLOTS 64
-struct suspend_slot { int tid; struct ntlibc_linux_sync *gate; };
+struct suspend_slot { int tid; struct spicule_linux_sync *gate; };
 static struct suspend_slot suspend_table[SUSPEND_SLOTS];
 
-static int suspend_table_store(int tid, struct ntlibc_linux_sync *gate)
+static int suspend_table_store(int tid, struct spicule_linux_sync *gate)
 {
 	int i, stored = -1;
 	__plat_fast_lock();
@@ -474,10 +474,10 @@ static int suspend_table_store(int tid, struct ntlibc_linux_sync *gate)
 	return stored;
 }
 
-static struct ntlibc_linux_sync *suspend_table_take(int tid)
+static struct spicule_linux_sync *suspend_table_take(int tid)
 {
 	int i;
-	struct ntlibc_linux_sync *gate = 0;
+	struct spicule_linux_sync *gate = 0;
 	__plat_fast_lock();
 	for (i = 0; i < SUSPEND_SLOTS; i++) {
 		if (suspend_table[i].tid == tid) {
@@ -499,7 +499,7 @@ int __plat_thread_spawn(__plat_thread_entry_t entry, void *arg,
 	long stack_ret, pid, flags;
 	void *top;
 	struct linux_thread_start *start;
-	struct ntlibc_linux_sync *gate = 0;
+	struct spicule_linux_sync *gate = 0;
 #if defined(__aarch64__)
 	void *tls;
 #endif
@@ -519,7 +519,7 @@ int __plat_thread_spawn(__plat_thread_entry_t entry, void *arg,
 	 * is a hard precondition for CLONE_SETTLS below -- see linux/tls.h's
 	 * own comment on why a thread must never actually start running with
 	 * TPIDR_EL0 == 0. */
-	tls = __ntlibc_linux_tls_block_create();
+	tls = __spicule_linux_tls_block_create();
 	if (!tls) {
 		raw_syscall(SYS_munmap, stack_ret, (long)sz, 0, 0, 0, 0);
 		errno = ENOMEM;
@@ -536,7 +536,7 @@ int __plat_thread_spawn(__plat_thread_entry_t entry, void *arg,
 		}
 		gate->futex = 0;
 		gate->max = 0;
-		gate->kind = NTLIBC_LX_SYNC_EVENT;
+		gate->kind = SPICULE_LX_SYNC_EVENT;
 	}
 
 	/* The header start_trampoline() reads sits at the LOW end of the
@@ -552,15 +552,15 @@ int __plat_thread_spawn(__plat_thread_entry_t entry, void *arg,
 	flags = CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | LINUX_SIGCHLD;
 #if defined(__aarch64__)
 	flags |= CLONE_SETTLS;
-	pid = __ntlibc_linux_clone(start_trampoline, top, flags, start, tls);
+	pid = __spicule_linux_clone(start_trampoline, top, flags, start, tls);
 #else
 	/* No clone(2) trampoline exists for this arch at all (see the extern
-	 * __ntlibc_linux_clone() declaration's own comment) -- this call
+	 * __spicule_linux_clone() declaration's own comment) -- this call
 	 * survives only because nothing in this port's curated build FILES
 	 * lists reaches it, letting --gc-sections drop the whole function.
 	 * tls=0/no CLONE_SETTLS here is unreachable dead weight, not a real
 	 * per-arch choice. */
-	pid = __ntlibc_linux_clone(start_trampoline, top, flags, start, 0);
+	pid = __spicule_linux_clone(start_trampoline, top, flags, start, 0);
 #endif
 	if (pid < 0) {
 		/* `tls` (aarch64 only) is intentionally leaked here too, joining
@@ -650,7 +650,7 @@ static int fast_lock_word;
 #error "plat_thread.c: unsupported architecture (expected __aarch64__, __x86_64__ or __i386__)"
 #endif
 
-void __plat_fast_lock(void) NTLIBC_NO_THREAD_SAFETY_ANALYSIS;
+void __plat_fast_lock(void) SPICULE_NO_THREAD_SAFETY_ANALYSIS;
 void __plat_fast_lock(void)
 {
 	int c;
@@ -663,7 +663,7 @@ void __plat_fast_lock(void)
 	}
 }
 
-void __plat_fast_unlock(void) NTLIBC_NO_THREAD_SAFETY_ANALYSIS;
+void __plat_fast_unlock(void) SPICULE_NO_THREAD_SAFETY_ANALYSIS;
 void __plat_fast_unlock(void)
 {
 	__atomic_store_n(&fast_lock_word, 0, __ATOMIC_RELEASE);
@@ -681,7 +681,7 @@ void __plat_fast_unlock(void)
  * handles[0] is always this file's own sync object, but handles[1], when
  * present, is __sig_delivery_event() -- a raw Linux eventfd(2) boxed as
  * (fd + 1), a completely different encoding. Blindly casting it to
- * `struct ntlibc_linux_sync *` would dereference a small integer as a
+ * `struct spicule_linux_sync *` would dereference a small integer as a
  * pointer, an almost-guaranteed SIGSEGV.
  *
  * The two domains are distinguished structurally: mmap(2) is guaranteed to
@@ -704,7 +704,7 @@ void __plat_fast_unlock(void)
 #error "plat_thread.c: unsupported architecture (expected __aarch64__, __x86_64__ or __i386__)"
 #endif
 
-/* See this function's own banner just above: a `struct ntlibc_linux_sync *`
+/* See this function's own banner just above: a `struct spicule_linux_sync *`
  * this file's own alloc_sync() produced is always mmap(2)-page-aligned;
  * a boxed eventfd (fd + 1) essentially never is. */
 static int handle_is_boxed_fd(__plat_handle_t h)
@@ -713,7 +713,7 @@ static int handle_is_boxed_fd(__plat_handle_t h)
 }
 
 /* Zero-timeout POLLIN peek on a boxed-fd handle. Peeks only, same as the
- * NTLIBC_LX_SYNC_EVENT branch below: never consumes. */
+ * SPICULE_LX_SYNC_EVENT branch below: never consumes. */
 static int fd_handle_ready(__plat_handle_t h)
 {
 	struct pollfd pfd;
@@ -742,13 +742,13 @@ int __plat_wait_any(__plat_handle_t *handles, unsigned count, int alertable, // 
 	for (;;) {
 		unsigned i;
 		for (i = 0; i < count; i++) {
-			struct ntlibc_linux_sync *obj;
+			struct spicule_linux_sync *obj;
 			if (handle_is_boxed_fd(handles[i])) {
 				if (fd_handle_ready(handles[i])) return __PLAT_WAIT_OK;
 				continue;
 			}
-			obj = (struct ntlibc_linux_sync *)handles[i];
-			if (obj->kind == NTLIBC_LX_SYNC_EVENT) {
+			obj = (struct spicule_linux_sync *)handles[i];
+			if (obj->kind == SPICULE_LX_SYNC_EVENT) {
 				if (__atomic_load_n(&obj->futex, __ATOMIC_ACQUIRE) != 0)
 					return __PLAT_WAIT_OK;
 			} else {
@@ -777,7 +777,7 @@ int __plat_wait_any(__plat_handle_t *handles, unsigned count, int alertable, // 
  * syscall; Linux has no equivalent, but the filesystem namespace under
  * /tmp plus O_CREAT|O_EXCL for atomic "did I just create this" detection
  * gets the same property: open/create a small backing file sized to one
- * struct ntlibc_linux_sync and MAP_SHARED it, so every process that opens
+ * struct spicule_linux_sync and MAP_SHARED it, so every process that opens
  * the same path sees the same futex word. */
 #if defined(__aarch64__)
 #define SYS_openat    56
@@ -802,7 +802,7 @@ int __plat_wait_any(__plat_handle_t *handles, unsigned count, int alertable, // 
 
 static void named_sem_path(const char *name, char *buf, size_t bufsz)
 {
-	static const char prefix[] = "/tmp/.ntlibc-sem.";
+	static const char prefix[] = "/tmp/.spicule-sem.";
 	size_t plen = sizeof(prefix) - 1, i, j = 0;
 	for (i = 0; i < plen && j < bufsz - 1; i++) buf[j++] = prefix[i];
 	for (i = 0; name[i] && j < bufsz - 1; i++)
@@ -818,7 +818,7 @@ static void named_sem_path(const char *name, char *buf, size_t bufsz)
  * first process's ftruncate() has run. Narrow in practice; a real fix
  * would retry the mmap on failure. */
 static int map_named_sem(const char *name, long flags, long mode,
-                         struct ntlibc_linux_sync **out)
+                         struct spicule_linux_sync **out)
 {
 	char path[160];
 	long fd, r;
@@ -827,15 +827,15 @@ static int map_named_sem(const char *name, long flags, long mode,
 	fd = raw_syscall(SYS_openat, AT_FDCWD_LX, (long)path, flags, mode, 0, 0);
 	if (is_sys_error(fd)) { errno = (int)-fd; return -1; }
 	if (flags & O_CREAT_LX)
-		raw_syscall(SYS_ftruncate, fd, (long)sizeof(struct ntlibc_linux_sync), 0, 0, 0, 0);
-	r = raw_syscall(SYS_mmap, 0, (long)sizeof(struct ntlibc_linux_sync),
+		raw_syscall(SYS_ftruncate, fd, (long)sizeof(struct spicule_linux_sync), 0, 0, 0, 0);
+	r = raw_syscall(SYS_mmap, 0, (long)sizeof(struct spicule_linux_sync),
 	                PROT_READ | PROT_WRITE, MAP_SHARED_LX, fd, 0);
 	raw_syscall(SYS_close, fd, 0, 0, 0, 0, 0);
 	if (is_sys_error(r)) { errno = (int)-r; return -1; }
 	/* mmap(2) returns the mapped address in a signed machine-word
 	 * syscall register; this backing store's whole point is being
-	 * reinterpreted as struct ntlibc_linux_sync. */
-	*out = unsafe_assume_valid_pointer((struct ntlibc_linux_sync *)r);
+	 * reinterpreted as struct spicule_linux_sync. */
+	*out = unsafe_assume_valid_pointer((struct spicule_linux_sync *)r);
 	return 0;
 }
 
@@ -845,12 +845,12 @@ static int map_named_sem(const char *name, long flags, long mode,
 int __plat_named_semaphore_create(const char *name, long initial, long maximum, // NOLINT(bugprone-easily-swappable-parameters) -- fixed platform-backend contract; initial and maximum counts have distinct roles
                                   __plat_handle_t *out)
 {
-	struct ntlibc_linux_sync *obj;
+	struct spicule_linux_sync *obj;
 	if (map_named_sem(name, O_RDWR_LX | O_CREAT_LX | O_EXCL_LX, 0600, &obj) < 0)
 		return -1;
 	obj->futex = (int)initial;
 	obj->max = (int)maximum;
-	obj->kind = NTLIBC_LX_SYNC_SEMAPHORE;
+	obj->kind = SPICULE_LX_SYNC_SEMAPHORE;
 	*out = (__plat_handle_t)obj;
 	return 0;
 }
@@ -860,7 +860,7 @@ int __plat_named_semaphore_create(const char *name, long initial, long maximum, 
  * case sem_open()'s O_CREAT-without-O_EXCL recovery path needs. */
 int __plat_named_semaphore_open(const char *name, __plat_handle_t *out)
 {
-	struct ntlibc_linux_sync *obj;
+	struct spicule_linux_sync *obj;
 	if (map_named_sem(name, O_RDWR_LX, 0, &obj) < 0)
 		return errno == ENOENT ? -2 : -1;
 	*out = (__plat_handle_t)obj;
@@ -870,11 +870,11 @@ int __plat_named_semaphore_open(const char *name, __plat_handle_t *out)
 int __plat_named_semaphore_open_or_create(const char *name, long initial, // NOLINT(bugprone-easily-swappable-parameters) -- fixed platform-backend contract; initial and maximum counts have distinct roles
                                           long maximum, __plat_handle_t *out)
 {
-	struct ntlibc_linux_sync *obj;
+	struct spicule_linux_sync *obj;
 	if (map_named_sem(name, O_RDWR_LX | O_CREAT_LX | O_EXCL_LX, 0600, &obj) == 0) {
 		obj->futex = (int)initial;
 		obj->max = (int)maximum;
-		obj->kind = NTLIBC_LX_SYNC_SEMAPHORE;
+		obj->kind = SPICULE_LX_SYNC_SEMAPHORE;
 		*out = (__plat_handle_t)obj;
 		return 0;
 	}
@@ -888,14 +888,14 @@ int __plat_named_semaphore_open_or_create(const char *name, long initial, // NOL
  * sigdelivery.c, contrary to this file's own earlier assumption --
  * confirmed by grep, not guessed) need a real create-or-open,
  * cross-process binary lock keyed by name. Modeled as a
- * ntlibc_linux_sync semaphore with initial=1,max=1, the same
+ * spicule_linux_sync semaphore with initial=1,max=1, the same
  * shared-file-plus-mmap technique __plat_named_semaphore_*() above
  * already uses, under its own path prefix so a mutant name can never
  * collide with a semaphore name that happens to hash to the same
  * bytes. */
 static void named_mutant_path(const char *name, char *buf, size_t bufsz)
 {
-	static const char prefix[] = "/tmp/.ntlibc-mutant.";
+	static const char prefix[] = "/tmp/.spicule-mutant.";
 	size_t plen = sizeof(prefix) - 1, i, j = 0;
 	for (i = 0; i < plen && j < bufsz - 1; i++) buf[j++] = prefix[i];
 	for (i = 0; name[i] && j < bufsz - 1; i++)
@@ -925,36 +925,36 @@ static void named_mutant_path(const char *name, char *buf, size_t bufsz)
 int __plat_named_mutant_acquire(const char *name, __plat_handle_t *out)
 {
 	char path[160];
-	struct ntlibc_linux_sync *obj;
+	struct spicule_linux_sync *obj;
 	long fd, r;
 	unsigned char expect;
 
 	named_mutant_path(name, path, sizeof path);
 	fd = raw_syscall(SYS_openat, AT_FDCWD_LX, (long)path, O_RDWR_LX | O_CREAT_LX, 0600, 0, 0);
 	if (is_sys_error(fd)) { errno = (int)-fd; return -1; }
-	raw_syscall(SYS_ftruncate, fd, (long)sizeof(struct ntlibc_linux_sync), 0, 0, 0, 0);
-	r = raw_syscall(SYS_mmap, 0, (long)sizeof(struct ntlibc_linux_sync),
+	raw_syscall(SYS_ftruncate, fd, (long)sizeof(struct spicule_linux_sync), 0, 0, 0, 0);
+	r = raw_syscall(SYS_mmap, 0, (long)sizeof(struct spicule_linux_sync),
 	                PROT_READ | PROT_WRITE, MAP_SHARED_LX, fd, 0);
 	raw_syscall(SYS_close, fd, 0, 0, 0, 0, 0);
 	if (is_sys_error(r)) { errno = (int)-r; return -1; }
 	/* Boxing, not dereference -- see map_named_sem()'s own comment
 	 * above on the identical mmap(2)-return reinterpretation. */
-	obj = unsafe_assume_valid_pointer((struct ntlibc_linux_sync *)r);
+	obj = unsafe_assume_valid_pointer((struct spicule_linux_sync *)r);
 
 	expect = 0;
-	if (__atomic_compare_exchange_n(&obj->kind, &expect, NTLIBC_LX_SYNC_INITIALIZING,
+	if (__atomic_compare_exchange_n(&obj->kind, &expect, SPICULE_LX_SYNC_INITIALIZING,
 	                                0, __ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE)) {
 		/* Provably the only process writing these two fields: the CAS
 		 * above admits exactly one winner. */
 		obj->max = 1;
 		obj->futex = 1;
-		__atomic_store_n(&obj->kind, NTLIBC_LX_SYNC_SEMAPHORE, __ATOMIC_RELEASE);
+		__atomic_store_n(&obj->kind, SPICULE_LX_SYNC_SEMAPHORE, __ATOMIC_RELEASE);
 	} else {
 		/* Either already published, or another process's initialization
 		 * is still in flight -- spin until it publishes. Same reasoning
 		 * as __plat_fast_lock() above: the winner's critical section is
 		 * two plain stores, so this never spins long. */
-		while (__atomic_load_n(&obj->kind, __ATOMIC_ACQUIRE) == NTLIBC_LX_SYNC_INITIALIZING)
+		while (__atomic_load_n(&obj->kind, __ATOMIC_ACQUIRE) == SPICULE_LX_SYNC_INITIALIZING)
 			raw_syscall(SYS_sched_yield, 0L, 0L, 0L, 0L, 0L, 0L);
 	}
 
@@ -975,7 +975,7 @@ void __plat_named_mutant_release(__plat_handle_t lock)
  * event/named-semaphore handle this file hands out via plat_fd.h's generic
  * __plat_close(), which issues close(2) on `(int)((long)h - 1)`. That is
  * exactly right for an fd+1 handle, but every handle this file returns is
- * a raw `struct ntlibc_linux_sync *` -- an mmap(2)'d pointer (see this
+ * a raw `struct spicule_linux_sync *` -- an mmap(2)'d pointer (see this
  * file's own banner and src/internal/linux/sync.h), a completely
  * different representation that merely gets silently truncated to a
  * plausible-looking 32-bit "fd" by the same cast. Typically that close(2)
@@ -993,16 +993,16 @@ void __plat_named_mutant_release(__plat_handle_t lock)
  * See plat_thread.h's own __plat_sync_close() banner for the full fix.
  * This backend's implementation is a real munmap(2): the exact inverse of
  * alloc_sync()/map_named_sem() above, which both hand back an
- * mmap(2)'d region sized to exactly one struct ntlibc_linux_sync (always
+ * mmap(2)'d region sized to exactly one struct spicule_linux_sync (always
  * within a single page). munmap(2) unmaps every page overlapping
  * [h, h + length), so the exact length passed does not need to match the
  * original mmap(2) call's rounded-up page size -- only to name at least
  * one byte inside the same single page, which sizeof(struct
- * ntlibc_linux_sync) always does. */
+ * spicule_linux_sync) always does. */
 int __plat_sync_close(__plat_handle_t h)
 {
 	long ret = raw_syscall(SYS_munmap, (long)h,
-	                       (long)sizeof(struct ntlibc_linux_sync), 0, 0, 0, 0);
+	                       (long)sizeof(struct spicule_linux_sync), 0, 0, 0, 0);
 	if (is_sys_error(ret)) { errno = (int)-ret; return -1; }
 	return 0;
 }
@@ -1047,7 +1047,7 @@ int __plat_thread_close(__plat_handle_t h)
  * suspend_table above. */
 int __plat_thread_resume(__plat_handle_t h)
 {
-	struct ntlibc_linux_sync *gate = suspend_table_take((int)((long)h - 1));
+	struct spicule_linux_sync *gate = suspend_table_take((int)((long)h - 1));
 	if (gate) __plat_event_set((__plat_handle_t)gate);
 	return 0;
 }
@@ -1135,7 +1135,7 @@ _Noreturn void __plat_thread_terminate_self(void)
  * unconditional exit. */
 _Noreturn void __plat_cancel_unsafe_abort(const char *region)
 {
-	static const char msg1[] = "ntlibc: cancellation-unsafe abort in: ";
+	static const char msg1[] = "spicule: cancellation-unsafe abort in: ";
 	static const char msg2[] = "\n";
 	size_t len = 0;
 	while (region[len]) len++;

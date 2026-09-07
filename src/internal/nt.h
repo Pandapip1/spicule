@@ -6,7 +6,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * The native NT interface ntlibc is built on: types, structures, constants
+ * The native NT interface spicule is built on: types, structures, constants
  * and prototypes for the ntdll routines used anywhere in the library.  This
  * is deliberately self-contained -- no windows.h, no winternl.h -- so that
  * the library builds with nothing but its own headers and tcc.
@@ -17,8 +17,8 @@
  * leading fields up to the last one needed are declared, and a comment
  * says so.
  */
-#ifndef _NTLIBC_NT_H
-#define _NTLIBC_NT_H
+#ifndef _SPICULE_NT_H
+#define _SPICULE_NT_H
 
 #include <features.h>
 #include <allocation_tokens.h>
@@ -1352,7 +1352,7 @@ typedef LONG (NTAPI *PVECTORED_EXCEPTION_HANDLER)(EXCEPTION_POINTERS *);
 /* Not an access violation (0xC0000005): raised on touching a page an
  * explicit PAGE_GUARD protection was set on (winnt.h's
  * STATUS_GUARD_PAGE_VIOLATION), most commonly by something outside
- * ntlibc probing a thread stack's guard region -- this library never
+ * spicule probing a thread stack's guard region -- this library never
  * sets PAGE_GUARD itself, there is no PAGE_GUARD bit among the PAGE_*
  * constants above. src/signal/signal.c's exception_handler() names
  * this explicitly so it is provably not folded into the
@@ -1623,7 +1623,7 @@ void     NTAPI RtlReleasePebLock(void);
  *
  * Every structure above is an ABI boundary: it is either passed to or
  * returned from an Nt... or Rtl... call, or its bytes go on the wire to a
- * driver.  Nothing in this header is a private ntlibc structure whose
+ * driver.  Nothing in this header is a private spicule structure whose
  * layout is ours to choose -- the kernel picks it, and a declaration
  * that disagrees is not a compile error, it is a silent wrong-offset
  * read or a heap overflow.  That has cost real bugs: symlinkat() had a
@@ -1669,7 +1669,7 @@ void     NTAPI RtlReleasePebLock(void);
  */
 #define NT_PTR ((size_t)sizeof(void *))
 #if defined(__linux__)
-/* This whole section verifies that ntlibc's own local redeclarations of
+/* This whole section verifies that spicule's own local redeclarations of
  * real Windows ABI structures (PEB, UNICODE_STRING, OBJECT_ATTRIBUTES,
  * ...) match the REAL Windows PE ABI's own field layout -- see this
  * section's own banner above ("catching AFD_CONNECT_INFO-class bugs").
@@ -1761,7 +1761,7 @@ NT_LAYOUT_OFFSET(RTL_DRIVE_LETTER_CURDIR, DosPath, 8);
 
 /* RTL_USER_PROCESS_PARAMETERS */
 /* sizeof deliberately NOT asserted: this declaration is a leading
- * prefix of the real NT structure and stops where ntlibc stops
+ * prefix of the real NT structure and stops where spicule stops
  * reading, so its size is ours, not NT's.  Pinning it would assert
  * a number no Windows agrees with and would fight any future
  * extension of the prefix.  The offsets below are the real ABI. */
@@ -1801,7 +1801,7 @@ NT_LAYOUT_OFFSET(RTL_USER_PROCESS_PARAMETERS, LoaderThreads, 308 + 91*NT_PTR);
 
 /* PEB_LDR_DATA */
 /* sizeof deliberately NOT asserted: this declaration is a leading
- * prefix of the real NT structure and stops where ntlibc stops
+ * prefix of the real NT structure and stops where spicule stops
  * reading, so its size is ours, not NT's.  Pinning it would assert
  * a number no Windows agrees with and would fight any future
  * extension of the prefix.  The offsets below are the real ABI. */
@@ -1815,7 +1815,7 @@ NT_LAYOUT_OFFSET(PEB_LDR_DATA, EntryInProgress, 8 + 7*NT_PTR);
 
 /* LDR_DATA_TABLE_ENTRY */
 /* sizeof deliberately NOT asserted: this declaration is a leading
- * prefix of the real NT structure and stops where ntlibc stops
+ * prefix of the real NT structure and stops where spicule stops
  * reading, so its size is ours, not NT's.  Pinning it would assert
  * a number no Windows agrees with and would fight any future
  * extension of the prefix.  The offsets below are the real ABI. */
@@ -1830,7 +1830,7 @@ NT_LAYOUT_OFFSET(LDR_DATA_TABLE_ENTRY, BaseDllName, 11*NT_PTR);
 
 /* PEB */
 /* sizeof deliberately NOT asserted: this declaration is a leading
- * prefix of the real NT structure and stops where ntlibc stops
+ * prefix of the real NT structure and stops where spicule stops
  * reading, so its size is ours, not NT's.  Pinning it would assert
  * a number no Windows agrees with and would fight any future
  * extension of the prefix.  The offsets below are the real ABI. */
@@ -1896,7 +1896,7 @@ NT_LAYOUT_OFFSET(NT_TIB, Self, 6*NT_PTR);
 
 /* TEB */
 /* sizeof deliberately NOT asserted: this declaration is a leading
- * prefix of the real NT structure and stops where ntlibc stops
+ * prefix of the real NT structure and stops where spicule stops
  * reading, so its size is ours, not NT's.  Pinning it would assert
  * a number no Windows agrees with and would fight any future
  * extension of the prefix.  The offsets below are the real ABI. */

@@ -80,7 +80,7 @@ int main(void)
 
 	/* ---- unistd/linux/plat_unistd.c: ftruncate() through the real front door --- */
 	{
-		long rawfd = syscall(SYS_openat, AT_FDCWD_RAW, "/tmp/ntlibc-linux-pilot-unistd2-file",
+		long rawfd = syscall(SYS_openat, AT_FDCWD_RAW, "/tmp/spicule-linux-pilot-unistd2-file",
 		                     O_CREAT | O_TRUNC | O_RDWR, 0644L);
 		off_t pos;
 		CHECK(rawfd >= 0, "raw openat() setup for ftruncate() test succeeded");
@@ -104,7 +104,7 @@ int main(void)
 		CHECK(fdatasync(fd) == 0, "fdatasync() on a real file succeeded");
 
 		close(fd);
-		syscall(SYS_unlinkat, AT_FDCWD_RAW, "/tmp/ntlibc-linux-pilot-unistd2-file", 0);
+		syscall(SYS_unlinkat, AT_FDCWD_RAW, "/tmp/spicule-linux-pilot-unistd2-file", 0);
 	}
 
 	/* ---- unistd/linux/plat_unistd.c: pipe()/pipe2() through the real front door, round-tripping real data through write()/read() --- */
@@ -132,39 +132,39 @@ int main(void)
 		long rawfd;
 		long mk;
 
-		rawfd = syscall(SYS_openat, AT_FDCWD_RAW, "/tmp/ntlibc-linux-pilot-unistd2-unlinkme",
+		rawfd = syscall(SYS_openat, AT_FDCWD_RAW, "/tmp/spicule-linux-pilot-unistd2-unlinkme",
 		                O_CREAT | O_TRUNC | O_WRONLY, 0644L);
 		CHECK(rawfd >= 0, "raw openat() setup for unlink() test succeeded");
-		CHECK(unlink("/tmp/ntlibc-linux-pilot-unistd2-unlinkme") == 0,
+		CHECK(unlink("/tmp/spicule-linux-pilot-unistd2-unlinkme") == 0,
 		      "unlink() removed the real file");
 		/* Confirm it is really gone: re-opening it without O_CREAT must fail. */
-		rawfd = syscall(SYS_openat, AT_FDCWD_RAW, "/tmp/ntlibc-linux-pilot-unistd2-unlinkme", O_RDONLY);
+		rawfd = syscall(SYS_openat, AT_FDCWD_RAW, "/tmp/spicule-linux-pilot-unistd2-unlinkme", O_RDONLY);
 		CHECK(rawfd < 0, "the unlinked file is really gone");
 
-		mk = syscall(SYS_mkdirat, AT_FDCWD_RAW, "/tmp/ntlibc-linux-pilot-unistd2-dir", 0755L);
+		mk = syscall(SYS_mkdirat, AT_FDCWD_RAW, "/tmp/spicule-linux-pilot-unistd2-dir", 0755L);
 		CHECK(mk == 0, "raw mkdirat() setup for rmdir() test succeeded");
-		CHECK(rmdir("/tmp/ntlibc-linux-pilot-unistd2-dir") == 0, "rmdir() removed the real directory");
+		CHECK(rmdir("/tmp/spicule-linux-pilot-unistd2-dir") == 0, "rmdir() removed the real directory");
 
-		mk = syscall(SYS_mkdirat, AT_FDCWD_RAW, "/tmp/ntlibc-linux-pilot-unistd2-dir2", 0755L);
+		mk = syscall(SYS_mkdirat, AT_FDCWD_RAW, "/tmp/spicule-linux-pilot-unistd2-dir2", 0755L);
 		CHECK(mk == 0, "raw mkdirat() setup for unlinkat(AT_REMOVEDIR) test succeeded");
-		CHECK(unlinkat(AT_FDCWD, "/tmp/ntlibc-linux-pilot-unistd2-dir2", AT_REMOVEDIR) == 0,
+		CHECK(unlinkat(AT_FDCWD, "/tmp/spicule-linux-pilot-unistd2-dir2", AT_REMOVEDIR) == 0,
 		      "unlinkat(AT_REMOVEDIR) removed the real directory");
 
-		/* fd-relative form: unlinkat() against an ntlibc fd-table dirfd,
+		/* fd-relative form: unlinkat() against an spicule fd-table dirfd,
 		 * proving src/unistd/linux/plat_unistd.c's resolve_dirfd()
 		 * really unboxes the fd table's handle rather than only ever
 		 * being exercised with the AT_FDCWD sentinel. */
-		mk = syscall(SYS_mkdirat, AT_FDCWD_RAW, "/tmp/ntlibc-linux-pilot-unistd2-reldir", 0755L);
+		mk = syscall(SYS_mkdirat, AT_FDCWD_RAW, "/tmp/spicule-linux-pilot-unistd2-reldir", 0755L);
 		CHECK(mk == 0, "raw mkdirat() setup for fd-relative unlinkat() succeeded");
 		{
-			/* Deliberately NOT ntlibc's own O_DIRECTORY here: this is a
+			/* Deliberately NOT spicule's own O_DIRECTORY here: this is a
 			 * raw syscall (like every other setup call in this file),
-			 * and ntlibc's <fcntl.h> O_DIRECTORY (0200000) does not
+			 * and spicule's <fcntl.h> O_DIRECTORY (0200000) does not
 			 * match the real Linux kernel ABI value (0040000, confirmed
 			 * against this host's own <fcntl.h>) the way AT_FDCWD/
 			 * O_CLOEXEC/AT_SYMLINK_* do -- plain O_RDONLY is enough to
 			 * open a directory for this test's purposes. */
-			long dfd = syscall(SYS_openat, AT_FDCWD_RAW, "/tmp/ntlibc-linux-pilot-unistd2-reldir",
+			long dfd = syscall(SYS_openat, AT_FDCWD_RAW, "/tmp/spicule-linux-pilot-unistd2-reldir",
 			                   O_RDONLY);
 			int ntdirfd;
 			CHECK(dfd >= 0, "raw openat() of the directory for fd-relative unlinkat() succeeded");
@@ -177,7 +177,7 @@ int main(void)
 			      "fd-relative unlinkat() removed the file via the fd table's boxed dirfd handle");
 			close(ntdirfd);
 		}
-		syscall(SYS_unlinkat, AT_FDCWD_RAW, "/tmp/ntlibc-linux-pilot-unistd2-reldir", AT_REMOVEDIR);
+		syscall(SYS_unlinkat, AT_FDCWD_RAW, "/tmp/spicule-linux-pilot-unistd2-reldir", AT_REMOVEDIR);
 	}
 
 	/* ---- unistd/linux/plat_unistd.c: sysconf() through the real front door --- */
@@ -208,14 +208,14 @@ int main(void)
 		CHECK(getpgid(0) == self, "getpgid(0) agrees");
 		CHECK(getpgid(self) == self, "getpgid(self) sees the real kernel pgid via __plat_pgrp_is_leader()");
 
-		r = syscall(SYS_openat, AT_FDCWD_RAW, "/tmp/ntlibc-linux-pilot-unistd2-chown", O_CREAT | O_TRUNC | O_WRONLY, 0644L);
+		r = syscall(SYS_openat, AT_FDCWD_RAW, "/tmp/spicule-linux-pilot-unistd2-chown", O_CREAT | O_TRUNC | O_WRONLY, 0644L);
 		CHECK(r >= 0, "raw openat() setup for fchownat() probe succeeded");
 		syscall(SYS_close, r);
-		CHECK(chown("/tmp/ntlibc-linux-pilot-unistd2-chown", u, getgid()) == 0,
+		CHECK(chown("/tmp/spicule-linux-pilot-unistd2-chown", u, getgid()) == 0,
 		      "chown() on an existing file succeeds (probe-only semantics)");
-		CHECK(chown("/tmp/ntlibc-linux-pilot-unistd2-does-not-exist", u, getgid()) == -1 && errno == ENOENT,
+		CHECK(chown("/tmp/spicule-linux-pilot-unistd2-does-not-exist", u, getgid()) == -1 && errno == ENOENT,
 		      "chown() on a missing file reports ENOENT via __plat_chown_probe()");
-		syscall(SYS_unlinkat, AT_FDCWD_RAW, "/tmp/ntlibc-linux-pilot-unistd2-chown", 0);
+		syscall(SYS_unlinkat, AT_FDCWD_RAW, "/tmp/spicule-linux-pilot-unistd2-chown", 0);
 	}
 
 	/* ---- unistd/linux/plat_unistd.c: __plat_getppid() directly (see this file's banner: getpid()/gettid() have no plat_unistd.h seam at all) --- */
@@ -239,52 +239,52 @@ int main(void)
 
 	/* ---- unistd/chdir.c: chdir() through the REAL front door, now that it no longer calls __vfs_resolve_at() itself --- */
 	{
-		long mk = syscall(SYS_mkdirat, AT_FDCWD_RAW, "/tmp/ntlibc-linux-pilot-unistd2-cwd", 0755L);
+		long mk = syscall(SYS_mkdirat, AT_FDCWD_RAW, "/tmp/spicule-linux-pilot-unistd2-cwd", 0755L);
 		char cwdbuf[256];
 		long n;
 		CHECK(mk == 0, "raw mkdirat() setup for chdir() test succeeded");
-		CHECK(chdir("/tmp/ntlibc-linux-pilot-unistd2-cwd") == 0, "chdir() succeeded through the real front door");
+		CHECK(chdir("/tmp/spicule-linux-pilot-unistd2-cwd") == 0, "chdir() succeeded through the real front door");
 		memset(cwdbuf, 0, sizeof cwdbuf);
 		n = syscall(SYS_getcwd, cwdbuf, sizeof cwdbuf);
-		CHECK(n > 0 && !memcmp(cwdbuf, "/tmp/ntlibc-linux-pilot-unistd2-cwd", strlen("/tmp/ntlibc-linux-pilot-unistd2-cwd")),
+		CHECK(n > 0 && !memcmp(cwdbuf, "/tmp/spicule-linux-pilot-unistd2-cwd", strlen("/tmp/spicule-linux-pilot-unistd2-cwd")),
 		      "a raw getcwd(2) confirms the real process cwd actually moved");
-		CHECK(chdir("/nonexistent-ntlibc-pilot-path") == -1 && errno == ENOENT,
+		CHECK(chdir("/nonexistent-spicule-pilot-path") == -1 && errno == ENOENT,
 		      "chdir() to a missing directory fails ENOENT");
 		CHECK(chdir("") == -1 && errno == ENOENT,
 		      "chdir(\"\") fails ENOENT via the front door's own NUL/empty-string check");
 		syscall(SYS_chdir, "/tmp");
-		syscall(SYS_unlinkat, AT_FDCWD_RAW, "/tmp/ntlibc-linux-pilot-unistd2-cwd", AT_REMOVEDIR);
+		syscall(SYS_unlinkat, AT_FDCWD_RAW, "/tmp/spicule-linux-pilot-unistd2-cwd", AT_REMOVEDIR);
 	}
 
 	/* ---- unistd/link.c: link()/readlink()/symlink() through the REAL front doors, now that readlinkat() no longer calls __vfs_resolve_at() itself --- */
 	{
-		long rawfd = syscall(SYS_openat, AT_FDCWD_RAW, "/tmp/ntlibc-linux-pilot-unistd2-target",
+		long rawfd = syscall(SYS_openat, AT_FDCWD_RAW, "/tmp/spicule-linux-pilot-unistd2-target",
 		                     O_CREAT | O_TRUNC | O_WRONLY, 0644L);
 		ssize_t n;
 		CHECK(rawfd >= 0, "raw openat() setup for link()/symlink() test succeeded");
 		syscall(SYS_close, rawfd);
 
-		CHECK(link("/tmp/ntlibc-linux-pilot-unistd2-target",
-		           "/tmp/ntlibc-linux-pilot-unistd2-hardlink") == 0,
+		CHECK(link("/tmp/spicule-linux-pilot-unistd2-target",
+		           "/tmp/spicule-linux-pilot-unistd2-hardlink") == 0,
 		      "link() created a hard link through the real front door");
 		{
-			long f1 = syscall(SYS_openat, AT_FDCWD_RAW, "/tmp/ntlibc-linux-pilot-unistd2-hardlink", O_RDONLY);
+			long f1 = syscall(SYS_openat, AT_FDCWD_RAW, "/tmp/spicule-linux-pilot-unistd2-hardlink", O_RDONLY);
 			CHECK(f1 >= 0, "the hard link opens as a real file");
 			if (f1 >= 0) syscall(SYS_close, f1);
 		}
 
-		CHECK(symlink("/tmp/ntlibc-linux-pilot-unistd2-target",
-		              "/tmp/ntlibc-linux-pilot-unistd2-symlink") == 0,
+		CHECK(symlink("/tmp/spicule-linux-pilot-unistd2-target",
+		              "/tmp/spicule-linux-pilot-unistd2-symlink") == 0,
 		      "symlink() created a symbolic link through the real front door");
 		memset(buf, 0, sizeof buf);
-		n = readlink("/tmp/ntlibc-linux-pilot-unistd2-symlink", buf, sizeof buf);
-		CHECK(n == (ssize_t)strlen("/tmp/ntlibc-linux-pilot-unistd2-target"), "readlink() reports the right length");
-		CHECK(!memcmp(buf, "/tmp/ntlibc-linux-pilot-unistd2-target", (size_t)n),
+		n = readlink("/tmp/spicule-linux-pilot-unistd2-symlink", buf, sizeof buf);
+		CHECK(n == (ssize_t)strlen("/tmp/spicule-linux-pilot-unistd2-target"), "readlink() reports the right length");
+		CHECK(!memcmp(buf, "/tmp/spicule-linux-pilot-unistd2-target", (size_t)n),
 		      "readlink() content matches the real symlink target");
 
-		syscall(SYS_unlinkat, AT_FDCWD_RAW, "/tmp/ntlibc-linux-pilot-unistd2-symlink", 0);
-		syscall(SYS_unlinkat, AT_FDCWD_RAW, "/tmp/ntlibc-linux-pilot-unistd2-hardlink", 0);
-		syscall(SYS_unlinkat, AT_FDCWD_RAW, "/tmp/ntlibc-linux-pilot-unistd2-target", 0);
+		syscall(SYS_unlinkat, AT_FDCWD_RAW, "/tmp/spicule-linux-pilot-unistd2-symlink", 0);
+		syscall(SYS_unlinkat, AT_FDCWD_RAW, "/tmp/spicule-linux-pilot-unistd2-hardlink", 0);
+		syscall(SYS_unlinkat, AT_FDCWD_RAW, "/tmp/spicule-linux-pilot-unistd2-target", 0);
 	}
 
 	printf("\n%s\n", failures ? "SOME CHECKS FAILED" : "ALL CHECKS PASSED");

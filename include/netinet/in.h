@@ -66,26 +66,26 @@ extern const struct in6_addr in6addr_loopback;
 
 /* Pure byte tests against s6_addr, with no AFD/socket dependency, so
  * nothing here is gated on the transport staging above. */
-static __inline int __ntlibc_in6_is_zero(const struct in6_addr *a, int upto)
+static __inline int __spicule_in6_is_zero(const struct in6_addr *a, int upto)
 {
 	int i;
 	for (i = 0; i < upto; i++) if (a->s6_addr[i]) return 0;
 	return 1;
 }
 
-#define IN6_IS_ADDR_UNSPECIFIED(a) (__ntlibc_in6_is_zero((a), 16))
+#define IN6_IS_ADDR_UNSPECIFIED(a) (__spicule_in6_is_zero((a), 16))
 #define IN6_IS_ADDR_LOOPBACK(a) \
-	(__ntlibc_in6_is_zero((a), 15) && (a)->s6_addr[15] == 1)
+	(__spicule_in6_is_zero((a), 15) && (a)->s6_addr[15] == 1)
 #define IN6_IS_ADDR_MULTICAST(a) ((a)->s6_addr[0] == 0xff)
 #define IN6_IS_ADDR_LINKLOCAL(a) \
 	(((a)->s6_addr[0] == 0xfe) && (((a)->s6_addr[1] & 0xc0) == 0x80))
 #define IN6_IS_ADDR_SITELOCAL(a) \
 	(((a)->s6_addr[0] == 0xfe) && (((a)->s6_addr[1] & 0xc0) == 0xc0))
 #define IN6_IS_ADDR_V4MAPPED(a) \
-	(__ntlibc_in6_is_zero((a), 10) && (a)->s6_addr[10] == 0xff && \
+	(__spicule_in6_is_zero((a), 10) && (a)->s6_addr[10] == 0xff && \
 	 (a)->s6_addr[11] == 0xff)
 #define IN6_IS_ADDR_V4COMPAT(a) \
-	(__ntlibc_in6_is_zero((a), 12) && !IN6_IS_ADDR_UNSPECIFIED(a) && \
+	(__spicule_in6_is_zero((a), 12) && !IN6_IS_ADDR_UNSPECIFIED(a) && \
 	 !IN6_IS_ADDR_LOOPBACK(a))
 #define IN6_IS_ADDR_MC_NODELOCAL(a) \
 	(IN6_IS_ADDR_MULTICAST(a) && (((a)->s6_addr[1] & 0xf) == 0x1))

@@ -15,8 +15,8 @@
  * own exit.html job-control bookkeeping, not NT-specific) is taken out:
  * the unconditional, never-returning process termination itself.
  */
-#ifndef _NTLIBC_PLAT_EXIT_H
-#define _NTLIBC_PLAT_EXIT_H
+#ifndef _SPICULE_PLAT_EXIT_H
+#define _SPICULE_PLAT_EXIT_H
 
 /* End this process immediately with exit status `code`.  Never returns
  * -- retries forever on the vanishingly unlikely chance the first

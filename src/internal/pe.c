@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * ntlibc_pe_find_export(): hand-parses an already-mapped PE image's own
+ * spicule_pe_find_export(): hand-parses an already-mapped PE image's own
  * export directory. See src/internal/pe.h for why this exists (the
  * ntdll delay-import bootstrap problem) and the field layouts used.
  *
@@ -11,14 +11,14 @@
  * ASan/UBSan build.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
 #ifndef __has_feature
 #define __has_feature(x) 0
 #endif
-#if !defined(_WIN32) && (defined(_NTLIBC_NATIVE_BUILD) || \
+#if !defined(_WIN32) && (defined(_SPICULE_NATIVE_BUILD) || \
                         defined(__SANITIZE_ADDRESS__) || __has_feature(address_sanitizer))
 #error "pe.c is NT-only; see src/internal/rpath.c's comment for why this guard exists"
 #endif
@@ -26,7 +26,7 @@
 #include "libc.h"
 #include "pe.h"
 
-/* Shared by ntlibc_pe_find_export() and ntlibc_pe_dll_range(): validates
+/* Shared by spicule_pe_find_export() and spicule_pe_dll_range(): validates
  * the DOS/NT headers and returns a pointer to IMAGE_NT_HEADERS, or NULL
  * if `base` is not a valid PE image.
  *
@@ -55,7 +55,7 @@ static IMAGE_NT_HEADERS *pe_nt_headers(unsigned char *b)
 	return nt;
 }
 
-int ntlibc_pe_dll_range(void *base, void **start, void **end)
+int spicule_pe_dll_range(void *base, void **start, void **end)
 {
 	unsigned char *b = (unsigned char *)base;
 	IMAGE_NT_HEADERS *nt = pe_nt_headers(b);
@@ -65,7 +65,7 @@ int ntlibc_pe_dll_range(void *base, void **start, void **end)
 	return 1;
 }
 
-int ntlibc_pe_tls_directory(void *base, IMAGE_TLS_DIRECTORY **dir)
+int spicule_pe_tls_directory(void *base, IMAGE_TLS_DIRECTORY **dir)
 {
 	unsigned char *b = (unsigned char *)base;
 	IMAGE_NT_HEADERS *nt = pe_nt_headers(b);
@@ -81,7 +81,7 @@ int ntlibc_pe_tls_directory(void *base, IMAGE_TLS_DIRECTORY **dir)
 	return 1;
 }
 
-void *ntlibc_pe_find_export(void *base, const char *name)
+void *spicule_pe_find_export(void *base, const char *name)
 {
 	unsigned char *b = (unsigned char *)base;
 	IMAGE_NT_HEADERS *nt;
@@ -117,7 +117,7 @@ void *ntlibc_pe_find_export(void *base, const char *name)
 			 * [exp_rva, exp_rva+exp_size) (a forwarder RVA, e.g.
 			 * "NTDLL.RtlAllocateHeap") -- none of the exports this file
 			 * is ever asked to resolve (LdrLoadDll,
-			 * LdrGetProcedureAddress, and whatever ntlibc_rpath_load()
+			 * LdrGetProcedureAddress, and whatever spicule_rpath_load()
 			 * itself later imports from ntdll) are forwarders in
 			 * practice, and misresolving one would fail loudly the
 			 * moment the caller jumps into a string instead of code,

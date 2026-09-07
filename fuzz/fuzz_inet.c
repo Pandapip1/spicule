@@ -23,7 +23,7 @@
  * inet_addr is deliberately NOT compared against the host's, and the
  * reason is the one test/verification-coverage-accounting.md gives for
  * not oracling regex against glibc: a noisy oracle is worse than none.
- * ntlibc's inet_addr parses each part with strtoul(base 0), which
+ * spicule's inet_addr parses each part with strtoul(base 0), which
  * accepts leading whitespace and a leading sign; glibc's hand-written
  * parser accepts neither.  Both readings of inet_addr.html are
  * arguable -- it says the parts are "interpreted as ... decimal, octal

@@ -15,7 +15,7 @@
  *   nmfix_global_bss        B (global, uninitialized, in .bss)
  *   nmfix_external_undefined U (referenced but never defined here)
  *
- * Never linked into anything ntlibc ships -- see the Makefile's own
+ * Never linked into anything spicule ships -- see the Makefile's own
  * obj/test/nmfix.o rule (`$(CC) ... -c`, no link stage at all) and
  * test/util-nm.c's own header comment for how this fixture is used.
  */

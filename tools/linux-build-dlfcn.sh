@@ -12,13 +12,13 @@
 # which deliberately links against the HOST's own crt/libc to keep the
 # pilot lightweight), this one follows tools/linux-build-crt.sh's own,
 # heavier discipline instead: the test PROGRAM is built and linked
-# entirely on ntlibc's own crt/linux/crt1.c + crt/linux/aarch64/start.S
+# entirely on spicule's own crt/linux/crt1.c + crt/linux/aarch64/start.S
 # + the real lib/libc.a (-nostdlib -static -no-pie, no host crt, no
 # host libc). This is not incidental: plat_dlfcn.c's own symbol-
 # resolution-against-the-static-binary mechanism reads the RUNNING
 # BINARY'S OWN /proc/self/exe symtab and treats every symbol's st_value
 # as an already-absolute address -- true only for a real non-PIE,
-# ntlibc-owned image, not for a PIE binary belonging to the host's
+# spicule-owned image, not for a PIE binary belonging to the host's
 # glibc. So this is also the first pilot that specifically needs the
 # "real freestanding" build to even test the thing it is testing, not
 # just to prove startup in general the way linux-build-crt.sh does.
@@ -32,7 +32,7 @@
 # The target .so (fuzz/linux_pilot_test_dlopen_lib.c) and its TLS-
 # bearing sibling (fuzz/linux_pilot_test_dlopen_tlslib.c) are each
 # built with the HOST's own clang/lld as ordinary aarch64 shared
-# objects -- they are not ntlibc code, they are the thing being loaded,
+# objects -- they are not spicule code, they are the thing being loaded,
 # same relationship any ELF loader's test .so has to the loader test
 # itself. -Wl,--hash-style=sysv guarantees a DT_HASH entry: plat_
 # dlfcn.c's own banner documents that DT_GNU_HASH-only objects are not
@@ -40,13 +40,13 @@
 # GNU-hash-only output.
 #
 # Usage: tools/linux-build-dlfcn.sh
-# Env:   NTLIBC_CC (default clang)
+# Env:   SPICULE_CC (default clang)
 
 set -eu
 
 srcdir=$(cd "$(dirname "$0")/.." && pwd)
-CC=${NTLIBC_CC:-clang}
-BUILD=${NTLIBC_LINUX_DLFCN_BUILD:-$srcdir/obj/linux-dlfcn-build}
+CC=${SPICULE_CC:-clang}
+BUILD=${SPICULE_LINUX_DLFCN_BUILD:-$srcdir/obj/linux-dlfcn-build}
 TAG=linux-build-dlfcn
 
 cd "$srcdir"
@@ -95,7 +95,7 @@ INC="-I$srcdir/src/internal -I$BUILD/obj/include -I$srcdir/include -I$srcdir/arc
 CFLAGS="-std=c99 -nostdinc -fno-builtin -fno-stack-protector -g -O0 \
 $INC -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -Wall -Wno-unused-function"
 
-echo "$TAG: compiling the test program ($CC, native ELF, ntlibc's own headers)..."
+echo "$TAG: compiling the test program ($CC, native ELF, spicule's own headers)..."
 # CFLAGS is deliberately a shell word list here: this script is POSIX sh,
 # and each flag must reach the compiler as a separate argument.
 # shellcheck disable=SC2086

@@ -259,7 +259,7 @@ static int file_one(const char *path, const struct file_opts *o)
 		/* readlink()'s own contract bounds linklen <= sizeof linkbuf - 1,
 		 * but this vocabulary has no annotation for a return value bounded
 		 * by a parameter, so linkbuf[linklen] is left open as an
-		 * ntlibc.ValidPointer finding -- a real checker gap, not a bug
+		 * spicule.ValidPointer finding -- a real checker gap, not a bug
 		 * (same gap documented in src/util/readlink.c). */
 		linkbuf[linklen] = 0;
 		printf("%s: %s %s\n", path, "symbolic link to", linkbuf);

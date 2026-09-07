@@ -14,7 +14,7 @@
 #     to a nix-wrapped compiler may not work correctly" -- empirically
 #     confirmed harmless for this build specifically: nothing here links
 #     against the wrapper's own target-specific sysroot/libc paths at
-#     all (-nostdinc, -nostdlib, ntlibc's own headers only), so the one
+#     all (-nostdinc, -nostdlib, spicule's own headers only), so the one
 #     thing the wrapper mismatch could actually break (finding the
 #     RIGHT host libc/crt for the requested target) is exactly the
 #     thing this build never asks it to do.
@@ -26,23 +26,23 @@
 #     for anything this project itself implements.
 #
 # Usage: tools/linux-build-crt-cross.sh <x86_64|i386>
-# Env:   NTLIBC_CLANG (default clang), NTLIBC_QEMU_X86_64 (default
-#        qemu-x86_64), NTLIBC_QEMU_I386 (default qemu-i386)
+# Env:   SPICULE_CLANG (default clang), SPICULE_QEMU_X86_64 (default
+#        qemu-x86_64), SPICULE_QEMU_I386 (default qemu-i386)
 
 set -eu
 
 arch=${1:?"usage: $0 <x86_64|i386>"}
 srcdir=$(cd "$(dirname "$0")/.." && pwd)
-CLANG=${NTLIBC_CLANG:-clang}
+CLANG=${SPICULE_CLANG:-clang}
 TAG="linux-build-crt-cross($arch)"
 
 case "$arch" in
-x86_64) target=x86_64-linux-gnu; qemu=${NTLIBC_QEMU_X86_64:-qemu-x86_64} ;;
-i386)   target=i386-linux-gnu;   qemu=${NTLIBC_QEMU_I386:-qemu-i386} ;;
+x86_64) target=x86_64-linux-gnu; qemu=${SPICULE_QEMU_X86_64:-qemu-x86_64} ;;
+i386)   target=i386-linux-gnu;   qemu=${SPICULE_QEMU_I386:-qemu-i386} ;;
 *) echo "$TAG: unsupported arch \"$arch\" (expected x86_64 or i386)" >&2; exit 1 ;;
 esac
 
-BUILD=${NTLIBC_LINUX_CRT_CROSS_BUILD:-$srcdir/obj/linux-crt-cross-build-$arch}
+BUILD=${SPICULE_LINUX_CRT_CROSS_BUILD:-$srcdir/obj/linux-crt-cross-build-$arch}
 CC="$CLANG --target=$target -fuse-ld=lld"
 
 cd "$srcdir"
@@ -123,14 +123,14 @@ if [ "$arch" = "i386" ]; then
 fi
 # arch/$arch/src/sigreturn_trampoline.S: the real SA_RESTORER trampoline
 # src/signal/linux/plat_signal.c's own __plat_sig_install_real_handler()
-# unconditionally references (by name, k_restorer = __ntlibc_sigreturn_
+# unconditionally references (by name, k_restorer = __spicule_sigreturn_
 # trampoline) for every arch it supports -- see that file's own comment
 # on that function and each arch's own arch/$arch/src/sigreturn_
 # trampoline.S banner. __signal_init() (crt1.c, unconditional) reaches
 # __plat_sig_install_fault_handlers() -> __plat_sig_install_real_handler()
 # on every arch, so this is a REAL, not merely potential, link
 # requirement -- confirmed by first trying without it and getting a real
-# "undefined symbol: __ntlibc_sigreturn_trampoline" from this exact
+# "undefined symbol: __spicule_sigreturn_trampoline" from this exact
 # script. Named directly here (basename-based object naming below still
 # works: the loop's `basename "$f" .c` leaves a ".S" input's own
 # extension alone, producing "sigreturn_trampoline.S.o" -- a valid,
@@ -196,7 +196,7 @@ FILES="$FILES
 
 INC="-I$srcdir/src/internal -I$BUILD/obj/include -I$srcdir/include -I$srcdir/arch/$arch -I$srcdir/arch/generic"
 CFLAGS="-std=c99 -nostdinc -fno-builtin -fno-stack-protector -g -O0 -ffunction-sections -fdata-sections \
-$INC -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_NTLIBC_INTERNAL -Wall -Wno-unused-function"
+$INC -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_SPICULE_INTERNAL -Wall -Wno-unused-function"
 
 echo "$TAG: compiling (cross $CC)..."
 objs="$BUILD/lib/crt1.o $BUILD/lib/start.o"

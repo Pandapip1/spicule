@@ -107,7 +107,7 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 	storage[end] = 0;
 
 	if (use_datemsk) {
-		/* The template file is written through ntlibc's own stdio
+		/* The template file is written through spicule's own stdio
 		 * into fuzz/ntstubs.c's simulated volume -- so fopen, fwrite
 		 * and fclose are on the path too, and getdate.c's
 		 * read_templates() reads back exactly what was written. */

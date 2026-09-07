@@ -51,7 +51,7 @@
  * is already updating reaches zero.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -105,7 +105,7 @@ static const char *shm_tmpdir(void)
 	return p && *p ? p : ".";
 }
 
-/* Every path this file builds is "<tmpdir>/ntlibc-sysvshm/" plus a
+/* Every path this file builds is "<tmpdir>/spicule-sysvshm/" plus a
  * decimal id and a fixed ".meta"/".data" suffix -- no caller-supplied
  * component ever reaches a path, so unlike src/thread/mqueue.c's
  * mq_path()/sem_path() this needs no name-character validation, only
@@ -114,7 +114,7 @@ withtok(heap_allocated)
 static char *dir_path(void)
 {
 	const char *dir = shm_tmpdir();
-	const char suffix[] = "/ntlibc-sysvshm";
+	const char suffix[] = "/spicule-sysvshm";
 	size_t dirlen = strnlen(dir, PATH_MAX);
 	size_t total;
 	char *path;
@@ -178,7 +178,7 @@ static int registry_lock(__plat_handle_t *out)
 	if (!dir) return -1;
 	hash = path_hash(dir);
 	free(dir);
-	n = snprintf(name, sizeof name, "\\BaseNamedObjects\\ntlibc.sysvshm.%08x%08x",
+	n = snprintf(name, sizeof name, "\\BaseNamedObjects\\spicule.sysvshm.%08x%08x",
 	         (unsigned)(hash >> 32), (unsigned)hash);
 	if (n < 0 || (size_t)n >= sizeof name) {
 		if (n >= 0) errno = ENAMETOOLONG;

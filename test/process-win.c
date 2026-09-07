@@ -94,12 +94,12 @@ static int child_main(int argc, char **argv)
 			_exit(RC_ARGV_MISMATCH);
 		}
 		if (!strcmp(argv[1], "--argv-env")) {
-			const char *v = getenv("NTLIBC_TEST_ENV");
+			const char *v = getenv("SPICULE_TEST_ENV");
 			if (!v || strcmp(v, "hello world")) {
-				printf("child: NTLIBC_TEST_ENV = %s\n", v ? v : "(unset)");
+				printf("child: SPICULE_TEST_ENV = %s\n", v ? v : "(unset)");
 				_exit(RC_ENV_MISMATCH);
 			}
-			if (getenv("NTLIBC_TEST_ABSENT")) _exit(RC_ENV_MISMATCH);
+			if (getenv("SPICULE_TEST_ABSENT")) _exit(RC_ENV_MISMATCH);
 		}
 		_exit(0);
 	}
@@ -338,11 +338,11 @@ static void test_exec(const char *self)
 	CHECK(WEXITSTATUS(status) == 0);
 
 	/* execve with an explicit environment */
-	envp[0] = (char *)"NTLIBC_TEST_ENV=hello world";
+	envp[0] = (char *)"SPICULE_TEST_ENV=hello world";
 	if (sr) { snprintf(sysroot, sizeof sysroot, "SystemRoot=%s", sr); envp[1] = sysroot; }
 	else envp[1] = (char *)"SystemRoot=C:\\Windows";
 	envp[2] = 0;
-	setenv("NTLIBC_TEST_ABSENT", "1", 1);   /* must not leak past an explicit envp */
+	setenv("SPICULE_TEST_ABSENT", "1", 1);   /* must not leak past an explicit envp */
 	pid = do_fork();
 	CHECK(pid >= 0);
 	if (pid == 0) {

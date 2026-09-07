@@ -93,9 +93,9 @@ long double sqrtl(long double);
 double      fmod(double, double);
 float       fmodf(float, float);
 long double fmodl(long double, long double);
-#ifdef NTLIBC_ARITHMETIC_ANALYSIS
+#ifdef SPICULE_ARITHMETIC_ANALYSIS
 #define __arith_output_excludes_min(argument) \
-	__attribute__((annotate("ntlibc_arith_output_excludes_min:" #argument)))
+	__attribute__((annotate("spicule_arith_output_excludes_min:" #argument)))
 #else
 #define __arith_output_excludes_min(argument)
 #endif

@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * stat-family front-door smoke test -- NOT part of ntlibc, same standing
+ * stat-family front-door smoke test -- NOT part of spicule, same standing
  * as every other fuzz/linux_pilot_test_*.c file.
  *
  * Like fuzz/linux_pilot_test_open.c (the open()/openat() pilot that
@@ -22,7 +22,7 @@
  * used only for setup/teardown/oracle checks that are not themselves
  * under test: umask(2) (pinned to 0 so every mode-bit assertion below
  * is deterministic regardless of the host shell's own umask -- see
- * src/stat/linux/plat_stat.c's own banner on why ntlibc's own umask()
+ * src/stat/linux/plat_stat.c's own banner on why spicule's own umask()
  * has no effect on this backend at all), openat(2)/close(2)/unlinkat(2)/
  * symlinkat(2) for building/tearing down fixtures, exactly the same
  * split linux_pilot_test_open.c already uses.
@@ -54,10 +54,10 @@ static int failures;
 } while (0)
 
 /* Installs a REAL raw fd (opened via a raw syscall, not through any
- * ntlibc front door) into ntlibc's own fd table, exactly the boxing
+ * spicule front door) into spicule's own fd table, exactly the boxing
  * __plat_open() itself uses (src/fcntl/linux/plat_fcntl.c:
  * `*out = (__plat_handle_t)(long)(fd + 1)`) -- so mkdirat()/fstatat()
- * below can be handed a real ntlibc dirfd that resolve_dirfd() unboxes
+ * below can be handed a real spicule dirfd that resolve_dirfd() unboxes
  * back to the same real fd. */
 static int install_real_fd(int real_fd, int type)
 {
@@ -66,10 +66,10 @@ static int install_real_fd(int real_fd, int type)
 
 int main(void)
 {
-	const char dirpath[]   = "/tmp/ntlibc-linux-statfam-dir";
-	const char subpath[]   = "/tmp/ntlibc-linux-statfam-dir/sub";
-	const char filepath[]  = "/tmp/ntlibc-linux-statfam-file";
-	const char linkpath[]  = "/tmp/ntlibc-linux-statfam-link";
+	const char dirpath[]   = "/tmp/spicule-linux-statfam-dir";
+	const char subpath[]   = "/tmp/spicule-linux-statfam-dir/sub";
+	const char filepath[]  = "/tmp/spicule-linux-statfam-file";
+	const char linkpath[]  = "/tmp/spicule-linux-statfam-link";
 	struct stat st;
 	struct statvfs vfs;
 	long rawfd;
@@ -97,10 +97,10 @@ int main(void)
 		CHECK(r2 == -1 && errno == EEXIST, "mkdir() on an existing path fails EEXIST");
 	}
 
-	/* mkdirat() against a REAL ntlibc dirfd (not AT_FDCWD): proves
+	/* mkdirat() against a REAL spicule dirfd (not AT_FDCWD): proves
 	 * resolve_dirfd() unboxes an installed fd correctly. */
-	/* O_RDONLY alone, deliberately NOT ntlibc's own O_DIRECTORY here: a
-	 * raw syscall needs the REAL kernel flag value, and ntlibc's own
+	/* O_RDONLY alone, deliberately NOT spicule's own O_DIRECTORY here: a
+	 * raw syscall needs the REAL kernel flag value, and spicule's own
 	 * O_DIRECTORY does not match it (see src/fcntl/linux/plat_fcntl.c's
 	 * own banner for exactly this pre-existing include/fcntl.h bug,
 	 * found the same way this test found it the first time it was
@@ -110,8 +110,8 @@ int main(void)
 	rawfd = syscall(SYS_openat, (long)AT_FDCWD_LX, (long)dirpath, (long)O_RDONLY, 0L);
 	CHECK(rawfd >= 0, "raw openat() of the directory (fixture, not under test) succeeded");
 	ntdirfd = install_real_fd((int)rawfd, __FD_DIR);
-	CHECK(ntdirfd >= 0, "installing the real dirfd into ntlibc's own fd table succeeded");
-	CHECK(mkdirat(ntdirfd, "sub", 0700) == 0, "mkdirat(realntfd, \"sub\", 0700) created a directory relative to a real ntlibc dirfd");
+	CHECK(ntdirfd >= 0, "installing the real dirfd into spicule's own fd table succeeded");
+	CHECK(mkdirat(ntdirfd, "sub", 0700) == 0, "mkdirat(realntfd, \"sub\", 0700) created a directory relative to a real spicule dirfd");
 
 	/* fstatat() against the same real dirfd, exercising resolve_dirfd()
 	 * a second, independent way. */
@@ -119,7 +119,7 @@ int main(void)
 	CHECK(S_ISDIR(st.st_mode), "fstatat() via a real dirfd reports S_ISDIR on the new subdirectory");
 	CHECK((st.st_mode & 07777) == 0700, "fstatat() via a real dirfd reports the exact requested mode (0700)");
 	syscall(SYS_close, rawfd, 0L, 0L, 0L, 0L, 0L); /* the raw fd, closed via the raw syscall directly --
-	                     * `rawfd` is never an ntlibc fd-table index, so ntlibc's own close() (not even
+	                     * `rawfd` is never an spicule fd-table index, so spicule's own close() (not even
 	                     * linked into this test) would be the wrong call here. The __fds[] entry
 	                     * installed above is simply abandoned, matching this pilot's fixture-teardown
 	                     * style elsewhere. */
@@ -188,7 +188,7 @@ int main(void)
 	CHECK(vfs.f_namemax > 0, "statvfs() reports a nonzero f_namemax");
 
 	/* O_RDONLY alone -- see the earlier openat() fixture's own comment
-	 * on why ntlibc's own O_DIRECTORY is deliberately not used here. */
+	 * on why spicule's own O_DIRECTORY is deliberately not used here. */
 	rawfd = syscall(SYS_openat, (long)AT_FDCWD_LX, (long)("/tmp"), (long)O_RDONLY, 0L);
 	CHECK(rawfd >= 0, "raw openat() of /tmp for fstatvfs() succeeded");
 	{

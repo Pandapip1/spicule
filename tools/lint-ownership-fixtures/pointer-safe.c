@@ -7,7 +7,7 @@ size_t strcspn(const char *, const char *);
 size_t strspn(const char *, const char *);
 /* Deliberately `unsigned short`, NOT whatever clang's own builtin
  * wchar_t happens to be on the host running this fixture -- this is
- * ntlibc's own real `wchar_t` typedef (each arch/'s bits/alltypes.h.in's
+ * spicule's own real `wchar_t` typedef (each arch/'s bits/alltypes.h.in's
  * `TYPEDEF unsigned short wchar_t`, kept 2 bytes on every arch this
  * tree builds for), and the whole point of wide_scan_return_value_
  * extent_is_trusted below is to prove trackScanExtent() uses THIS
@@ -47,7 +47,7 @@ int static_string(void)
 	return "valid"[1];
 }
 
-/* A null-checked pointer *parameter* -- ntlibc's single most common
+/* A null-checked pointer *parameter* -- spicule's single most common
  * pointer shape, used pervasively for borrowed buffers, structs, and
  * caller-owned objects the callee never allocated and never frees. Once
  * nonnull is proven (the check above), this checker has no further
@@ -61,7 +61,7 @@ int static_string(void)
  * whose provenance crosses a call boundary was not freed by code this
  * analysis never sees. Before the checker stopped treating "not seen by
  * my own allocator tracking" as "known freed", this one shape alone
- * accounted for the majority of ntlibc.ValidPointer findings tree-wide. */
+ * accounted for the majority of spicule.ValidPointer findings tree-wide. */
 int opaque_borrow(int *pointer)
 {
 	if (!pointer)

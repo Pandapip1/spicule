@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Black-box tests for ntlibc's Tier 9 SCCS tooling: admin(1p) and
+ * Black-box tests for spicule's Tier 9 SCCS tooling: admin(1p) and
  * enough of get(1p) to round-trip it (src/util/admin.c, src/util/get.c
  * -- see each file's own header comment for exactly what this pair
  * does and does not implement, and why delta(1p) is not part of the

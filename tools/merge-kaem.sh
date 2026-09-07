@@ -136,7 +136,7 @@
 # `merge.<name>.driver` command line is per-clone config, same as
 # core.hooksPath for .githooks: see ./configure, which sets both with one
 # `git config` block. To enable by hand in an already-configured clone:
-#   git config merge.ntlibc-kaem.driver 'tools/merge-kaem.sh %O %A %B %P'
+#   git config merge.spicule-kaem.driver 'tools/merge-kaem.sh %O %A %B %P'
 
 set -eu
 

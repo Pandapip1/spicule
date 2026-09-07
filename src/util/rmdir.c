@@ -16,7 +16,7 @@
  * src/util/mkdir_util.c.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -77,7 +77,7 @@ int __util_rmdir_main(
 {
 	int i, opt_p = 0, fail = 0;
 
-	/* ntlibc.ValidPointer can't prove argv[i][0] nonnull here: the
+	/* spicule.ValidPointer can't prove argv[i][0] nonnull here: the
 	 * dereference is directly in the loop header, where the
 	 * elements_withtok(null_terminated, argc) fact only reaches a
 	 * checker-visible local, not a raw subscript. Left open: a known

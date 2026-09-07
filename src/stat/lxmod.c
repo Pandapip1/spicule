@@ -6,11 +6,11 @@
  * Microsoft documents $LXMOD as the file-mode member of WSL's NTFS
  * metadata, and Linux ntfs3 stores it as one little-endian 32-bit word.
  * Deliberately do not create $LXUID or $LXGID here: those are literal IDs
- * in a Linux distribution's user namespace, while ntlibc's getuid() is a
+ * in a Linux distribution's user namespace, while spicule's getuid() is a
  * Windows-SID-derived process identity and is not a WSL UID mapping.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)

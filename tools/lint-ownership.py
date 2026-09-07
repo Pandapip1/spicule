@@ -45,7 +45,7 @@ DIAGNOSTIC = re.compile(
     r"resource family does not match operation); "
     r"origin '(.*)'; context '(.*)'; "
     r"expression '(.*)'; site '(.*)' "
-    r"\[ntlibc\.(Ownership|OwnedConstruct|CapabilityToken|OwnershipType|ValidPointer|Resource)\]$"
+    r"\[spicule\.(Ownership|OwnedConstruct|CapabilityToken|OwnershipType|ValidPointer|Resource)\]$"
 )
 CONTRACT = re.compile(
     r"^ownership-contract: "
@@ -135,8 +135,8 @@ def fixture_test(path: pathlib.Path) -> None:
     for source in FIXTURES.glob("*.c"):
         for number, line in enumerate(source.read_text(encoding="utf-8").splitlines(), 1):
             # "ownership-expect: resource-leak" belongs to the opt-in
-            # ntlibc.ResourceLeak checker's own tools/lint-resourceleak.py
-            # gate (tools/lint.sh's resourceleak stage) -- ntlibc.Resource
+            # spicule.ResourceLeak checker's own tools/lint-resourceleak.py
+            # gate (tools/lint.sh's resourceleak stage) -- spicule.Resource
             # alone (this script's own DIAGNOSTIC) no longer emits that
             # message, so it must not be in this gate's expected set.
             if "ownership-expect" in line and "ownership-expect: resource-leak" not in line:

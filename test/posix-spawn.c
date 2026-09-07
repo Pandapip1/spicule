@@ -1106,7 +1106,7 @@ static void test_null_actions_and_argv(void)
 
 /* ---------------------------------------------------------------- */
 
-#if NTLIBC_TEST(PASS, posix_spawn_setsigmask_nonempty_is_delivered) /* was BUG (formerly UNIMPL): posix_spawn.html DESCRIPTION -- POSIX_SPAWN_SETSIGMASK
+#if SPICULE_TEST(PASS, posix_spawn_setsigmask_nonempty_is_delivered) /* was BUG (formerly UNIMPL): posix_spawn.html DESCRIPTION -- POSIX_SPAWN_SETSIGMASK
 	with a *non-empty* mask.  Needs the parent to hand initial signal
 	state to a child that has not executed an instruction yet.
 
@@ -1120,7 +1120,7 @@ static void test_null_actions_and_argv(void)
 	caught a dangling-pointer bug in it.
 
 	What was missing was a format and a reader -- now built:
-	src/internal/nt/plat_fd_init.c appends an ntlibc-specific trailer
+	src/internal/nt/plat_fd_init.c appends an spicule-specific trailer
 	(SIG_RUNTIME_MAGIC) past the msvcrt-compatible osfile/osfhnd table
 	and its own optional VFS trailer, carrying the mask
 	src/process/posix_spawn.c's spawn_common() staged through
@@ -1133,8 +1133,8 @@ static void test_null_actions_and_argv(void)
 	Still not equivalent to POSIX's promise in the one respect
 	src/process/posix_spawn.c's own banner records: on POSIX the kernel
 	carries the mask across exec, so it applies to *any* image; this
-	trailer reaches an ntlibc-built child only.  That does not matter
-	to this fence -- self is always ntlibc-built -- but is why
+	trailer reaches an spicule-built child only.  That does not matter
+	to this fence -- self is always spicule-built -- but is why
 	POSIX_SPAWN_SETSIGMASK is still refused with EINVAL on the Linux
 	backend rather than given a from-scratch equivalent nothing here
 	has verified (test_attr_flags_acted_on's own #if defined(__linux__)
@@ -1189,7 +1189,7 @@ static void test_setsigmask_nonempty_is_delivered(void)
 }
 #endif
 
-#if NTLIBC_TEST(NA, posix_spawn_setpgroup_other_group) /* N/A: posix_spawn.html DESCRIPTION -- POSIX_SPAWN_SETPGROUP with
+#if SPICULE_TEST(NA, posix_spawn_setpgroup_other_group) /* N/A: posix_spawn.html DESCRIPTION -- POSIX_SPAWN_SETPGROUP with
 	a spawn-pgroup naming some *other* process's group.
 	
 	The mechanism previously recorded here -- "NT has no process-group
@@ -1217,7 +1217,7 @@ static void test_setsigmask_nonempty_is_delivered(void)
 	pid.  So a child cannot be spawned into some *other* process's
 	group, and there is nothing to observe a placement against.
 
-	Note what this does NOT excuse: ntlibc's own group model
+	Note what this does NOT excuse: spicule's own group model
 	(src/unistd/ids.c answers getpgrp()/getpgid() with a fixed 1 for
 	every process, setpgid() is a no-op) is a choice, not a
 	consequence of the platform, since a group concept does exist to
@@ -1243,7 +1243,7 @@ static void test_setpgroup_other_group(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_spawn_setschedparam_applied) /* was BUG (formerly UNIMPL): posix_spawn.html DESCRIPTION --
+#if SPICULE_TEST(PASS, posix_spawn_setschedparam_applied) /* was BUG (formerly UNIMPL): posix_spawn.html DESCRIPTION --
 	POSIX_SPAWN_SETSCHEDULER/POSIX_SPAWN_SETSCHEDPARAM actually being
 	applied.  NT mechanism, already half-built by accident: __spawn()
 	creates the process *suspended* (RtlCreateUserProcess followed by a
@@ -1351,7 +1351,7 @@ static void test_setschedparam_applied(void)
 }
 #endif
 
-#if NTLIBC_TEST(NA, posix_spawn_resetids) /* N/A: posix_spawn.html DESCRIPTION -- POSIX_SPAWN_RESETIDS,
+#if SPICULE_TEST(NA, posix_spawn_resetids) /* N/A: posix_spawn.html DESCRIPTION -- POSIX_SPAWN_RESETIDS,
 	"reset the effective user ID of the child process to the real user
 	ID of the parent process".  An NT access token carries a set of
 	SIDs and privileges; it has no real/effective/saved-set-id triple,
@@ -1467,7 +1467,7 @@ int main(int argc, char **argv)
 	if (unverified) {
 		/* `unverified` only ever comes from test_spawnp_path_search()
 		 * above, which is unconditional and unrelated to either of this
-		 * file's two NTLIBC_TEST-fenced cases.  A tools/test-policy.py
+		 * file's two SPICULE_TEST-fenced cases.  A tools/test-policy.py
 		 * probe recompiles this whole file to validate ONE fenced case in
 		 * isolation, and test_spawnp_path_search() still runs alongside
 		 * it; without this guard, its argv[0]-shape environment gap would
@@ -1479,7 +1479,7 @@ int main(int argc, char **argv)
 		printf("posix-spawn: %d assertion group(s) unverified in this "
 		       "environment (see SKIP lines above); no failures in what "
 		       "did run\n", unverified);
-		if (!NTLIBC_TEST_POLICY_PROBE) return 77;
+		if (!SPICULE_TEST_POLICY_PROBE) return 77;
 	}
 	printf("posix-spawn: all ok\n");
 	return 0;

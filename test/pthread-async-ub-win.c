@@ -3,7 +3,7 @@
  *
  * POSIX makes cancellation with PTHREAD_CANCEL_ASYNCHRONOUS undefined
  * while any function other than pthread_cancel(), pthread_setcancelstate(),
- * or pthread_setcanceltype() is executing.  ntlibc diagnoses the dangerous
+ * or pthread_setcanceltype() is executing.  spicule diagnoses the dangerous
  * subset in which redirecting a thread would abandon one of its internal
  * synchronization states -- but the sleep family (nanosleep(), sleep(),
  * usleep(), clock_nanosleep(), pause()) and the internal signal-state lock
@@ -21,7 +21,7 @@
  * __pthread_cancel_unsafe_enter()/_leave() directly with a synthetic
  * region name: self-cancel, a pending request becoming enabled, a pending
  * request becoming async, and a nested defer inside an unsafe region. None
- * of these are tied to a real ntlibc wrapper -- they exercise the abort
+ * of these are tied to a real spicule wrapper -- they exercise the abort
  * mechanism itself (every non-redirect delivery gateway, plus the rule
  * that a nested defer inside an unsafe region postpones delivery without
  * suppressing the enclosing diagnostic), so the mechanism stays covered
@@ -37,7 +37,7 @@
  *
  * The -win suffix is intentional.  Under Wine, NtTerminateProcess() ends
  * each diagnostic child, but the corresponding NT process handle is not
- * signalled, so an ntlibc parent cannot reap it.  Running any child mode
+ * signalled, so an spicule parent cannot reap it.  Running any child mode
  * directly under Wine still exercises the detector; native Windows runs
  * this parent-side status adjudication in the normal suite.
  */
@@ -338,7 +338,7 @@ static void expect_ub(const char *self, const char *mode, const char *region)
 	CHECK(WIFSIGNALED(status));
 	if (WIFSIGNALED(status)) CHECK(WTERMSIG(status) == SIGABRT);
 	CHECK(!(WIFEXITED(status) && WEXITSTATUS(status) == SURVIVED_EXIT));
-	CHECK(strstr(output, "ntlibc: undefined behavior: asynchronous cancellation during ") != 0);
+	CHECK(strstr(output, "spicule: undefined behavior: asynchronous cancellation during ") != 0);
 	CHECK(strstr(output, region) != 0);
 }
 

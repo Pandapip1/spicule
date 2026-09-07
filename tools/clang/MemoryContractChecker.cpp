@@ -18,7 +18,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 
-#ifdef NTLIBC_MEMORY_CONTRACT_Z3
+#ifdef SPICULE_MEMORY_CONTRACT_Z3
 #include "ExactCScalarSMT.h"
 #include "z3++.h"
 #endif
@@ -134,8 +134,8 @@ REGISTER_MAP_WITH_PROGRAMSTATE(TouchedRecordSpan, RecordSpanTouchKey,
 
 namespace {
 
-using ntlibc::algebra::findTokenSort;
-using ntlibc::algebra::hasQualifier;
+using spicule::algebra::findTokenSort;
+using spicule::algebra::hasQualifier;
 
 enum class MemoryTokenOperation : unsigned char { Require, Grant };
 
@@ -563,7 +563,7 @@ static ProgramStateRef assumeFieldSpan(const Expr *Expression,
              : State;
 }
 
-#ifdef NTLIBC_MEMORY_CONTRACT_Z3
+#ifdef SPICULE_MEMORY_CONTRACT_Z3
 // A narrow bridge from the range constraint manager (and this checker's own
 // ProvenLessEqual/ProvenLessThan relations, see checkBranchCondition above)
 // to Z3.  It exists solely to discharge the no-wrap side condition that
@@ -599,13 +599,13 @@ class MemoryContractZ3Proof {
   z3::context &ZCtx;
   z3::solver &Solver;
   ASTContext &AST;
-  ntlibc::algebra::ScalarSMT Algebra;
+  spicule::algebra::ScalarSMT Algebra;
 
   static bool isUnsigned(QualType Type) {
     return Type->isUnsignedIntegerOrEnumerationType();
   }
 
-  ntlibc::algebra::CType cType(QualType Type) const {
+  spicule::algebra::CType cType(QualType Type) const {
     return {AST.getIntWidth(Type), AST.getIntWidth(Type), isUnsigned(Type)};
   }
 
@@ -642,14 +642,14 @@ class MemoryContractZ3Proof {
       if (Left.get_sort().bv_size() != Right.get_sort().bv_size() ||
           (Opcode != BO_Add && Opcode != BO_Sub && Opcode != BO_Mul))
         return std::nullopt;
-      ntlibc::algebra::CType Type = cType(OperandType);
-      std::optional<ntlibc::algebra::SemanticResult> L =
+      spicule::algebra::CType Type = cType(OperandType);
+      std::optional<spicule::algebra::SemanticResult> L =
           Algebra.input(Left, Type);
-      std::optional<ntlibc::algebra::SemanticResult> R =
+      std::optional<spicule::algebra::SemanticResult> R =
           Algebra.input(Right, Type);
       if (!L || !R)
         return std::nullopt;
-      std::optional<ntlibc::algebra::SemanticResult> Result =
+      std::optional<spicule::algebra::SemanticResult> Result =
           Opcode == BO_Add    ? Algebra.addConverted(*L, *R)
           : Opcode == BO_Sub  ? Algebra.subtractConverted(*L, *R)
                               : Algebra.multiplyConverted(*L, *R);
@@ -726,9 +726,9 @@ class MemoryContractZ3Proof {
     std::optional<z3::expr> Right = translate(RightSymbol);
     if (!Left || !Right)
       return;
-    std::optional<ntlibc::algebra::SemanticResult> LeftInput =
+    std::optional<spicule::algebra::SemanticResult> LeftInput =
         Algebra.input(*Left, cType(LeftSymbol->getType()));
-    std::optional<ntlibc::algebra::SemanticResult> RightInput =
+    std::optional<spicule::algebra::SemanticResult> RightInput =
         Algebra.input(*Right, cType(RightSymbol->getType()));
     if (!LeftInput || !RightInput)
       return;
@@ -789,18 +789,18 @@ public:
     unsigned Width = AST.getIntWidth(BaseType);
     if (BaseExpr->get_sort().bv_size() != Width)
       return false;
-    ntlibc::algebra::CType Domain = cType(BaseType);
-    std::optional<ntlibc::algebra::SemanticResult> BaseInput =
+    spicule::algebra::CType Domain = cType(BaseType);
+    std::optional<spicule::algebra::SemanticResult> BaseInput =
         Algebra.input(*BaseExpr, Domain);
     if (!BaseInput)
       return false;
     llvm::APSInt OffsetValue(Width, Domain.Unsigned);
     OffsetValue = Offset;
-    std::optional<ntlibc::algebra::SemanticResult> OffsetInput =
+    std::optional<spicule::algebra::SemanticResult> OffsetInput =
         Algebra.input(bitVector(OffsetValue, Width), Domain);
     if (!OffsetInput)
       return false;
-    std::optional<ntlibc::algebra::SemanticResult> Result =
+    std::optional<spicule::algebra::SemanticResult> Result =
         Algebra.addConverted(*BaseInput, *OffsetInput);
     if (!Result)
       return false;
@@ -810,7 +810,7 @@ public:
     if (!Violation.is_bool())
       return false;
     Solver.add(Violation);
-    return ntlibc::algebra::provesUnsatisfiable(Solver);
+    return spicule::algebra::provesUnsatisfiable(Solver);
   }
 
   // Proves Extent's value is never smaller than Length's, from the two
@@ -840,9 +840,9 @@ public:
     std::optional<z3::expr> LengthExpr = translate(LengthSymbol);
     if (!ExtentExpr || !LengthExpr)
       return false;
-    std::optional<ntlibc::algebra::SemanticResult> ExtentInput =
+    std::optional<spicule::algebra::SemanticResult> ExtentInput =
         Algebra.input(*ExtentExpr, cType(ExtentSymbol->getType()));
-    std::optional<ntlibc::algebra::SemanticResult> LengthInput =
+    std::optional<spicule::algebra::SemanticResult> LengthInput =
         Algebra.input(*LengthExpr, cType(LengthSymbol->getType()));
     if (!ExtentInput || !LengthInput)
       return false;
@@ -853,7 +853,7 @@ public:
     if (!LessThan)
       return false;
     Solver.add(*LessThan);
-    return ntlibc::algebra::provesUnsatisfiable(Solver);
+    return spicule::algebra::provesUnsatisfiable(Solver);
   }
 
   // Peels exactly one top-level `Root * Scale` (or `Scale * Root`)
@@ -914,16 +914,16 @@ public:
     unsigned Width = AST.getIntWidth(Root->getType());
     if (RootExpr->get_sort().bv_size() != Width)
       return false;
-    ntlibc::algebra::CType Domain = cType(Root->getType());
-    std::optional<ntlibc::algebra::SemanticResult> RootInput =
+    spicule::algebra::CType Domain = cType(Root->getType());
+    std::optional<spicule::algebra::SemanticResult> RootInput =
         Algebra.input(*RootExpr, Domain);
     if (!RootInput)
       return false;
-    std::optional<ntlibc::algebra::SemanticResult> ScaleInput =
+    std::optional<spicule::algebra::SemanticResult> ScaleInput =
         Algebra.input(bitVector(Scale, Width), Domain);
     if (!ScaleInput)
       return false;
-    std::optional<ntlibc::algebra::SemanticResult> Result =
+    std::optional<spicule::algebra::SemanticResult> Result =
         Algebra.multiplyConverted(*RootInput, *ScaleInput);
     if (!Result)
       return false;
@@ -934,7 +934,7 @@ public:
       return false;
     Solver.push();
     Solver.add(Violation);
-    bool NoOverflow = ntlibc::algebra::provesUnsatisfiable(Solver);
+    bool NoOverflow = spicule::algebra::provesUnsatisfiable(Solver);
     Solver.pop();
     if (!NoOverflow)
       return false;
@@ -991,12 +991,12 @@ public:
     std::optional<z3::expr> ExtentExpr = translate(ExtentSymbol);
     if (!ExtentExpr)
       return false;
-    ntlibc::algebra::CType Domain = cType(ExtentSymbol->getType());
-    std::optional<ntlibc::algebra::SemanticResult> ExtentInput =
+    spicule::algebra::CType Domain = cType(ExtentSymbol->getType());
+    std::optional<spicule::algebra::SemanticResult> ExtentInput =
         Algebra.input(*ExtentExpr, Domain);
     if (!ExtentInput)
       return false;
-    std::optional<ntlibc::algebra::SemanticResult> LengthInput =
+    std::optional<spicule::algebra::SemanticResult> LengthInput =
         Algebra.input(bitVector(Length, ExtentExpr->get_sort().bv_size()),
                       Domain);
     if (!LengthInput)
@@ -1005,7 +1005,7 @@ public:
     if (!LessThan)
       return false;
     Solver.add(*LessThan);
-    return ntlibc::algebra::provesUnsatisfiable(Solver);
+    return spicule::algebra::provesUnsatisfiable(Solver);
   }
 
   // Closes the proof gap this file's own field-span enforcement
@@ -1139,7 +1139,7 @@ public:
       return false;
     z3::expr NotZero = *Expr != ZCtx.bv_val(0, Expr->get_sort().bv_size());
     Solver.add(NotZero);
-    return ntlibc::algebra::provesUnsatisfiable(Solver);
+    return spicule::algebra::provesUnsatisfiable(Solver);
   }
 };
 
@@ -1183,7 +1183,7 @@ static bool zeroProvenZ3(SymbolRef Symbol, ProgramStateRef State,
   MemoryContractZ3Proof Proof(memoryContractZ3Engine(), State, AST);
   return Proof.provesZero(Symbol);
 }
-#endif // NTLIBC_MEMORY_CONTRACT_Z3
+#endif // SPICULE_MEMORY_CONTRACT_Z3
 
 class MemoryContractChecker
     : public Checker<check::PreCall, check::PostCall, check::BeginFunction,
@@ -1485,7 +1485,7 @@ class MemoryContractChecker
               C.getSValBuilder().getMaxValue(State, Length);
           if (Maximum && *Maximum <= Limit)
             return true;
-#ifdef NTLIBC_MEMORY_CONTRACT_Z3
+#ifdef SPICULE_MEMORY_CONTRACT_Z3
           // getMaxValue only sees LengthSymbol's own range constraints; it
           // cannot combine a proven relation to another symbol (see
           // MemoryContractZ3Proof's comment above) with that other
@@ -1511,7 +1511,7 @@ class MemoryContractChecker
       if ((EL == LL && ER == LR) || (EL == LR && ER == LL))
         return true;
     }
-#ifdef NTLIBC_MEMORY_CONTRACT_Z3
+#ifdef SPICULE_MEMORY_CONTRACT_Z3
     // The two structural checks above (a shared SymExpr pointer, and a
     // SymSymExpr*SymSymExpr product with matching factors) both require
     // syntactic identity of at least part of the expression tree. A
@@ -1575,7 +1575,7 @@ class MemoryContractChecker
         State, C.getSValBuilder().makeSymbolVal(ExtentBase));
     if (Maximum && *Maximum <= Limit)
       return true;
-#ifdef NTLIBC_MEMORY_CONTRACT_Z3
+#ifdef SPICULE_MEMORY_CONTRACT_Z3
     // Same fallback as above: getMaxValue(ExtentBase) alone cannot use a
     // proven relation to a different bounded symbol.
     if (noWrapProvenZ3(ExtentBase, BaseType,
@@ -1882,7 +1882,7 @@ public:
                   CheckerContext &C, bool UseAssumedSpans = true) const {
     if (State->isNull(Length).isConstrainedTrue())
       return true;
-#ifdef NTLIBC_MEMORY_CONTRACT_Z3
+#ifdef SPICULE_MEMORY_CONTRACT_Z3
     // isNull() only consults the constraint manager's own range fact for
     // Length's exact symbolic identity. A scaled length built via this
     // file's own Contract.Scale multiplication (count_symbol * elemSize)
@@ -3212,7 +3212,7 @@ public:
 
 void registerMemoryContractChecker(CheckerRegistry &Registry) {
   Registry.addChecker<MemoryContractChecker>(
-      "ntlibc.MemoryContract",
+      "spicule.MemoryContract",
       "Proves memory spans and memcpy non-overlap contracts", "");
 }
 

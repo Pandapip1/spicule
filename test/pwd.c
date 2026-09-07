@@ -4,7 +4,7 @@
  * Clause-by-clause POSIX.1-2017 audit of <pwd.h>
  * (pwd.h.html, getpwnam.html, getpwuid.html, getpwent.html) against
  * src/misc/pwd.c.  See that file's header comment for the design:
- * ntlibc has exactly one uid (getuid()/geteuid() always agree, per
+ * spicule has exactly one uid (getuid()/geteuid() always agree, per
  * src/unistd/ids.c and test/posix-unistd.c's own coverage of that),
  * and this file checks that getpwuid()/getpwnam() answer honestly for
  * that one user and refuse cleanly for anyone else.
@@ -95,7 +95,7 @@ static void test_getpwuid_current(void)
 }
 
 /* getpwuid.html RETURN VALUE: "If the requested entry was not found,
- * errno shall not be changed." ntlibc has exactly one uid, so any
+ * errno shall not be changed." spicule has exactly one uid, so any
  * other value is "not found" by definition, regardless of
  * have_user(). */
 static void test_getpwuid_other_not_found(void)
@@ -144,7 +144,7 @@ static void test_getpwnam_other_not_found(void)
 	struct passwd *pw;
 
 	errno = 12345;
-	pw = getpwnam("definitely-not-a-real-ntlibc-user-xyz");
+	pw = getpwnam("definitely-not-a-real-spicule-user-xyz");
 	CHECK(pw == NULL);
 	CHECK(errno == 12345);
 }
@@ -232,7 +232,7 @@ static void test_getpwnam_r_success_and_not_found(void)
 	CHECK(pw.pw_uid == getuid());
 
 	result = (struct passwd *)0x1;
-	r = getpwnam_r("definitely-not-a-real-ntlibc-user-xyz", &pw, buf, sizeof buf, &result);
+	r = getpwnam_r("definitely-not-a-real-spicule-user-xyz", &pw, buf, sizeof buf, &result);
 	CHECK(r == 0);
 	CHECK(result == NULL);
 }
@@ -261,7 +261,7 @@ static void test_getpwnam_r_erange(void)
 	CHECK(result == NULL);
 }
 
-/* getpwent.html: XSI, but implementable here -- ntlibc's "database"
+/* getpwent.html: XSI, but implementable here -- spicule's "database"
  * genuinely has one entry when the current user's name is knowable,
  * and none at all otherwise.  setpwent() rewinds; the first
  * getpwent() yields the one entry (or immediate end-of-file without
@@ -552,7 +552,7 @@ int main(void)
  *      boundary, nsswitch.conf gating -- against a hermetic fixture
  *      tree this file builds itself in a fresh mkdtemp() directory,
  *      pointed to via this pass's own disclosed testability env-var
- *      seam (NTLIBC_TEST_PASSWD_PATH/NTLIBC_TEST_NSSWITCH_PATH, see
+ *      seam (SPICULE_TEST_PASSWD_PATH/SPICULE_TEST_NSSWITCH_PATH, see
  *      src/internal/nss_paths.h), so none of it depends on this host's
  *      real user database having any particular shape.
  * ==================================================================== */
@@ -623,14 +623,14 @@ static void test_linux_getpwent_reaches_root(void)
 
 static void fixture_env_set(void)
 {
-	CHECK(setenv("NTLIBC_TEST_PASSWD_PATH", FIX_PASSWD, 1) == 0);
-	CHECK(setenv("NTLIBC_TEST_NSSWITCH_PATH", FIX_NSSWITCH, 1) == 0);
+	CHECK(setenv("SPICULE_TEST_PASSWD_PATH", FIX_PASSWD, 1) == 0);
+	CHECK(setenv("SPICULE_TEST_NSSWITCH_PATH", FIX_NSSWITCH, 1) == 0);
 }
 
 static void fixture_env_clear(void)
 {
-	unsetenv("NTLIBC_TEST_PASSWD_PATH");
-	unsetenv("NTLIBC_TEST_NSSWITCH_PATH");
+	unsetenv("SPICULE_TEST_PASSWD_PATH");
+	unsetenv("SPICULE_TEST_NSSWITCH_PATH");
 }
 
 /* getpwnam.html DESCRIPTION/RETURN VALUE, getpwuid.html DESCRIPTION,
@@ -792,8 +792,8 @@ static void test_linux_fixture_missing_nsswitch_defaults_to_files(void)
 	struct passwd *pw;
 
 	fixture_write(FIX_PASSWD, "erin:x:5005:5005:Erin Example:/home/erin:/bin/esh\n");
-	CHECK(setenv("NTLIBC_TEST_PASSWD_PATH", FIX_PASSWD, 1) == 0);
-	CHECK(setenv("NTLIBC_TEST_NSSWITCH_PATH", "fx-nsswitch-does-not-exist", 1) == 0);
+	CHECK(setenv("SPICULE_TEST_PASSWD_PATH", FIX_PASSWD, 1) == 0);
+	CHECK(setenv("SPICULE_TEST_NSSWITCH_PATH", "fx-nsswitch-does-not-exist", 1) == 0);
 
 	pw = getpwnam("erin");
 	CHECK(pw != NULL);

@@ -26,8 +26,8 @@
  * the real NTSTATUS in hand, not reconstructed from errno afterward --
  * see __plat_process_open_checked() vs __plat_process_open() below.
  */
-#ifndef _NTLIBC_PLAT_MISC_H
-#define _NTLIBC_PLAT_MISC_H
+#ifndef _SPICULE_PLAT_MISC_H
+#define _SPICULE_PLAT_MISC_H
 
 #include <sys/types.h>
 #include <sys/resource.h>

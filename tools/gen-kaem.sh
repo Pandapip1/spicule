@@ -18,7 +18,7 @@
 # currently contain; -n means "print, don't run"; asking for exactly the
 # handful of libraries/objects the bootstrap stage actually needs --
 # rather than the default `all` target -- excludes the empty stub libs
-# (libm.a, libpthread.a, ...), lib/ntdll.def, the ntlibc-tcc wrapper
+# (libm.a, libpthread.a, ...), lib/ntdll.def, the spicule-tcc wrapper
 # script, and lib/delayload2.o (an optional helper only programs using
 # -Wl,--delay-all need, on either platform), none of which the kaem
 # bootstrap stage needs), and then mechanically rewrites that dry-run
@@ -557,7 +557,7 @@ case "$PLATFORM" in
 nt)
 	TARGET_DESC="${ARCH}-win32"
 	PRODUCES_LINE="# boot/kaem/build-${PLATFORM}-${ARCH}.kaem -- kaem-only bootstrap build of
-# ntlibc for ${TARGET_DESC}, producing lib/libc.a, lib/crt1.o and the
+# spicule for ${TARGET_DESC}, producing lib/libc.a, lib/crt1.o and the
 # standalone POSIX utility programs (obj/bin/*.exe -- true, false, test,
 # ...) without make, without a real shell, and without a general-purpose
 # ar."
@@ -601,7 +601,7 @@ nt)
 linux)
 	TARGET_DESC="${ARCH}-linux"
 	PRODUCES_LINE="# boot/kaem/build-${PLATFORM}-${ARCH}.kaem -- kaem-only bootstrap build of
-# ntlibc for ${TARGET_DESC}, producing lib/libc.a, lib/crt1.o and
+# spicule for ${TARGET_DESC}, producing lib/libc.a, lib/crt1.o and
 # lib/start.o, without make, without a real shell, and without a
 # general-purpose ar."
 	CONFIGURE_LINE="#   ./configure --platform=linux CC=${CC} CFLAGS=\"-fno-stack-protector -mno-outline-atomics\""
@@ -678,7 +678,7 @@ HEADER
 	cat <<HEADER
 # sync with the Makefile as source files are added/removed/changed).
 #
-# This is NOT the normal way to build ntlibc. It exists solely for the
+# This is NOT the normal way to build spicule. It exists solely for the
 # "right after mes compiles tcc" point in a from-scratch bootstrap chain
 # (live-bootstrap style), where the only command driver available is kaem
 # (from mescc-tools) and make/bash do not exist yet. See CONTRIBUTING.md
@@ -727,7 +727,7 @@ HEADER
 # from-scratch bootstrap actually has -- an unpacked tarball or a store path
 # it may not write to, and no recursive copy at this stage to stage it with:
 #   cd /some/empty/writable/dir
-#   srcdir=/path/to/ntlibc ${SHORT_INVOKE_VARS} kaem --strict --file .../build-${PLATFORM}-${ARCH}.kaem
+#   srcdir=/path/to/spicule ${SHORT_INVOKE_VARS} kaem --strict --file .../build-${PLATFORM}-${ARCH}.kaem
 # (On a developer machine with a POSIX shell the tools are unsuffixed and
 # \`command -v' fills these in, e.g. bin_cp=\$(command -v cp).)
 #

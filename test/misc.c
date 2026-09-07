@@ -43,27 +43,27 @@ static int env_has(const char *prefix)
 
 static void test_env(void)
 {
-	static char pe[] = "NTLIBC_PUTENV=pv";
+	static char pe[] = "SPICULE_PUTENV=pv";
 
-	CHECK(getenv("NTLIBC_NO_SUCH_VAR_XYZ") == NULL);
+	CHECK(getenv("SPICULE_NO_SUCH_VAR_XYZ") == NULL);
 	CHECK(getenv("") == NULL);
 	CHECK(getenv("A=B") == NULL);
 
-	CHECK(setenv("NTLIBC_T1", "one", 1) == 0);
-	CHECK(getenv("NTLIBC_T1") && !strcmp(getenv("NTLIBC_T1"), "one"));
-	CHECK(env_has("NTLIBC_T1=one"));
-	CHECK(setenv("NTLIBC_T1", "two", 0) == 0);
-	CHECK(getenv("NTLIBC_T1") && !strcmp(getenv("NTLIBC_T1"), "one"));
-	CHECK(setenv("NTLIBC_T1", "two", 1) == 0);
-	CHECK(getenv("NTLIBC_T1") && !strcmp(getenv("NTLIBC_T1"), "two"));
-	CHECK(env_has("NTLIBC_T1=two"));
-	CHECK(!env_has("NTLIBC_T1=one"));
-	CHECK(setenv("NTLIBC_EMPTY", "", 1) == 0);
-	CHECK(getenv("NTLIBC_EMPTY") && !*getenv("NTLIBC_EMPTY"));
-	CHECK(unsetenv("NTLIBC_T1") == 0);
-	CHECK(getenv("NTLIBC_T1") == NULL);
-	CHECK(!env_has("NTLIBC_T1="));
-	CHECK(unsetenv("NTLIBC_T1") == 0);  /* not present: still success */
+	CHECK(setenv("SPICULE_T1", "one", 1) == 0);
+	CHECK(getenv("SPICULE_T1") && !strcmp(getenv("SPICULE_T1"), "one"));
+	CHECK(env_has("SPICULE_T1=one"));
+	CHECK(setenv("SPICULE_T1", "two", 0) == 0);
+	CHECK(getenv("SPICULE_T1") && !strcmp(getenv("SPICULE_T1"), "one"));
+	CHECK(setenv("SPICULE_T1", "two", 1) == 0);
+	CHECK(getenv("SPICULE_T1") && !strcmp(getenv("SPICULE_T1"), "two"));
+	CHECK(env_has("SPICULE_T1=two"));
+	CHECK(!env_has("SPICULE_T1=one"));
+	CHECK(setenv("SPICULE_EMPTY", "", 1) == 0);
+	CHECK(getenv("SPICULE_EMPTY") && !*getenv("SPICULE_EMPTY"));
+	CHECK(unsetenv("SPICULE_T1") == 0);
+	CHECK(getenv("SPICULE_T1") == NULL);
+	CHECK(!env_has("SPICULE_T1="));
+	CHECK(unsetenv("SPICULE_T1") == 0);  /* not present: still success */
 
 	errno = 0;
 	CHECK(setenv("A=B", "x", 1) == -1 && errno == EINVAL);
@@ -75,13 +75,13 @@ static void test_env(void)
 	CHECK(unsetenv("A=B") == -1 && errno == EINVAL);
 
 	CHECK(putenv(pe) == 0);
-	CHECK(getenv("NTLIBC_PUTENV") && !strcmp(getenv("NTLIBC_PUTENV"), "pv"));
-	CHECK(env_has("NTLIBC_PUTENV=pv"));
+	CHECK(getenv("SPICULE_PUTENV") && !strcmp(getenv("SPICULE_PUTENV"), "pv"));
+	CHECK(env_has("SPICULE_PUTENV=pv"));
 	pe[14] = 'q';  /* putenv strings are referenced, not copied */
-	CHECK(getenv("NTLIBC_PUTENV") && !strcmp(getenv("NTLIBC_PUTENV"), "qv"));
-	CHECK(unsetenv("NTLIBC_PUTENV") == 0);
-	CHECK(getenv("NTLIBC_PUTENV") == NULL);
-	CHECK(!env_has("NTLIBC_PUTENV="));
+	CHECK(getenv("SPICULE_PUTENV") && !strcmp(getenv("SPICULE_PUTENV"), "qv"));
+	CHECK(unsetenv("SPICULE_PUTENV") == 0);
+	CHECK(getenv("SPICULE_PUTENV") == NULL);
+	CHECK(!env_has("SPICULE_PUTENV="));
 }
 
 /* ---- process scheduling ---- */
@@ -139,11 +139,11 @@ static void test_semaphore(void)
 	CHECK(sem_post(&sem) == 0);
 	CHECK(sem_getvalue(&sem, &value) == 0 && value == 1);
 	CHECK(sem_destroy(&sem) == 0);
-	sem_unlink("/ntlibc_misc_sem");
-	named = sem_open("/ntlibc_misc_sem", O_CREAT | O_EXCL, 0600, 1);
+	sem_unlink("/spicule_misc_sem");
+	named = sem_open("/spicule_misc_sem", O_CREAT | O_EXCL, 0600, 1);
 	CHECK(named != SEM_FAILED);
 	if (named != SEM_FAILED) CHECK(sem_close(named) == 0);
-	CHECK(sem_unlink("/ntlibc_misc_sem") == 0);
+	CHECK(sem_unlink("/spicule_misc_sem") == 0);
 }
 
 /* ---- message queues ---- */
@@ -158,8 +158,8 @@ static void test_mqueue(void)
 
 	attr.mq_maxmsg = 2;
 	attr.mq_msgsize = sizeof buf;
-	mq_unlink("/ntlibc_misc_mq");
-	q = mq_open("/ntlibc_misc_mq", O_CREAT | O_EXCL | O_RDWR, 0600, &attr);
+	mq_unlink("/spicule_misc_mq");
+	q = mq_open("/spicule_misc_mq", O_CREAT | O_EXCL | O_RDWR, 0600, &attr);
 	CHECK(q != (mqd_t)-1);
 	if (q == (mqd_t)-1) return;
 	event.sigev_notify = SIGEV_NONE;
@@ -177,7 +177,7 @@ static void test_mqueue(void)
 	CHECK(mq_timedreceive(q, buf, sizeof buf, &prio, &deadline) == 4 &&
 	      prio == 9 && !memcmp(buf, "high", 4));
 	CHECK(mq_close(q) == 0);
-	CHECK(mq_unlink("/ntlibc_misc_mq") == 0);
+	CHECK(mq_unlink("/spicule_misc_mq") == 0);
 }
 
 /* ---- asynchronous I/O ---- */
@@ -190,7 +190,7 @@ static void test_aio(void)
 	char in[8] = {0};
 	int fd, canceled;
 
-	fd = open("ntlibc-misc-aio.tmp", O_CREAT | O_TRUNC | O_RDWR, 0600);
+	fd = open("spicule-misc-aio.tmp", O_CREAT | O_TRUNC | O_RDWR, 0600);
 	CHECK(fd >= 0);
 	if (fd < 0) return;
 
@@ -259,7 +259,7 @@ static void test_aio(void)
 	(void)aio_return(&cb);
 
 	CHECK(close(fd) == 0);
-	CHECK(unlink("ntlibc-misc-aio.tmp") == 0);
+	CHECK(unlink("spicule-misc-aio.tmp") == 0);
 }
 
 /* ---- system() ---- */

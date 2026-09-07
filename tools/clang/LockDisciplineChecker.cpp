@@ -27,7 +27,7 @@ using namespace ento;
 
 // "Held" is the same must-hold/must-not-double-acquire linear-lifecycle
 // question OwnershipChecker.cpp's ConstructMap and AllocationLifetimeChecker.cpp's
-// AllocationLifecycle already answer via ntlibc::algebra's shared,
+// AllocationLifecycle already answer via spicule::algebra's shared,
 // nominal-state algebra (Live/Released/Absent/Unknown, transitioned by
 // applyLifecycleOperation()) -- this checker used to carry its own,
 // separately hand-rolled boolean "is this MemRegion held" derivation
@@ -51,20 +51,20 @@ using namespace ento;
 // distinguished which family was released for those two checks, and
 // family-mismatch detection is not a discipline this checker claims to
 // enforce.
-using ntlibc::algebra::absentLifecycle;
-using ntlibc::algebra::applyLifecycleOperation;
-using ntlibc::algebra::contains;
-using ntlibc::algebra::LifecycleEvent;
-using ntlibc::algebra::LifecycleFact;
-using ntlibc::algebra::LifecycleFamilyId;
-using ntlibc::algebra::LifecycleOperation;
-using ntlibc::algebra::LifecycleState;
-using ntlibc::algebra::LifecycleTransition;
-using ntlibc::algebra::liveLifecycle;
-using ntlibc::algebra::observeLifecycleExit;
-using ntlibc::algebra::releasedLifecycle;
-using ntlibc::algebra::requireNotLive;
-using ntlibc::algebra::unknownLifecycle;
+using spicule::algebra::absentLifecycle;
+using spicule::algebra::applyLifecycleOperation;
+using spicule::algebra::contains;
+using spicule::algebra::LifecycleEvent;
+using spicule::algebra::LifecycleFact;
+using spicule::algebra::LifecycleFamilyId;
+using spicule::algebra::LifecycleOperation;
+using spicule::algebra::LifecycleState;
+using spicule::algebra::LifecycleTransition;
+using spicule::algebra::liveLifecycle;
+using spicule::algebra::observeLifecycleExit;
+using spicule::algebra::releasedLifecycle;
+using spicule::algebra::requireNotLive;
+using spicule::algebra::unknownLifecycle;
 
 REGISTER_MAP_WITH_PROGRAMSTATE(HeldLocks, const MemRegion *, LifecycleState)
 REGISTER_MAP_WITH_PROGRAMSTATE(HeldLockFamily, const MemRegion *,
@@ -76,7 +76,7 @@ REGISTER_MAP_WITH_PROGRAMSTATE(LockAcquirers, const MemRegion *,
 // ending while holding this lock is a deliberate hand-off (to the
 // caller, or, for a pthread_cleanup_push() handler, the cancellation
 // machinery). A function opts into this via a
-// ntlibc_lock_requires_held_on_entry/ntlibc_lock_acquires_for_caller
+// spicule_lock_requires_held_on_entry/spicule_lock_acquires_for_caller
 // __attribute__((annotate(...))) on its own declaration -- see
 // LockHandoffContracts.h and handoffContract() below for the two ways a
 // region gets tagged from that annotation.
@@ -85,15 +85,15 @@ REGISTER_MAP_WITH_PROGRAMSTATE(HandoffExempt, const MemRegion *,
 
 namespace {
 
-using ntlibc::lock::LockCall;
-using ntlibc::lock::LockOperation;
+using spicule::lock::LockCall;
+using spicule::lock::LockOperation;
 
 class LockDisciplineChecker
     : public Checker<check::PreCall, check::PostCall, check::EndFunction,
                      check::BeginFunction> {
   mutable std::unique_ptr<BugType> BT;
 
-  // ntlibc::lock::classifyCall() reads the real consume:/consume_any:/
+  // spicule::lock::classifyCall() reads the real consume:/consume_any:/
   // grant:/withtok: token annotations off Call's own callee declaration --
   // the same annotations OwnershipChecker.cpp already enforces for these
   // same pthread.h entry points -- instead of this checker keeping its own
@@ -101,7 +101,7 @@ class LockDisciplineChecker
   // LockAlgebra.h's own doc comment for why that table had already drifted
   // from PurityChecker.cpp's copy before this change).
   static std::optional<LockCall> protocolFor(const CallEvent &Call) {
-    return ntlibc::lock::classifyCall(
+    return spicule::lock::classifyCall(
         dyn_cast_or_null<FunctionDecl>(Call.getDecl()));
   }
 
@@ -140,7 +140,7 @@ class LockDisciplineChecker
   // synthetic-seed case, exactly as this checker's own former single
   // "write" tag was for everything.
   static const IdentifierInfo *handoffFamily(ASTContext &Ctx) {
-    return &Ctx.Idents.get("ntlibc.lock.handoff");
+    return &Ctx.Idents.get("spicule.lock.handoff");
   }
 
   // The MemRegion-keyed analogue of AllocationLifetimeChecker.cpp's own
@@ -168,22 +168,22 @@ class LockDisciplineChecker
                                           : releasedLifecycle(Id);
   }
 
-  // Function's own ntlibc_lock_requires_held_on_entry/
-  // ntlibc_lock_acquires_for_caller annotation, if it (or any of its
+  // Function's own spicule_lock_requires_held_on_entry/
+  // spicule_lock_acquires_for_caller annotation, if it (or any of its
   // other redeclarations -- a forward declaration is where these are
   // conventionally attached, e.g. src/thread/pthread_cond.c's
   // cond_wait_cleanup) carries one of the given kind. Real AST
   // inspection of a source-visible attribute, not a name match: see
   // LockHandoffContracts.h.
-  static std::optional<ntlibc::LockHandoffContract>
-  handoffContract(const FunctionDecl *Function, ntlibc::LockHandoffKind Kind) {
+  static std::optional<spicule::LockHandoffContract>
+  handoffContract(const FunctionDecl *Function, spicule::LockHandoffKind Kind) {
     if (!Function)
       return std::nullopt;
     for (const FunctionDecl *Redeclaration : Function->redecls()) {
       for (const auto *Attribute :
            Redeclaration->specific_attrs<AnnotateAttr>()) {
-        std::optional<ntlibc::LockHandoffContract> Contract =
-            ntlibc::parseLockHandoff(Attribute->getAnnotation());
+        std::optional<spicule::LockHandoffContract> Contract =
+            spicule::parseLockHandoff(Attribute->getAnnotation());
         if (Contract && Contract->Kind == Kind)
           return Contract;
       }
@@ -192,11 +192,11 @@ class LockDisciplineChecker
   }
 
   // True if the function currently being analyzed carries
-  // ntlibc_lock_acquires_for_caller.
+  // spicule_lock_acquires_for_caller.
   static bool acquiresForCaller(CheckerContext &C) {
     const auto *Function =
         dyn_cast_or_null<FunctionDecl>(C.getLocationContext()->getDecl());
-    return handoffContract(Function, ntlibc::LockHandoffKind::AcquiresForCaller)
+    return handoffContract(Function, spicule::LockHandoffKind::AcquiresForCaller)
         .has_value();
   }
 
@@ -415,8 +415,8 @@ public:
   void checkBeginFunction(CheckerContext &C) const {
     const auto *Function =
         dyn_cast_or_null<FunctionDecl>(C.getLocationContext()->getDecl());
-    std::optional<ntlibc::LockHandoffContract> Contract = handoffContract(
-        Function, ntlibc::LockHandoffKind::RequiresHeldOnEntry);
+    std::optional<spicule::LockHandoffContract> Contract = handoffContract(
+        Function, spicule::LockHandoffKind::RequiresHeldOnEntry);
     if (!Contract || Contract->Argument >= Function->getNumParams())
       return;
     const ParmVarDecl *Param = Function->getParamDecl(Contract->Argument);
@@ -474,6 +474,6 @@ extern "C" const char clang_analyzerAPIVersionString[] =
 
 extern "C" void clang_registerCheckers(CheckerRegistry &Registry) {
   Registry.addChecker<LockDisciplineChecker>(
-      "ntlibc.LockDiscipline", "Proves mutex, rwlock, and spinlock discipline",
+      "spicule.LockDiscipline", "Proves mutex, rwlock, and spinlock discipline",
       "");
 }

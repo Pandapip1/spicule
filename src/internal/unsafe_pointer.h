@@ -42,16 +42,16 @@
  * marker (see tools/lint-pointer-provenance-fixtures/unsafe.c's
  * unmarked_cast_still_flagged()).
  */
-#ifndef _NTLIBC_UNSAFE_POINTER_H
-#define _NTLIBC_UNSAFE_POINTER_H
+#ifndef _SPICULE_UNSAFE_POINTER_H
+#define _SPICULE_UNSAFE_POINTER_H
 
 #ifdef __clang_analyzer__
 #define unsafe_assume_valid_pointer(expr) \
 	(__extension__({ \
-		__typeof__(expr) __ntlibc_unsafe_ptr__ \
-			__attribute__((annotate("ntlibc_unsafe_assume_valid_pointer"))) \
+		__typeof__(expr) __spicule_unsafe_ptr__ \
+			__attribute__((annotate("spicule_unsafe_assume_valid_pointer"))) \
 			= (expr); \
-		__ntlibc_unsafe_ptr__; \
+		__spicule_unsafe_ptr__; \
 	}))
 #else
 #define unsafe_assume_valid_pointer(expr) (expr)
@@ -86,10 +86,10 @@
 #ifdef __clang_analyzer__
 #define unsafe_assume_shared_provenance(expr) \
 	(__extension__({ \
-		__typeof__(expr) __ntlibc_unsafe_shared_prov__ \
-			__attribute__((annotate("ntlibc_unsafe_assume_shared_provenance"))) \
+		__typeof__(expr) __spicule_unsafe_shared_prov__ \
+			__attribute__((annotate("spicule_unsafe_assume_shared_provenance"))) \
 			= (expr); \
-		__ntlibc_unsafe_shared_prov__; \
+		__spicule_unsafe_shared_prov__; \
 	}))
 #else
 #define unsafe_assume_shared_provenance(expr) (expr)

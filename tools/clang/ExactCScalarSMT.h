@@ -1,15 +1,15 @@
 // SPDX-FileCopyrightText: (C) 2026 Gavin John
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef NTLIBC_EXACT_C_SCALAR_SMT_H
-#define NTLIBC_EXACT_C_SCALAR_SMT_H
+#ifndef SPICULE_EXACT_C_SCALAR_SMT_H
+#define SPICULE_EXACT_C_SCALAR_SMT_H
 
 #include "z3++.h"
 
 #include <optional>
 #include <utility>
 
-namespace ntlibc::algebra {
+namespace spicule::algebra {
 
 // Target-specific C integer type information.  Rank is the C conversion rank,
 // not the bit width: consumers must distinguish (for example) a same-width
@@ -67,7 +67,7 @@ inline bool provesUnsatisfiable(z3::solver &Solver) {
   return Solver.check() == z3::unsat;
 }
 
-// Scalar is the integer-value module of ntlibc's common semantic algebra.
+// Scalar is the integer-value module of spicule's common semantic algebra.
 // Future path propositions and token/resource modules can bind these immutable
 // results to their own versioned identities without duplicating C conversions
 // or conflating solver truth with checker permission.
@@ -450,6 +450,6 @@ public:
   }
 };
 
-} // namespace ntlibc::algebra
+} // namespace spicule::algebra
 
 #endif

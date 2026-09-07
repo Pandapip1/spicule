@@ -55,7 +55,7 @@
  * argument unchanged from every conversion function, no special-casing
  * of surrogate halves).  That commitment is asserted below too, in
  * test_documented_extension(), clearly separated and labelled: it is
- * ntlibc's promise to its callers, not POSIX's requirement, and if it
+ * spicule's promise to its callers, not POSIX's requirement, and if it
  * ever changes this file should record the change rather than pretend
  * the spec forbade it.
  *
@@ -458,7 +458,7 @@ static void test_no_errors_defined(void)
 }
 
 /* --------------------------------------------------------------------
- * ntlibc's documented extension beyond the spec's domain.
+ * spicule's documented extension beyond the spec's domain.
  *
  * Everything asserted here is UNDEFINED per every page's domain
  * sentence -- POSIX requires nothing at all of it.  It is asserted

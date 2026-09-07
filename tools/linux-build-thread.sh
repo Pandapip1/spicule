@@ -5,7 +5,7 @@
 # linux-build-thread.sh -- build and run the Linux thread-subsystem pilot
 # natively. Sibling to tools/linux-build.sh (mman/unistd); see that
 # script's own banner for the shared discipline (raw syscall(2), no host
-# libc wrapper, -nostdinc against ntlibc's own generated headers,
+# libc wrapper, -nostdinc against spicule's own generated headers,
 # aarch64-host-only syscall numbers).
 #
 # Builds src/thread/linux/plat_thread.c + src/thread/linux/aarch64/clone.S +
@@ -19,24 +19,24 @@
 # linux_pilot_test_thread.c, which builds a minimal mutex directly on
 # top of the real backend functions and stress-tests it with real,
 # clone()-spawned Linux threads hammering a shared counter. Unlike
-# tools/linux-build.sh's pilot, this one does NOT link any real ntlibc
+# tools/linux-build.sh's pilot, this one does NOT link any real spicule
 # front-door .c file (no src/thread/pthread_mutex.c) -- see plat_thread.c
 # for exactly why that front door cannot be linked against this backend
 # without also porting RtlAcquirePebLock()/__pthread_current(), separate
 # follow-up work.
 #
 # Usage: tools/linux-build-thread.sh
-# Env:   NTLIBC_CC (default clang), NTLIBC_ARCH (default x86_64 -- the
-#          width convention for ntlibc's OWN generated headers this
+# Env:   SPICULE_CC (default clang), SPICULE_ARCH (default x86_64 -- the
+#          width convention for spicule's OWN generated headers this
 #          build compiles against; unrelated to the host's real CPU
 #          architecture, see tools/linux-build.sh's own comment)
 
 set -eu
 
 srcdir=$(cd "$(dirname "$0")/.." && pwd)
-CC=${NTLIBC_CC:-clang}
-ARCH=${NTLIBC_ARCH:-x86_64}
-OBJ=${NTLIBC_LINUX_OBJ:-$srcdir/obj/linux-pilot-thread}
+CC=${SPICULE_CC:-clang}
+ARCH=${SPICULE_ARCH:-x86_64}
+OBJ=${SPICULE_LINUX_OBJ:-$srcdir/obj/linux-pilot-thread}
 TAG=linux-build-thread
 
 cd "$srcdir"
@@ -45,7 +45,7 @@ if [ -f config.mak ]; then
 	cfg_arch=$(sed -n 's/^ARCH *= *//p' config.mak | head -1)
 	if [ -n "$cfg_arch" ] && [ "$cfg_arch" != "$ARCH" ]; then
 		echo "$TAG: tree is configured for ARCH=$cfg_arch but this build is $ARCH." >&2
-		echo "$TAG: reconfigure (./configure --host=$ARCH-win32 CC=...) or set NTLIBC_ARCH=$cfg_arch." >&2
+		echo "$TAG: reconfigure (./configure --host=$ARCH-win32 CC=...) or set SPICULE_ARCH=$cfg_arch." >&2
 		exit 1
 	fi
 fi
@@ -58,7 +58,7 @@ fi
 
 INC="-Isrc/internal -Iobj/include -Iinclude -Iarch/$ARCH -Iarch/generic"
 CFLAGS="-std=c99 -nostdinc -fno-builtin -g -O0 -ffunction-sections -fdata-sections \
-$INC -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_NTLIBC_INTERNAL -Wall -Wno-unused-function"
+$INC -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_SPICULE_INTERNAL -Wall -Wno-unused-function"
 
 FILES="
 	src/thread/linux/plat_thread.c

@@ -78,7 +78,7 @@
  *
  * "utility cannot be a special built-in" (OPERANDS): satisfied by
  * construction rather than by an explicit check. Unlike a shell's own
- * `time` reserved word (which ntlibc's sh does not implement -- only
+ * `time` reserved word (which spicule's sh does not implement -- only
  * this builtin), both callers of __util_time_main() -- bin/time.exe
  * and the `time` shell builtin -- always resolve `utility` via
  * __find_program() and run it as a real, separate process via

@@ -23,8 +23,8 @@
  * __TINYC__ split below mirrors that file's own tcc accommodation.
  */
 .text
-.globl __ntlibc_sigreturn_trampoline
-__ntlibc_sigreturn_trampoline:
+.globl __spicule_sigreturn_trampoline
+__spicule_sigreturn_trampoline:
 #ifdef __TINYC__
 	/* tcc's arm64-win32 assembler does not implement SVC. Never reached
 	 * on this platform regardless -- nothing on NT installs this. */

@@ -120,7 +120,7 @@
  *     destination name.  So G's "new is now the link" and readlink()
  *     assertions fail, and main()'s closing rmdir() fails too, because
  *     the duplicate entry cannot be removed by name and the scratch
- *     directory is therefore not empty.  ntlibc issues exactly one
+ *     directory is therefore not empty.  spicule issues exactly one
  *     NtSetInformationFile there and glibc gets the case right, so if
  *     those three fail under a symlink-capable Wine the bug to chase is
  *     Wine's rename of a reparse point, not a regression here.  Note
@@ -144,7 +144,7 @@
 /* Same relative-include idiom test/spawn-stdhandle-attr.c uses: the test
  * pattern rule does not put src/internal on the include path, and this
  * file needs NTSTATUS/UNICODE_STRING/ANSI_STRING and the two Ldr* calls
- * to reach kernel32 without ntlibc declaring any kernel32 import. */
+ * to reach kernel32 without spicule declaring any kernel32 import. */
 #include "../src/internal/libc.h"
 
 static int fails;
@@ -431,7 +431,7 @@ static void test_rename_symlink_to_dir_over_file(void)
  * NT can hold, not this library's ability to create one.
  *
  * Resolved through LdrGetProcedureAddress rather than linked, because
- * ntlibc declares no kernel32 imports; SYMBOLIC_LINK_FLAG_ALLOW_
+ * spicule declares no kernel32 imports; SYMBOLIC_LINK_FLAG_ALLOW_
  * UNPRIVILEGED_CREATE is included so the call also works under
  * Developer Mode without an elevated token.  If it is unavailable or
  * refused, this group SKIPs and the process reports unverified rather

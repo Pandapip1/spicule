@@ -7,7 +7,7 @@
 //
 // Nothing here auto-merges, on purpose. Every dependency this repo pins can
 // change build behaviour: a GitHub Actions major can swap the Node runtime
-// underneath a step, and the tinycc pin *is* the compiler ntlibc is built
+// underneath a step, and the tinycc pin *is* the compiler spicule is built
 // and tested with. Renovate's job here is to open a PR that says "this moved",
 // and CI plus a human decide whether it is safe.
 {
@@ -59,7 +59,7 @@
       "description": [
         "The tinycc toolchain pin. Deliberately pinned (see the comment above",
         "TINYCC_SHA in .github/workflows/ci.yml): it must be bumped only after",
-        "re-validating ntlibc against the new commit. Never grouped, never",
+        "re-validating spicule against the new commit. Never grouped, never",
         "merged on green alone, and checked monthly rather than weekly since",
         "tinycc's mob branch moves whenever it moves."
       ],
@@ -70,7 +70,7 @@
       "commitMessageTopic": "the pinned tinycc toolchain commit",
       "prBodyNotes": [
         "**Do not merge on a green CI run alone.** This changes the compiler",
-        "ntlibc is built with. Re-validate before merging: `make -j4 check`",
+        "spicule is built with. Re-validate before merging: `make -j4 check`",
         "must be 15/15 for both i386-win32 and x86_64-win32, `make generated`",
         "must stay drift-free, and the real-Windows leg (not just Wine) must",
         "pass. Check tinycc's log between the old and new commit for codegen",

@@ -66,7 +66,7 @@
  * The value this file does have is that it is a reading rather than an
  * inference, that it would catch outcome 2 (the slot holds something other
  * than the PEB on a platform we thought forwarded it), and that it becomes
- * genuinely informative the day anyone runs ntlibc on an NT 5.x-era
+ * genuinely informative the day anyone runs spicule on an NT 5.x-era
  * target -- where it should report a raw arg0 that is not the PEB.
  *
  *

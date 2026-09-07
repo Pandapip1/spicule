@@ -41,8 +41,8 @@
  * O(n) rather than O(1), and is not meaningful across different DIR
  * streams over the same directory the way a Linux fd offset can be.
  */
-#ifndef _NTLIBC_DIRENT_INTERNAL_H
-#define _NTLIBC_DIRENT_INTERNAL_H
+#ifndef _SPICULE_DIRENT_INTERNAL_H
+#define _SPICULE_DIRENT_INTERNAL_H
 
 #include <dirent.h>
 #include "libc.h"

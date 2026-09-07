@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: (C) 2026 Gavin John
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Build and adjudicate the Open POSIX Test Suite with ntlibc policy."""
+"""Build and adjudicate the Open POSIX Test Suite with spicule policy."""
 
 from __future__ import annotations
 
@@ -195,7 +195,7 @@ def resolved_policy(profile_terms: list[str],
     # happens to mention. Passed via a temp file rather than one argument
     # per case: 1610 --profile-sized argv entries would risk the
     # platform's command-line length limit.
-    with tempfile.TemporaryDirectory(prefix="ntlibc-posix-opts-cases.") as name:
+    with tempfile.TemporaryDirectory(prefix="spicule-posix-opts-cases.") as name:
         cases_path = Path(name) / "cases.txt"
         cases_path.write_text("\n".join(cases) + "\n", encoding="utf-8")
         command = [
@@ -396,7 +396,7 @@ def main() -> int:
         # wait()ing for its blocked child. Keep the process-group assertion on
         # Unix, where this CI invariant runs and private sessions are available.
         if os.name != "nt":
-            with tempfile.TemporaryDirectory(prefix="ntlibc-runner-selftest.") as name:
+            with tempfile.TemporaryDirectory(prefix="spicule-runner-selftest.") as name:
                 started = time.monotonic()
                 result = run_captured(
                     [sys.executable, "-c",
@@ -477,7 +477,7 @@ def main() -> int:
 
     started = time.monotonic()
     results: dict[str, CaseResult] = {}
-    with tempfile.TemporaryDirectory(prefix="ntlibc-posix-opts.") as name:
+    with tempfile.TemporaryDirectory(prefix="spicule-posix-opts.") as name:
         work = Path(name)
         (work / "exe").mkdir()
         (work / "run").mkdir()

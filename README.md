@@ -11,7 +11,7 @@ that means ntdll — never kernel32 or any other DLL layered on top of it.
 On Linux it means raw syscalls, with no host libc underneath at all. One
 source tree covers both.
 
-[![CI](https://github.com/Pandapip1/ebue/actions/workflows/ci.yml/badge.svg)](https://github.com/Pandapip1/ebue/actions/workflows/ci.yml)
+[![CI](https://github.com/Pandapip1/spicule/actions/workflows/ci.yml/badge.svg)](https://github.com/Pandapip1/spicule/actions/workflows/ci.yml)
 
 ## Supported platforms
 
@@ -30,7 +30,7 @@ architecture guessed from the compiler or set explicitly via
 
 ## Supported Windows versions
 
-<!-- ntlibc-min-ntdll: 6.0 -->
+<!-- spicule-min-ntdll: 6.0 -->
 **Windows Vista / Server 2008 (NTDLL 6.0) or newer, for i386, x86_64 and
 aarch64 alike.** (aarch64 additionally requires an ARM64 build of
 Windows, which did not exist before Windows 10 — that is a fact about
@@ -38,7 +38,7 @@ when Microsoft shipped Windows for that architecture at all, not a
 separate ntdll floor; the 6.0 figure below is computed the same way,
 from the same import list, for all three architectures.)
 
-This is a floor, not a preference. ntlibc imports from `ntdll.dll` and
+This is a floor, not a preference. spicule imports from `ntdll.dll` and
 nothing else, and a static import of a name the running ntdll does not
 export is not a call that fails at runtime — the loader refuses the whole
 image before any of its code runs. So the minimum supported version is

@@ -752,7 +752,7 @@ static void test_ndirs_out_of_range(void)
 /* ====================================================================
  * FINDING 1 -- fenced BUG
  * ================================================================== */
-#if NTLIBC_TEST(PASS, posix_ftw_error_other_than_eacces_stops_walk) /* BUG: src/ftw/ftw.c reports every stat()/lstat() failure below
+#if SPICULE_TEST(PASS, posix_ftw_error_other_than_eacces_stops_walk) /* BUG: src/ftw/ftw.c reports every stat()/lstat() failure below
 	the walk root as FTW_NS, and every opendir() failure as
 	FTW_DNR, and carries on walking.  Both pages reserve that for
 	a lack-of-permission failure and require any other failure to
@@ -872,7 +872,7 @@ static void test_nftw_error_other_than_eacces_stops_the_walk(void)
 /* ====================================================================
  * FINDING 2 -- fenced BUG
  * ================================================================== */
-#if NTLIBC_TEST(NA, posix_ftw_unreadable_dir_reported_twice) /* N/A (the defect below is real; this test cannot show it -- see WHY N/A): with FTW_DEPTH clear, a directory that cannot be read is
+#if SPICULE_TEST(NA, posix_ftw_unreadable_dir_reported_twice) /* N/A (the defect below is real; this test cannot show it -- see WHY N/A): with FTW_DEPTH clear, a directory that cannot be read is
 	handed to fn twice -- once as FTW_D, then again as FTW_DNR.
 
 	nftw.html DESCRIPTION: "At each file it encounters, nftw()
@@ -990,7 +990,7 @@ static void test_nftw_dnr_reported_once(void)
 /* ====================================================================
  * FINDING 3 -- fenced BUG
  * ================================================================== */
-#if NTLIBC_TEST(PASS, posix_ftw_eacces_when_fn_returns_minus_one) /* BUG: nftw() does not set errno to [EACCES] when fn returns -1
+#if SPICULE_TEST(PASS, posix_ftw_eacces_when_fn_returns_minus_one) /* BUG: nftw() does not set errno to [EACCES] when fn returns -1
 	without setting errno itself.
 
 	nftw.html ERRORS, *shall fail*: "[EACCES] Search permission is
@@ -1072,13 +1072,13 @@ int main(void)
 	test_flag_combinations();
 	test_ftw_enametoolong();
 	test_ndirs_out_of_range();
-#if NTLIBC_TEST(PASS, posix_ftw_error_other_than_eacces_stops_walk) /* BUG: see the fence above test_nftw_error_other_than_eacces_stops_the_walk */
+#if SPICULE_TEST(PASS, posix_ftw_error_other_than_eacces_stops_walk) /* BUG: see the fence above test_nftw_error_other_than_eacces_stops_the_walk */
 	test_nftw_error_other_than_eacces_stops_the_walk();
 #endif
-#if NTLIBC_TEST(NA, posix_ftw_unreadable_dir_reported_twice) /* N/A: see the fence above test_nftw_dnr_reported_once */
+#if SPICULE_TEST(NA, posix_ftw_unreadable_dir_reported_twice) /* N/A: see the fence above test_nftw_dnr_reported_once */
 	test_nftw_dnr_reported_once();
 #endif
-#if NTLIBC_TEST(PASS, posix_ftw_eacces_when_fn_returns_minus_one) /* BUG: see the fence above test_nftw_eacces_when_fn_returns_minus_one */
+#if SPICULE_TEST(PASS, posix_ftw_eacces_when_fn_returns_minus_one) /* BUG: see the fence above test_nftw_eacces_when_fn_returns_minus_one */
 	test_nftw_eacces_when_fn_returns_minus_one();
 #endif
 

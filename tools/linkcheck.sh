@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # linkcheck.sh -- prove that a user can actually link a call to every
-# function ntlibc declares in a public header, for the arch this tree is
+# function spicule declares in a public header, for the arch this tree is
 # currently configured for.
 #
 # The bug class: a header can declare a function that no program can
@@ -300,7 +300,7 @@ esac
 # --libs/--system-libs do not provide.
 #
 # Run once per header, in the same C mode ($CFLAGS, built above) every
-# real ntlibc-consuming program compiles against -- so, unlike the old
+# real spicule-consuming program compiles against -- so, unlike the old
 # awk's blind text scan, a declaration hidden behind an #ifdef this
 # arch's flags do not satisfy is correctly invisible here too, the same
 # as it would be to a real caller.
@@ -308,7 +308,7 @@ esac
 # Output contract unchanged from the old scan(): one line per declared
 # function, tab-separated: name  header  fixed_argc  undefined_ok(0/1).
 # ---------------------------------------------------------------------
-declscan_plugin="$builddir/ntlibc-declscan.so"
+declscan_plugin="$builddir/spicule-declscan.so"
 for declscan_tool in clang-18 clang++-18 llvm-config-18; do
 	command -v "$declscan_tool" >/dev/null 2>&1 || {
 		echo "linkcheck: FAILED -- '$declscan_tool' not found on PATH." >&2
@@ -348,8 +348,8 @@ scan() {
 		# shellcheck disable=SC2086
 		clang-18 -std=c99 -fsyntax-only $CFLAGS \
 			-Xclang -load -Xclang "$declscan_plugin" \
-			-Xclang -add-plugin -Xclang ntlibc-declscan \
-			-Xclang -plugin-arg-ntlibc-declscan -Xclang "$scan_hdr" \
+			-Xclang -add-plugin -Xclang spicule-declscan \
+			-Xclang -plugin-arg-spicule-declscan -Xclang "$scan_hdr" \
 			"$scan_hdr" 2>> "$builddir/declscan.err" || scan_rc=1
 	done
 	return $scan_rc
@@ -421,8 +421,8 @@ reason_for() {
 # a standalone TU like the ones this script generates, because their
 # *contract* requires the calling program itself to supply another
 # symbol.  Found by running this script once and reading the failures:
-# every ntlibc_rpath_*/ntlibc_delayLoadHelper2 entry point resolves
-# `__rpath` (include/ntlibc/rpath.h) as an extern array the *executable*
+# every spicule_rpath_*/spicule_delayLoadHelper2 entry point resolves
+# `__rpath` (include/spicule/rpath.h) as an extern array the *executable*
 # is documented to define (see test/rpath.c for a real definition) --
 # libc.a deliberately does not carry one, the same way it does not carry
 # a definition of `main`. A generated TU that only calls the function,
@@ -431,11 +431,11 @@ reason_for() {
 # broken.
 #
 # dlopen()/dlsym()/dlclose()/dlerror() (include/dlfcn.h, src/dlfcn/
-# dlfcn.c) and ntlibc_rpath_unload()/ntlibc_rpath_error_seq()
-# (include/ntlibc/rpath.h, src/internal/rpath.c) join the list for the
+# dlfcn.c) and spicule_rpath_unload()/spicule_rpath_error_seq()
+# (include/spicule/rpath.h, src/internal/rpath.c) join the list for the
 # same reason at one remove: dlopen()/dlsym()/dlclose() call straight
-# into ntlibc_rpath_load()/_sym()/_unload(), and dlerror() into
-# ntlibc_rpath_error_seq() (which shares rpath.c's one translation unit
+# into spicule_rpath_load()/_sym()/_unload(), and dlerror() into
+# spicule_rpath_error_seq() (which shares rpath.c's one translation unit
 # and so pulls in the same unresolved `__rpath`, even though it does
 # not read that array itself) -- a generated single-call TU for any of
 # these six hits the identical missing-`__rpath` link failure, for a
@@ -476,8 +476,8 @@ reason_for() {
 # started seeing the whole header correctly.
 linkcheck_exception() {
 	case $1 in
-	ntlibc_rpath_load|ntlibc_rpath_sym|ntlibc_rpath_error|ntlibc_rpath_fail|ntlibc_delayLoadHelper2|ntlibc_rpath_unload|ntlibc_rpath_error_seq|dlopen|dlsym|dlclose|dlerror)
-		echo "resolves __rpath (include/ntlibc/rpath.h), an extern array the *calling program* is documented to define (see test/rpath.c) -- not a libc symbol, so no standalone TU can supply it" ;;
+	spicule_rpath_load|spicule_rpath_sym|spicule_rpath_error|spicule_rpath_fail|spicule_delayLoadHelper2|spicule_rpath_unload|spicule_rpath_error_seq|dlopen|dlsym|dlclose|dlerror)
+		echo "resolves __rpath (include/spicule/rpath.h), an extern array the *calling program* is documented to define (see test/rpath.c) -- not a libc symbol, so no standalone TU can supply it" ;;
 	hsearch)
 		echo "takes ENTRY by value (basedefs/search.h.html); this script's generated call site fills every argument with a literal 0, which cannot convert to a struct type -- a generator limitation, not an unlinkable symbol (see test/posix-glob.c's real ENTRY-literal call)" ;;
 	inet_ntoa)

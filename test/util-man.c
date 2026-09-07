@@ -231,7 +231,7 @@ static int err_contains(const char *needle) { return strstr(errbuf, needle) != 0
 /* ==== fixture page 1: exercises every supported macro/escape ============ */
 
 static const char FROBNICATE_1[] =
-	".TH FROBNICATE 1 \"2026\" \"ntlibc test\" \"ntlibc Test Suite\"\n"
+	".TH FROBNICATE 1 \"2026\" \"spicule test\" \"spicule Test Suite\"\n"
 	".SH NAME\n"
 	"frobnicate \\- exercise every supported macro\n"
 	".SH SYNOPSIS\n"
@@ -309,7 +309,7 @@ static const char FROBNICATE_1[] =
  * "never split across a word-wrap boundary" reasoning FROBNICATE_1's own
  * REGISTERS section already documents. */
 static const char MACROTEST_1[] =
-	".TH MACROTEST 1 \"2026\" \"ntlibc test\" \"ntlibc Test Suite\"\n"
+	".TH MACROTEST 1 \"2026\" \"spicule test\" \"spicule Test Suite\"\n"
 	".SH NAME\n"
 	"macrotest \\- exercise user-defined macros\n"
 	".SH MACROS\n"
@@ -354,7 +354,7 @@ static const char MACROTEST_1[] =
  * nested block -- see src/util/man.c's own "CONDITIONALS" header
  * comment for the exact grammar and the documented n/t/o/e answers. */
 static const char CONDTEST_1[] =
-	".TH CONDTEST 1 \"2026\" \"ntlibc test\" \"ntlibc Test Suite\"\n"
+	".TH CONDTEST 1 \"2026\" \"spicule test\" \"spicule Test Suite\"\n"
 	".SH NAME\n"
 	"condtest \\- exercise conditional evaluation\n"
 	".SH CONDITIONALS\n"
@@ -459,7 +459,7 @@ static const char CONDTEST_1[] =
  *    parse together and the custom separator is honoured instead of
  *    a literal tab. */
 static const char TBLTEST_1[] =
-	".TH TBLTEST 1 \"2026\" \"ntlibc test\" \"ntlibc Test Suite\"\n"
+	".TH TBLTEST 1 \"2026\" \"spicule test\" \"spicule Test Suite\"\n"
 	".SH NAME\n"
 	"tbltest \\- exercise tbl table rendering\n"
 	".SH TABLES\n"
@@ -512,7 +512,7 @@ static const char TBLTEST_1[] =
  * combining onto one primary, and a `"quoted"` literal staying literal
  * text beside the same bare word looked up as a Greek letter. */
 static const char EQNTEST_1[] =
-	".TH EQNTEST 1 \"2026\" \"ntlibc test\" \"ntlibc Test Suite\"\n"
+	".TH EQNTEST 1 \"2026\" \"spicule test\" \"spicule Test Suite\"\n"
 	".SH NAME\n"
 	"eqntest \\- exercise eqn equation rendering\n"
 	".SH EQUATIONS\n"
@@ -562,7 +562,7 @@ static const char EQNTEST_1[] =
  * `.ad b` to distribute across the resulting 5 gaps, and 3 words (35
  * columns, nowhere near 73) on the final, never-stretched line. */
 static const char ADJUSTTEST_1[] =
-	".TH ADJUSTTEST 1 \"2026\" \"ntlibc test\" \"ntlibc Test Suite\"\n"
+	".TH ADJUSTTEST 1 \"2026\" \"spicule test\" \"spicule Test Suite\"\n"
 	".SH NAME\n"
 	"adjusttest \\- exercise fill-and-adjust rendering\n"
 	".SH ADJUSTMENT\n"
@@ -610,7 +610,7 @@ static const char ADJUSTTEST_1[] =
  *    file's own recognised ".under3" prefix, so the same "under-" split
  *    point P1 exercises is still the expected, correct result here. */
 static const char HYPHTEST_1[] =
-	".TH HYPHTEST 1 \"2026\" \"ntlibc test\" \"ntlibc Test Suite\"\n"
+	".TH HYPHTEST 1 \"2026\" \"spicule test\" \"spicule Test Suite\"\n"
 	".SH NAME\n"
 	"hyphtest \\- exercise hyphenation rendering\n"
 	".SH HYPHENATION\n"
@@ -1034,7 +1034,7 @@ static void test_finds_and_formats_frobnicate(void)
 
 	/* Header/footer from .TH. */
 	CHECK(out_contains("FROBNICATE(1)"));
-	CHECK(out_contains("ntlibc Test Suite"));
+	CHECK(out_contains("spicule Test Suite"));
 
 	/* .SH/.SS headings and body text reach the page at all.
 	 * "Subsection Heading" is bold (every .SS heading is), so it is

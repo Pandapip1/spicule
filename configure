@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: (C) 2026 Gavin John
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# configure for ntlibc -- same shape as musl's: probes a few things, writes
+# configure for spicule -- same shape as musl's: probes a few things, writes
 # config.mak, and leaves everything else to the Makefile.
 
 usage () {
@@ -10,20 +10,20 @@ cat <<USAGE
 Usage: $0 [OPTION]... [VAR=VALUE]...
 
   --srcdir=DIR            source directory [detected]
-  --prefix=PREFIX         main installation prefix [/usr/local/ntlibc]
+  --prefix=PREFIX         main installation prefix [/usr/local/spicule]
   --exec-prefix=EPREFIX   installation prefix for executable files [PREFIX]
   --bindir=DIR            user executables [EPREFIX/bin]
   --libdir=DIR            library files for the linker [PREFIX/lib]
   --includedir=DIR        include files for the C compiler [PREFIX/include]
   --syslibdir=DIR         unused, accepted for musl compatibility
-  --host=HOST             the system ntlibc will RUN on: i386-win32,
+  --host=HOST             the system spicule will RUN on: i386-win32,
                           x86_64-win32, aarch64-linux or x86_64-linux
                           [guess from CC]
   --target=TARGET         accepted as an alias of --host, for musl
                           compatibility.  Autoconf's --target means "what
                           the compiler in this package emits code for",
-                          which is meaningless here: ntlibc is a library,
-                          not a toolchain.  Cross-compiling ntlibc is the
+                          which is meaningless here: spicule is a library,
+                          not a toolchain.  Cross-compiling spicule is the
                           normal case and --host is the knob for it.
   --platform=PLATFORM     which OS-level backend to build: nt [default] or
                           linux.  Independent of --host's ARCH (CPU width);
@@ -32,7 +32,7 @@ Usage: $0 [OPTION]... [VAR=VALUE]...
   --disable-debug         build without debugging information [default]
   --enable-warnings       build with recommended warnings flags [default]
   --disable-warnings      build without warnings flags
-  --enable-wrapper        build the ntlibc-tcc wrapper script [default]
+  --enable-wrapper        build the spicule-tcc wrapper script [default]
   --disable-wrapper       do not build the wrapper script
   --enable-kernel32       allow the few places that have no pure-NTDLL way
                           to do something to fall back to kernel32
@@ -89,7 +89,7 @@ CFLAGS_C99FSE=
 CFLAGS_AUTO=
 CFLAGS_TRY=
 srcdir=
-prefix=/usr/local/ntlibc
+prefix=/usr/local/spicule
 # These four are literal make variable references, written verbatim into
 # config.mak for make to expand; the shell must not expand them here.
 # shellcheck disable=SC2016
@@ -191,7 +191,7 @@ esac
 # -- gcc or clang, nothing win32-shaped about it.  This is the same
 # native build tools/linux-build*.sh have used ad hoc all along (see
 # their own banners); configure now knows about it directly rather than
-# leaving it to a script's NTLIBC_CC default.
+# leaving it to a script's SPICULE_CC default.
 #
 printf "checking for C compiler... "
 if [ "$platform" = linux ] ; then
@@ -440,9 +440,12 @@ test "$srcdir" = "." || ln -sf "$srcdir/Makefile" .
 #
 if git -C "$abs_srcdir" rev-parse --git-dir >/dev/null 2>&1 ; then
 git -C "$abs_srcdir" config core.hooksPath .githooks
-git -C "$abs_srcdir" config merge.ntlibc-kaem.driver 'tools/merge-kaem.sh %O %A %B %P'
-# Retire the generated-report driver installed by older revisions.
+git -C "$abs_srcdir" config merge.spicule-kaem.driver 'tools/merge-kaem.sh %O %A %B %P'
+# Retire drivers installed by older revisions, under their old names: the
+# generated-report driver, which no longer exists, and the kaem driver as it
+# was spelled before the project was renamed from ntlibc to spicule.
 git -C "$abs_srcdir" config --unset-all merge.ntlibc-gendata.driver 2>/dev/null || :
+git -C "$abs_srcdir" config --unset-all merge.ntlibc-kaem.driver 2>/dev/null || :
 fi
 
 printf "done\n"

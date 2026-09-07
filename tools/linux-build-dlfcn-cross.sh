@@ -19,23 +19,23 @@
 # specifically.
 #
 # Usage: tools/linux-build-dlfcn-cross.sh <x86_64|i386>
-# Env:   NTLIBC_CLANG (default clang), NTLIBC_QEMU_X86_64 (default
-#        qemu-x86_64), NTLIBC_QEMU_I386 (default qemu-i386)
+# Env:   SPICULE_CLANG (default clang), SPICULE_QEMU_X86_64 (default
+#        qemu-x86_64), SPICULE_QEMU_I386 (default qemu-i386)
 
 set -eu
 
 arch=${1:?"usage: $0 <x86_64|i386>"}
 srcdir=$(cd "$(dirname "$0")/.." && pwd)
-CLANG=${NTLIBC_CLANG:-clang}
+CLANG=${SPICULE_CLANG:-clang}
 TAG="linux-build-dlfcn-cross($arch)"
 
 case "$arch" in
-x86_64) target=x86_64-linux-gnu; qemu=${NTLIBC_QEMU_X86_64:-qemu-x86_64} ;;
-i386)   target=i386-linux-gnu;   qemu=${NTLIBC_QEMU_I386:-qemu-i386} ;;
+x86_64) target=x86_64-linux-gnu; qemu=${SPICULE_QEMU_X86_64:-qemu-x86_64} ;;
+i386)   target=i386-linux-gnu;   qemu=${SPICULE_QEMU_I386:-qemu-i386} ;;
 *) echo "$TAG: unsupported arch \"$arch\" (expected x86_64 or i386)" >&2; exit 1 ;;
 esac
 
-BUILD=${NTLIBC_LINUX_DLFCN_CROSS_BUILD:-$srcdir/obj/linux-dlfcn-cross-build-$arch}
+BUILD=${SPICULE_LINUX_DLFCN_CROSS_BUILD:-$srcdir/obj/linux-dlfcn-cross-build-$arch}
 CC="$CLANG --target=$target -fuse-ld=lld"
 
 cd "$srcdir"
@@ -206,7 +206,7 @@ fi
 
 INC="-I$srcdir/src/internal -I$BUILD/obj/include -I$srcdir/include -I$srcdir/arch/$arch -I$srcdir/arch/generic"
 CFLAGS="-std=c99 -nostdinc -fno-builtin -fno-stack-protector -g -O0 -ffunction-sections -fdata-sections \
-$INC -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_NTLIBC_INTERNAL -Wall -Wno-unused-function"
+$INC -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_SPICULE_INTERNAL -Wall -Wno-unused-function"
 
 echo "$TAG: compiling the test program + curated support files (cross $CC)..."
 objs="$BUILD/lib/crt1.o $BUILD/lib/start.o"

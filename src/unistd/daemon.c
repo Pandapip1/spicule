@@ -10,7 +10,7 @@
  * redirect fd 0/1/2 to /dev/null. Returns 0 in the child on success,
  * -1/errno on failure; the parent never returns from daemon() at all. */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -46,7 +46,7 @@ int daemon(int nochdir, int noclose)
 				return -1;
 			}
 			if (fd > STDERR_FILENO) (void)close(fd);
-			/* Checker gap (ntlibc.ResourceLeak): when fd IS one of
+			/* Checker gap (spicule.ResourceLeak): when fd IS one of
 			 * 0/1/2, dup2(fd, fd) above already retired it as that
 			 * standard stream for the rest of the process -- the
 			 * checker can't see that aliasing, so it reports fd as

@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: (C) 2026 Gavin John
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Build ntlibc natively (Linux/ELF) under AddressSanitizer + UBSan and run
+# Build spicule natively (Linux/ELF) under AddressSanitizer + UBSan and run
 # whichever of test/*.c can be built that way.  See CONTRIBUTING.md.
 #
 # The library targets NT, so a native build cannot be complete: anything
@@ -18,15 +18,15 @@
 #   --objects-only  build the instrumented library objects and stop; used
 #                   by fuzz/Makefile so the fuzzers and this script share
 #                   one mechanically derived file list.
-# Env:   NTLIBC_SAN_MODE (default asan; `ubsan` drops AddressSanitizer --
+# Env:   SPICULE_SAN_MODE (default asan; `ubsan` drops AddressSanitizer --
 #          see the long comment above the SAN_MODE case below for when
 #          that is the only mode that runs, and for what it stops
 #          catching when it is),
-#        NTLIBC_CC (default clang), NTLIBC_ASAN_OBJ (default obj/asan),
-#        NTLIBC_ASAN_EXTRA (extra CFLAGS, e.g. -fsanitize=fuzzer-no-link),
-#        NTLIBC_LEAKS (default 1; set 0 to switch LeakSanitizer off)
-#        NTLIBC_ASAN_CONVERSION=1 (see CONVSAN below)
-#        NTLIBC_CFI=1 (add cfi-icall and LTO; `make cfi` sets it)
+#        SPICULE_CC (default clang), SPICULE_ASAN_OBJ (default obj/asan),
+#        SPICULE_ASAN_EXTRA (extra CFLAGS, e.g. -fsanitize=fuzzer-no-link),
+#        SPICULE_LEAKS (default 1; set 0 to switch LeakSanitizer off)
+#        SPICULE_ASAN_CONVERSION=1 (see CONVSAN below)
+#        SPICULE_CFI=1 (add cfi-icall and LTO; `make cfi` sets it)
 #        ASAN_JOBS (default: nproc) -- how many src/*.c compiles and how
 #          many test links to run at once.  The test *runs* are always
 #          serial; see the comment above the link phase for why that is
@@ -36,20 +36,20 @@
 set -eu
 
 srcdir=$(cd "$(dirname "$0")/.." && pwd)
-CC=${NTLIBC_CC:-clang}
-OBJ=${NTLIBC_ASAN_OBJ:-$srcdir/obj/asan}
-ARCH=${NTLIBC_ARCH:-x86_64}
+CC=${SPICULE_CC:-clang}
+OBJ=${SPICULE_ASAN_OBJ:-$srcdir/obj/asan}
+ARCH=${SPICULE_ARCH:-x86_64}
 
 # The tag every diagnostic below carries, computed here -- before the
 # ARCH/config-mismatch check just below, which is the first thing that
-# uses it -- rather than down by NTLIBC_SAN_MODE's own case statement,
+# uses it -- rather than down by SPICULE_SAN_MODE's own case statement,
 # which runs far later.  Mirrors that later logic (SAN_MODE's default and
-# NTLIBC_CFI's override) against the raw env vars, since $SAN_MODE itself
+# SPICULE_CFI's override) against the raw env vars, since $SAN_MODE itself
 # does not exist yet.  Under `set -u` an unset $TAG here is not a style
 # nit, it is a crash: the very first diagnostic this script can print
 # (the ARCH mismatch below) referenced $TAG before anything set it.
-TAG=${NTLIBC_SAN_MODE:-asan}
-[ "${NTLIBC_CFI:-0}" = 1 ] && TAG=cfi
+TAG=${SPICULE_SAN_MODE:-asan}
+[ "${SPICULE_CFI:-0}" = 1 ] && TAG=cfi
 
 # This build compiles src/*.c *natively* (64-bit ELF) but includes
 # obj/include/bits/alltypes.h, which `make` generates from
@@ -72,21 +72,21 @@ if [ -f "$srcdir/config.mak" ]; then
 		echo "$TAG: size_t/ssize_t to a native $ARCH build -- wrong, and it" >&2
 		echo "$TAG: fails in ways that look like library bugs." >&2
 		echo "$TAG: reconfigure first (./configure --host=$ARCH-win32 CC=$ARCH-win32-tcc)," >&2
-		echo "$TAG: or set NTLIBC_ARCH=$cfg_arch if you really meant that." >&2
+		echo "$TAG: or set SPICULE_ARCH=$cfg_arch if you really meant that." >&2
 		exit 2
 	fi
 fi
 mode=${1:-}
-EXTRA=${NTLIBC_ASAN_EXTRA:-}
+EXTRA=${SPICULE_ASAN_EXTRA:-}
 
-# LeakSanitizer is on, and that is the point.  ntlibc's malloc is
+# LeakSanitizer is on, and that is the point.  spicule's malloc is
 # RtlAllocateHeap, which fuzz/ntstubs.c answers with ASan's own allocator,
-# so LSan sees every ntlibc allocation with a full ntlibc stack -- there is
+# so LSan sees every spicule allocation with a full spicule stack -- there is
 # nothing here it cannot account for and no suppression file is needed.
 # Leaving it off costs real bugs: sscanf leaking a BUFSIZ block per call
 # went unnoticed through a green `make check` until LSan caught it in one
-# run.  Set NTLIBC_LEAKS=0 only to isolate some other failure.
-LEAKS=${NTLIBC_LEAKS:-1}
+# run.  Set SPICULE_LEAKS=0 only to isolate some other failure.
+LEAKS=${SPICULE_LEAKS:-1}
 
 # See the long comment in tools/fuzz.sh: with $DEBUGINFOD_URLS set (Ubuntu
 # exports it from /etc/profile.d/debuginfod.sh, so every login shell has
@@ -98,11 +98,11 @@ LEAKS=${NTLIBC_LEAKS:-1}
 export DEBUGINFOD_URLS=
 
 # -shared-libasan is not cosmetic either: with the static runtime, ASan's
-# own calls to sysconf()/malloc() bind at link time to ntlibc's versions,
+# own calls to sysconf()/malloc() bind at link time to spicule's versions,
 # and ASan starts up on an NT libc that is not initialised yet.  In the
 # shared runtime they go through libc.so like any other library's.
 #
-# NTLIBC_SAN_MODE PICKS WHICH SANITIZER THIS BUILD CARRIES, and there are
+# SPICULE_SAN_MODE PICKS WHICH SANITIZER THIS BUILD CARRIES, and there are
 # exactly two because there are exactly two environments to build for.
 #
 #   asan  (the default, and the only one whose findings count)
@@ -146,11 +146,11 @@ export DEBUGINFOD_URLS=
 #
 # -shared-libsan for the same reason -shared-libasan is used above, and
 # it is not optional either: with the static UBSan runtime, its start-up
-# call to sysconf(_SC_SIGSTKSZ) binds at link time to *ntlibc's*
+# call to sysconf(_SC_SIGSTKSZ) binds at link time to *spicule's*
 # sysconf, which answers 0, and the runtime dies in
 # SetAlternateSignalStack with "failed to allocate 0x0 bytes (error
 # code: 22)" before the program starts.  Measured, not anticipated.
-SAN_MODE=${NTLIBC_SAN_MODE:-asan}
+SAN_MODE=${SPICULE_SAN_MODE:-asan}
 case $SAN_MODE in
 asan)
 	SAN="-fsanitize=address,undefined -fno-sanitize-recover=undefined -shared-libasan"
@@ -161,7 +161,7 @@ ubsan)
 	SAN_RT=libclang_rt.ubsan_standalone-x86_64.so
 	;;
 *)
-	echo "asan-build: NTLIBC_SAN_MODE must be asan or ubsan, not $SAN_MODE" >&2
+	echo "asan-build: SPICULE_SAN_MODE must be asan or ubsan, not $SAN_MODE" >&2
 	exit 2
 	;;
 esac
@@ -188,23 +188,23 @@ SAN="$SAN -fno-wrapv"
 # It is an ASan-mode extension, not a meaningful addition to the reduced
 # UBSan-only fallback used on strict-overcommit hosts.
 LTOFLAGS=
-if [ "${NTLIBC_CFI:-0}" = 1 ]; then
+if [ "${SPICULE_CFI:-0}" = 1 ]; then
 	if [ "$SAN_MODE" != asan ]; then
-		echo "asan-build: NTLIBC_CFI=1 requires NTLIBC_SAN_MODE=asan" >&2
+		echo "asan-build: SPICULE_CFI=1 requires SPICULE_SAN_MODE=asan" >&2
 		exit 2
 	fi
 	SAN="$SAN -fsanitize=cfi-icall"
 	LTOFLAGS="-flto -fno-sanitize-trap=cfi-icall"
 fi
 # TAG was already computed, near ARCH above, from the same two env vars
-# this recomputes it from ($NTLIBC_SAN_MODE / $NTLIBC_CFI) -- it has to be
+# this recomputes it from ($SPICULE_SAN_MODE / $SPICULE_CFI) -- it has to be
 # usable that early for the ARCH/config-mismatch check, well before
 # $SAN_MODE exists. Recorded here as a no-op reassignment, not deleted
 # outright, so a log still says which mode produced it right next to the
 # case statement that decided it, and so nobody "cleans up" the earlier
 # one thinking it is dead code.
 TAG=$SAN_MODE
-[ "${NTLIBC_CFI:-0}" = 1 ] && TAG=cfi
+[ "${SPICULE_CFI:-0}" = 1 ] && TAG=cfi
 RTDIR=$($CC -print-file-name=$SAN_RT)
 RTDIR=$(dirname "$RTDIR")
 LINKFLAGS="-Wl,-rpath,$RTDIR"
@@ -233,25 +233,25 @@ LINKFLAGS="-Wl,-rpath,$RTDIR"
 #       time_impl.h's `mp + (mp < 10 ? 3 : -9)` month wrap, and open.c's
 #       `~FILE_WRITE_DATA` mask.  Off by default and report-only when on,
 #       the way tools/lint.sh treats LINT_CONVERSION: worth a periodic
-#       read, not worth a gate.  NTLIBC_ASAN_CONVERSION=1 enables it.
+#       read, not worth a gate.  SPICULE_ASAN_CONVERSION=1 enables it.
 #
 # Neither catches an *explicit* cast -- `(USHORT)v` is silent under all
 # three -- so this is not a substitute for reading narrowing casts.
 #
 # CONVSAN applies to the library only, never to test/*.c or ntstubs.c:
-# a narrowing in test code is not a finding about ntlibc.
+# a narrowing in test code is not a finding about spicule.
 CONVSAN="-fsanitize=implicit-signed-integer-truncation,implicit-unsigned-integer-truncation \
  -fno-sanitize-recover=implicit-signed-integer-truncation,implicit-unsigned-integer-truncation"
-if [ "${NTLIBC_ASAN_CONVERSION:-0}" = 1 ]; then
+if [ "${SPICULE_ASAN_CONVERSION:-0}" = 1 ]; then
 	CONVSAN="$CONVSAN -fsanitize=implicit-integer-sign-change"
 fi
 
 INC="-I$srcdir/src/internal -I$srcdir/obj/include -I$srcdir/include \
      -I$srcdir/arch/$ARCH -I$srcdir/arch/generic"
-# -fvisibility=hidden matters: without it ntlibc's own malloc() lands in
+# -fvisibility=hidden matters: without it spicule's own malloc() lands in
 # the executable's dynamic symbol table and preempts glibc's, so ld.so and
 # ASan's own start-up allocate through RtlAllocateHeap before the shim's
-# constructor has run.  Hidden keeps ntlibc's definitions for ntlibc (and
+# constructor has run.  Hidden keeps spicule's definitions for spicule (and
 # the tests, which are in the same module) and out of everyone else's way.
 # -fsanitize=unsigned-integer-overflow,unsigned-shift-base (the "integer"
 # group's checks beyond -fsanitize=undefined) are not undefined behaviour
@@ -263,7 +263,7 @@ INC="-I$srcdir/src/internal -I$srcdir/obj/include -I$srcdir/include \
 INTSAN="-fsanitize=unsigned-integer-overflow,unsigned-shift-base \
  -fno-sanitize-recover=unsigned-integer-overflow,unsigned-shift-base"
 
-# NTLIBC_USE_KERNEL32 is deliberately never defined here, unlike the real
+# SPICULE_USE_KERNEL32 is deliberately never defined here, unlike the real
 # tcc/config.mak build (see the Makefile's CFLAGS_ALL). This build has no
 # real kernel32 -- ntstubs.c stands in for ntdll, not for kernel32 on top
 # of it -- and crt1.c calls __signal_init() unconditionally, so turning
@@ -287,7 +287,7 @@ INTSAN="-fsanitize=unsigned-integer-overflow,unsigned-shift-base \
 # windows-test job on an --enable-kernel32 build (see
 # .github/workflows/ci.yml); that is the right place for it, not a
 # simulation here.
-# -D_NTLIBC_NATIVE_BUILD says out loud what four files under src/ need to
+# -D_SPICULE_NATIVE_BUILD says out loud what four files under src/ need to
 # know: that this is the native (ELF) compile-and-link, not a build for
 # NT.  src/internal/{rpath,pe,delayload}.c and src/dlfcn/nt/plat_dlfcn.c
 # (the guard used to live directly in src/dlfcn/dlfcn.c, before that file
@@ -300,7 +300,7 @@ INTSAN="-fsanitize=unsigned-integer-overflow,unsigned-shift-base \
 # proxy had to go.
 #
 # -U__linux__ is not cosmetic either, and belongs on the same line as
-# _NTLIBC_NATIVE_BUILD above because it exists to make that macro's own
+# _SPICULE_NATIVE_BUILD above because it exists to make that macro's own
 # promise true. This build compiles real 64-bit ELF object code on a real
 # Linux host, so clang's *driver* cannot help predefining __linux__ for
 # its own default target triple (`clang -dM -E -x c /dev/null` shows it,
@@ -332,14 +332,14 @@ INTSAN="-fsanitize=unsigned-integer-overflow,unsigned-shift-base \
 # unrelated bugs. Undefining it here, in the one compiler invocation that
 # actually has the wrong state, fixes all of them (and every future one
 # of the same shape) at the root instead of patching each call site with
-# its own `&& !defined(_NTLIBC_NATIVE_BUILD)`, and touches nothing else:
+# its own `&& !defined(_SPICULE_NATIVE_BUILD)`, and touches nothing else:
 # the real NT build (`$(CC) ... $(CFLAGS_ALL)` in the top-level Makefile)
 # never defines __linux__ in the first place, and the real PLATFORM=linux
 # build needs and still gets the true predefine, since that build's own
 # CFLAGS_ALL (Makefile) is entirely separate from this script's and is
 # not touched here.
 CFLAGS="$SAN $CONVSAN $INTSAN $LTOFLAGS -g -O1 -std=c99 -nostdinc -fno-builtin -fvisibility=hidden -U__linux__ \
-        -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_NTLIBC_INTERNAL -D_NTLIBC_NATIVE_BUILD $INC $EXTRA"
+        -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_SPICULE_INTERNAL -D_SPICULE_NATIVE_BUILD $INC $EXTRA"
 
 if [ ! -f "$srcdir/obj/include/bits/alltypes.h" ]; then
 	echo "$TAG: obj/include/bits/alltypes.h missing -- run 'make' first" >&2
@@ -387,7 +387,7 @@ mkdir -p "$OBJ/obj" "$OBJ/test"
 #   src/*/linux/*         -- this native harness exercises the NT backend
 #                           through fuzz/ntstubs.c
 #   src/dlfcn/dlfcn.c     -- the native harness's allocator bootstrap uses
-#                           the host dlopen/dlsym; linking ntlibc's front
+#                           the host dlopen/dlsym; linking spicule's front
 #                           door would intercept those calls recursively
 #   src/signal/nt/sigdelivery.c -- ntstubs supplies the native harness's
 #                                  deliberately non-delivering stand-ins
@@ -580,15 +580,15 @@ fi
 # strcmp/strlen/strxfrm/memcpy/... interceptors and the driver puts it
 # ahead of our inputs, so every one of those references would be satisfied
 # from the DSO and the matching archive member never pulled -- i.e. the
-# tests would be exercising glibc, not ntlibc.  Linking the objects
-# unconditionally, hidden, makes ntlibc's definitions the ones that bind.
+# tests would be exercising glibc, not spicule.  Linking the objects
+# unconditionally, hidden, makes spicule's definitions the ones that bind.
 #
 # One consequence of that is worth stating, because it cost a long
 # debugging session: the precompiled runtime linked in here (libFuzzer,
 # compiler-rt, libstdc++) does not only get preempted, it also *calls*
 # some of these libc-named functions -- and it was compiled against the
-# host's headers, so it stack-allocates the host's struct sizes.  ntlibc's
-# definition wins the call, so an ntlibc struct that is *larger* than the
+# host's headers, so it stack-allocates the host's struct sizes.  spicule's
+# definition wins the call, so an spicule struct that is *larger* than the
 # host's, for one of the functions that runtime calls, makes the callee
 # write past the caller's frame.  struct rusage did exactly that: a stray
 # `long __reserved[16]` made it 272 bytes against the host's 144, and
@@ -596,7 +596,7 @@ fi
 # libFuzzer's GetPeakRSSMb() -- every harness died at execution #2 with a
 # jump to address 0, for as long as the harnesses had existed.
 #
-# This is a constraint on *this build*, not on ntlibc's ABI.  ntlibc's
+# This is a constraint on *this build*, not on spicule's ABI.  spicule's
 # headers are the ones its users compile against, and matching glibc's
 # layouts is explicitly not a goal.  It binds only the handful of
 # functions the precompiled runtime itself calls, and only in the
@@ -633,12 +633,12 @@ echo "$TAG: $nsrc of $((nsrc + nskip)) src/*.c compiled natively ($nskip skipped
 # posix-signal): fuzz/ntstubs.c now carries a dying process's full exit
 # code to its reaper out of band, alongside the host's own 8-bit one (see
 # xstatus_record()/xstatus_init() there).  Nothing else is excused -- in
-# particular a genuine ASan or UBSan finding in ntlibc must fail here.
+# particular a genuine ASan or UBSan finding in spicule must fail here.
 not_native()
 {
 	case $1 in
 	posix-dl)
-		echo "calls ntlibc_rpath_load/_sym/_error to demonstrate how much of dlfcn.h already exists; those live in src/internal/rpath.c, which is NT-only (LdrLoadDll/LdrGetProcedureAddress against a real NT image) and so is excluded from this build -- see obj/asan/skipped.txt. Its dlfcn/mman/termios/spawn clauses are fenced UNIMPL/N-A anyway; the live parts run under 'make check'" ;;
+		echo "calls spicule_rpath_load/_sym/_error to demonstrate how much of dlfcn.h already exists; those live in src/internal/rpath.c, which is NT-only (LdrLoadDll/LdrGetProcedureAddress against a real NT image) and so is excluded from this build -- see obj/asan/skipped.txt. Its dlfcn/mman/termios/spawn clauses are fenced UNIMPL/N-A anyway; the live parts run under 'make check'" ;;
 	rpath)
 		echo "exercises the delay-load/\$ORIGIN machinery in src/internal/{rpath,delayload}.c, which is PE-only (LdrLoadDll/LdrGetProcedureAddress against a real NT image) and is therefore not compiled into this build at all -- see obj/asan/skipped.txt. Covered by 'make check' under Wine instead" ;;
 	delayall)
@@ -648,13 +648,13 @@ not_native()
 	spawn-stdhandle-attr)
 		echo "resolves NtCreateUserProcess itself, at run time, with LdrGetDllHandle()/LdrGetProcedureAddress() against a loaded ntdll.dll (see its resolve_ncup()) -- module-handle and export-table primitives that only the NT loader has, and that fuzz/ntstubs.c cannot stand in for: there is no ntdll image in a native ELF process to hand back a handle to, and the syscall it goes on to look up is the very thing under test, so a stub answering it would be testing the stub. Its subject is what real NT's PsAttributeStdHandleInfo does to the child's process parameters, which needs a real NT process anyway. Covered by 'make check' under Wine (and real Windows CI)" ;;
 	posix-rename-symlink)
-		echo "builds a directory-flavoured reparse point with Win32 CreateSymbolicLinkW(SYMBOLIC_LINK_FLAG_DIRECTORY), resolved at run time through LdrLoadDll()/LdrGetProcedureAddress() because ntlibc declares no kernel32 imports (see test_rename_dir_over_forced_directory_symlink()). Those two Ldr* entry points are NT-loader primitives with no stub in fuzz/ntstubs.c, so the whole file fails to link natively -- 'undefined reference to LdrGetProcedureAddress / LdrLoadDll' -- not just that one group. A stub cannot supply them either: there is no kernel32.dll PE image in an ELF process to load or to walk an export table of, and the object the export produces is the very thing under test -- an entry carrying FILE_ATTRIBUTE_DIRECTORY and FILE_ATTRIBUTE_REPARSE_POINT at once, which is NT's file-attribute model and not something a host symlink(2) has. Standing in with a POSIX symlink would delete the subject and leave the measurement asserting against the stand-in, the same objection recorded for spawn-stdhandle-attr above. Covered by 'make check' under Wine (and real Windows CI)" ;;
+		echo "builds a directory-flavoured reparse point with Win32 CreateSymbolicLinkW(SYMBOLIC_LINK_FLAG_DIRECTORY), resolved at run time through LdrLoadDll()/LdrGetProcedureAddress() because spicule declares no kernel32 imports (see test_rename_dir_over_forced_directory_symlink()). Those two Ldr* entry points are NT-loader primitives with no stub in fuzz/ntstubs.c, so the whole file fails to link natively -- 'undefined reference to LdrGetProcedureAddress / LdrLoadDll' -- not just that one group. A stub cannot supply them either: there is no kernel32.dll PE image in an ELF process to load or to walk an export table of, and the object the export produces is the very thing under test -- an entry carrying FILE_ATTRIBUTE_DIRECTORY and FILE_ATTRIBUTE_REPARSE_POINT at once, which is NT's file-attribute model and not something a host symlink(2) has. Standing in with a POSIX symlink would delete the subject and leave the measurement asserting against the stand-in, the same objection recorded for spawn-stdhandle-attr above. Covered by 'make check' under Wine (and real Windows CI)" ;;
 	spawn-runtimedata-stress)
 		echo "needs RuntimeData-based descriptor inheritance for a fd above 2, which this stub's RtlCreateUserProcess (fuzz/ntstubs.c) does not model: it execve()s a real host binary, and the fresh child's __ntshim_init constructor wires up only StandardInput/Output/Error (FD2H(0..2)) before calling __fd_init -- there is no PEB-parameters blob carrying a RuntimeData table across that real execve the way real NT's process-parameters copy does. Covered by 'make check' under Wine (and real Windows CI) instead, where RtlCreateUserProcess is the real thing" ;;
 	posix-kill-perm-win)
 		echo "asserts that NT denies PROCESS_TERMINATE on the protected System process (pid 4), which is NT access-control policy and not something this build has. fuzz/ntstubs.c's NtOpenProcess is NOTIMPL, so it answers STATUS_NOT_IMPLEMENTED, which src/signal/signal.c's kill() correctly maps to ESRCH rather than EPERM -- the test then fails on an assertion about real NT while measuring a stub. Teaching the stub to answer STATUS_ACCESS_DENIED for pid 4 would be modelling Windows' process table inside the stub and then asserting against the model, the same objection recorded for spawn-stdhandle-attr above. Its subject needs a real NT process table; it runs on the real-Windows CI leg, which is what *-win.c is for. NOTE: this is a per-test exclusion on purpose -- do NOT generalise it to a *-win pattern. The -win suffix means 'Wine cannot run this', which is a different axis from 'the native stub build cannot run this': fork-win, fork-handles-win, fork-cloexec-exec-win and process-win all PASS here, because this build has a real fork() where Wine lacks RtlCloneUserProcess" ;;
 	posix-signal-crossproc)
-		echo "exercises src/signal/sigdelivery.c's named-NT-event transport and manager thread between two independently spawned ntlibc processes. That source is NT-only and is therefore absent from this native ELF build; fuzz/ntstubs.c supplies refusing/no-op boundary stubs so unrelated signal users still link, but no host signal can enter ntlibc's private disposition and pending-state machinery. Running this test would assert against that deliberate refusal, not exercise the transport. Covered by 'make check' under Wine and by every real-Windows CI leg" ;;
+		echo "exercises src/signal/sigdelivery.c's named-NT-event transport and manager thread between two independently spawned spicule processes. That source is NT-only and is therefore absent from this native ELF build; fuzz/ntstubs.c supplies refusing/no-op boundary stubs so unrelated signal users still link, but no host signal can enter spicule's private disposition and pending-state machinery. Running this test would assert against that deliberate refusal, not exercise the transport. Covered by 'make check' under Wine and by every real-Windows CI leg" ;;
 	posix-pgrp-crossproc)
 		echo "requires two pieces of named-NT-event state across independently spawned processes: ids.c's process-group-leader publication and sigdelivery.c's caught-signal transport. The native shim deliberately refuses named events and omits the NT delivery thread, so getpgid(child) sees only the inherited sentinel and killpg() cannot run the child's SIGUSR1 handler. Modelling only the group id would still leave the test asserting against an absent signal transport; both mechanisms run under 'make check' in Wine and real-Windows CI" ;;
 	posix-fcntl-lock-crossproc)
@@ -692,7 +692,7 @@ not_native()
 # no per-test opinion at all -- so the two harnesses diverge on a file
 # nobody made a decision about, and the divergence is invisible because
 # both stay green.  tools/test-policy.py does not cover this: it governs
-# source-level NTLIBC_TEST fences inside a test, not which harness runs
+# source-level SPICULE_TEST fences inside a test, not which harness runs
 # the file.
 #
 # This list closes the gap by making the absence loud instead.  Every
@@ -809,7 +809,7 @@ link_one() {
 	# $SAN/$LTOFLAGS/$TINC/$LINKFLAGS/$SHIMOBJS/$LIBOBJS are flag and object lists.
 	# shellcheck disable=SC2086
 	if $CC $SAN $LTOFLAGS -g -O1 -std=c99 -nostdinc -fno-builtin -D_XOPEN_SOURCE=700 -D_GNU_SOURCE \
-	     -D_NTLIBC_NATIVE_BUILD -w \
+	     -D_SPICULE_NATIVE_BUILD -w \
 	     $TINC $LINKFLAGS "$srcdir/$l_t" $SHIMOBJS $LIBOBJS -o "$l_exe" \
 	     2> "$l_exe.link.err"; then
 		echo ok > "$lpar/$l_idx.rc"
@@ -920,7 +920,7 @@ echo "$TAG: $passed/$ran tests passed, $unverified unverified, $skipped not appl
 # still passes and the report scrolls by unread.  Collect the distinct
 # sites and say how many there were.  (The truncation checks are fatal, so
 # they turn up as a FAIL above and need no summary.)
-if [ "${NTLIBC_ASAN_CONVERSION:-0}" = 1 ]; then
+if [ "${SPICULE_ASAN_CONVERSION:-0}" = 1 ]; then
 	nconv=$(grep -h 'runtime error: implicit conversion' "$OBJ"/test/*.out 2>/dev/null \
 		| sed 's/: runtime error.*//' | sort -u | tee "$OBJ/conversion.txt" | wc -l)
 	echo "$TAG: $nconv implicit-conversion site(s) -> $OBJ/conversion.txt (report-only)"

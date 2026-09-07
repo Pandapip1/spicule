@@ -32,7 +32,7 @@
  * out-of-range values there are exactly what a real caller with a
  * corrupt or hand-built struct tm would hand it.
  *
- * No host oracle: glibc's strftime honours %E/%O and locale data ntlibc
+ * No host oracle: glibc's strftime honours %E/%O and locale data spicule
  * doesn't implement, so byte-for-byte comparison would be mostly noise;
  * this is a bounds/crash check.
  */

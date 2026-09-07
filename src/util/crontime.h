@@ -61,8 +61,8 @@
  * so they cannot collide with user code.
  */
 // NOLINTBEGIN(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
-#ifndef _NTLIBC_UTIL_CRONTIME_H
-#define _NTLIBC_UTIL_CRONTIME_H
+#ifndef _SPICULE_UTIL_CRONTIME_H
+#define _SPICULE_UTIL_CRONTIME_H
 
 #include <time.h>
 

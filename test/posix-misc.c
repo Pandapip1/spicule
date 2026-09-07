@@ -201,7 +201,7 @@ static void test_dirent(void)
  * https://man7.org/linux/man-pages/man3/readdir.3.html under "d_type":
  * "not specified in POSIX.1... available on most BSD systems... on
  * Linux". Tested here as an extension against its own documented
- * contract, not folded into the POSIX table above. ntlibc's NT backend
+ * contract, not folded into the POSIX table above. spicule's NT backend
  * (src/dirent/nt/plat_dirent.c's dtype_from_attrs(), formerly
  * dirent_internal.h's __dirent_dtype()) only ever returns DT_LNK
  * (reparse points), DT_DIR or DT_REG -- DT_FIFO/DT_CHR/DT_BLK/DT_SOCK/
@@ -277,7 +277,7 @@ static void test_dtype(void)
 typedef char eoverflow_fence_needs_64bit_ino_t[sizeof(ino_t) >= 8 ? 1 : -1];
 typedef char eoverflow_fence_needs_off_t_at_least_as_wide_as_long[sizeof(off_t) >= sizeof(long) ? 1 : -1];
 
-#if NTLIBC_TEST(NA, posix_misc_readdir_eoverflow) /* N/A: readdir.html/readdir_r.html ERRORS, the "shall fail"
+#if SPICULE_TEST(NA, posix_misc_readdir_eoverflow) /* N/A: readdir.html/readdir_r.html ERRORS, the "shall fail"
        * (mandatory-when-triggered, not optional) list: "[EOVERFLOW]
        * One of the values in the structure to be returned cannot be
        * represented correctly." Checked against the live spec page
@@ -316,13 +316,13 @@ static void test_readdir_eoverflow(void)
 }
 #endif
 
-#if NTLIBC_TEST(NA, posix_misc_readdir_enoent_position) /* N/A: readdir.html/readdir_r.html ERRORS, the "may fail"
+#if SPICULE_TEST(NA, posix_misc_readdir_enoent_position) /* N/A: readdir.html/readdir_r.html ERRORS, the "may fail"
        * (optional) list: "[ENOENT] The current position of the
        * directory stream is invalid." POSIX "may fail" conditions are
        * explicitly optional -- a conformant implementation need not
        * detect or report them at all (base definitions, "may fail"
        * introductory text: these are conditions an implementation MAY
-       * support detecting, not conditions it must). ntlibc's
+       * support detecting, not conditions it must). spicule's
        * seekdir()/telldir() positions are plain dp->tell values fed
        * back into a linear NtQueryDirectoryFile restart-scan count
        * (src/dirent/seekdir.c); there is no encoding of "invalid"
@@ -431,7 +431,7 @@ static void test_locale(void)
 	CHECK(!strcmp(setlocale(LC_ALL, NULL), "C"));
 
 	/* setlocale.html: composite LC_ALL name form other than the plain
-	 * category names, still resolving to "C" is an ntlibc-specific
+	 * category names, still resolving to "C" is an spicule-specific
 	 * shortcut (see src/misc/locale.c), not a POSIX requirement -- not
 	 * asserted here as a spec clause.  Every individual category
 	 * accepts "C"/"POSIX"/NULL (setlocale.html DESCRIPTION lists all of
@@ -451,7 +451,7 @@ static void test_locale(void)
  * The EXAMPLES table from basename.html (dirname's outputs are given in
  * the same table).  Both functions may modify the argument -- pass a
  * writable copy each time (basename.html DESCRIPTION: "may modify the
- * string pointed to by path").  ntlibc's Windows drive-letter handling
+ * string pointed to by path").  spicule's Windows drive-letter handling
  * is an extension POSIX does not describe: asserted separately below,
  * not mixed into the POSIX table.
  * ------------------------------------------------------------------ */
@@ -489,7 +489,7 @@ static void test_libgen(void)
 	check_pair("//usr//lib//", "lib", "//usr");
 	check_pair("/home//dwc//test", "test", "/home//dwc");
 
-	/* ntlibc extension, not POSIX: Windows drive-letter prefixes are
+	/* spicule extension, not POSIX: Windows drive-letter prefixes are
 	 * kept with the directory half and never treated as part of the
 	 * basename. */
 	check_pair("C:\\x\\y", "y", "C:\\x");

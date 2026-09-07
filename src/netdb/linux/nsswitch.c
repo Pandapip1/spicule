@@ -3,7 +3,7 @@
  *
  * __nsswitch_order(): a real /etc/nsswitch.conf(5) parser, Linux-only
  * (see src/internal/nsswitch.h's banner for why it lives here): NSS as
- * ntlibc's own statically-linked "files"/"dns" backends, dispatched by
+ * spicule's own statically-linked "files"/"dns" backends, dispatched by
  * a real config file, rather than dlopen()ing glibc's own
  * libnss_*.so.2 modules, which are built against glibc's private,
  * unstable internal ABI -- musl makes the identical call for the

@@ -16,14 +16,14 @@
  *
  * SAFETY: real fd 0 is forced to /dev/null before __util_stty_main() is
  * ever called. __util_stty_main() hard-codes fd 0 in every
- * tcgetattr(0,...)/tcsetattr(0,...) call, and neither ntlibc termios
+ * tcgetattr(0,...)/tcsetattr(0,...) call, and neither spicule termios
  * backend is actually linked into this build (src/termios/termios.c is
  * __linux__-guarded out, and the Linux backend is skipped by
  * asan-build.sh's file selection) -- so those calls resolve to the
  * host's real, dynamically-linked glibc instead. Unforced, that would
  * (a) mutate a real terminal's settings if real fd 0 happens to be one,
  * and (b) on success write glibc's larger struct termios (NCCS==32)
- * through a pointer declared with ntlibc's own smaller one (NCCS==16),
+ * through a pointer declared with spicule's own smaller one (NCCS==16),
  * a real stack buffer overrun. force_stdin_devnull() below reaches the
  * host's syscall(2) directly (fd 0 is real hardware here, not
  * fuzz/ntstubs.c's simulated volume) to dup2() /dev/null onto it once,

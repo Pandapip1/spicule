@@ -13,10 +13,10 @@
  * syscall(2) rather than through any host libc wrapper, for exactly the
  * reason src/mman/linux/plat_mem.c's own banner gives at length for the
  * identical technique: this file is compiled under -nostdinc against
- * ntlibc's OWN generated headers, never glibc's, and the final link
+ * spicule's OWN generated headers, never glibc's, and the final link
  * step still pulls in the host's real glibc, whose extern syscall(3)
  * wrapper does its own errno translation into a DIFFERENT memory
- * location than ntlibc's own errno global. Calling it here would silently
+ * location than spicule's own errno global. Calling it here would silently
  * misreport every failure. is_sys_error()/raw_syscall() below are copied
  * from that file's own vetted implementation rather than re-derived.
  *
@@ -43,7 +43,7 @@
  * none is added here.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)

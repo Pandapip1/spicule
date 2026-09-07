@@ -281,7 +281,7 @@ int ordered_global_subtraction_across_unknown_call(int removed, void *pointer)
 }
 
 static int malicious_free_total = 1;
-__attribute__((annotate("ntlibc_arith_scalar_noop")))
+__attribute__((annotate("spicule_arith_scalar_noop")))
 void __free(void *pointer)
 {
 	(void)pointer; /* arithmetic-ub-expect */
@@ -323,9 +323,9 @@ void signed_truthiness_does_not_prove_positive(
 }
 
 #define fixture_arith_range(minimum, maximum) \
-	__attribute__((annotate("ntlibc_arith_range:" #minimum ":" #maximum)))
+	__attribute__((annotate("spicule_arith_range:" #minimum ":" #maximum)))
 #define fixture_nonzero_field_on_success(argument, field) \
-	__attribute__((annotate("ntlibc_arith_nonzero_field_on_success:" \
+	__attribute__((annotate("spicule_arith_nonzero_field_on_success:" \
 		#argument ":" #field)))
 
 static unsigned contracted_divisor(unsigned value,
@@ -518,7 +518,7 @@ int defined_frexp_is_not_trusted(double value)
 	return exponent - 1; /* arithmetic-ub-expect */
 }
 
-__attribute__((annotate("ntlibc_arith_output_excludes_min:1")))
+__attribute__((annotate("spicule_arith_output_excludes_min:1")))
 int bad_output_provider(int value, int *output)
 {
 	*output = (-2147483647 - 1);
@@ -532,9 +532,9 @@ int annotated_bad_output_caller_is_constrained(int value)
 	return output - 1;
 }
 
-__attribute__((annotate("ntlibc_arith_output_excludes_min:0")))
+__attribute__((annotate("spicule_arith_output_excludes_min:0")))
 extern int conflicting_output_provider(int *, int *);
-__attribute__((annotate("ntlibc_arith_output_excludes_min:1")))
+__attribute__((annotate("spicule_arith_output_excludes_min:1")))
 extern int conflicting_output_provider(int *, int *);
 
 int conflicting_output_contract_is_not_trusted(void)
@@ -546,7 +546,7 @@ int conflicting_output_contract_is_not_trusted(void)
 
 extern void mutate_output(int *);
 
-__attribute__((annotate("ntlibc_arith_output_excludes_min:1")))
+__attribute__((annotate("spicule_arith_output_excludes_min:1")))
 int direct_call_can_invalidate_output(int value, int *output)
 {
 	*output = 0;
@@ -554,7 +554,7 @@ int direct_call_can_invalidate_output(int value, int *output)
 	return value; /* arithmetic-ub-expect */
 }
 
-__attribute__((annotate("ntlibc_arith_output_excludes_min:1")))
+__attribute__((annotate("spicule_arith_output_excludes_min:1")))
 int copied_alias_call_can_invalidate_output(int value, int *output)
 {
 	int *alias = output;
@@ -566,7 +566,7 @@ int copied_alias_call_can_invalidate_output(int value, int *output)
 static int *escaped_output;
 extern void mutate_escaped_output(void);
 
-__attribute__((annotate("ntlibc_arith_output_excludes_min:1")))
+__attribute__((annotate("spicule_arith_output_excludes_min:1")))
 int escaped_alias_call_can_invalidate_output(int value, int *output)
 {
 	*output = 0;
@@ -575,7 +575,7 @@ int escaped_alias_call_can_invalidate_output(int value, int *output)
 	return value; /* arithmetic-ub-expect */
 }
 
-__attribute__((annotate("ntlibc_arith_output_excludes_min:1")))
+__attribute__((annotate("spicule_arith_output_excludes_min:1")))
 int partial_write_can_invalidate_output(int value, int *output)
 {
 	*output = 0;
@@ -583,7 +583,7 @@ int partial_write_can_invalidate_output(int value, int *output)
 	return value; /* arithmetic-ub-expect */
 }
 
-__attribute__((annotate("ntlibc_arith_output_excludes_min:0")))
+__attribute__((annotate("spicule_arith_output_excludes_min:0")))
 void fallthrough_does_not_establish_output(int *output)
 {
 	(void)output;

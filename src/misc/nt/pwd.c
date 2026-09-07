@@ -22,7 +22,7 @@
  * getpwnam.html's "not found" case) -- there is no database to enumerate
  * a second entry out of.
  *
- * getpwent()/setpwent()/endpwent(): implemented, not stubbed. ntlibc's
+ * getpwent()/setpwent()/endpwent(): implemented, not stubbed. spicule's
  * user database genuinely contains exactly one entry, so "rewind, yield
  * that one entry, then EOF" is the honest enumeration of it.
  */
@@ -146,7 +146,7 @@ struct passwd *getpwuid(uid_t uid)
 	return &g_pw;
 }
 
-/* getpwnam_r()/getpwuid_r() (Thread-Safe Functions option; ntlibc has
+/* getpwnam_r()/getpwuid_r() (Thread-Safe Functions option; spicule has
  * no feature-test gate for it, same as the rest of this library's
  * _r functions).  Return value is the error number itself (0 on
  * success or clean not-found), never routed through errno; *result

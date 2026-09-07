@@ -183,6 +183,6 @@ extern "C" const char clang_analyzerAPIVersionString[] =
 
 extern "C" void clang_registerCheckers(CheckerRegistry &Registry) {
   Registry.addChecker<InitializationChecker>(
-      "ntlibc.InitializedRead", "Proves that every memory load is initialized",
+      "spicule.InitializedRead", "Proves that every memory load is initialized",
       "");
 }

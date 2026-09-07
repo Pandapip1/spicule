@@ -22,7 +22,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
-#ifdef NTLIBC_OWNERSHIP_Z3
+#ifdef SPICULE_OWNERSHIP_Z3
 #include "ExactCScalarSMT.h"
 #include "z3++.h"
 #endif
@@ -40,7 +40,7 @@ enum class OwnershipKind : unsigned char { Owned, Consumed };
 REGISTER_MAP_WITH_PROGRAMSTATE(OwnershipMap, SymbolRef, OwnershipKind)
 
 REGISTER_MAP_WITH_PROGRAMSTATE(ConstructMap, const MemRegion *,
-                               ntlibc::algebra::LifecycleState)
+                               spicule::algebra::LifecycleState)
 REGISTER_MAP_WITH_PROGRAMSTATE(ConstructFamilyMap, const MemRegion *,
                                const IdentifierInfo *)
 
@@ -71,13 +71,13 @@ REGISTER_MAP_WITH_PROGRAMSTATE(StrictLoanMap, StrictLoanKey, const MemRegion *)
 REGISTER_SET_WITH_PROGRAMSTATE(ExpiredStrictLoanSet, const MemRegion *)
 
 REGISTER_MAP_WITH_PROGRAMSTATE(ResourceMap, SymbolRef, unsigned)
-// Origin/frame side tables for ResourceLeakChecker's (opt-in, ntlibc.
+// Origin/frame side tables for ResourceLeakChecker's (opt-in, spicule.
 // ResourceLeak) leak-at-exit scan, the same two facts AllocationLifetime
 // Checker's own AllocationOrigin/AllocationFrame record for the identical
 // reason: a diagnostic needs the acquisition site, and the scan needs to
 // skip a resource this function merely inherited (a borrowed parameter,
 // or one still live in a caller's frame) rather than acquired itself.
-// Populated by ResourceLifecycleChecker's (ntlibc.Resource, always-on)
+// Populated by ResourceLifecycleChecker's (spicule.Resource, always-on)
 // own track()/checkPostCall -- ResourceLeakChecker only ever reads them,
 // so both checkers must run in the same clang -analyzer-checker= pass for
 // the leak scan to see anything.
@@ -97,32 +97,32 @@ REGISTER_TRAIT_WITH_PROGRAMSTATE(PendingInstalledFd, SymbolRef)
 
 namespace {
 
-using ntlibc::algebra::excludedSentinel;
-using ntlibc::algebra::ElementTokenRelation;
-using ntlibc::algebra::findTokenSort;
-using ntlibc::algebra::hasQualifier;
-using ntlibc::algebra::LifecycleEvent;
-using ntlibc::algebra::LifecycleFact;
-using ntlibc::algebra::LifecycleFamilyId;
-using ntlibc::algebra::LifecycleOperation;
-using ntlibc::algebra::LifecycleState;
-using ntlibc::algebra::LifecycleTransition;
-using ntlibc::algebra::LinearLoanClass;
-using ntlibc::algebra::lookupElementToken;
-using ntlibc::algebra::ProofStatus;
-using ntlibc::algebra::RelationSupport;
-using ntlibc::algebra::TokenEvent;
-using ntlibc::algebra::TokenEffect;
-using ntlibc::algebra::TokenState;
-using ntlibc::algebra::TokenTransfer;
-using ntlibc::algebra::transferToken;
-using ntlibc::algebra::absentLifecycle;
-using ntlibc::algebra::applyLifecycleOperation;
-using ntlibc::algebra::contains;
-using ntlibc::algebra::liveLifecycle;
-using ntlibc::algebra::SentinelSplit;
-using ntlibc::algebra::splitOnExcludedSentinel;
-using ntlibc::algebra::unknownLifecycle;
+using spicule::algebra::excludedSentinel;
+using spicule::algebra::ElementTokenRelation;
+using spicule::algebra::findTokenSort;
+using spicule::algebra::hasQualifier;
+using spicule::algebra::LifecycleEvent;
+using spicule::algebra::LifecycleFact;
+using spicule::algebra::LifecycleFamilyId;
+using spicule::algebra::LifecycleOperation;
+using spicule::algebra::LifecycleState;
+using spicule::algebra::LifecycleTransition;
+using spicule::algebra::LinearLoanClass;
+using spicule::algebra::lookupElementToken;
+using spicule::algebra::ProofStatus;
+using spicule::algebra::RelationSupport;
+using spicule::algebra::TokenEvent;
+using spicule::algebra::TokenEffect;
+using spicule::algebra::TokenState;
+using spicule::algebra::TokenTransfer;
+using spicule::algebra::transferToken;
+using spicule::algebra::absentLifecycle;
+using spicule::algebra::applyLifecycleOperation;
+using spicule::algebra::contains;
+using spicule::algebra::liveLifecycle;
+using spicule::algebra::SentinelSplit;
+using spicule::algebra::splitOnExcludedSentinel;
+using spicule::algebra::unknownLifecycle;
 
 struct CapabilityPresence {
   bool Known;
@@ -1293,7 +1293,7 @@ class OwnedConstructChecker : public Checker<check::PreCall, check::PostCall> {
     LifecycleFamilyId Id = familyId(*Family);
     return *Phase == LifecycleState::Live
                ? liveLifecycle(Id)
-               : ntlibc::algebra::releasedLifecycle(Id);
+               : spicule::algebra::releasedLifecycle(Id);
   }
 
   static ProgramStateRef setConstructFact(ProgramStateRef State,
@@ -2778,11 +2778,11 @@ class OwnershipTypeChecker
              SourceState == TokenState::Duplicable) &&
             SourceState != RequiredState;
         if (!Transfer->permitted() || WrongSourceClass) {
-          if (ntlibc::algebra::contains(
+          if (spicule::algebra::contains(
                   Transfer->Events, TokenEvent::DestinationOccupied))
             report("ownership destination already holds a token", Statement,
                    State, C);
-          if (ntlibc::algebra::contains(
+          if (spicule::algebra::contains(
                   Transfer->Events,
                   TokenEvent::DuplicationClassMismatch))
             report("ownership token duplication class does not match",
@@ -3091,7 +3091,7 @@ public:
   }
 };
 
-#ifdef NTLIBC_OWNERSHIP_Z3
+#ifdef SPICULE_OWNERSHIP_Z3
 // A genuine Z3-backed fallback for ValidPointerChecker's own ad hoc
 // linear-arithmetic bound prover (collectLinearTerms()/
 // linearExtentProvenInBounds()/peelElementWidthFactor() below), used only
@@ -3164,9 +3164,9 @@ class OwnershipZ3Proof {
   z3::context &ZCtx;
   z3::solver &Solver;
   ASTContext &AST;
-  ntlibc::algebra::ScalarSMT Algebra;
+  spicule::algebra::ScalarSMT Algebra;
 
-  ntlibc::algebra::CType cType(QualType Type) const {
+  spicule::algebra::CType cType(QualType Type) const {
     return {AST.getIntWidth(Type), AST.getIntWidth(Type),
            Type->isUnsignedIntegerOrEnumerationType()};
   }
@@ -3177,9 +3177,9 @@ class OwnershipZ3Proof {
   // never inherited from an earlier, possibly-stale cast the way a
   // symbolic operand's own getType() can be (see apply()'s comment for
   // why that distinction matters here).
-  std::optional<ntlibc::algebra::SemanticResult>
+  std::optional<spicule::algebra::SemanticResult>
   literal(const llvm::APSInt &Value) const {
-    ntlibc::algebra::CType Type{Value.getBitWidth(), Value.getBitWidth(),
+    spicule::algebra::CType Type{Value.getBitWidth(), Value.getBitWidth(),
                                 Value.isUnsigned()};
     llvm::SmallString<40> Text;
     Value.toString(Text, 10, false, false);
@@ -3236,11 +3236,11 @@ class OwnershipZ3Proof {
   // silently dropped. A wider range (the comparison's truth value
   // genuinely unknown on this path) still round-trips harmlessly, since
   // "ite(cmp, 1, 0) is in {0, 1}" is a tautology that adds nothing.
-  std::optional<ntlibc::algebra::SemanticResult>
+  std::optional<spicule::algebra::SemanticResult>
   comparisonResult(BinaryOperator::Opcode Op,
-                   const ntlibc::algebra::SemanticResult &Left,
-                   const ntlibc::algebra::SemanticResult &Right,
-                   const ntlibc::algebra::CType &ResultType) const {
+                   const spicule::algebra::SemanticResult &Left,
+                   const spicule::algebra::SemanticResult &Right,
+                   const spicule::algebra::CType &ResultType) const {
     std::optional<z3::expr> Ascending = Algebra.less(Left, Right);
     std::optional<z3::expr> Descending = Algebra.less(Right, Left);
     if (!Ascending || !Descending)
@@ -3277,10 +3277,10 @@ class OwnershipZ3Proof {
     return Algebra.input(Value, ResultType);
   }
 
-  std::optional<ntlibc::algebra::SemanticResult>
-  apply(BinaryOperator::Opcode Op, const ntlibc::algebra::SemanticResult &Left,
-       const ntlibc::algebra::SemanticResult &Right,
-       const ntlibc::algebra::CType &ResultType) const {
+  std::optional<spicule::algebra::SemanticResult>
+  apply(BinaryOperator::Opcode Op, const spicule::algebra::SemanticResult &Left,
+       const spicule::algebra::SemanticResult &Right,
+       const spicule::algebra::CType &ResultType) const {
     switch (Op) {
     case BO_Add:
       return Algebra.add(Left, Right);
@@ -3300,15 +3300,15 @@ class OwnershipZ3Proof {
     }
   }
 
-  std::optional<ntlibc::algebra::SemanticResult>
+  std::optional<spicule::algebra::SemanticResult>
   translate(SymbolRef Sym, unsigned Depth = 0) {
     if (!Sym || Depth > 24 || Sym->getType().isNull() ||
         !Sym->getType()->isIntegerType())
       return std::nullopt;
-    ntlibc::algebra::CType Type = cType(Sym->getType());
+    spicule::algebra::CType Type = cType(Sym->getType());
     if (const auto *Data = dyn_cast<SymbolData>(Sym)) {
       std::string Name =
-          "ntlibc_ownership_bounds_" + std::to_string(Data->getSymbolID());
+          "spicule_ownership_bounds_" + std::to_string(Data->getSymbolID());
       return Algebra.input(ZCtx.bv_const(Name.c_str(), Type.Width), Type);
     }
     if (const auto *Cast = dyn_cast<SymbolCast>(Sym)) {
@@ -3316,38 +3316,38 @@ class OwnershipZ3Proof {
       if (OperandType.isNull() || !OperandType->isIntegerType() ||
           AST.getIntWidth(OperandType) != Type.Width)
         return std::nullopt;
-      std::optional<ntlibc::algebra::SemanticResult> Operand =
+      std::optional<spicule::algebra::SemanticResult> Operand =
           translate(Cast->getOperand(), Depth + 1);
       if (!Operand)
         return std::nullopt;
       return Algebra.convert(*Operand, Type);
     }
     if (const auto *Binary = dyn_cast<SymIntExpr>(Sym)) {
-      std::optional<ntlibc::algebra::SemanticResult> Left =
+      std::optional<spicule::algebra::SemanticResult> Left =
           translate(Binary->getLHS(), Depth + 1);
       if (!Left)
         return std::nullopt;
-      std::optional<ntlibc::algebra::SemanticResult> Right =
+      std::optional<spicule::algebra::SemanticResult> Right =
           literal(Binary->getRHS());
       if (!Right)
         return std::nullopt;
       return apply(Binary->getOpcode(), *Left, *Right, Type);
     }
     if (const auto *Binary = dyn_cast<IntSymExpr>(Sym)) {
-      std::optional<ntlibc::algebra::SemanticResult> Right =
+      std::optional<spicule::algebra::SemanticResult> Right =
           translate(Binary->getRHS(), Depth + 1);
       if (!Right)
         return std::nullopt;
-      std::optional<ntlibc::algebra::SemanticResult> Left =
+      std::optional<spicule::algebra::SemanticResult> Left =
           literal(Binary->getLHS());
       if (!Left)
         return std::nullopt;
       return apply(Binary->getOpcode(), *Left, *Right, Type);
     }
     if (const auto *Binary = dyn_cast<SymSymExpr>(Sym)) {
-      std::optional<ntlibc::algebra::SemanticResult> Left =
+      std::optional<spicule::algebra::SemanticResult> Left =
           translate(Binary->getLHS(), Depth + 1);
-      std::optional<ntlibc::algebra::SemanticResult> Right =
+      std::optional<spicule::algebra::SemanticResult> Right =
           translate(Binary->getRHS(), Depth + 1);
       if (!Left || !Right)
         return std::nullopt;
@@ -3408,7 +3408,7 @@ public:
         Algebra(ZCtx, cType(AST.IntTy), cType(AST.UnsignedIntTy)) {
     Solver.reset();
     for (const auto &Entry : getConstraintMap(State))
-      if (std::optional<ntlibc::algebra::SemanticResult> Result =
+      if (std::optional<spicule::algebra::SemanticResult> Result =
               translate(Entry.first))
         addRange(Result->Value, Entry.second);
   }
@@ -3426,34 +3426,34 @@ public:
                                           SymbolRef IndexSym,
                                           CharUnits ElemWidth,
                                           CharUnits Required) {
-    std::optional<ntlibc::algebra::SemanticResult> Extent =
+    std::optional<spicule::algebra::SemanticResult> Extent =
         translate(ExtentSym);
-    std::optional<ntlibc::algebra::SemanticResult> Index =
+    std::optional<spicule::algebra::SemanticResult> Index =
         translate(IndexSym);
     if (!Extent || !Index)
       return std::nullopt;
-    ntlibc::algebra::CType SizeT = cType(AST.getSizeType());
-    std::optional<ntlibc::algebra::SemanticResult> ExtentWide =
+    spicule::algebra::CType SizeT = cType(AST.getSizeType());
+    std::optional<spicule::algebra::SemanticResult> ExtentWide =
         Algebra.convert(*Extent, SizeT);
-    std::optional<ntlibc::algebra::SemanticResult> IndexWide =
+    std::optional<spicule::algebra::SemanticResult> IndexWide =
         Algebra.convert(*Index, SizeT);
     if (!ExtentWide || !IndexWide)
       return std::nullopt;
-    std::optional<ntlibc::algebra::SemanticResult> WidthLiteral =
+    std::optional<spicule::algebra::SemanticResult> WidthLiteral =
         Algebra.input(
             ZCtx.bv_val(static_cast<uint64_t>(ElemWidth.getQuantity()),
                        SizeT.Width),
             SizeT);
-    std::optional<ntlibc::algebra::SemanticResult> RequiredLiteral =
+    std::optional<spicule::algebra::SemanticResult> RequiredLiteral =
         Algebra.input(
             ZCtx.bv_val(static_cast<uint64_t>(Required.getQuantity()),
                        SizeT.Width),
             SizeT);
     if (!WidthLiteral || !RequiredLiteral)
       return std::nullopt;
-    std::optional<ntlibc::algebra::SemanticResult> Scaled =
+    std::optional<spicule::algebra::SemanticResult> Scaled =
         Algebra.multiplyConverted(*IndexWide, *WidthLiteral);
-    std::optional<ntlibc::algebra::SemanticResult> Access =
+    std::optional<spicule::algebra::SemanticResult> Access =
         Scaled ? Algebra.addConverted(*Scaled, *RequiredLiteral)
               : std::nullopt;
     if (!Access)
@@ -3462,7 +3462,7 @@ public:
     z3::expr Obligation =
         !(ExtentWide->Defined && Access->Defined && Sufficient);
     Solver.add(Obligation);
-    return ntlibc::algebra::provesUnsatisfiable(Solver);
+    return spicule::algebra::provesUnsatisfiable(Solver);
   }
 };
 
@@ -3560,10 +3560,10 @@ class ValidPointerChecker
   // terminated property nearby. It is deliberately NOT routed through
   // this project's own grant()/consume() token-state map the way that
   // sibling axiom is: that map (CapabilityMap/SymbolCapabilityMap, see
-  // CapabilityTokenChecker above) is populated only by ntlibc.
+  // CapabilityTokenChecker above) is populated only by spicule.
   // CapabilityToken, and tools/lint.sh's stage_ownership never loads
-  // ntlibc.CapabilityToken in the same clang --analyze invocation as
-  // ntlibc.ValidPointer (they are deliberately split into separate
+  // spicule.CapabilityToken in the same clang --analyze invocation as
+  // spicule.ValidPointer (they are deliberately split into separate
   // passes with separate exploration budgets -- see stage_ownership's
   // own comment on "Keep the high-volume pointer proof search from
   // consuming the exploration budget needed by ownership/lifecycle
@@ -4094,7 +4094,7 @@ class ValidPointerChecker
     return Constant == Required;
   }
 
-#ifdef NTLIBC_OWNERSHIP_Z3
+#ifdef SPICULE_OWNERSHIP_Z3
   // The genuine Z3-backed fallback (OwnershipZ3Proof, above) for exactly
   // the shapes linearExtentProvenInBounds documents it cannot handle:
   // nested multiplication, and a provably-equal-but-differently-derived
@@ -4567,7 +4567,7 @@ public:
         // improvement on top of it, never a substitute: if Z3 also can't
         // prove it, the finding below still fires exactly as before.
         if (linearExtentProvenInBounds(Element, BaseExtent, Width, C)
-#ifdef NTLIBC_OWNERSHIP_Z3
+#ifdef SPICULE_OWNERSHIP_Z3
             || z3ExtentProvenInBounds(Element, BaseExtent, Width, C)
 #endif
         ) {
@@ -5303,7 +5303,7 @@ public:
   }
 };
 
-// Opt-in (ntlibc.ResourceLeak; see tools/lint.sh's resourceleak stage): the
+// Opt-in (spicule.ResourceLeak; see tools/lint.sh's resourceleak stage): the
 // missing half of ResourceLifecycleChecker's acquire/use/release proof --
 // checkResource there only ever validates a release call's own legitimacy
 // at the moment one is reached, so nothing notices a live resource that no
@@ -5321,7 +5321,7 @@ public:
 // landed as their own checker before earning a place in requested_stages'
 // default list. It reads ResourceMap/ResourceOrigin/ResourceFrame -- the
 // same three program-state tables ResourceLifecycleChecker's track()
-// writes -- rather than duplicating them, so ntlibc.Resource must also be
+// writes -- rather than duplicating them, so spicule.Resource must also be
 // enabled in the same clang -analyzer-checker= invocation for this
 // checker to see anything.
 class ResourceLeakChecker
@@ -5450,35 +5450,35 @@ extern "C" void clang_registerCheckers(CheckerRegistry &Registry) {
   registerAllocationLifetimeChecker(Registry);
   registerMemoryContractChecker(Registry);
   Registry.addChecker<OwnershipChecker>(
-      "ntlibc.Ownership",
+      "spicule.Ownership",
       "Proves allocator provenance and borrow lifetime at deallocation", "");
   Registry.addChecker<OwnedConstructChecker>(
-      "ntlibc.OwnedConstruct",
+      "spicule.OwnedConstruct",
       "Proves synchronization object construction and destruction", "");
   Registry.addChecker<OwnershipContractChecker>(
-      "ntlibc.OwnershipContract",
+      "spicule.OwnershipContract",
       "Requires source definitions to repeat header ownership contracts", "");
   Registry.addChecker<AggregateElementTokenChecker>(
-      "ntlibc.AggregateElementToken",
+      "spicule.AggregateElementToken",
       "Relates versioned aggregate elements to nominal token states", "");
   Registry.addChecker<CapabilityTokenChecker>(
-      "ntlibc.CapabilityToken",
+      "spicule.CapabilityToken",
       "Proves explicit linear and duplicable ownership-token transitions", "");
   Registry.addChecker<OwnershipTypeChecker>(
-      "ntlibc.OwnershipType",
+      "spicule.OwnershipType",
       "Proves ownership token bundles across value and storage types", "");
   Registry.addChecker<ValidPointerChecker>(
-      "ntlibc.ValidPointer",
+      "spicule.ValidPointer",
       "Proves every memory access has a nonnull, live, in-bounds, aligned "
       "pointer",
       "");
   Registry.addChecker<ResourceLifecycleChecker>(
-      "ntlibc.Resource", "Proves acquire, use, and release resource "
+      "spicule.Resource", "Proves acquire, use, and release resource "
       "lifecycles",
       "");
   Registry.addChecker<ResourceLeakChecker>(
-      "ntlibc.ResourceLeak",
+      "spicule.ResourceLeak",
       "Proves a tracked resource is released before function exit "
-      "(opt-in, ntlibc.Resource must also be enabled)",
+      "(opt-in, spicule.Resource must also be enabled)",
       "");
 }

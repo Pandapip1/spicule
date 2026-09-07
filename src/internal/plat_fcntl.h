@@ -37,20 +37,20 @@
  * stays in the front door (only the genuinely portable /dev/std*
  * fd-table special case) versus what moved here.
  */
-#ifndef _NTLIBC_PLAT_FCNTL_H
-#define _NTLIBC_PLAT_FCNTL_H
+#ifndef _SPICULE_PLAT_FCNTL_H
+#define _SPICULE_PLAT_FCNTL_H
 
 #include <sys/types.h>
 #include "plat_handle.h"
 
-/* open()/openat(): resolve `path` (relative to `dirfd`, ntlibc's own
+/* open()/openat(): resolve `path` (relative to `dirfd`, spicule's own
  * AT_FDCWD sentinel or an already-open dirfd) and translate `flags`/
  * `mode` into whatever the backend's native open call needs -- see
  * src/fcntl/open.c's own banner for the access-mode/synchronous/share-
  * mode policy this replaces on the NT side. `mode` is the already-
  * umask-applied creation mode (0 unless O_CREAT is set).
  *
- * *vfsout and *vfsnativeout report ntlibc's own POSIX-namespace-overlay
+ * *vfsout and *vfsnativeout report spicule's own POSIX-namespace-overlay
  * state (src/internal/libc.h's __VFS_* enum: is this descriptor one of
  * the synthetic `/`, `/dev`, `/dev/null` etc. entries NT needs because
  * it has no native concept of them, and if so does a real native object

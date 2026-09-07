@@ -14,7 +14,7 @@
  * alive while the original name becomes reusable immediately.
  *
  * Names without an initial slash and names with extra slashes are POSIX
- * implementation-defined; ntlibc accepts the former (Open POSIX Test Suite
+ * implementation-defined; spicule accepts the former (Open POSIX Test Suite
  * compatibility) and rejects the latter. Component chars are restricted to
  * the portable filename set, which also avoids DOS device names/separators
  * getting a second interpretation.
@@ -52,7 +52,7 @@ static char *shm_path(const char *name)
 {
 	const char *dir;
 	const char *component;
-	const size_t prefix = sizeof "/ntlibc-shm/" - 1;
+	const size_t prefix = sizeof "/spicule-shm/" - 1;
 	size_t dirlen, maxdir, namelen, pathlen;
 	char *path;
 	size_t i;
@@ -88,14 +88,14 @@ static char *shm_path(const char *name)
 	pathlen = dirlen + prefix + namelen + 1;
 	path = malloc(pathlen);
 	if (!path) return NULL;
-	snprintf(path, pathlen, "%s/ntlibc-shm/%s", dir, component);
+	snprintf(path, pathlen, "%s/spicule-shm/%s", dir, component);
 	return path;
 }
 
 /* path is never NULL here: both callers null-check their shm_path()/
  * shm_mode_path() result first. `slash` (strrchr(dir, '/')) is never NULL
  * either, since both callers only ever pass a path built by concatenating
- * "/ntlibc-shm(-mode)/" onto a directory -- but that's an invariant of the
+ * "/spicule-shm(-mode)/" onto a directory -- but that's an invariant of the
  * callers, not something the nonnull attribute on `path` can state. */
 static int ensure_namespace(const char *path) __attribute__((nonnull(1)));
 static int ensure_namespace(const char *path)
@@ -281,7 +281,7 @@ static unsigned tombstone_serial;
  * rather than replacing a live object's last name. */
 static int rename_mapped_away(const char *path)
 {
-	static const char stem[] = ".ntlibc-shm-deleted-";
+	static const char stem[] = ".spicule-shm-deleted-";
 	const char *slash = strrchr(path, '/');
 	size_t dirlen = slash ? (size_t)(slash - path + 1) : 0;
 	size_t size = dirlen + sizeof stem + 8 + 1 + 8 + 1 + 8;

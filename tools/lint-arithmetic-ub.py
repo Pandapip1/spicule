@@ -20,7 +20,7 @@ DIAGNOSTIC = re.compile(
     r"signed arithmetic result is not proven representable|"
     r"arithmetic contract is not proven: .*); "
     r"origin '(.*)'; context '(.*)'; expression '(.*)'; site '(.*)' "
-    r"\[ntlibc\.(Divisor|ShiftCount|SignedArithmetic|ArithmeticContract)\]$"
+    r"\[spicule\.(Divisor|ShiftCount|SignedArithmetic|ArithmeticContract)\]$"
 )
 
 

@@ -73,8 +73,8 @@
  * directory is a thin CMPLX-precision cast around the one double
  * algorithm, never an independent computation.
  */
-#ifndef NTLIBC_COMPLEX_IMPL_H
-#define NTLIBC_COMPLEX_IMPL_H
+#ifndef SPICULE_COMPLEX_IMPL_H
+#define SPICULE_COMPLEX_IMPL_H
 
 #include <complex.h>
 #include <math.h>

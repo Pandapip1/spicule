@@ -12,10 +12,10 @@
  * still-open, non-close-on-exec descriptor automatically, with the
  * kernel as the only bookkeeping authority for the raw numbers.
  *
- * What IS this library's own job: ntlibc's own __fds[] table in a
+ * What IS this library's own job: spicule's own __fds[] table in a
  * freshly exec'd process is a brand new, zeroed array that has never
  * heard of any of these descriptors. A raw descriptor surviving exec is
- * perfectly usable at the syscall level, but every ntlibc-level
+ * perfectly usable at the syscall level, but every spicule-level
  * operation on it (read()/write()/fcntl()/close()/dup(), which resolve a
  * small integer to a handle by indexing __fds[], never by asking the
  * kernel) returns EBADF until the table knows the slot is occupied.
@@ -41,7 +41,7 @@
  * NtQueryVolumeInformationFile/NtQueryInformationFile pair there, a
  * single statx(2) here). */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)

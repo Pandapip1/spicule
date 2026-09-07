@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Black-box tests for ntlibc's Tier 2 POSIX standard utilities: `cut`,
+ * Black-box tests for spicule's Tier 2 POSIX standard utilities: `cut`,
  * `paste`, `tr`, `expand`, `unexpand`, `fold` (XCU cut(1p), paste(1p),
  * tr(1p), expand(1p), unexpand(1p), fold(1p)).  Same technique as
  * test/util-fsops.c: the standalone obj/bin/<name>.exe is spawned as a

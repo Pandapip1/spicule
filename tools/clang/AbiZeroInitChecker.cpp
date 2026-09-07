@@ -698,7 +698,7 @@ extern "C" const char clang_analyzerAPIVersionString[] =
 
 extern "C" void clang_registerCheckers(CheckerRegistry &Registry) {
   Registry.addChecker<AbiZeroInitChecker>(
-      "ntlibc.AbiZeroInit",
+      "spicule.AbiZeroInit",
       "Proves stack aggregates crossing an Nt*/Zw* syscall boundary are "
       "fully initialized",
       "");

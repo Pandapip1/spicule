@@ -13,7 +13,7 @@
  * POSIX's ioctl() is not implemented here at all; a different function
  * that shares its name is:
  *
- *                     POSIX <stropts.h>             ntlibc <sys/ioctl.h>
+ *                     POSIX <stropts.h>             spicule <sys/ioctl.h>
  *   header            stropts.h (absent here)       sys/ioctl.h
  *   signature         int ioctl(int, int, ...)      int ioctl(int, unsigned long, ...)
  *   specified over    STREAMS devices               NT file/pipe/console handles
@@ -22,7 +22,7 @@
  *
  * The two share a name, an fd parameter and nothing else -- disjoint
  * headers, disjoint command sets, and POSIX's own text says of
- * everything ntlibc's version does that "for non-STREAMS devices, the
+ * everything spicule's version does that "for non-STREAMS devices, the
  * functions performed by this call are unspecified".
  * `include/sys/ioctl.h`'s own banner says as much in its first line:
  * "ioctl(): NOT a POSIX interface -- POSIX deliberately specifies
@@ -30,7 +30,7 @@
  *
  * So this file's verdict is a **reclassification, not a fence**:
  * `ioctl` belongs in `POSIX-GAP-ACCOUNTING.md`'s *absent* accounting,
- * alongside the other headers ntlibc does not have, not in
+ * alongside the other headers spicule does not have, not in
  * "Implemented, not clause-audited".  Fencing an UNIMPL inside a row
  * that should not exist would have recorded the symptom and kept the
  * miscategorisation.  The ledger entry for this file says so.
@@ -56,10 +56,10 @@
  *  3. The one general-condition clause that survives regardless of
  *     STREAMS -- "[EBADF] The fildes argument is not a valid open file
  *     descriptor" -- is implemented and is asserted live, against
- *     ntlibc's own ioctl() through <sys/ioctl.h>.  It is the only
+ *     spicule's own ioctl() through <sys/ioctl.h>.  It is the only
  *     assertion in this file that runs.
  *
- * The BSD ioctl() ntlibc actually ships is deliberately *not* audited
+ * The BSD ioctl() spicule actually ships is deliberately *not* audited
  * against ioctl.html here beyond that: it is not the function the page
  * specifies, and asserting whatever the code happens to do would be
  * exactly the "audit the implementation instead of the spec" failure
@@ -84,7 +84,7 @@ static int fails;
  *
  * The one clause on the page that is not conditioned on `fildes`
  * referring to a STREAMS device, and therefore the one that is not
- * vacuous here.  Asserted against ntlibc's own ioctl(); it holds
+ * vacuous here.  Asserted against spicule's own ioctl(); it holds
  * (src/internal/fd.c's __fd_get() sets EBADF and src/ioctl/ioctl.c
  * returns -1 on a null result).
  * ------------------------------------------------------------------ */
@@ -132,11 +132,11 @@ static void test_ebadf(void)
  * fence and answered there, because it is a reasonable thing to think
  * and someone will think it again.
  * ------------------------------------------------------------------ */
-#if NTLIBC_TEST(NA, posix_stropts_placeholder_not_a_header_test) /* N/A: this block cannot test that <stropts.h> exists.
+#if SPICULE_TEST(NA, posix_stropts_placeholder_not_a_header_test) /* N/A: this block cannot test that <stropts.h> exists.
        * ioctl.html SYNOPSIS:
        *   #include <stropts.h>
        *   int ioctl(int fildes, int request, ... );
-       * ntlibc declares ioctl() in <sys/ioctl.h> -- a BSD/SVR4 header
+       * spicule declares ioctl() in <sys/ioctl.h> -- a BSD/SVR4 header
        * POSIX does not specify -- with `unsigned long request` rather
        * than `int request`.  A strictly conforming application that
        * writes the SYNOPSIS above does not compile.  The assertions
@@ -180,10 +180,10 @@ static void test_ebadf(void)
        *    a stream" for any valid descriptor.  getmsg, putmsg,
        *    getpmsg, putpmsg, fattach and fdetach do not exist.  An
        *    application that compiles against that header fails at
-       *    link, which is where ntlibc's would fail too.
+       *    link, which is where spicule's would fail too.
        *
        * 3. IT IS NOT FREE.  POSIX's prototype is
-       *    `int ioctl(int fildes, int request, ...)`; ntlibc's working
+       *    `int ioctl(int fildes, int request, ...)`; spicule's working
        *    ioctl() is `int ioctl(int, unsigned long, ...)`.  Shipping
        *    <stropts.h> as specified puts two conflicting declarations
        *    of ioctl in one tree -- a program including both headers
@@ -225,7 +225,7 @@ static void test_stropts_header_exists(void)
  * driver, no way to open a device as a STREAM, and no module to push
  * onto one.  `fildes` can therefore never refer to a STREAMS device on
  * this platform, which makes those clauses vacuous rather than
- * violated -- and it puts everything ntlibc's ioctl() actually does
+ * violated -- and it puts everything spicule's ioctl() actually does
  * (FIONREAD, TIOCGWINSZ, FIONBIO on ordinary NT handles) squarely in
  * the region POSIX explicitly leaves unspecified.
  *
@@ -241,7 +241,7 @@ static void test_stropts_header_exists(void)
 int main(void)
 {
 	test_ebadf();
-#if NTLIBC_TEST(NA, posix_stropts_placeholder_not_a_header_test) /* N/A: see the fence above test_stropts_header_exists.
+#if SPICULE_TEST(NA, posix_stropts_placeholder_not_a_header_test) /* N/A: see the fence above test_stropts_header_exists.
        * This is the same fence, not a second one: the call site has to
        * be guarded too, because the function it calls is inside the
        * first #if 0. */

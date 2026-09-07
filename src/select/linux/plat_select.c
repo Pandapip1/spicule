@@ -3,7 +3,7 @@
  *
  * Linux implementation of src/internal/plat_select.h -- see src/mman/
  * linux/plat_mem.c's own banner for the general discipline this file
- * follows too (raw syscall(2), no host libc, -nostdinc against ntlibc's
+ * follows too (raw syscall(2), no host libc, -nostdinc against spicule's
  * own headers, aarch64 syscall numbers confirmed against this host's
  * own <sys/syscall.h>).
  *
@@ -43,7 +43,7 @@
  * whichever backend originally opened it.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -72,7 +72,7 @@ static int unbox(__plat_handle_t h) { return (int)((long)h - 1); }
 /* struct timespec, as the raw clock_gettime(2)/nanosleep(2)/ppoll(2)
  * kernel ABI on a 64-bit-time_t architecture (aarch64 always is one;
  * see src/internal/libc.h's discipline elsewhere) actually lays it
- * out: two 8-byte fields, matching ntlibc's own <time.h> struct
+ * out: two 8-byte fields, matching spicule's own <time.h> struct
  * timespec exactly, so no local restatement of the struct is needed --
  * <poll.h> already pulls in <time.h> for struct timespec (ppoll(2)'s
  * timeout argument). */

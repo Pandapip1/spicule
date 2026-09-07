@@ -6,7 +6,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Entry points for ntlibc's own POSIX.1-2017 (XCU) standard utilities.
+ * Entry points for spicule's own POSIX.1-2017 (XCU) standard utilities.
  * Each `__util_<name>_main()` is the whole of utility <name>'s logic,
  * implemented once in src/util/<name>.c (mkdir, chmod, printf and time
  * are the four exceptions -- src/util/mkdir_util.c, src/util/chmod_util.c,
@@ -42,19 +42,19 @@
  * further: bin/<name>.c hands it straight to the OS as its own exit
  * code, and bi_<name>() assigns it straight to ctx->status.
  */
-#ifndef _NTLIBC_UTIL_H
-#define _NTLIBC_UTIL_H
+#ifndef _SPICULE_UTIL_H
+#define _SPICULE_UTIL_H
 
 #include <stdlib.h>
 
 /* Arithmetic contracts are analysis-only: normal compilers see no source
  * attribute, while the arithub checker both enforces them at every direct
  * call and assumes them at the separately-analyzed callee entry. */
-#ifdef NTLIBC_ARITHMETIC_ANALYSIS
+#ifdef SPICULE_ARITHMETIC_ANALYSIS
 #define __arith_range(minimum, maximum) \
-	__attribute__((annotate("ntlibc_arith_range:" #minimum ":" #maximum)))
+	__attribute__((annotate("spicule_arith_range:" #minimum ":" #maximum)))
 #define __arith_nonzero_field_on_success(argument, field) \
-	__attribute__((annotate("ntlibc_arith_nonzero_field_on_success:" \
+	__attribute__((annotate("spicule_arith_nonzero_field_on_success:" \
 		#argument ":" #field)))
 #else
 #define __arith_range(minimum, maximum)
@@ -665,7 +665,7 @@ unsigned __util_sccs_checksum(const char *buf, size_t len) __attribute__((nonnul
 /* Tier 6: terminal messaging.  write(1p)/mesg(1p) -- the plan's own
  * "explicitly deferred / out of scope" tier, revisited: see
  * src/util/mesg.c and src/util/util_write.c's own header comments for
- * the full argument on what is real here given ntlibc's one-real-user
+ * the full argument on what is real here given spicule's one-real-user
  * model (src/misc/pwd.c), and src/util/termident.h for the terminal-
  * identification mechanism both share.  __util_write_main() lives in
  * util_write.c, not write.c, to avoid the same ar member-name

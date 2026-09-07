@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Black-box tests for the first batch of ntlibc's third tier of POSIX
+ * Black-box tests for the first batch of spicule's third tier of POSIX
  * standard utilities -- the text I/O tier: `cat`, `echo`, `tee`, `wc`,
  * `head`, `tail` (XCU cat(1p), echo(1p), tee(1p), wc(1p), head(1p),
  * tail(1p)).  Same shape as test/util-fileops.c and test/util-fsops.c
@@ -25,7 +25,7 @@
  *   utilities/wc.html utilities/head.html utilities/tail.html
  */
 /* usleep()/kill() below are gated behind _POSIX_SOURCE/_POSIX_C_SOURCE/
- * _XOPEN_SOURCE/_GNU_SOURCE/_BSD_SOURCE in ntlibc's own include/
+ * _XOPEN_SOURCE/_GNU_SOURCE/_BSD_SOURCE in spicule's own include/
  * unistd.h and include/signal.h, none of which a plain -std=c99 build
  * defines on its own. Same fix, same reasoning, as test/posix-stdlib.c's
  * own top-of-file _GNU_SOURCE define. */

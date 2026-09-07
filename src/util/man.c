@@ -802,7 +802,7 @@
  * utility -- see src/util/dd.c's own header comment for why.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -4431,10 +4431,10 @@ static int man_run_external_pager(const char *pager, const char *styled, size_t 
 
 	{
 		size_t tmplbytes;
-		if (!__util_size_add(dn, sizeof "/ntlibc-manXXXXXX", &tmplbytes)) return -1;
+		if (!__util_size_add(dn, sizeof "/spicule-manXXXXXX", &tmplbytes)) return -1;
 		tmpl = malloc(tmplbytes);
 		if (!tmpl) return -1;
-		snprintf(tmpl, tmplbytes, "%s/ntlibc-manXXXXXX", dir);
+		snprintf(tmpl, tmplbytes, "%s/spicule-manXXXXXX", dir);
 	}
 	fd = mkstemp(tmpl);
 	if (fd < 0) { free(tmpl); return -1; }

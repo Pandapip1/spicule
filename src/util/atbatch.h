@@ -21,7 +21,7 @@
  * `sh` skips them without any special-casing) and the one place atd
  * looks to answer "is this job due yet":
  *
- *   #!ntlibc-at-job 1
+ *   #!spicule-at-job 1
  *   #run_at <epoch seconds, decimal>
  *   #submit_time <epoch seconds, decimal>
  *   #queue <one letter>
@@ -57,8 +57,8 @@
  * so they cannot collide with user code.
  */
 // NOLINTBEGIN(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
-#ifndef _NTLIBC_UTIL_ATBATCH_H
-#define _NTLIBC_UTIL_ATBATCH_H
+#ifndef _SPICULE_UTIL_ATBATCH_H
+#define _SPICULE_UTIL_ATBATCH_H
 
 #include <stddef.h>
 #include <time.h>
@@ -84,7 +84,7 @@
  * (id_out_sz bytes, NUL-terminated). On failure, returns -1 with
  * errno set to whatever the underlying spool/file/read operation
  * failed with; id_out is left untouched. */
-/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline: every
+/* tools/clang/ErrnoDisciplineChecker.cpp's spicule.ErrnoDiscipline: every
  * failure return of this file's own atbatch.c implementation sets
  * errno, via a real errno-setting call (__spool_dir/__spool_new_job/
  * fopen/fread/fwrite/fputc/fputs/fclose/__spool_publish_job) or its own

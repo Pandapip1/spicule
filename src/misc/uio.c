@@ -17,7 +17,7 @@
  * literally be a write() -- the vector is gathered into one buffer,
  * handed to a single src/unistd/write.c call, and therefore reaches the
  * file as a single NtWriteFile; the read side scatters back out of one
- * NtReadFile.  Every file ntlibc opens is FILE_SYNCHRONOUS_IO_NONALERT
+ * NtReadFile.  Every file spicule opens is FILE_SYNCHRONOUS_IO_NONALERT
  * (src/fcntl/open.c), and the NT I/O manager holds the file object's
  * own lock across a synchronous transfer, reading and advancing
  * CurrentByteOffset under it.  That lock lives on the FILE_OBJECT, not

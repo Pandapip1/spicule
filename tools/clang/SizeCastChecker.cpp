@@ -21,7 +21,7 @@
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/SmallString.h"
 #include "TokenAlgebra.h"
-#ifdef NTLIBC_ARITHMETIC_Z3
+#ifdef SPICULE_ARITHMETIC_Z3
 #include "ExactCScalarSMT.h"
 #include "z3++.h"
 #endif
@@ -40,8 +40,8 @@ using namespace ento;
 // function, or bound to a matching parameter at function entry, is tracked
 // by the SPECIFIC Decl (FunctionDecl or ParmVarDecl) that carried the
 // qualifier -- not by the already-parsed int64_t literal -- so
-// ntlibc.IntegerSentinel re-derives the literal through
-// ntlibc::algebra::scalarSentinel() at every use site instead of caching a
+// spicule.IntegerSentinel re-derives the literal through
+// spicule::algebra::scalarSentinel() at every use site instead of caching a
 // second, possibly-diverging copy of it. This mirrors AllocationOrigin's
 // own SymbolRef -> const Stmt* shape immediately below: a plain pointer
 // value is a POD FoldingSet key with no template-instantiation risk plain
@@ -55,13 +55,13 @@ REGISTER_MAP_WITH_PROGRAMSTATE(ArithmeticContractOutput,
 REGISTER_SET_WITH_PROGRAMSTATE(ArithmeticContractOutputValid,
                                const StackFrameContext *)
 REGISTER_SET_WITH_PROGRAMSTATE(ArithmeticWideReducer, const MemRegion *)
-#ifdef NTLIBC_ARITHMETIC_Z3
+#ifdef SPICULE_ARITHMETIC_Z3
 REGISTER_MAP_WITH_PROGRAMSTATE(ArithmeticZ3BranchFact, SymbolRef, bool)
 // A second, SizeCast-scoped branch-fact map -- deliberately not shared with
 // ArithmeticZ3BranchFact above, so recording a fact here can only ever
 // affect CastZ3Proof's own query, never arithub's.  It exists because
 // getConstraintMap(State) -- the mechanism ArithmeticZ3Proof relies on for
-// its own facts -- was observed empty at every ntlibc.SizeCast callback on
+// its own facts -- was observed empty at every spicule.SizeCast callback on
 // a real, minimal guarded-cast test case in this Clang 18 build, for a
 // plain `if (room > 1000) return 0;` guard as much as for a `count < room`
 // comparison between two live symbols: the diagnostic path notes already
@@ -77,19 +77,19 @@ REGISTER_MAP_WITH_PROGRAMSTATE(ArithmeticZ3BranchFact, SymbolRef, bool)
 REGISTER_MAP_WITH_PROGRAMSTATE(CastZ3BranchFact, SymbolRef, bool)
 // A third, ArrayIndexChecker-scoped branch-fact map, deliberately not shared
 // with either map above: see ArrayIndexZ3Proof's own comment (just before
-// class ArrayIndexChecker below) for why ntlibc.ArrayIndex needs this exact
+// class ArrayIndexChecker below) for why spicule.ArrayIndex needs this exact
 // same eval::Assume-sourced recording technique CastZ3BranchFact already
-// uses for ntlibc.SizeCast.
+// uses for spicule.SizeCast.
 REGISTER_MAP_WITH_PROGRAMSTATE(ArrayIndexZ3BranchFact, SymbolRef, bool)
 #endif
 
 namespace {
 
-#ifdef NTLIBC_ARITHMETIC_Z3
-// A small Z3 bridge scoped to ntlibc.SizeCast alone -- deliberately a
+#ifdef SPICULE_ARITHMETIC_Z3
+// A small Z3 bridge scoped to spicule.SizeCast alone -- deliberately a
 // separate context/solver/translate() from arithub's ArithmeticZ3Proof
 // below, so this extension can only ever change SizeCast's own findings,
-// never arithub's (ntlibc.Divisor/ShiftCount/SignedArithmetic/
+// never arithub's (spicule.Divisor/ShiftCount/SignedArithmetic/
 // ArithmeticContract).
 //
 // The gap this closes: expressionInterval()/symbolInterval() above are
@@ -111,7 +111,7 @@ namespace {
 // relational fact: CastZ3BranchFact below is populated from eval::Assume,
 // not from getConstraintMap(State) the way arithub's ArithmeticZ3Proof
 // reads its own facts -- getConstraintMap() was observed empty at every
-// ntlibc.SizeCast callback on real, minimal guarded-cast cases in this
+// spicule.SizeCast callback on real, minimal guarded-cast cases in this
 // Clang 18 build, for a plain symbol-vs-literal guard as much as for a
 // symbol-vs-symbol one (see CastZ3BranchFact's own comment for how this
 // was confirmed).  Asserting every such recorded fact and asking whether
@@ -183,7 +183,7 @@ class CastZ3Proof {
       return std::nullopt;
     unsigned Width = AST.getIntWidth(Expression->getType());
     if (const auto *Data = dyn_cast<SymbolData>(Expression)) {
-      std::string Name = "ntlibc_cast_sym_" + std::to_string(Data->getSymbolID());
+      std::string Name = "spicule_cast_sym_" + std::to_string(Data->getSymbolID());
       return ZCtx.bv_const(Name.c_str(), Width);
     }
     if (const auto *Cast = dyn_cast<SymbolCast>(Expression)) {
@@ -459,7 +459,7 @@ public:
     if (!OutsideRange.is_bool())
       return false;
     Solver.add(OutsideRange);
-    return ntlibc::algebra::provesUnsatisfiable(Solver);
+    return spicule::algebra::provesUnsatisfiable(Solver);
   }
 
   // Proves a pointer-difference cast is safe by comparing the exact,
@@ -571,14 +571,14 @@ public:
     if (!OutsideRange.is_bool())
       return false;
     Solver.add(OutsideRange);
-    return ntlibc::algebra::provesUnsatisfiable(Solver);
+    return spicule::algebra::provesUnsatisfiable(Solver);
   }
 };
 #endif
 
 class SizeCastChecker
     : public Checker<check::PreStmt<ExplicitCastExpr>
-#ifdef NTLIBC_ARITHMETIC_Z3
+#ifdef SPICULE_ARITHMETIC_Z3
                      , eval::Assume
 #endif
                      > {
@@ -1242,7 +1242,7 @@ public:
         contains(typeInterval(Ctx, Dest),
                  expressionInterval(Cast->getSubExpr(), C)))
       return;
-#ifdef NTLIBC_ARITHMETIC_Z3
+#ifdef SPICULE_ARITHMETIC_Z3
     // The interval-only proof above gave up.  Ask the SizeCast-scoped Z3
     // bridge whether every range Clang's own engine has already narrowed
     // on this real path (PathState, not the report-only Outside state
@@ -1338,7 +1338,7 @@ public:
     C.emitReport(std::move(Report));
   }
 
-#ifdef NTLIBC_ARITHMETIC_Z3
+#ifdef SPICULE_ARITHMETIC_Z3
   // Records a relational fact so CastZ3Proof can assert it later.  This is
   // deliberately not limited to symbol-vs-symbol (SymSymExpr) comparisons:
   // empirically, getConstraintMap(State) -- the mechanism this file's
@@ -1366,10 +1366,10 @@ public:
 #endif
 };
 
-#ifdef NTLIBC_ARITHMETIC_Z3
-// A third Z3 bridge, scoped to ntlibc.ArrayIndex alone for the identical
+#ifdef SPICULE_ARITHMETIC_Z3
+// A third Z3 bridge, scoped to spicule.ArrayIndex alone for the identical
 // isolation reason CastZ3Engine/CastZ3Proof above document for
-// ntlibc.SizeCast: this extension can only ever change ArrayIndex's own
+// spicule.SizeCast: this extension can only ever change ArrayIndex's own
 // findings, never SizeCast's or arithub's.
 //
 // The obligation this proves is a different shape from either of this
@@ -1452,7 +1452,7 @@ class ArrayIndexZ3Proof {
     unsigned Width = AST.getIntWidth(Expression->getType());
     if (const auto *Data = dyn_cast<SymbolData>(Expression)) {
       std::string Name =
-          "ntlibc_arrayidx_sym_" + std::to_string(Data->getSymbolID());
+          "spicule_arrayidx_sym_" + std::to_string(Data->getSymbolID());
       return ZCtx.bv_const(Name.c_str(), Width);
     }
     if (const auto *Cast = dyn_cast<SymbolCast>(Expression)) {
@@ -1632,14 +1632,14 @@ public:
       return false;
     Solver.add(*Translated ==
               ZCtx.bv_val(0, Translated->get_sort().bv_size()));
-    return ntlibc::algebra::provesUnsatisfiable(Solver);
+    return spicule::algebra::provesUnsatisfiable(Solver);
   }
 };
 #endif
 
 class ArrayIndexChecker
     : public Checker<check::PreStmt<ArraySubscriptExpr>
-#ifdef NTLIBC_ARITHMETIC_Z3
+#ifdef SPICULE_ARITHMETIC_Z3
                      , eval::Assume
 #endif
                      > {
@@ -1659,7 +1659,7 @@ class ArrayIndexChecker
   // nothing new to the source and states nothing this checker did not
   // already effectively assume by leaving every such access unproven; it
   // only turns a permanent "cannot know" into a real bound.  This is the
-  // same trust boundary the file already relies on for ntlibc_arith_range
+  // same trust boundary the file already relies on for spicule_arith_range
   // (rangeContract() below) and for ordinary nonnull/alloc_size attributes:
   // a declared parameter contract is taken as an axiom, not independently
   // reverified.  A lie in the annotation is a lie this checker inherits
@@ -1727,7 +1727,7 @@ class ArrayIndexChecker
     return std::nullopt;
   }
 
-#ifdef NTLIBC_ARITHMETIC_Z3
+#ifdef SPICULE_ARITHMETIC_Z3
   // include/string.h's withtok(null_terminated) -- the identical per-
   // parameter trust boundary TotalityChecker.cpp's nullTerminatedParameter()
   // already reads off strlen/wcslen's own declaration for this exact literal
@@ -2043,7 +2043,7 @@ public:
         if (!ContractOutside)
           return;
       }
-#ifdef NTLIBC_ARITHMETIC_Z3
+#ifdef SPICULE_ARITHMETIC_Z3
       // Both DynamicExtent-based proofs above failed; try the
       // null-terminated-string structural invariant as a third,
       // independent route before concluding this access is unproven.
@@ -2073,7 +2073,7 @@ public:
     C.emitReport(std::move(Report));
   }
 
-#ifdef NTLIBC_ARITHMETIC_Z3
+#ifdef SPICULE_ARITHMETIC_Z3
   // Records a relational fact so ArrayIndexZ3Proof can assert it later --
   // the identical technique SizeCastChecker::evalAssume above uses for
   // CastZ3BranchFact, and for the identical reason: getConstraintMap(State)
@@ -2099,7 +2099,7 @@ static std::string arithmeticText(const Stmt *Statement, CheckerContext &C);
 static std::string arithmeticSite(const Expr *Expression, CheckerContext &C);
 static std::string arithmeticContext(CheckerContext &C);
 
-#ifdef NTLIBC_ARITHMETIC_Z3
+#ifdef SPICULE_ARITHMETIC_Z3
 // A deliberately small bridge from the range constraint manager to Z3.  It
 // translates only integer bit-vector expressions for which the Clang analyzer
 // records exact semantics.  Missing expressions merely omit a constraint, so
@@ -2130,13 +2130,13 @@ class ArithmeticZ3Proof {
   z3::context &ZCtx;
   z3::solver &Solver;
   ASTContext &AST;
-  ntlibc::algebra::ScalarSMT Algebra;
+  spicule::algebra::ScalarSMT Algebra;
 
   static bool isUnsigned(QualType Type) {
     return Type->isUnsignedIntegerOrEnumerationType();
   }
 
-  ntlibc::algebra::CType cType(QualType Type) const {
+  spicule::algebra::CType cType(QualType Type) const {
     // The analyzer's SymExpr operands have already undergone C's integer
     // promotions and usual arithmetic conversions.  Width orders all target
     // domains used here; the shared algebra retains an explicit rank so a
@@ -2176,23 +2176,23 @@ class ArithmeticZ3Proof {
   // -- only SymbolCast's inaccessible FromTy is not, which is why that node
   // is still rejected outright above.
   std::optional<std::pair<z3::expr, z3::expr>>
-  widenToCommon(const z3::expr &Left, ntlibc::algebra::CType LeftType,
-               const z3::expr &Right, ntlibc::algebra::CType RightType,
+  widenToCommon(const z3::expr &Left, spicule::algebra::CType LeftType,
+               const z3::expr &Right, spicule::algebra::CType RightType,
                QualType &CommonTypeOut) {
-    std::optional<ntlibc::algebra::CType> Common =
+    std::optional<spicule::algebra::CType> Common =
         Algebra.usualArithmeticType(LeftType, RightType);
     if (!Common)
       return std::nullopt;
     CommonTypeOut = AST.getIntTypeForBitwidth(Common->Width, !Common->Unsigned);
     if (CommonTypeOut.isNull())
       return std::nullopt;
-    std::optional<ntlibc::algebra::SemanticResult> LeftInput =
+    std::optional<spicule::algebra::SemanticResult> LeftInput =
         Algebra.input(Left, LeftType);
-    std::optional<ntlibc::algebra::SemanticResult> RightInput =
+    std::optional<spicule::algebra::SemanticResult> RightInput =
         Algebra.input(Right, RightType);
-    std::optional<ntlibc::algebra::SemanticResult> LeftWide =
+    std::optional<spicule::algebra::SemanticResult> LeftWide =
         LeftInput ? Algebra.convert(*LeftInput, *Common) : std::nullopt;
-    std::optional<ntlibc::algebra::SemanticResult> RightWide =
+    std::optional<spicule::algebra::SemanticResult> RightWide =
         RightInput ? Algebra.convert(*RightInput, *Common) : std::nullopt;
     if (!LeftWide || !RightWide)
       return std::nullopt;
@@ -2236,14 +2236,14 @@ class ArithmeticZ3Proof {
       case BO_Add:
       case BO_Sub:
       case BO_Mul: {
-        ntlibc::algebra::CType Type = cType(OperandType);
-        std::optional<ntlibc::algebra::SemanticResult> L =
+        spicule::algebra::CType Type = cType(OperandType);
+        std::optional<spicule::algebra::SemanticResult> L =
             Algebra.input(Left, Type);
-        std::optional<ntlibc::algebra::SemanticResult> R =
+        std::optional<spicule::algebra::SemanticResult> R =
             Algebra.input(Right, Type);
         if (!L || !R)
           return std::nullopt;
-        std::optional<ntlibc::algebra::SemanticResult> Result =
+        std::optional<spicule::algebra::SemanticResult> Result =
             Opcode == BO_Add    ? Algebra.addConverted(*L, *R)
             : Opcode == BO_Sub  ? Algebra.subtractConverted(*L, *R)
                                 : Algebra.multiplyConverted(*L, *R);
@@ -2342,7 +2342,7 @@ class ArithmeticZ3Proof {
           Left->get_sort().bv_size() != AST.getIntWidth(LeftType))
         return std::nullopt;
       const llvm::APSInt &RightValue = Binary->getRHS();
-      ntlibc::algebra::CType RightType{RightValue.getBitWidth(),
+      spicule::algebra::CType RightType{RightValue.getBitWidth(),
                                        RightValue.getBitWidth(),
                                        RightValue.isUnsigned()};
       z3::expr RightRaw = bitVector(RightValue, RightValue.getBitWidth());
@@ -2372,7 +2372,7 @@ class ArithmeticZ3Proof {
           Right->get_sort().bv_size() != AST.getIntWidth(RightType))
         return std::nullopt;
       const llvm::APSInt &LeftValue = Binary->getLHS();
-      ntlibc::algebra::CType LeftType{LeftValue.getBitWidth(),
+      spicule::algebra::CType LeftType{LeftValue.getBitWidth(),
                                       LeftValue.getBitWidth(),
                                       LeftValue.isUnsigned()};
       z3::expr LeftRaw = bitVector(LeftValue, LeftValue.getBitWidth());
@@ -2475,14 +2475,14 @@ public:
     if (!Left || !Right || Left->get_sort().bv_size() != Width ||
         Right->get_sort().bv_size() != Width)
       return false;
-    ntlibc::algebra::CType Domain = cType(Type);
-    std::optional<ntlibc::algebra::SemanticResult> L =
+    spicule::algebra::CType Domain = cType(Type);
+    std::optional<spicule::algebra::SemanticResult> L =
         Algebra.input(*Left, Domain);
-    std::optional<ntlibc::algebra::SemanticResult> R =
+    std::optional<spicule::algebra::SemanticResult> R =
         Algebra.input(*Right, Domain);
     if (!L || !R)
       return false;
-    std::optional<ntlibc::algebra::SemanticResult> Result =
+    std::optional<spicule::algebra::SemanticResult> Result =
         Subtract ? Algebra.subtract(*L, *R) : Algebra.add(*L, *R);
     if (!Result)
       return false;
@@ -2495,7 +2495,7 @@ public:
     Solver.add(Violation);
     // Only an UNSAT answer discharges the source obligation.  Timeout,
     // unknown, and an explicit counterexample all preserve the finding.
-    return ntlibc::algebra::provesUnsatisfiable(Solver);
+    return spicule::algebra::provesUnsatisfiable(Solver);
   }
 
   bool provesNoSignedUnitOverflow(NonLoc Value, const Expr *Source,
@@ -2505,16 +2505,16 @@ public:
     std::optional<z3::expr> Operand = translate(Value, Type);
     if (!Operand)
       return false;
-    ntlibc::algebra::CType Domain = cType(Type);
-    std::optional<ntlibc::algebra::SemanticResult> Input =
+    spicule::algebra::CType Domain = cType(Type);
+    std::optional<spicule::algebra::SemanticResult> Input =
         Algebra.input(*Operand, Domain);
     if (!Input)
       return false;
-    std::optional<ntlibc::algebra::SemanticResult> Result =
+    std::optional<spicule::algebra::SemanticResult> Result =
         Algebra.unitStep(*Input, Increasing);
     if (!Result)
       return false;
-    std::optional<ntlibc::algebra::SemanticResult> Stored =
+    std::optional<spicule::algebra::SemanticResult> Stored =
         Algebra.convert(*Result, Domain);
     if (!Stored)
       return false;
@@ -2530,7 +2530,7 @@ public:
     if (!Violation.is_bool())
       return false;
     Solver.add(Violation);
-    return ntlibc::algebra::provesUnsatisfiable(Solver);
+    return spicule::algebra::provesUnsatisfiable(Solver);
   }
 
   bool provesNoSignedNegationOverflow(NonLoc Value, const Expr *Source,
@@ -2540,9 +2540,9 @@ public:
     std::optional<z3::expr> Operand = translate(Value, Type);
     if (!Operand)
       return false;
-    std::optional<ntlibc::algebra::SemanticResult> Input =
+    std::optional<spicule::algebra::SemanticResult> Input =
         Algebra.input(*Operand, cType(Type));
-    std::optional<ntlibc::algebra::SemanticResult> Result =
+    std::optional<spicule::algebra::SemanticResult> Result =
         Input ? Algebra.negate(*Input) : std::nullopt;
     if (!Result)
       return false;
@@ -2550,7 +2550,7 @@ public:
     if (!Violation.is_bool())
       return false;
     Solver.add(Violation);
-    return ntlibc::algebra::provesUnsatisfiable(Solver);
+    return spicule::algebra::provesUnsatisfiable(Solver);
   }
 
   bool provesNoSignedDivisionOverflow(NonLoc LeftValue, const Expr *LeftSource,
@@ -2564,14 +2564,14 @@ public:
     std::optional<z3::expr> Right = translate(RightValue, Type);
     if (!Left || !Right)
       return false;
-    ntlibc::algebra::CType Domain = cType(Type);
-    std::optional<ntlibc::algebra::SemanticResult> L =
+    spicule::algebra::CType Domain = cType(Type);
+    std::optional<spicule::algebra::SemanticResult> L =
         Algebra.input(*Left, Domain);
-    std::optional<ntlibc::algebra::SemanticResult> R =
+    std::optional<spicule::algebra::SemanticResult> R =
         Algebra.input(*Right, Domain);
     if (!L || !R)
       return false;
-    std::optional<ntlibc::algebra::SemanticResult> Result =
+    std::optional<spicule::algebra::SemanticResult> Result =
         Remainder ? Algebra.remainderConverted(*L, *R)
                   : Algebra.divideConverted(*L, *R);
     if (!Result)
@@ -2582,7 +2582,7 @@ public:
     if (!Violation.is_bool())
       return false;
     Solver.add(Violation);
-    return ntlibc::algebra::provesUnsatisfiable(Solver);
+    return spicule::algebra::provesUnsatisfiable(Solver);
   }
 };
 
@@ -2601,7 +2601,7 @@ class SignedArithmeticChecker
                      check::PreStmt<UnaryOperator>,
                      check::PostStmt<BinaryOperator>,
                      check::PostStmt<DeclStmt>
-#ifdef NTLIBC_ARITHMETIC_Z3
+#ifdef SPICULE_ARITHMETIC_Z3
                      , eval::Assume
 #endif
                      > {
@@ -2651,7 +2651,7 @@ class SignedArithmeticChecker
         integerValue(Operation->getRHS(), Input, C);
     if (!Left || !Right)
       return true;
-#ifdef NTLIBC_ARITHMETIC_Z3
+#ifdef SPICULE_ARITHMETIC_Z3
     ArithmeticZ3Proof Z3(arithmeticZ3Engine(), Input, C.getASTContext());
     if (Z3.provesNoSignedAddSubOverflow(
             *Left, Operation->getLHS(), *Right, Operation->getRHS(), Type,
@@ -2705,7 +2705,7 @@ class SignedArithmeticChecker
     return false;
   }
 
-#ifdef NTLIBC_ARITHMETIC_Z3
+#ifdef SPICULE_ARITHMETIC_Z3
   static bool unitOverflowFeasible(const UnaryOperator *Operation,
                                    CheckerContext &C) {
     ProgramStateRef State = C.getState();
@@ -2881,7 +2881,7 @@ class SignedArithmeticChecker
   }
 
 public:
-#ifdef NTLIBC_ARITHMETIC_Z3
+#ifdef SPICULE_ARITHMETIC_Z3
   ProgramStateRef evalAssume(ProgramStateRef State, SVal Condition,
                              bool Assumption) const {
     SymbolRef Symbol = Condition.getAsSymbol();
@@ -3003,7 +3003,7 @@ public:
       MinusOne = -MinusOne;
       if (Left.Min <= Bounds.Min && Left.Max >= Bounds.Min &&
           Right.Min <= MinusOne && Right.Max >= MinusOne
-#ifdef NTLIBC_ARITHMETIC_Z3
+#ifdef SPICULE_ARITHMETIC_Z3
           && divisionOverflowFeasible(Operation, C)
 #endif
       )
@@ -3033,7 +3033,7 @@ public:
                       ? Operand.Max >= Bounds.Max
                       : Operand.Min <= Bounds.Min;
     if (Unsafe
-#ifdef NTLIBC_ARITHMETIC_Z3
+#ifdef SPICULE_ARITHMETIC_Z3
         && (Opcode == UO_Minus ? negationOverflowFeasible(Operation, C)
                                : unitOverflowFeasible(Operation, C))
 #endif
@@ -3129,7 +3129,7 @@ class ArithmeticContractChecker
   static std::optional<RangeContract> rangeContract(const ParmVarDecl *Param) {
     for (const AnnotateAttr *Attr : Param->specific_attrs<AnnotateAttr>()) {
       StringRef Text = Attr->getAnnotation();
-      if (!Text.consume_front("ntlibc_arith_range:"))
+      if (!Text.consume_front("spicule_arith_range:"))
         continue;
       auto Parts = Text.split(':');
       int64_t Minimum, Maximum;
@@ -3272,7 +3272,7 @@ class ArithmeticContractChecker
       for (const AnnotateAttr *Attr :
            Redeclaration->specific_attrs<AnnotateAttr>()) {
         StringRef Text = Attr->getAnnotation();
-        if (!Text.consume_front("ntlibc_arith_output_excludes_min:"))
+        if (!Text.consume_front("spicule_arith_output_excludes_min:"))
           continue;
         unsigned Parsed;
         if (Text.getAsInteger(10, Parsed))
@@ -3311,7 +3311,7 @@ class ArithmeticContractChecker
            Redeclaration->specific_attrs<AnnotateAttr>()) {
         StringRef Text = Attr->getAnnotation();
         if (!Text.consume_front(
-                "ntlibc_arith_nonzero_field_on_success:"))
+                "spicule_arith_nonzero_field_on_success:"))
           continue;
         auto Parts = Text.split(':');
         unsigned Argument;
@@ -3452,10 +3452,10 @@ public:
     const FunctionDecl *Function = function(Call);
     if (!Function || Function->getName() != "__free" ||
         Call.getNumArgs() != 1 || !Function->getReturnType()->isVoidType() ||
-        !hasAnnotation(Function, "ntlibc_arith_scalar_noop") ||
+        !hasAnnotation(Function, "spicule_arith_scalar_noop") ||
         !verifiedScalarNoop(Function))
       return false;
-    // ntlibc's internal __free is a one-line allocator wrapper.  It changes
+    // spicule's internal __free is a one-line allocator wrapper.  It changes
     // only allocation lifetime/allocator-private bookkeeping; it cannot
     // mutate the caller's scalar objects or globals.  The arithmetic stage
     // does not model heap lifetime, so treating this wrapper as an arithmetic
@@ -3471,7 +3471,7 @@ public:
     if (!Function)
       return;
     if (Function->getName() == "__free" &&
-        hasAnnotation(Function, "ntlibc_arith_scalar_noop") &&
+        hasAnnotation(Function, "spicule_arith_scalar_noop") &&
         !verifiedScalarNoop(Function)) {
       reportInvalidNoop(Function, C);
       return;
@@ -3942,7 +3942,7 @@ public:
  *
  * The proof obligation here -- "is it possible for this exact value to equal
  * one fixed literal" -- is a single-symbol equality query, not the
- * cross-symbol relational bound ntlibc.SizeCast's own CastZ3Proof exists for
+ * cross-symbol relational bound spicule.SizeCast's own CastZ3Proof exists for
  * (see CastZ3Engine's comment above for why THAT problem needs Z3: two
  * independently-bounded symbols compared to each other, which plain interval
  * arithmetic cannot combine). A fixed-literal equality is exactly what the
@@ -3952,8 +3952,8 @@ public:
  * OwnershipChecker.cpp's refineExcludedSentinel() already relies on for
  * sentinel_exclude(value)'s tokdef case, rather than adding a second,
  * disconnected proof engine. It still lives in this translation unit
- * alongside ntlibc.SizeCast/ntlibc.ArrayIndex, sharing their diagnostic
- * shape and BugReporter conventions, so a NTLIBC_ARITHMETIC_Z3 escalation
+ * alongside spicule.SizeCast/spicule.ArrayIndex, sharing their diagnostic
+ * shape and BugReporter conventions, so a SPICULE_ARITHMETIC_Z3 escalation
  * can be added here later without disturbing callers if a real relational
  * guard shape (e.g. "checked against another, independently-bounded
  * variable" rather than a literal) is ever found to need one. */
@@ -3965,7 +3965,7 @@ class IntegerSentinelChecker
   mutable std::unique_ptr<BugType> BT;
 
   static std::optional<int64_t> declSentinel(const Decl *Declaration) {
-    return Declaration ? ntlibc::algebra::scalarSentinel(Declaration)
+    return Declaration ? spicule::algebra::scalarSentinel(Declaration)
                        : std::nullopt;
   }
 
@@ -4063,7 +4063,7 @@ class IntegerSentinelChecker
     QualType Type = Value.getType(C.getASTContext());
     if (Type.isNull() || !Type->isIntegralOrEnumerationType())
       return;
-    ntlibc::algebra::SentinelSplit Split = ntlibc::algebra::splitOnExcludedSentinel(
+    spicule::algebra::SentinelSplit Split = spicule::algebra::splitOnExcludedSentinel(
         State, *Defined, Type, *Sentinel, C.getSValBuilder());
     if (!Split.Sentinel)
       return; // infeasible for Value to equal Sentinel: proven excluded.
@@ -4169,25 +4169,25 @@ extern "C" const char clang_analyzerAPIVersionString[] =
 
 extern "C" void clang_registerCheckers(CheckerRegistry &Registry) {
   Registry.addChecker<SizeCastChecker>(
-      "ntlibc.SizeCast", "Proves that explicit integer casts preserve values",
+      "spicule.SizeCast", "Proves that explicit integer casts preserve values",
       "");
   Registry.addChecker<ArrayIndexChecker>(
-      "ntlibc.ArrayIndex", "Proves that array indices are in bounds", "");
+      "spicule.ArrayIndex", "Proves that array indices are in bounds", "");
   Registry.addChecker<TaggedResultChecker>(
-      "ntlibc.TaggedResult",
+      "spicule.TaggedResult",
       "Proves that tagged normal and special result fields are selected", "");
   Registry.addChecker<DivisorChecker>(
-      "ntlibc.Divisor", "Proves that integer divisors are nonzero", "");
+      "spicule.Divisor", "Proves that integer divisors are nonzero", "");
   Registry.addChecker<ShiftCountChecker>(
-      "ntlibc.ShiftCount", "Proves that integer shift counts are in range", "");
+      "spicule.ShiftCount", "Proves that integer shift counts are in range", "");
   Registry.addChecker<SignedArithmeticChecker>(
-      "ntlibc.SignedArithmetic",
+      "spicule.SignedArithmetic",
       "Proves that signed arithmetic results are representable", "");
   Registry.addChecker<ArithmeticContractChecker>(
-      "ntlibc.ArithmeticContract",
+      "spicule.ArithmeticContract",
       "Enforces arithmetic parameter and successful-call contracts", "");
   Registry.addChecker<IntegerSentinelChecker>(
-      "ntlibc.IntegerSentinel",
+      "spicule.IntegerSentinel",
       "Proves integer_sentinel/long_sentinel values are ruled out before "
       "arithmetic, cast, or index use",
       "");

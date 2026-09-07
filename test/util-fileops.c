@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Black-box tests for ntlibc's `rm`, `cp` and `mv` (XCU rm(1p), cp(1p),
+ * Black-box tests for spicule's `rm`, `cp` and `mv` (XCU rm(1p), cp(1p),
  * mv(1p)) -- the second, higher-risk tier of POSIX standard utilities
  * after test/util-trivial.c's true/false/test.  Same shape as that file
  * (see its header): each standalone obj/bin/NAME.exe is spawned as a real
@@ -470,7 +470,7 @@ static void test_mv_nonexistent_source(void)
  * different volumes from inside a portable, sandboxed test process is
  * not generally possible -- there is no guaranteed second writable
  * volume/drive letter to target. This looks for one real environment
- * where ntlibc's own test infrastructure does produce one (Wine's `Z:`
+ * where spicule's own test infrastructure does produce one (Wine's `Z:`
  * passthrough to the host filesystem root, alongside the `C:`-drive
  * prefix obj/ is normally built under) and exercises the fallback for
  * real when it is present; otherwise it prints why it could not run,
@@ -492,7 +492,7 @@ static void test_mv_cross_filesystem(void)
 		return;
 	}
 
-	snprintf(probe_dir, sizeof probe_dir, "Z:\\ntlibc-fileops-test-%ld", (long)getpid());
+	snprintf(probe_dir, sizeof probe_dir, "Z:\\spicule-fileops-test-%ld", (long)getpid());
 	if (mkdir(probe_dir, 0700) != 0) {
 		printf("NOTE util-fileops: Z: is not writable here -- mv's EXDEV "
 		       "fallback path was not exercised\n");

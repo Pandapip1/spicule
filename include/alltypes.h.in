@@ -72,7 +72,7 @@ STRUCT timespec { time_t tv_sec; long tv_nsec; };
  * extensions strftime()'s %z/%Z read (src/time/strftime.c). */
 STRUCT tm { int tm_sec; int tm_min; int tm_hour; int tm_mday; int tm_mon; int tm_year; int tm_wday; int tm_yday; int tm_isdst; long __tm_gmtoff; const char *__tm_zone; };
 
-/* POSIX puts struct sched_param in <sched.h>; ntlibc's <sched.h>
+/* POSIX puts struct sched_param in <sched.h>; spicule's <sched.h>
  * deliberately declares nothing from the _POSIX_PRIORITY_SCHEDULING
  * option group, so the only header that defines it today is <spawn.h>,
  * whose posix_spawnattr_getschedparam()/_setschedparam() take one.  It

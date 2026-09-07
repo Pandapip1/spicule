@@ -10,7 +10,7 @@
  * (dlopen()/dlsym()/dlclose()/dlerror()) calls into instead of talking
  * to a platform loader directly.  See src/dlfcn/nt/plat_dlfcn.c (built
  * on ntdll's LdrLoadDll()/LdrGetProcedureAddress()/LdrUnloadDll() via
- * include/ntlibc/rpath.h) and src/dlfcn/linux/plat_dlfcn.c (a real,
+ * include/spicule/rpath.h) and src/dlfcn/linux/plat_dlfcn.c (a real,
  * from-scratch ELF64 loader -- see that file's own banner for the
  * design) for the two implementations these declare.  Same shape as
  * src/internal/plat_stat.h/plat_fcntl.h/plat_mem.h: one POSIX-facing
@@ -35,7 +35,7 @@
  * dlerror() ... shall return NULL" immediately after a prior call
  * already reported the same failure. Both backends instead keep their
  * error state STICKY (the NT backend inherits this from
- * ntlibc_rpath_error(), which stays sticky because other, older callers
+ * spicule_rpath_error(), which stays sticky because other, older callers
  * of that API already depend on it; the Linux backend below matches it
  * deliberately, for the same reason src/dlfcn/dlfcn.c's own dlerror()
  * banner gives: a sticky backend behind a single-shot front door is
@@ -54,8 +54,8 @@
  * implement single-shot semantics itself. src/dlfcn/dlfcn.c's dlerror()
  * is the only caller of either.
  */
-#ifndef _NTLIBC_PLAT_DLFCN_H
-#define _NTLIBC_PLAT_DLFCN_H
+#ifndef _SPICULE_PLAT_DLFCN_H
+#define _SPICULE_PLAT_DLFCN_H
 
 /* dlopen(): load `file` (or, if NULL, return a handle for the global/
  * main-image symbol set -- dlopen.html DESCRIPTION) with mode `mode`

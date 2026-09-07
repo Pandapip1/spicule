@@ -69,7 +69,7 @@ static int fails;
  * pthread_self.html, pthread_equal.html, pthread_detach.html
  * ================================================================== */
 
-#if NTLIBC_TEST(PASS, posix_pthread_create_join_value)
+#if SPICULE_TEST(PASS, posix_pthread_create_join_value)
 #include <pthread.h>
 
 static void *cj_start(void *arg)
@@ -108,7 +108,7 @@ static void test_pthread_create_join_value(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_pthread_detach_join_esrch)
+#if SPICULE_TEST(PASS, posix_pthread_detach_join_esrch)
 #include <pthread.h>
 #include <errno.h>
 
@@ -144,7 +144,7 @@ static void test_pthread_detach_join_esrch(void)
  * pthread_attr_get and pthread_attr_set pages
  * ================================================================== */
 
-#if NTLIBC_TEST(PASS, posix_pthread_attr_roundtrip)
+#if SPICULE_TEST(PASS, posix_pthread_attr_roundtrip)
 #include <pthread.h>
 #include <limits.h>
 #include <errno.h>
@@ -238,7 +238,7 @@ static void test_pthread_attr_roundtrip(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_pthread_cleanup_push_pop)
+#if SPICULE_TEST(PASS, posix_pthread_cleanup_push_pop)
 #include <pthread.h>
 
 static void cleanup_increment(void *argument)
@@ -267,7 +267,7 @@ static void test_pthread_cleanup_push_pop(void)
  * pthread_mutex_init.html, pthread_mutexattr_settype.html
  * ================================================================== */
 
-#if NTLIBC_TEST(PASS, posix_pthread_mutex_lock_unlock)
+#if SPICULE_TEST(PASS, posix_pthread_mutex_lock_unlock)
 #include <pthread.h>
 #include <semaphore.h>
 #include <errno.h>
@@ -338,7 +338,7 @@ static void test_pthread_mutex_lock_unlock(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_pthread_mutexattr_type_relock)
+#if SPICULE_TEST(PASS, posix_pthread_mutexattr_type_relock)
 #include <pthread.h>
 #include <errno.h>
 
@@ -392,7 +392,7 @@ static void test_pthread_mutexattr_type_relock(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_pthread_pshared_recursive_owner_after_fork)
+#if SPICULE_TEST(PASS, posix_pthread_pshared_recursive_owner_after_fork)
 #include <pthread.h>
 #include <sys/mman.h>
 #include <sys/wait.h>
@@ -442,7 +442,7 @@ static void test_pthread_pshared_recursive_owner_after_fork(void)
  * pthread_cond_timedwait.html, pthread_condattr_getclock.html
  * ================================================================== */
 
-#if NTLIBC_TEST(PASS, posix_pthread_cond_timedwait_etimedout)
+#if SPICULE_TEST(PASS, posix_pthread_cond_timedwait_etimedout)
 #include <pthread.h>
 #include <time.h>
 #include <errno.h>
@@ -520,7 +520,7 @@ static void test_pthread_cond_timedwait_etimedout(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_pthread_condattr_clock)
+#if SPICULE_TEST(PASS, posix_pthread_condattr_clock)
 #include <pthread.h>
 #include <time.h>
 
@@ -564,7 +564,7 @@ static void test_pthread_condattr_clock(void)
  * pthread_rwlock_rdlock.html, pthread_rwlock_wrlock.html
  * ================================================================== */
 
-#if NTLIBC_TEST(PASS, posix_pthread_rwlock_shared_read)
+#if SPICULE_TEST(PASS, posix_pthread_rwlock_shared_read)
 #include <pthread.h>
 #include <semaphore.h>
 #include <errno.h>
@@ -659,7 +659,7 @@ static void test_pthread_rwlock_shared_read(void)
  * pthread_barrier_wait.html  (Barriers option, _POSIX_BARRIERS)
  * ================================================================== */
 
-#if NTLIBC_TEST(PASS, posix_pthread_barrier_serial_thread)
+#if SPICULE_TEST(PASS, posix_pthread_barrier_serial_thread)
 #include <pthread.h>
 #include <errno.h>
 
@@ -721,7 +721,7 @@ static void test_pthread_barrier_serial_thread(void)
  * pthread_spin_lock.html  (Spin Locks option, _POSIX_SPIN_LOCKS)
  * ================================================================== */
 
-#if NTLIBC_TEST(PASS, posix_pthread_spin_lock_trylock)
+#if SPICULE_TEST(PASS, posix_pthread_spin_lock_trylock)
 #include <pthread.h>
 #include <errno.h>
 
@@ -755,7 +755,7 @@ static void test_pthread_spin_lock_trylock(void)
  * One-time initialization -- .../functions/pthread_once.html
  * ================================================================== */
 
-#if NTLIBC_TEST(PASS, posix_pthread_once_runs_once)
+#if SPICULE_TEST(PASS, posix_pthread_once_runs_once)
 #include <pthread.h>
 
 static pthread_once_t once_ctl = PTHREAD_ONCE_INIT;
@@ -788,7 +788,7 @@ static void test_pthread_once_runs_once(void)
  * pthread_getspecific.html
  * ================================================================== */
 
-#if NTLIBC_TEST(PASS, posix_pthread_specific_key)
+#if SPICULE_TEST(PASS, posix_pthread_specific_key)
 #include <pthread.h>
 
 static int tsd_destructor_calls;
@@ -854,7 +854,7 @@ static void test_pthread_specific_key(void)
  * pthread_setcancelstate.html, pthread_cleanup_push.html
  * ================================================================== */
 
-#if NTLIBC_TEST(PASS, posix_pthread_cancel_cleanup)
+#if SPICULE_TEST(PASS, posix_pthread_cancel_cleanup)
 #include <pthread.h>
 #include <semaphore.h>
 
@@ -884,7 +884,7 @@ static volatile int defer_cleanup_ran;
 static volatile int defer_operation_returned;
 
 /* Internal hooks used here to deterministically put a target in the same
- * cancellation-deferred region which protects ntlibc's state locks. */
+ * cancellation-deferred region which protects spicule's state locks. */
 void __pthread_cancel_defer_enter(void);
 void __pthread_cancel_defer_leave(void);
 
@@ -1062,7 +1062,7 @@ static void test_pthread_cancel_cleanup(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_pthread_cancel_huge_timeouts)
+#if SPICULE_TEST(PASS, posix_pthread_cancel_huge_timeouts)
 #include <pthread.h>
 #include <sched.h>
 #include <time.h>
@@ -1128,7 +1128,7 @@ static void test_pthread_cancel_huge_timeouts(void)
  * pthread_getconcurrency.html
  * ================================================================== */
 
-#if NTLIBC_TEST(PASS, posix_pthread_schedparam_self)
+#if SPICULE_TEST(PASS, posix_pthread_schedparam_self)
 #include <pthread.h>
 #include <sched.h>
 
@@ -1158,7 +1158,7 @@ static void test_pthread_schedparam_self(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_pthread_concurrency_default)
+#if SPICULE_TEST(PASS, posix_pthread_concurrency_default)
 #include <pthread.h>
 #include <errno.h>
 
@@ -1183,7 +1183,7 @@ static void test_pthread_concurrency_default(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_pthread_getcpuclockid)
+#if SPICULE_TEST(PASS, posix_pthread_getcpuclockid)
 #include <pthread.h>
 #include <time.h>
 
@@ -1213,7 +1213,7 @@ static void test_pthread_getcpuclockid(void)
  * .../functions/pthread_kill.html, pthread_sigmask.html
  * ================================================================== */
 
-#if NTLIBC_TEST(PASS, posix_pthread_sigmask_roundtrip)
+#if SPICULE_TEST(PASS, posix_pthread_sigmask_roundtrip)
 #include <signal.h>
 
 static void test_pthread_sigmask_roundtrip(void)
@@ -1240,7 +1240,7 @@ static void test_pthread_sigmask_roundtrip(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_pthread_kill_signal_zero)
+#if SPICULE_TEST(PASS, posix_pthread_kill_signal_zero)
 #include <signal.h>
 #include <pthread.h>
 #include <errno.h>

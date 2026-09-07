@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Fixtures for ntlibc.SizeCast's pointer-difference extension (see
+ * Fixtures for spicule.SizeCast's pointer-difference extension (see
  * tools/clang/SizeCastChecker.cpp's CastZ3Proof::
  * provesPointerDifferenceRepresentable() and the mismatched-width
  * SymSymExpr case its own translate() gained alongside it): a pointer

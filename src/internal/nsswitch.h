@@ -33,8 +33,8 @@
  * ones consistent with this pass having no directory-service backend
  * for passwd/group at all.
  */
-#ifndef _NTLIBC_NSSWITCH_H
-#define _NTLIBC_NSSWITCH_H
+#ifndef _SPICULE_NSSWITCH_H
+#define _SPICULE_NSSWITCH_H
 
 enum __nss_service {
 	__NSS_SVC_FILES,

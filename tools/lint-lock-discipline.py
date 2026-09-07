@@ -20,7 +20,7 @@ DIAGNOSTIC = re.compile(
     r"lock release is not proven to hold the lock|"
     r"condition wait is not proven to hold its mutex|lock is destroyed while held|"
     r"function exits while a lock is held); origin '(.*)'; context '(.*)'; "
-    r"expression '(.*)' \[ntlibc\.LockDiscipline\]$"
+    r"expression '(.*)' \[spicule\.LockDiscipline\]$"
 )
 
 

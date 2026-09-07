@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Black-box tests for ntlibc's text-formatting/file-splitting POSIX
+ * Black-box tests for spicule's text-formatting/file-splitting POSIX
  * standard utilities: `printf`, `od`, `pr`, `tabs`, `split`, `csplit`
  * (XCU printf(1p), od(1p), pr(1p), tabs(1p), split(1p), csplit(1p)).
  * Same technique as test/util-fsops.c: the standalone obj/bin/<name>.exe

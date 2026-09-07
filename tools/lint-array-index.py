@@ -17,7 +17,7 @@ FIXTURES = ROOT / "tools/lint-array-index-fixtures"
 DIAGNOSTIC = re.compile(
     r"^(.*?):(\d+):(\d+): warning: array index is not proven in bounds; "
     r"origin '(.*)'; context '(.*)'; subscript '(.*)'; site '(.*)' "
-    r"\[ntlibc\.ArrayIndex\]$"
+    r"\[spicule\.ArrayIndex\]$"
 )
 
 

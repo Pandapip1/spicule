@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: (C) 2026 Gavin John
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# lint.sh -- opt-in static checking for ntlibc.
+# lint.sh -- opt-in static checking for spicule.
 #
 # This is deliberately NOT part of `make all` or `make check`.  The library
 # itself is built with tcc, which accepts a great deal that gcc and clang
@@ -93,7 +93,7 @@
 #             Clang's own Thread Safety Analysis (-Wthread-safety), driven by
 #             capability/guarded_by/acquire_capability/release_capability
 #             attributes behind src/internal/thread_annotations.h's
-#             clang-and-lockset-stage-only macros, proves that ntlibc's own
+#             clang-and-lockset-stage-only macros, proves that spicule's own
 #             guarded internal globals are only ever touched while the
 #             internal lock that is supposed to protect them is held --
 #             the "which lock guards this data" question `locks` above does
@@ -103,7 +103,7 @@
 #   signals   on by default; checks directly registered signal handlers for
 #             async-signal-safe calls and volatile sig_atomic_t-only writes.
 #   errno     on by default; path-sensitively proves errno discipline in
-#             ntlibc's own implementation: every read of errno is reachable
+#             spicule's own implementation: every read of errno is reachable
 #             only from the call whose failure it is checking (no stale
 #             read after an intervening errno-capable call, e.g. a cleanup
 #             close()), and only after some call or direct assignment on
@@ -392,7 +392,7 @@ gen_alltypes() {
 }
 
 cppflags_for() {
-	echo "-std=c99 -nostdinc -fno-builtin -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_NTLIBC_INTERNAL" \
+	echo "-std=c99 -nostdinc -fno-builtin -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_SPICULE_INTERNAL" \
 	     "-Iarch/$1 -Iarch/generic -I$builddir/$1/include -Iinclude -Isrc/internal"
 }
 
@@ -801,7 +801,7 @@ stage_cppcheck() {
 		cppcheck --quiet --enable=warning,portability --std=c99 --max-configs=12 \
 			--inline-suppr --suppressions-list="$suppr" \
 			--error-exitcode=0 -j "$LINT_JOBS" \
-			-DNTLIBC_LINT=1 -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_NTLIBC_INTERNAL \
+			-DSPICULE_LINT=1 -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_SPICULE_INTERNAL \
 			"$arch_define" $asm_define \
 			-Iarch/"$arch" -Iarch/generic -I"$builddir/$arch/include" \
 			-Iinclude -Isrc/internal \
@@ -897,13 +897,13 @@ stage_sizearith() {
 		return $missing
 	fi
 
-	plugin=$builddir/ntlibc-size-cast-checker.so
-	# NTLIBC_ARITHMETIC_Z3 turns on both SizeCastChecker.cpp's own
+	plugin=$builddir/spicule-size-cast-checker.so
+	# SPICULE_ARITHMETIC_Z3 turns on both SizeCastChecker.cpp's own
 	# CastZ3Proof fallback (a same-width relational bound Clang's
 	# interval-only RangeConstraintManager cannot combine on its own --
 	# see CastZ3Proof's own comment) and arithub's ArithmeticZ3Proof; both
 	# checkers live in this one translation unit and this one plugin, the
-	# same way NTLIBC_OWNERSHIP_ANALYSIS below turns on ArrayIndex's
+	# same way SPICULE_OWNERSHIP_ANALYSIS below turns on ArrayIndex's
 	# elements_withtok contract reading.
 	#
 	# -fexceptions must follow --cxxflags, not precede it: --cxxflags
@@ -913,7 +913,7 @@ stage_sizearith() {
 	# llvm-config and pkg-config deliberately return shell words, not one
 	# argument.
 	# shellcheck disable=SC2046,SC2086
-	clang++-18 -fPIC -shared -DNTLIBC_ARITHMETIC_Z3 \
+	clang++-18 -fPIC -shared -DSPICULE_ARITHMETIC_Z3 \
 		$(llvm-config-18 --cxxflags) -fexceptions \
 		tools/clang/SizeCastChecker.cpp -o "$plugin" "$clang_cpp" \
 		$(llvm-config-18 --ldflags --libs --system-libs) $z3_flags || return 1
@@ -922,7 +922,7 @@ stage_sizearith() {
 	: > "$fixture_log"
 	for fixture in tools/lint-cast-range-fixtures/*.c; do
 		clang-18 --analyze -Xclang -load -Xclang "$plugin" \
-			-Xclang -analyzer-checker=ntlibc.SizeCast \
+			-Xclang -analyzer-checker=spicule.SizeCast \
 			-Xclang -analyzer-output=text "$fixture" -o /dev/null \
 			>> "$fixture_log" 2>&1 || any=1
 	done
@@ -930,7 +930,7 @@ stage_sizearith() {
 	: > "$array_fixture_log"
 	for fixture in tools/lint-array-index-fixtures/*.c; do
 		clang-18 --analyze -Xclang -load -Xclang "$plugin" \
-			-Xclang -analyzer-checker=ntlibc.ArrayIndex \
+			-Xclang -analyzer-checker=spicule.ArrayIndex \
 			-Xclang -analyzer-output=text "$fixture" -o /dev/null \
 			>> "$array_fixture_log" 2>&1 || any=1
 	done
@@ -938,7 +938,7 @@ stage_sizearith() {
 	: > "$tagged_fixture_log"
 	for fixture in tools/lint-tagged-result-fixtures/*.c; do
 		clang-18 --analyze -Xclang -load -Xclang "$plugin" \
-			-Xclang -analyzer-checker=ntlibc.TaggedResult \
+			-Xclang -analyzer-checker=spicule.TaggedResult \
 			-Xclang -analyzer-output=text "$fixture" -o /dev/null \
 			>> "$tagged_fixture_log" 2>&1 || any=1
 	done
@@ -946,7 +946,7 @@ stage_sizearith() {
 	: > "$sentinel_fixture_log"
 	for fixture in tools/lint-integer-sentinel-fixtures/*.c; do
 		clang-18 --analyze -Xclang -load -Xclang "$plugin" \
-			-Xclang -analyzer-checker=ntlibc.IntegerSentinel \
+			-Xclang -analyzer-checker=spicule.IntegerSentinel \
 			-Xclang -analyzer-output=text "$fixture" -o /dev/null \
 			>> "$sentinel_fixture_log" 2>&1 || any=1
 	done
@@ -961,10 +961,10 @@ stage_sizearith() {
 		out=$builddir/$arch.cast-range.log
 		pardir=$(mktemp -d "$builddir/cast-range.XXXXXX") || return 1
 		# Each analyzer owns a log, avoiding interleaved path diagnostics.
-		# NTLIBC_OWNERSHIP_ANALYSIS turns on include/ownership.h's
+		# SPICULE_OWNERSHIP_ANALYSIS turns on include/ownership.h's
 		# elements_withtok(token, extent) attribute, already written on
 		# every argc/argv-shaped utility entry point purely for
-		# OwnershipChecker's benefit.  ntlibc.ArrayIndex reads the same
+		# OwnershipChecker's benefit.  spicule.ArrayIndex reads the same
 		# attribute to learn a pointer parameter's element count where no
 		# statement in this translation unit could otherwise tell it one.
 		# shellcheck disable=SC2086,SC2016
@@ -973,8 +973,8 @@ stage_sizearith() {
 			id=$(printf %s "$f" | tr / _)
 			# shellcheck disable=SC2086
 			"$clang" $target --analyze -Xclang -load -Xclang "$plugin" \
-				-Xclang -analyzer-checker=ntlibc.SizeCast,ntlibc.ArrayIndex,ntlibc.TaggedResult,ntlibc.IntegerSentinel \
-				-DNTLIBC_OWNERSHIP_ANALYSIS \
+				-Xclang -analyzer-checker=spicule.SizeCast,spicule.ArrayIndex,spicule.TaggedResult,spicule.IntegerSentinel \
+				-DSPICULE_OWNERSHIP_ANALYSIS \
 				-Xclang -analyzer-output=text "$@" "$f" -o /dev/null \
 				> "'"$pardir"'/$id.log" 2>&1
 		' _ {} clang-18 "$plugin" "$target" $flags
@@ -1058,7 +1058,7 @@ stage_totality() {
 		return $missing
 	fi
 
-	plugin=$builddir/ntlibc-totality-checker.so
+	plugin=$builddir/spicule-totality-checker.so
 	# llvm-config and pkg-config deliberately return shell words, not one
 	# argument.
 	# shellcheck disable=SC2046,SC2086
@@ -1073,7 +1073,7 @@ stage_totality() {
 	for fixture in tools/lint-totality-fixtures/*.c; do
 		clang-18 -std=c99 -fsyntax-only \
 			-Xclang -load -Xclang "$plugin" \
-			-Xclang -add-plugin -Xclang ntlibc-totality "$fixture" \
+			-Xclang -add-plugin -Xclang spicule-totality "$fixture" \
 			>> "$fixture_log" 2>> "$fixture_err" || any=1
 	done
 	if [ -s "$fixture_err" ]; then
@@ -1112,8 +1112,8 @@ stage_totality() {
 			id=$(printf %s "$f" | tr / _)
 			# shellcheck disable=SC2086
 			"$clang" $target -fsyntax-only -Xclang -load -Xclang "$plugin" \
-				-Xclang -add-plugin -Xclang ntlibc-totality \
-				-DNTLIBC_OWNERSHIP_ANALYSIS "$@" "$f" \
+				-Xclang -add-plugin -Xclang spicule-totality \
+				-DSPICULE_OWNERSHIP_ANALYSIS "$@" "$f" \
 				> "'"$pardir"'/$id.log" 2> "'"$pardir"'/$id.err"
 		' _ {} clang-18 "$plugin" "$target" $flags
 		runrc=$?
@@ -1168,8 +1168,8 @@ stage_arithub() {
 		return $missing
 	fi
 
-	plugin=$builddir/ntlibc-arithmetic-ub-checker.so
-	algebra_test=$builddir/ntlibc-exact-c-scalar-smt-test
+	plugin=$builddir/spicule-arithmetic-ub-checker.so
+	algebra_test=$builddir/spicule-exact-c-scalar-smt-test
 	# llvm-config and pkg-config deliberately return shell words, not one
 	# argument.
 	# shellcheck disable=SC2046,SC2086
@@ -1184,21 +1184,21 @@ stage_arithub() {
 	# could not build its plugin at all, on any machine, until this was
 	# added; confirmed by removing the flag and reproducing the same
 	# "cannot use 'throw' with exceptions disabled" error in isolation.
-	clang++-18 -fPIC -shared -DNTLIBC_ARITHMETIC_Z3 \
+	clang++-18 -fPIC -shared -DSPICULE_ARITHMETIC_Z3 \
 		$(llvm-config-18 --cxxflags) -fexceptions \
 		tools/clang/SizeCastChecker.cpp -o "$plugin" "$clang_cpp" \
 		$(llvm-config-18 --ldflags --libs --system-libs) $z3_flags || return 1
 
 	# These built-ins add a same-operation assumption before a plugin's
-	# PreStmt callback.  Disable only the overlapping checks so ntlibc's
+	# PreStmt callback.  Disable only the overlapping checks so spicule's
 	# checkers prove their own obligations from the real current path state.
 	fixture_log=$builddir/arithmetic-ub-fixtures.log
 	: > "$fixture_log"
 	for fixture in tools/lint-arithmetic-ub-fixtures/*.c; do
 		clang-18 --analyze -Xclang -load -Xclang "$plugin" \
-			-Xclang -analyzer-checker=ntlibc.Divisor,ntlibc.ShiftCount,ntlibc.SignedArithmetic,ntlibc.ArithmeticContract \
+			-Xclang -analyzer-checker=spicule.Divisor,spicule.ShiftCount,spicule.SignedArithmetic,spicule.ArithmeticContract \
 			-Xclang -analyzer-disable-checker=core.DivideZero,core.BitwiseShift \
-			-Xclang -analyzer-output=text -DNTLIBC_ARITHMETIC_ANALYSIS "$fixture" -o /dev/null \
+			-Xclang -analyzer-output=text -DSPICULE_ARITHMETIC_ANALYSIS "$fixture" -o /dev/null \
 			>> "$fixture_log" 2>&1 || any=1
 	done
 	tools/lint-arithmetic-ub.py --fixtures "$fixture_log" || any=1
@@ -1218,9 +1218,9 @@ stage_arithub() {
 			id=$(printf %s "$f" | tr / _)
 			# shellcheck disable=SC2086
 			"$clang" $target --analyze -Xclang -load -Xclang "$plugin" \
-				-Xclang -analyzer-checker=ntlibc.Divisor,ntlibc.ShiftCount,ntlibc.SignedArithmetic,ntlibc.ArithmeticContract \
+				-Xclang -analyzer-checker=spicule.Divisor,spicule.ShiftCount,spicule.SignedArithmetic,spicule.ArithmeticContract \
 				-Xclang -analyzer-disable-checker=core.DivideZero,core.BitwiseShift \
-				-Xclang -analyzer-output=text -DNTLIBC_ARITHMETIC_ANALYSIS "$@" "$f" -o /dev/null \
+				-Xclang -analyzer-output=text -DSPICULE_ARITHMETIC_ANALYSIS "$@" "$f" -o /dev/null \
 				> "'"$pardir"'/$id.log" 2>&1
 		' _ {} clang-18 "$plugin" "$target" $flags
 		runrc=$?
@@ -1295,21 +1295,21 @@ stage_ownership() {
 	# carries LLVM's own -fno-exceptions, and the later flag wins (see
 	# stage_arithub's identical build for the same requirement -- z3++.h's
 	# `throw exception(...)` calls fail to compile without it).
-	memory_contract_cxxflags="-DNTLIBC_MEMORY_CONTRACT_Z3 -fexceptions"
+	memory_contract_cxxflags="-DSPICULE_MEMORY_CONTRACT_Z3 -fexceptions"
 
-	plugin=$builddir/ntlibc-ownership-checker.so
+	plugin=$builddir/spicule-ownership-checker.so
 	# llvm-config and pkg-config deliberately return shell words, not one
 	# argument.
 	# shellcheck disable=SC2046,SC2086
 	# -fexceptions must follow --cxxflags, not precede it: --cxxflags
 	# carries LLVM's own -fno-exceptions, and the later flag wins (see
 	# stage_arithub's identical build for the same requirement). Both
-	# NTLIBC_MEMORY_CONTRACT_Z3 (MemoryContractChecker.cpp's no-wrap side
-	# condition) and NTLIBC_OWNERSHIP_Z3 (OwnershipChecker.cpp's extent
+	# SPICULE_MEMORY_CONTRACT_Z3 (MemoryContractChecker.cpp's no-wrap side
+	# condition) and SPICULE_OWNERSHIP_Z3 (OwnershipChecker.cpp's extent
 	# bounds fallback) share this one -fexceptions, since z3++.h's `throw
 	# exception(...)` calls are compiled into this one translation unit
 	# either way.
-	clang++-18 -fPIC -shared -DOWNERSHIP_CHECKER_BUNDLE -DNTLIBC_OWNERSHIP_Z3 \
+	clang++-18 -fPIC -shared -DOWNERSHIP_CHECKER_BUNDLE -DSPICULE_OWNERSHIP_Z3 \
 		$(llvm-config-18 --cxxflags) $memory_contract_cxxflags \
 		tools/clang/OwnershipChecker.cpp \
 		tools/clang/AllocationLifetimeChecker.cpp \
@@ -1321,8 +1321,8 @@ stage_ownership() {
 	: > "$fixture_log"
 	for fixture in tools/lint-ownership-fixtures/*.c; do
 		clang-18 --analyze -Xclang -load -Xclang "$plugin" \
-			-Xclang -analyzer-checker=ntlibc.Ownership,ntlibc.OwnedConstruct,ntlibc.OwnershipContract,ntlibc.AggregateElementToken,ntlibc.CapabilityToken,ntlibc.OwnershipType,ntlibc.ValidPointer,ntlibc.Resource \
-			-DNTLIBC_OWNERSHIP_ANALYSIS \
+			-Xclang -analyzer-checker=spicule.Ownership,spicule.OwnedConstruct,spicule.OwnershipContract,spicule.AggregateElementToken,spicule.CapabilityToken,spicule.OwnershipType,spicule.ValidPointer,spicule.Resource \
+			-DSPICULE_OWNERSHIP_ANALYSIS \
 			-Xclang -analyzer-output=text "$fixture" -o /dev/null \
 			>> "$fixture_log" 2>&1 || any=1
 	done
@@ -1332,7 +1332,7 @@ stage_ownership() {
 	: > "$allocation_fixture_log"
 	for fixture in tools/lint-allocation-lifetime-fixtures/*.c; do
 		clang-18 --analyze -Xclang -load -Xclang "$plugin" \
-			-Xclang -analyzer-checker=ntlibc.AllocationLifetime \
+			-Xclang -analyzer-checker=spicule.AllocationLifetime \
 			-Xclang -analyzer-output=text "$fixture" -o /dev/null \
 			>> "$allocation_fixture_log" 2>&1 || any=1
 	done
@@ -1342,7 +1342,7 @@ stage_ownership() {
 	: > "$memory_fixture_log"
 	for fixture in tools/lint-memory-contract-fixtures/*.c; do
 		clang-18 --analyze -Xclang -load -Xclang "$plugin" \
-			-Xclang -analyzer-checker=ntlibc.MemoryContract \
+			-Xclang -analyzer-checker=spicule.MemoryContract \
 			-Xclang -analyzer-output=text "$fixture" -o /dev/null \
 			>> "$memory_fixture_log" 2>&1 || any=1
 	done
@@ -1371,15 +1371,15 @@ stage_ownership() {
 			# exploration budget needed by ownership/lifecycle proofs.
 			# shellcheck disable=SC2086
 			"$clang" $target --analyze -Xclang -load -Xclang "$plugin" \
-				-Xclang -analyzer-checker=ntlibc.Ownership,ntlibc.OwnedConstruct,ntlibc.OwnershipContract,ntlibc.AggregateElementToken,ntlibc.CapabilityToken,ntlibc.OwnershipType,ntlibc.Resource \
-				-DNTLIBC_OWNERSHIP_ANALYSIS \
+				-Xclang -analyzer-checker=spicule.Ownership,spicule.OwnedConstruct,spicule.OwnershipContract,spicule.AggregateElementToken,spicule.CapabilityToken,spicule.OwnershipType,spicule.Resource \
+				-DSPICULE_OWNERSHIP_ANALYSIS \
 				-Xclang -analyzer-output=text "$@" "$f" -o /dev/null \
 				> "$owner" 2>&1
 			owner_rc=$?
 			# Ownership also supplies allocation provenance to ValidPointer.
 			# shellcheck disable=SC2086
 			"$clang" $target --analyze -Xclang -load -Xclang "$plugin" \
-				-Xclang -analyzer-checker=ntlibc.Ownership,ntlibc.ValidPointer,ntlibc.MemoryContract \
+				-Xclang -analyzer-checker=spicule.Ownership,spicule.ValidPointer,spicule.MemoryContract \
 				-Xclang -analyzer-output=text "$@" "$f" -o /dev/null \
 				> "$pointer" 2>&1
 			pointer_rc=$?
@@ -1387,7 +1387,7 @@ stage_ownership() {
 			# consumes the same declaration axioms from this combined plugin.
 			# shellcheck disable=SC2086
 			"$clang" $target --analyze -Xclang -load -Xclang "$plugin" \
-				-Xclang -analyzer-checker=ntlibc.AllocationLifetime \
+				-Xclang -analyzer-checker=spicule.AllocationLifetime \
 				-Xclang -analyzer-output=text "$@" "$f" -o /dev/null \
 				> "$allocation" 2>&1
 			allocation_rc=$?
@@ -1441,9 +1441,9 @@ stage_ownership() {
 # Opt-in (not in requested_stages' default list, not in the CI matrix --
 # same landing pattern totality/sizearith/loopcond each used before their
 # own tree-wide backlog was triaged down to zero and only then promoted).
-# ResourceLeakChecker (ntlibc.ResourceLeak, tools/clang/OwnershipChecker.cpp)
-# is the leak-at-exit half split out of ntlibc.Resource: it only reads the
-# ResourceMap/ResourceOrigin/ResourceFrame facts ntlibc.Resource's own
+# ResourceLeakChecker (spicule.ResourceLeak, tools/clang/OwnershipChecker.cpp)
+# is the leak-at-exit half split out of spicule.Resource: it only reads the
+# ResourceMap/ResourceOrigin/ResourceFrame facts spicule.Resource's own
 # checkPostCall writes, so both checkers must be enabled together in the
 # same -analyzer-checker= invocation below for it to see anything -- run
 # alone it would silently find nothing, not prove anything.
@@ -1455,7 +1455,7 @@ stage_resourceleak() {
 	require_tool llvm-config-18 || return $missing
 	require_tool pkg-config || return $missing
 	if ! pkg-config --exists z3; then
-		report_missing "Z3 development headers and library are not installed, so ntlibc.ValidPointer's extent-bounds fallback (compiled into the same translation unit) cannot be built."
+		report_missing "Z3 development headers and library are not installed, so spicule.ValidPointer's extent-bounds fallback (compiled into the same translation unit) cannot be built."
 		return $missing
 	fi
 	if ! z3_flags=$(pkg-config --cflags --libs z3); then
@@ -1475,10 +1475,10 @@ stage_resourceleak() {
 	# stage rebuilds the identical three-file bundle stage_ownership does,
 	# to its own plugin path -- the two stages' builds are otherwise
 	# unrelated and safe to run concurrently.
-	plugin=$builddir/ntlibc-resourceleak-checker.so
+	plugin=$builddir/spicule-resourceleak-checker.so
 	# shellcheck disable=SC2046,SC2086
-	clang++-18 -fPIC -shared -DOWNERSHIP_CHECKER_BUNDLE -DNTLIBC_OWNERSHIP_Z3 \
-		$(llvm-config-18 --cxxflags) -DNTLIBC_MEMORY_CONTRACT_Z3 -fexceptions \
+	clang++-18 -fPIC -shared -DOWNERSHIP_CHECKER_BUNDLE -DSPICULE_OWNERSHIP_Z3 \
+		$(llvm-config-18 --cxxflags) -DSPICULE_MEMORY_CONTRACT_Z3 -fexceptions \
 		tools/clang/OwnershipChecker.cpp \
 		tools/clang/AllocationLifetimeChecker.cpp \
 		tools/clang/MemoryContractChecker.cpp \
@@ -1489,8 +1489,8 @@ stage_resourceleak() {
 	: > "$fixture_log"
 	for fixture in tools/lint-ownership-fixtures/*.c; do
 		clang-18 --analyze -Xclang -load -Xclang "$plugin" \
-			-Xclang -analyzer-checker=ntlibc.Resource,ntlibc.ResourceLeak \
-			-DNTLIBC_OWNERSHIP_ANALYSIS \
+			-Xclang -analyzer-checker=spicule.Resource,spicule.ResourceLeak \
+			-DSPICULE_OWNERSHIP_ANALYSIS \
 			-Xclang -analyzer-output=text "$fixture" -o /dev/null \
 			>> "$fixture_log" 2>&1 || any=1
 	done
@@ -1511,8 +1511,8 @@ stage_resourceleak() {
 			id=$(printf %s "$f" | tr / _)
 			# shellcheck disable=SC2086
 			"$clang" $target --analyze -Xclang -load -Xclang "$plugin" \
-				-Xclang -analyzer-checker=ntlibc.Resource,ntlibc.ResourceLeak \
-				-DNTLIBC_OWNERSHIP_ANALYSIS \
+				-Xclang -analyzer-checker=spicule.Resource,spicule.ResourceLeak \
+				-DSPICULE_OWNERSHIP_ANALYSIS \
 				-Xclang -analyzer-output=text "$@" "$f" -o /dev/null \
 				> "'"$pardir"'/$id.log" 2>&1
 		' _ {} clang-18 "$plugin" "$target" $flags
@@ -1542,7 +1542,7 @@ stage_initproof() {
 	libdir=$(llvm-config-18 --libdir)
 	clang_cpp=$(find "$libdir" -maxdepth 1 -name 'libclang-cpp.so.18*' -print 2>/dev/null | sort | head -n 1)
 	[ -n "$clang_cpp" ] || { report_missing "Clang 18 development libraries are required for initialization proofs."; return $missing; }
-	plugin=$builddir/ntlibc-initialization-checker.so
+	plugin=$builddir/spicule-initialization-checker.so
 	# shellcheck disable=SC2046
 	clang++-18 -fPIC -shared $(llvm-config-18 --cxxflags) \
 		tools/clang/InitializationChecker.cpp -o "$plugin" "$clang_cpp" \
@@ -1551,7 +1551,7 @@ stage_initproof() {
 	: > "$fixture_log"
 	for fixture in tools/lint-initialization-fixtures/*.c; do
 		clang-18 --analyze -Xclang -load -Xclang "$plugin" \
-			-Xclang -analyzer-checker=ntlibc.InitializedRead \
+			-Xclang -analyzer-checker=spicule.InitializedRead \
 			-Xclang -analyzer-output=text "$fixture" -o /dev/null \
 			>> "$fixture_log" 2>&1 || any=1
 	done
@@ -1570,7 +1570,7 @@ stage_initproof() {
 			id=$(printf %s "$f" | tr / _)
 			# shellcheck disable=SC2086
 			"$clang" $target --analyze -Xclang -load -Xclang "$plugin" \
-				-Xclang -analyzer-checker=ntlibc.InitializedRead \
+				-Xclang -analyzer-checker=spicule.InitializedRead \
 				-Xclang -analyzer-output=text "$@" "$f" -o /dev/null \
 				> "'"$pardir"'/$id.log" 2>&1
 		' _ {} clang-18 "$plugin" "$target" $flags
@@ -1597,7 +1597,7 @@ stage_fallible() {
 	libdir=$(llvm-config-18 --libdir)
 	clang_cpp=$(find "$libdir" -maxdepth 1 -name 'libclang-cpp.so.18*' -print 2>/dev/null | sort | head -n 1)
 	[ -n "$clang_cpp" ] || { report_missing "Clang 18 development libraries are required for fallible-result proofs."; return $missing; }
-	plugin=$builddir/ntlibc-fallible-result-checker.so
+	plugin=$builddir/spicule-fallible-result-checker.so
 	# shellcheck disable=SC2046
 	clang++-18 -fPIC -shared $(llvm-config-18 --cxxflags) \
 		tools/clang/FallibleResultChecker.cpp -o "$plugin" "$clang_cpp" \
@@ -1606,7 +1606,7 @@ stage_fallible() {
 	: > "$fixture_log"
 	for fixture in tools/lint-fallible-result-fixtures/*.c; do
 		clang-18 --analyze -Xclang -load -Xclang "$plugin" \
-			-Xclang -analyzer-checker=ntlibc.FallibleResult \
+			-Xclang -analyzer-checker=spicule.FallibleResult \
 			-Xclang -analyzer-output=text "$fixture" -o /dev/null \
 			>> "$fixture_log" 2>&1 || any=1
 	done
@@ -1625,7 +1625,7 @@ stage_fallible() {
 			id=$(printf %s "$f" | tr / _)
 			# shellcheck disable=SC2086
 			"$clang" $target --analyze -Xclang -load -Xclang "$plugin" \
-				-Xclang -analyzer-checker=ntlibc.FallibleResult \
+				-Xclang -analyzer-checker=spicule.FallibleResult \
 				-Xclang -analyzer-output=text "$@" "$f" -o /dev/null \
 				> "'"$pardir"'/$id.log" 2>&1
 		' _ {} clang-18 "$plugin" "$target" $flags
@@ -1652,7 +1652,7 @@ stage_provenance() {
 	libdir=$(llvm-config-18 --libdir)
 	clang_cpp=$(find "$libdir" -maxdepth 1 -name 'libclang-cpp.so.18*' -print 2>/dev/null | sort | head -n 1)
 	[ -n "$clang_cpp" ] || { report_missing "Clang 18 development libraries are required for provenance proofs."; return $missing; }
-	plugin=$builddir/ntlibc-pointer-provenance-checker.so
+	plugin=$builddir/spicule-pointer-provenance-checker.so
 	# shellcheck disable=SC2046
 	clang++-18 -fPIC -shared $(llvm-config-18 --cxxflags) \
 		tools/clang/PointerProvenanceChecker.cpp -o "$plugin" "$clang_cpp" \
@@ -1661,7 +1661,7 @@ stage_provenance() {
 	: > "$fixture_log"
 	for fixture in tools/lint-pointer-provenance-fixtures/*.c; do
 		clang-18 --analyze -Xclang -load -Xclang "$plugin" \
-			-Xclang -analyzer-checker=ntlibc.PointerProvenance \
+			-Xclang -analyzer-checker=spicule.PointerProvenance \
 			-Xclang -analyzer-output=text "$fixture" -o /dev/null \
 			>> "$fixture_log" 2>&1 || any=1
 	done
@@ -1680,7 +1680,7 @@ stage_provenance() {
 			id=$(printf %s "$f" | tr / _)
 			# shellcheck disable=SC2086
 			"$clang" $target --analyze -Xclang -load -Xclang "$plugin" \
-				-Xclang -analyzer-checker=ntlibc.PointerProvenance \
+				-Xclang -analyzer-checker=spicule.PointerProvenance \
 				-Xclang -analyzer-output=text "$@" "$f" -o /dev/null \
 				> "'"$pardir"'/$id.log" 2>&1
 		' _ {} clang-18 "$plugin" "$target" $flags
@@ -1707,7 +1707,7 @@ stage_locks() {
 	libdir=$(llvm-config-18 --libdir)
 	clang_cpp=$(find "$libdir" -maxdepth 1 -name 'libclang-cpp.so.18*' -print 2>/dev/null | sort | head -n 1)
 	[ -n "$clang_cpp" ] || { report_missing "Clang 18 development libraries are required for lock proofs."; return $missing; }
-	plugin=$builddir/ntlibc-lock-discipline-checker.so
+	plugin=$builddir/spicule-lock-discipline-checker.so
 	# shellcheck disable=SC2046
 	clang++-18 -fPIC -shared $(llvm-config-18 --cxxflags) \
 		tools/clang/LockDisciplineChecker.cpp -o "$plugin" "$clang_cpp" \
@@ -1716,7 +1716,7 @@ stage_locks() {
 	: > "$fixture_log"
 	for fixture in tools/lint-lock-discipline-fixtures/*.c; do
 		clang-18 --analyze -Xclang -load -Xclang "$plugin" \
-			-Xclang -analyzer-checker=ntlibc.LockDiscipline \
+			-Xclang -analyzer-checker=spicule.LockDiscipline \
 			-Xclang -analyzer-output=text "$fixture" -o /dev/null \
 			>> "$fixture_log" 2>&1 || any=1
 	done
@@ -1735,7 +1735,7 @@ stage_locks() {
 			id=$(printf %s "$f" | tr / _)
 			# shellcheck disable=SC2086
 			"$clang" $target --analyze -Xclang -load -Xclang "$plugin" \
-				-Xclang -analyzer-checker=ntlibc.LockDiscipline \
+				-Xclang -analyzer-checker=spicule.LockDiscipline \
 				-Xclang -analyzer-output=text "$@" "$f" -o /dev/null \
 				> "'"$pardir"'/$id.log" 2>&1
 		' _ {} clang-18 "$plugin" "$target" $flags
@@ -1759,9 +1759,9 @@ stage_locks() {
 # its diagnostics are the ground truth, so this is a plain -fsyntax-only
 # flags-only pass, structurally the closest thing in this file to
 # stage_warn()/stage_variadic() rather than to stage_locks()/
-# stage_signals(). NTLIBC_LOCKSET_ANALYSIS is the macro
+# stage_signals(). SPICULE_LOCKSET_ANALYSIS is the macro
 # thread_annotations.h requires (on top of __clang__) before any
-# NTLIBC_* annotation macro emits a real attribute at all; every other
+# SPICULE_* annotation macro emits a real attribute at all; every other
 # clang-based stage in this file compiles the same tree without it and so
 # never sees these attributes.
 stage_lockset() {
@@ -1777,7 +1777,7 @@ stage_lockset() {
 	# "argument unused during compilation" -- warning noise from the
 	# wrapper, unrelated to thread safety, that would otherwise trip the
 	# safe.c fixture's "must compile silent" check below on Nix alone.
-	lockset_flags="-DNTLIBC_LOCKSET_ANALYSIS -Wthread-safety -Wthread-safety-analysis -Wthread-safety-precise -Wno-unused-function -c"
+	lockset_flags="-DSPICULE_LOCKSET_ANALYSIS -Wthread-safety -Wthread-safety-analysis -Wthread-safety-precise -Wno-unused-function -c"
 	fixture_log=$builddir/lockset-fixtures.log
 	: > "$fixture_log"
 	# Two fixtures, two expectations: the correctly guarded one must stay
@@ -1849,7 +1849,7 @@ stage_abizeroinit() {
 	libdir=$(llvm-config-18 --libdir)
 	clang_cpp=$(find "$libdir" -maxdepth 1 -name 'libclang-cpp.so.18*' -print 2>/dev/null | sort | head -n 1)
 	[ -n "$clang_cpp" ] || { report_missing "Clang 18 development libraries are required for ABI zero-init proofs."; return $missing; }
-	plugin=$builddir/ntlibc-abi-zeroinit-checker.so
+	plugin=$builddir/spicule-abi-zeroinit-checker.so
 	# shellcheck disable=SC2046
 	clang++-18 -fPIC -shared $(llvm-config-18 --cxxflags) \
 		tools/clang/AbiZeroInitChecker.cpp -o "$plugin" "$clang_cpp" \
@@ -1858,7 +1858,7 @@ stage_abizeroinit() {
 	: > "$fixture_log"
 	for fixture in tools/lint-abi-zeroinit-fixtures/*.c; do
 		clang-18 --analyze -Xclang -load -Xclang "$plugin" \
-			-Xclang -analyzer-checker=ntlibc.AbiZeroInit \
+			-Xclang -analyzer-checker=spicule.AbiZeroInit \
 			-Xclang -analyzer-output=text "$fixture" -o /dev/null \
 			>> "$fixture_log" 2>&1 || any=1
 	done
@@ -1877,7 +1877,7 @@ stage_abizeroinit() {
 			id=$(printf %s "$f" | tr / _)
 			# shellcheck disable=SC2086
 			"$clang" $target --analyze -Xclang -load -Xclang "$plugin" \
-				-Xclang -analyzer-checker=ntlibc.AbiZeroInit \
+				-Xclang -analyzer-checker=spicule.AbiZeroInit \
 				-Xclang -analyzer-output=text "$@" "$f" -o /dev/null \
 				> "'"$pardir"'/$id.log" 2>&1
 		' _ {} clang-18 "$plugin" "$target" $flags
@@ -1945,7 +1945,7 @@ stage_signals() {
 	libdir=$(llvm-config-18 --libdir)
 	clang_cpp=$(find "$libdir" -maxdepth 1 -name 'libclang-cpp.so.18*' -print 2>/dev/null | sort | head -n 1)
 	[ -n "$clang_cpp" ] || { report_missing "Clang 18 development libraries are required for signal-safety proofs."; return $missing; }
-	plugin=$builddir/ntlibc-signal-safety-checker.so
+	plugin=$builddir/spicule-signal-safety-checker.so
 	# shellcheck disable=SC2046
 	clang++-18 -fPIC -shared $(llvm-config-18 --cxxflags) \
 		tools/clang/SignalSafetyChecker.cpp -o "$plugin" "$clang_cpp" \
@@ -1955,12 +1955,12 @@ stage_signals() {
 	# This stage's plugin is a plain -fsyntax-only PluginASTAction, not a
 	# clang --analyze checker, so clang never predefines __clang_analyzer__
 	# here (see stage_totality's identical note) -- without
-	# -DNTLIBC_OWNERSHIP_ANALYSIS, include/ownership.h's async_signal_safe
+	# -DSPICULE_OWNERSHIP_ANALYSIS, include/ownership.h's async_signal_safe
 	# annotation goes dark and asyncSafe() finds nothing on any callee.
 	for fixture in tools/lint-signal-safety-fixtures/*.c; do
 		clang-18 -fsyntax-only -Xclang -load -Xclang "$plugin" \
-			-Xclang -add-plugin -Xclang ntlibc-signal-safety \
-			-DNTLIBC_OWNERSHIP_ANALYSIS "$fixture" \
+			-Xclang -add-plugin -Xclang spicule-signal-safety \
+			-DSPICULE_OWNERSHIP_ANALYSIS "$fixture" \
 			>> "$fixture_log" 2>&1 || any=1
 	done
 	tools/lint-signal-safety.py --fixtures "$fixture_log" || any=1
@@ -1978,8 +1978,8 @@ stage_signals() {
 			id=$(printf %s "$f" | tr / _)
 			# shellcheck disable=SC2086
 			"$clang" $target -fsyntax-only -Xclang -load -Xclang "$plugin" \
-				-Xclang -add-plugin -Xclang ntlibc-signal-safety \
-				-DNTLIBC_OWNERSHIP_ANALYSIS "$@" "$f" \
+				-Xclang -add-plugin -Xclang spicule-signal-safety \
+				-DSPICULE_OWNERSHIP_ANALYSIS "$@" "$f" \
 				> "'"$pardir"'/$id.log" 2>&1
 		' _ {} clang-18 "$plugin" "$target" $flags
 		runrc=$?; nlog=$(find "$pardir" -name '*.log' | grep -c . || true)
@@ -2005,7 +2005,7 @@ stage_errno() {
 	libdir=$(llvm-config-18 --libdir)
 	clang_cpp=$(find "$libdir" -maxdepth 1 -name 'libclang-cpp.so.18*' -print 2>/dev/null | sort | head -n 1)
 	[ -n "$clang_cpp" ] || { report_missing "Clang 18 development libraries are required for errno-discipline proofs."; return $missing; }
-	plugin=$builddir/ntlibc-errno-discipline-checker.so
+	plugin=$builddir/spicule-errno-discipline-checker.so
 	# shellcheck disable=SC2046
 	clang++-18 -fPIC -shared $(llvm-config-18 --cxxflags) \
 		tools/clang/ErrnoDisciplineChecker.cpp -o "$plugin" "$clang_cpp" \
@@ -2014,7 +2014,7 @@ stage_errno() {
 	: > "$fixture_log"
 	for fixture in tools/lint-errno-discipline-fixtures/*.c; do
 		clang-18 --analyze -Xclang -load -Xclang "$plugin" \
-			-Xclang -analyzer-checker=ntlibc.ErrnoDiscipline \
+			-Xclang -analyzer-checker=spicule.ErrnoDiscipline \
 			-Xclang -analyzer-output=text "$fixture" -o /dev/null \
 			>> "$fixture_log" 2>&1 || any=1
 	done
@@ -2033,7 +2033,7 @@ stage_errno() {
 			id=$(printf %s "$f" | tr / _)
 			# shellcheck disable=SC2086
 			"$clang" $target --analyze -Xclang -load -Xclang "$plugin" \
-				-Xclang -analyzer-checker=ntlibc.ErrnoDiscipline \
+				-Xclang -analyzer-checker=spicule.ErrnoDiscipline \
 				-Xclang -analyzer-output=text "$@" "$f" -o /dev/null \
 				> "'"$pardir"'/$id.log" 2>&1
 		' _ {} clang-18 "$plugin" "$target" $flags
@@ -2060,7 +2060,7 @@ stage_reentrancy() {
 	libdir=$(llvm-config-18 --libdir)
 	clang_cpp=$(find "$libdir" -maxdepth 1 -name 'libclang-cpp.so.18*' -print 2>/dev/null | sort | head -n 1)
 	[ -n "$clang_cpp" ] || { report_missing "Clang 18 development libraries are required for reentrancy proofs."; return $missing; }
-	plugin=$builddir/ntlibc-reentrancy-checker.so
+	plugin=$builddir/spicule-reentrancy-checker.so
 	# shellcheck disable=SC2046
 	clang++-18 -fPIC -shared $(llvm-config-18 --cxxflags) \
 		tools/clang/ReentrancyChecker.cpp -o "$plugin" "$clang_cpp" \
@@ -2069,7 +2069,7 @@ stage_reentrancy() {
 	: > "$fixture_log"
 	for fixture in tools/lint-reentrancy-fixtures/*.c; do
 		clang-18 --analyze -Xclang -load -Xclang "$plugin" \
-			-Xclang -analyzer-checker=ntlibc.Reentrancy \
+			-Xclang -analyzer-checker=spicule.Reentrancy \
 			-Xclang -analyzer-output=text "$fixture" -o /dev/null \
 			>> "$fixture_log" 2>&1 || any=1
 	done
@@ -2088,7 +2088,7 @@ stage_reentrancy() {
 			id=$(printf %s "$f" | tr / _)
 			# shellcheck disable=SC2086
 			"$clang" $target --analyze -Xclang -load -Xclang "$plugin" \
-				-Xclang -analyzer-checker=ntlibc.Reentrancy \
+				-Xclang -analyzer-checker=spicule.Reentrancy \
 				-Xclang -analyzer-output=text "$@" "$f" -o /dev/null \
 				> "'"$pardir"'/$id.log" 2>&1
 		' _ {} clang-18 "$plugin" "$target" $flags
@@ -2115,7 +2115,7 @@ stage_purity() {
 	libdir=$(llvm-config-18 --libdir)
 	clang_cpp=$(find "$libdir" -maxdepth 1 -name 'libclang-cpp.so.18*' -print 2>/dev/null | sort | head -n 1)
 	[ -n "$clang_cpp" ] || { report_missing "Clang 18 development libraries are required for purity proofs."; return $missing; }
-	plugin=$builddir/ntlibc-purity-checker.so
+	plugin=$builddir/spicule-purity-checker.so
 	# shellcheck disable=SC2046
 	clang++-18 -fPIC -shared $(llvm-config-18 --cxxflags) \
 		tools/clang/PurityChecker.cpp -o "$plugin" "$clang_cpp" \
@@ -2124,7 +2124,7 @@ stage_purity() {
 	: > "$fixture_log"
 	for fixture in tools/lint-purity-fixtures/*.c; do
 		clang-18 --analyze -Xclang -load -Xclang "$plugin" \
-			-Xclang -analyzer-checker=ntlibc.Purity \
+			-Xclang -analyzer-checker=spicule.Purity \
 			-Xclang -analyzer-output=text "$fixture" -o /dev/null \
 			>> "$fixture_log" 2>&1 || any=1
 	done
@@ -2143,7 +2143,7 @@ stage_purity() {
 			id=$(printf %s "$f" | tr / _)
 			# shellcheck disable=SC2086
 			"$clang" $target --analyze -Xclang -load -Xclang "$plugin" \
-				-Xclang -analyzer-checker=ntlibc.Purity \
+				-Xclang -analyzer-checker=spicule.Purity \
 				-Xclang -analyzer-output=text "$@" "$f" -o /dev/null \
 				> "'"$pardir"'/$id.log" 2>&1
 		' _ {} clang-18 "$plugin" "$target" $flags
@@ -2170,7 +2170,7 @@ stage_loopcond() {
 	libdir=$(llvm-config-18 --libdir)
 	clang_cpp=$(find "$libdir" -maxdepth 1 -name 'libclang-cpp.so.18*' -print 2>/dev/null | sort | head -n 1)
 	[ -n "$clang_cpp" ] || { report_missing "Clang 18 development libraries are required for loop-condition analysis."; return $missing; }
-	plugin=$builddir/ntlibc-loopcond-checker.so
+	plugin=$builddir/spicule-loopcond-checker.so
 	# shellcheck disable=SC2046
 	clang++-18 -fPIC -shared $(llvm-config-18 --cxxflags) \
 		tools/clang/LoopConditionChecker.cpp -o "$plugin" "$clang_cpp" \
@@ -2179,7 +2179,7 @@ stage_loopcond() {
 	: > "$fixture_log"
 	for fixture in tools/lint-loopcond-fixtures/*.c; do
 		clang-18 --analyze -Xclang -load -Xclang "$plugin" \
-			-Xclang -analyzer-checker=ntlibc.LoopCondition \
+			-Xclang -analyzer-checker=spicule.LoopCondition \
 			-Xclang -analyzer-output=text "$fixture" -o /dev/null \
 			>> "$fixture_log" 2>&1 || any=1
 	done
@@ -2198,7 +2198,7 @@ stage_loopcond() {
 			id=$(printf %s "$f" | tr / _)
 			# shellcheck disable=SC2086
 			"$clang" $target --analyze -Xclang -load -Xclang "$plugin" \
-				-Xclang -analyzer-checker=ntlibc.LoopCondition \
+				-Xclang -analyzer-checker=spicule.LoopCondition \
 				-Xclang -analyzer-output=text "$@" "$f" -o /dev/null \
 				> "'"$pardir"'/$id.log" 2>&1
 		' _ {} clang-18 "$plugin" "$target" $flags

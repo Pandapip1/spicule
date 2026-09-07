@@ -12,7 +12,7 @@
  *
  * write.html ERRORS: "[EPIPE] An attempt is made to write to a pipe or
  * FIFO that is not open for reading by any process, or that has only one
- * end open. A SIGPIPE signal shall also be sent to the thread."  ntlibc
+ * end open. A SIGPIPE signal shall also be sent to the thread."  spicule
  * implements both halves -- src/unistd/write.c turns STATUS_PIPE_BROKEN
  * (0xC00000B1, read directly out of NtWriteFile, not inferred back
  * through the many-to-one map in src/internal/errno.c) into

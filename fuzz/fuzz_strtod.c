@@ -103,9 +103,9 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 	(void)strtold(buf, &end);
 
 	/* --- strtoll, in every base ---------------------------------------
-	 * strtoll and not strtol: ntlibc targets LLP64, so its LONG_MAX is
+	 * strtoll and not strtol: spicule targets LLP64, so its LONG_MAX is
 	 * 0x7fffffff (arch/x86_64/bits/limits.h), while a native build gives
-	 * `long` 64 bits.  ntlibc's strtol therefore saturates at 2^31-1 here
+	 * `long` 64 bits.  spicule's strtol therefore saturates at 2^31-1 here
 	 * and glibc's does not -- an ABI difference, not a defect, and not
 	 * something a native differential test can say anything about.
 	 * LLONG_MAX is the same on both, so strtoll is comparable. */

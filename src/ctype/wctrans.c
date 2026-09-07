@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * wctrans.html: "the following character mapping names are defined in
- * all locales: tolower toupper" -- ntlibc's one locale defines no
+ * all locales: tolower toupper" -- spicule's one locale defines no
  * others.  Encoding (1 = tolower, 2 = toupper) is consumed by the
  * matching switch in towctrans.c. */
 #include <wctype.h>

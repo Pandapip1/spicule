@@ -6573,4 +6573,4 @@ protected:
 } // namespace
 
 static FrontendPluginRegistry::Add<TotalityAction>
-    X("ntlibc-totality", "emit ntlibc totality proof inputs");
+    X("spicule-totality", "emit spicule totality proof inputs");

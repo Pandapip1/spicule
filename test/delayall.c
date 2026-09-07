@@ -2,13 +2,13 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Proof that an *unmodified* program -- a plain `extern` declaration,
- * an ordinary call site, nothing ntlibc-specific at the call site at
+ * an ordinary call site, nothing spicule-specific at the call site at
  * all -- gets $ORIGIN-relative delay loading when built with
  * -Wl,--delay-all, through the linker-generated thunks and
  * __delayLoadHelper2 (crt/delayload2.c), not through
- * include/ntlibc/delayload.h's hand-authored NTLIBC_DELAY_STUB macros
+ * include/spicule/delayload.h's hand-authored SPICULE_DELAY_STUB macros
  * (that facility is exercised separately by test/rpath.c). This is the
- * only ntlibc-specific thing this file contains: the well-known
+ * only spicule-specific thing this file contains: the well-known
  * __rpath array rpath.h documents every delay-loading program defining
  * regardless of which of the two mechanisms it uses -- a plain data
  * declaration, not a macro or a wrapper call.
@@ -39,7 +39,7 @@
  * the Makefile places delayall-plugin.dll right alongside this .exe. */
 const char *const __rpath[] = { ".", 0 };
 
-/* No NTLIBC_DELAY_DLL/NTLIBC_DELAY_STUB, no ntlibc/delayload.h at all --
+/* No SPICULE_DELAY_DLL/SPICULE_DELAY_STUB, no spicule/delayload.h at all --
  * exactly the extern declaration an unmodified program would write for
  * a function it expects to find in some DLL. */
 extern int delayall_check(int a, int b, int c, int d, double e, double f);

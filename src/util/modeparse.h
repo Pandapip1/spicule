@@ -43,8 +43,8 @@
  * backend applies the process umask a second time unconditionally --
  * see src/util/mkdir_util.c's own comment on that interaction).
  */
-#ifndef _NTLIBC_UTIL_MODEPARSE_H
-#define _NTLIBC_UTIL_MODEPARSE_H
+#ifndef _SPICULE_UTIL_MODEPARSE_H
+#define _SPICULE_UTIL_MODEPARSE_H
 
 #include <sys/stat.h>
 

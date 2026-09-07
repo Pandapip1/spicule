@@ -4,8 +4,8 @@
  * Cross-process signal delivery, phase 1.
  *
  * Every process that has run __signal_init() owns a named pipe
- * (\Device\NamedPipe\ntlibc-sig.<pid>) and a dedicated thread blocked
- * reading it. kill() to another ntlibc process writes a packet to that
+ * (\Device\NamedPipe\spicule-sig.<pid>) and a dedicated thread blocked
+ * reading it. kill() to another spicule process writes a packet to that
  * pipe instead of guessing its disposition; the target's own delivery
  * thread queues it, and an eligible application thread drains it at a
  * signal-aware safe point under its own sigprocmask().
@@ -47,7 +47,7 @@
  * __raise_internal() call; __raise_internal() itself assumes the caller
  * already holds it. */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -110,12 +110,12 @@ void __sig_notify_delivery(void)
 	if (wake_event) __plat_event_set(wake_event);
 }
 
-/* NTLIBC_NO_THREAD_SAFETY_ANALYSIS: this and the next three functions are
- * __ntlibc_sig_lock_token's actual implementation over the raw NT primitives
+/* SPICULE_NO_THREAD_SAFETY_ANALYSIS: this and the next three functions are
+ * __spicule_sig_lock_token's actual implementation over the raw NT primitives
  * (lock_event/lock_owner/lock_depth), which a lockset checker cannot see
  * through; every caller still sees the ACQUIRE()/RELEASE() contract from
  * libc.h. */
-void __sig_lock(void) NTLIBC_NO_THREAD_SAFETY_ANALYSIS
+void __sig_lock(void) SPICULE_NO_THREAD_SAFETY_ANALYSIS
 {
 	pid_t me;
 	if (!lock_event) return;
@@ -133,7 +133,7 @@ void __sig_lock(void) NTLIBC_NO_THREAD_SAFETY_ANALYSIS
 	lock_depth = 1;
 }
 
-void __sig_unlock(void) NTLIBC_NO_THREAD_SAFETY_ANALYSIS
+void __sig_unlock(void) SPICULE_NO_THREAD_SAFETY_ANALYSIS
 {
 	LONG prev;
 	if (!lock_event) return;
@@ -150,7 +150,7 @@ void __sig_unlock(void) NTLIBC_NO_THREAD_SAFETY_ANALYSIS
  * threads make progress while the handler runs. Preserve recursion depth so
  * the internal caller which eventually unwinds still owns exactly the
  * acquisitions it made before the callback. */
-int __sig_unlock_for_handler(void) NTLIBC_NO_THREAD_SAFETY_ANALYSIS
+int __sig_unlock_for_handler(void) SPICULE_NO_THREAD_SAFETY_ANALYSIS
 {
 	LONG previous;
 	int depth;
@@ -162,18 +162,18 @@ int __sig_unlock_for_handler(void) NTLIBC_NO_THREAD_SAFETY_ANALYSIS
 	return depth;
 }
 
-void __sig_relock_after_handler(int depth) NTLIBC_NO_THREAD_SAFETY_ANALYSIS
+void __sig_relock_after_handler(int depth) SPICULE_NO_THREAD_SAFETY_ANALYSIS
 {
 	if (!lock_event || depth <= 0) return;
 	__sig_lock();
 	lock_depth = depth;
 }
 
-/* \Device\NamedPipe\ntlibc-sig.<pid, 8 hex digits> -- one signal pipe per
+/* \Device\NamedPipe\spicule-sig.<pid, 8 hex digits> -- one signal pipe per
  * process, named by the pid kill()'s caller already has in hand. */
 static void sig_pipe_name(pid_t pid, WCHAR *name, UNICODE_STRING *us)
 {
-	static const char pfx[] = "\\Device\\NamedPipe\\ntlibc-sig.";
+	static const char pfx[] = "\\Device\\NamedPipe\\spicule-sig.";
 	int i = 0;
 
 	for (; pfx[i]; i++) name[i] = (unsigned char)pfx[i];
@@ -194,7 +194,7 @@ static void sig_pipe_name(pid_t pid, WCHAR *name, UNICODE_STRING *us)
  * name and is released by the kernel if a sender dies while owning it. */
 static void sig_send_lock_name(pid_t pid, WCHAR *name, UNICODE_STRING *us)
 {
-	static const char pfx[] = "\\BaseNamedObjects\\ntlibc-sig-send.";
+	static const char pfx[] = "\\BaseNamedObjects\\spicule-sig-send.";
 	int i = 0;
 
 	for (; pfx[i]; i++) name[i] = (unsigned char)pfx[i];
@@ -297,7 +297,7 @@ static ULONG NTAPI sig_delivery_thread(PVOID arg)
 /* __signal_init() calls this once at process startup. Every failure here
  * degrades rather than aborting startup: __sig_try_deliver_remote() below
  * simply never succeeds for this process, and kill() falls back to
- * default-disposition-only behaviour, same as targeting a non-ntlibc process. */
+ * default-disposition-only behaviour, same as targeting a non-spicule process. */
 void __sig_delivery_init(void)
 {
 	UNICODE_STRING lock_us, pipe_us;
@@ -369,7 +369,7 @@ void __sig_delivery_reinit_after_fork(void)
 /* kill()'s cross-process arm, called before its default-action-only
  * (NtTerminateProcess) fallback. Returns nonzero only if the target's own
  * listener accepted the packet; any failure -- no such process, a
- * non-ntlibc process, or one still inside __signal_init() -- returns 0 and
+ * non-spicule process, or one still inside __signal_init() -- returns 0 and
  * lets kill() fall through unchanged.
  *
  * Catchable stop signals set nondefault_only: the target snapshots its

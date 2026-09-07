@@ -23,8 +23,8 @@
  * of this interface -- it stays in the front door, unchanged, exactly
  * like mman.c's own reservation table (see plat_mem.h).
  */
-#ifndef _NTLIBC_PLAT_FD_H
-#define _NTLIBC_PLAT_FD_H
+#ifndef _SPICULE_PLAT_FD_H
+#define _SPICULE_PLAT_FD_H
 
 #include <stddef.h>
 #include <sys/types.h>
@@ -81,7 +81,7 @@ int __plat_dup(__plat_handle_t h, int inheritable, __plat_handle_t *out)
  * back an arbitrary low fd, and using it to fill a *specific* table
  * slot (src/unistd/dup.c dup_to(), this function's only caller today)
  * only coincidentally lines up the real kernel descriptor with the
- * ntlibc-level index it is filed under -- when it does not, the
+ * spicule-level index it is filed under -- when it does not, the
  * mismatch is invisible to every caller in THIS process (every
  * operation here dereferences the handle, never the table index, to
  * reach the real descriptor) but breaks the moment a child is

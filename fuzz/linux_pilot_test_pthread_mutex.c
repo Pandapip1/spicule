@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * pthread_mutex_t front-door smoke test -- NOT part of ntlibc, same
+ * pthread_mutex_t front-door smoke test -- NOT part of spicule, same
  * standing as every other fuzz/linux_pilot_test_*.c file.
  *
  * Calls the REAL src/thread/pthread_mutex.c front door

@@ -82,7 +82,7 @@ static int fold(int v, int lo, int hi)
 	return (int)((unsigned)lo + (unsigned)v % span);
 }
 
-/* Not ntlibc's snprintf (itself under test) or the host's (unreachable
+/* Not spicule's snprintf (itself under test) or the host's (unreachable
  * from a file not compiled against host headers). */
 static char *put_i(char *p, char *end, long long v)
 {

@@ -96,7 +96,7 @@ struct stat {
 async_signal_safe
 io_operation
 int stat(const char *__restrict, struct stat *__restrict);
-/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline:
+/* tools/clang/ErrnoDisciplineChecker.cpp's spicule.ErrnoDiscipline:
  * src/stat/stat.c's fstat() sets errno on every failure return, either
  * via __fd_get() (already errno-capable) or __plat_fstat() (both
  * platforms' own implementations set errno on every failure). */
@@ -110,7 +110,7 @@ int fstatat(int, const char *__restrict, struct stat *__restrict, int);
 fallible
 async_signal_safe
 int chmod(const char *, mode_t);
-/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline:
+/* tools/clang/ErrnoDisciplineChecker.cpp's spicule.ErrnoDiscipline:
  * src/stat/chmod.c's fchmod() sets errno on every failure return, via
  * __fd_get(), its own explicit EROFS assignment, or __plat_chmod()/
  * fchmodat() (the latter already errno-capable by way of chmod()'s
@@ -119,7 +119,7 @@ grants_thread_token(errno_grounds)
 fallible
 async_signal_safe
 int fchmod(int, mode_t);
-/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline:
+/* tools/clang/ErrnoDisciplineChecker.cpp's spicule.ErrnoDiscipline:
  * src/stat/chmod.c's fchmodat() sets errno on every failure return,
  * via its own explicit EINVAL assignment or __plat_chmodat() (chmod()
  * itself is exactly fchmodat(AT_FDCWD, ...), already trusted above). */
@@ -137,7 +137,7 @@ fallible
 int mkdirat(int, const char *, mode_t);
 int mkfifoat(int, const char *, mode_t);
 
-/* tools/clang/ErrnoDisciplineChecker.cpp's ntlibc.ErrnoDiscipline:
+/* tools/clang/ErrnoDisciplineChecker.cpp's spicule.ErrnoDiscipline:
  * src/stat/chmod.c's mknod()/mknodat() set errno on every failure
  * return, via __plat_mknod() (both platforms' own implementations set
  * errno on every failure). */

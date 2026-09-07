@@ -3,8 +3,8 @@
 
 #define FLT_EVAL_METHOD 0
 
-/* ntlibc's own `long double` has two incompatible layouts depending on
- * which compiler built it (see src/math/ldbl_math.h, NTLIBC_LDBL_EXTENDED,
+/* spicule's own `long double` has two incompatible layouts depending on
+ * which compiler built it (see src/math/ldbl_math.h, SPICULE_LDBL_EXTENDED,
  * and test/posix-math.c): under this project's tcc, "long double" is
  * an alias for `double` (sizeof == 8, no 80-bit range/precision) on
  * the actual NT target; under the mingw-w64/gcc fallback compiler (and

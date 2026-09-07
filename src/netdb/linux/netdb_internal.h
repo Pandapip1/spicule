@@ -12,8 +12,8 @@
  * so they cannot collide with user code.
  */
 // NOLINTBEGIN(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
-#ifndef _NTLIBC_NETDB_INTERNAL_H
-#define _NTLIBC_NETDB_INTERNAL_H
+#ifndef _SPICULE_NETDB_INTERNAL_H
+#define _SPICULE_NETDB_INTERNAL_H
 
 #include <stdio.h>
 #include <netinet/in.h>

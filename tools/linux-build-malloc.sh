@@ -17,13 +17,13 @@
 # statically linked into one native, runnable ELF binary.
 #
 # Usage: tools/linux-build-malloc.sh
-# Env:   NTLIBC_CC (default clang)
+# Env:   SPICULE_CC (default clang)
 
 set -eu
 
 srcdir=$(cd "$(dirname "$0")/.." && pwd)
-CC=${NTLIBC_CC:-clang}
-OBJ=${NTLIBC_LINUX_OBJ:-$srcdir/obj/linux-pilot-malloc}
+CC=${SPICULE_CC:-clang}
+OBJ=${SPICULE_LINUX_OBJ:-$srcdir/obj/linux-pilot-malloc}
 TAG=linux-build-malloc
 
 cd "$srcdir"
@@ -48,7 +48,7 @@ INC="-Isrc/internal -Iobj/include -Iinclude -Iarch/$arch -Iarch/generic"
 # this tree has no __stack_chk_guard/_fail, and a native host cc
 # defaults to inserting stack-protector calls anyway.
 CFLAGS="-std=c99 -nostdinc -fno-builtin -fno-stack-protector -g -O0 -ffunction-sections -fdata-sections \
-$INC -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_NTLIBC_INTERNAL -Wall -Wno-unused-function"
+$INC -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_SPICULE_INTERNAL -Wall -Wno-unused-function"
 
 echo "$TAG: compiling ($CC, native ELF)..."
 objs=""

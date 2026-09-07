@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -13,7 +13,7 @@
  *
  * Foreign-process state is local to the caller.  This is enough to make
  * the process APIs coherent for self and children, including the common
- * set-then-get use, without pretending that another ntlibc process can
+ * set-then-get use, without pretending that another spicule process can
  * see a policy distinction the NT kernel itself does not store.
  *
  * sched_yield.html: "The sched_yield() function shall force the running

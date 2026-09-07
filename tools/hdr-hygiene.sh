@@ -2,12 +2,12 @@
 # SPDX-FileCopyrightText: (C) 2026 Gavin John
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# hdr-hygiene.sh -- prove every public ntlibc header is usable *on its own*.
+# hdr-hygiene.sh -- prove every public spicule header is usable *on its own*.
 #
 # The bug this exists to catch: a full-source bootstrap (building Make and
-# gnulib against ntlibc) found that ntlibc has no <pwd.h> at all, and
+# gnulib against spicule) found that spicule has no <pwd.h> at all, and
 # nothing in-tree noticed, because nothing in the tree includes a header
-# ntlibc does not have.  That is the "missing outright" half of the class
+# spicule does not have.  That is the "missing outright" half of the class
 # (see test/POSIX-COVERAGE.md and the sibling inventory this script does
 # not produce).  This script is the other half: headers that exist but are
 # not *usable* -- one that only compiles if something else was included

@@ -76,7 +76,7 @@
  *   1. Different scope.  The banner answers XSH 2.9.7 "Thread
  *      Interactions with Regular File Operations", which is stated over
  *      two THREADS and over REGULAR FILES.  This clause is stated over
- *      other PROCESSES and over PIPES.  ntlibc has no thread-creation
+ *      other PROCESSES and over PIPES.  spicule has no thread-creation
  *      interface, which is why test/posix-grp.c leaves 2.9.7
  *      unasserted -- but it does have fork() (src/process/fork.c) and
  *      pipe() (src/unistd/pipe.c), so this one is expressible in the
@@ -222,7 +222,7 @@ static void test_writev_failure_leaves_file_pointer(void)
 	CHECK(lseek(fd, 0, SEEK_CUR) == 2);
 
 	/* *may fail* "[EINVAL] The iovcnt argument was less than or equal
-	 * to 0, or greater than {IOV_MAX}" -- ntlibc does implement it, so
+	 * to 0, or greater than {IOV_MAX}" -- spicule does implement it, so
 	 * the same RETURN VALUE sentence is checked on that path too. */
 	iov[0].iov_base = buf; iov[0].iov_len = 1;
 	errno = 0;
@@ -468,7 +468,7 @@ static void test_pipe_round_trip(void)
  * The finding.  The banner has the full argument; the fence carries the
  * short form and what the test would establish.
  * ------------------------------------------------------------------ */
-#if NTLIBC_TEST(PASS, posix_uio_writev_pipe_below_pipe_buf_not_interleaved) /* Former BUG, now fixed by gathering the vector into one write.
+#if SPICULE_TEST(PASS, posix_uio_writev_pipe_below_pipe_buf_not_interleaved) /* Former BUG, now fixed by gathering the vector into one write.
 	writev.html DESCRIPTION -- "The writev() function shall
 	be equivalent to write(), except as described below" -- and so
 	write.html DESCRIPTION's pipe clause: "Write requests of
@@ -675,7 +675,7 @@ static void test_writev_pipe_below_pipe_buf_not_interleaved(const char *self)
 
 int main(int argc, char **argv)
 {
-#if NTLIBC_TEST(PASS, posix_uio_writev_pipe_below_pipe_buf_not_interleaved)
+#if SPICULE_TEST(PASS, posix_uio_writev_pipe_below_pipe_buf_not_interleaved)
 	if (argc == 3 && !strcmp(argv[1], "writev-child")) {
 		int fd = 0;
 		const char *p = argv[2];
@@ -692,7 +692,7 @@ int main(int argc, char **argv)
 	test_readv_iovcnt_upper_edge();
 	test_ebadf_wrong_access_mode();
 	test_pipe_round_trip();
-#if NTLIBC_TEST(PASS, posix_uio_writev_pipe_below_pipe_buf_not_interleaved) /* see the fence above
+#if SPICULE_TEST(PASS, posix_uio_writev_pipe_below_pipe_buf_not_interleaved) /* see the fence above
 	test_writev_pipe_below_pipe_buf_not_interleaved.  The same
 	fence, not a second one: the call site has to be guarded too,
 	because the function it calls is inside the first #if 0. */

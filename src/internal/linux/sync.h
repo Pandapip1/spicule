@@ -6,7 +6,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * struct ntlibc_linux_sync, promoted out of src/thread/linux/
+ * struct spicule_linux_sync, promoted out of src/thread/linux/
  * plat_thread.c (where it started as a private, file-scoped type) so
  * that other Linux backends -- named semaphores and stop-events
  * (src/thread/linux/plat_thread.c's own __plat_named_semaphore_*(),
@@ -20,7 +20,7 @@
  * for an event), `kind` distinguishes the two so __plat_wait_one() can
  * tell a decrementing P/V wait from a manual-reset non-consuming one.
  *
- * NTLIBC_LX_SYNC_INITIALIZING: a third, transient `kind` value used
+ * SPICULE_LX_SYNC_INITIALIZING: a third, transient `kind` value used
  * ONLY by __plat_named_mutant_acquire() (plat_thread.c) to make its
  * first-touch lazy initialization of a freshly created (or not-yet-
  * initialized) MAP_SHARED backing file race-free across processes --
@@ -34,13 +34,13 @@
  * __plat_event_set()/__plat_semaphore_post() need to understand: by the
  * time any of those see the object, kind has always already settled to
  * SEMAPHORE or EVENT. */
-#ifndef _NTLIBC_LINUX_SYNC_H
-#define _NTLIBC_LINUX_SYNC_H
+#ifndef _SPICULE_LINUX_SYNC_H
+#define _SPICULE_LINUX_SYNC_H
 
-enum { NTLIBC_LX_SYNC_SEMAPHORE = 1, NTLIBC_LX_SYNC_EVENT = 2,
-       NTLIBC_LX_SYNC_INITIALIZING = 3 };
+enum { SPICULE_LX_SYNC_SEMAPHORE = 1, SPICULE_LX_SYNC_EVENT = 2,
+       SPICULE_LX_SYNC_INITIALIZING = 3 };
 
-struct ntlibc_linux_sync {
+struct spicule_linux_sync {
 	int futex;
 	int max;
 	unsigned char kind;

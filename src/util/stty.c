@@ -377,7 +377,7 @@ static int parse_ctrl_char(const char *s withtok(null_terminated), unsigned char
 static int parse_uint(const char *s withtok(null_terminated), unsigned long *out)
 {
 	char *end;
-	/* OPEN LINT FINDING (ntlibc.ValidPointer, "s[0]" not proven
+	/* OPEN LINT FINDING (spicule.ValidPointer, "s[0]" not proven
 	 * nonnull): withtok(null_terminated) above establishes s at
 	 * function entry, but a raw subscript directly inside this
 	 * compound `if` condition is the same shape src/util/rmdir.c's
@@ -465,7 +465,7 @@ static void print_cc(const struct termios *t, int all)
 	int i;
 	for (i = 0; i < NCCNAMES; i++) {
 		int idx = ccnames[i].idx;
-		/* OPEN LINT FINDING (ntlibc.ValidPointer, "dereference extent is
+		/* OPEN LINT FINDING (spicule.ValidPointer, "dereference extent is
 		 * not proven sufficient"): every ccnames[].idx value is one of
 		 * the VINTR..VSUSP constants, all < NCCS, so t->c_cc[idx] and
 		 * cc_defaults[idx] below are always in bounds. The checker

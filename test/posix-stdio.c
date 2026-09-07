@@ -93,7 +93,7 @@ static void test_fflush_read_stream(const char *name)
 	}
 }
 
-#if NTLIBC_TEST(PASS, posix_stdio_fflush_nonseekable_read_stream) /* fflush() accepts a readable stream whose fd cannot seek.
+#if SPICULE_TEST(PASS, posix_stdio_fflush_nonseekable_read_stream) /* fflush() accepts a readable stream whose fd cannot seek.
 	 * fflush.html DESCRIPTION states the read-stream action with an
 	 * explicit seekability condition: "For a stream open for reading
 	 * with an underlying file description, if the file is not already
@@ -124,7 +124,7 @@ static void test_fflush_read_stream(const char *name)
 	 * treat an ESPIPE from the resync seek as "nothing to resync"
 	 * rather than as a failure, the way the read-ahead distance is
 	 * already ignored for a memory stream.  This is source-derived --
-	 * it is ntlibc's own lseek() refusing a non-__FD_FILE fd, not an
+	 * it is spicule's own lseek() refusing a non-__FD_FILE fd, not an
 	 * emulator artefact -- so it holds on Wine and on real NT alike.
 	 * Re-enable when fflush() stops failing here. */
 static void test_fflush_nonseekable_read_stream(void)
@@ -156,7 +156,7 @@ static void test_fflush_nonseekable_read_stream(void)
  * fflush() or to a file positioning function..., and input is not
  * directly followed by output without an intervening call to a file
  * positioning function, unless the input operation encounters
- * end-of-file." ntlibc's __toread/__towrite (src/stdio/buf.c) apply the
+ * end-of-file." spicule's __toread/__towrite (src/stdio/buf.c) apply the
  * fflush/seek automatically on every direction switch, which is a
  * strict superset of what the standard requires (it makes the "shall
  * be preceded by" cases work too, not just leaves them as UB) -- so
@@ -260,7 +260,7 @@ static void test_memory_stream_position_overflow(void)
 	if (f) {
 		/* The logical endpoint still fits in off_t (off_t is 64-bit on
 		 * every target here), but the extra byte needed for the mandatory
-		 * terminator exceeds ntlibc's object-size range, PTRDIFF_MAX --
+		 * terminator exceeds spicule's object-size range, PTRDIFF_MAX --
 		 * see __file_write()'s own comment on that ceiling. PTRDIFF_MAX
 		 * is the portable spelling of this boundary: it equals LLONG_MAX
 		 * on a target where ptrdiff_t is 64-bit (x86_64, aarch64), so
@@ -445,7 +445,7 @@ static void test_clearerr_both(const char *name)
  * string followed by a <newline>." "The error messages ... shall be
  * the same as those returned by strerror()." "The perror() function
  * shall not change the orientation of the standard error stream" (not
- * meaningfully testable here -- ntlibc's stderr is always byte
+ * meaningfully testable here -- spicule's stderr is always byte
  * oriented, there is no wide-orientation mode to switch into) and,
  * from the "Error Checking" application-usage note (implicit in the
  * DESCRIPTION's silence about errno), a successful perror() call must
@@ -480,7 +480,7 @@ static void perror_prefixed(void) { errno = ENOENT; perror("myprefix"); }
 static void perror_noprefix_null(void) { errno = EACCES; perror(0); }
 static void perror_noprefix_empty(void) { errno = EACCES; perror(""); }
 
-#if NTLIBC_TEST(PASS, posix_stdio_fflush_null_covers_stderr) /* fflush(NULL) includes stderr and stdin.
+#if SPICULE_TEST(PASS, posix_stdio_fflush_null_covers_stderr) /* fflush(NULL) includes stderr and stdin.
 	 * on the list it walks.  fflush.html DESCRIPTION: "If stream is a
 	 * null pointer, fflush() shall perform this flushing action on all
 	 * streams for which the behavior is defined above."  stderr is such
@@ -680,7 +680,7 @@ static void test_popen(void)
 
 	/* pclose.html ERRORS: "[ECHILD] The status of the child process
 	 * could not be obtained" -- a legitimate way this happens without
-	 * touching any ntlibc-internal state: the application itself reaps
+	 * touching any spicule-internal state: the application itself reaps
 	 * the popen'd child (e.g. via a wait()/waitpid(-1, ...) loop that
 	 * doesn't know or care it came from popen(), which POSIX permits),
 	 * so by the time pclose() calls waitpid() on that same pid there is
@@ -695,7 +695,7 @@ static void test_popen(void)
 	}
 }
 
-#if NTLIBC_TEST(PASS, posix_stdio_popen_emfile) /* PASS: popen.html ERRORS "shall fail" clause: "[EMFILE]
+#if SPICULE_TEST(PASS, posix_stdio_popen_emfile) /* PASS: popen.html ERRORS "shall fail" clause: "[EMFILE]
        * {STREAM_MAX} streams are currently open in the calling
        * process."  Was N/A; the tag was wrong, and this is a
        * correction of the tag rather than of the decision.
@@ -704,7 +704,7 @@ static void test_popen(void)
        * judgement, not a platform fact: driving the process to
        * STREAM_MAX purely to watch one more popen() fail is not a
        * popen()-specific behaviour -- every fopen()-family function
-       * hits the same wall the same way, ntlibc has no
+       * hits the same wall the same way, spicule has no
        * STREAM_MAX-specific logic in popen() to distinguish from the
        * generic "out of fd table / out of memory" paths fopen()
        * already exercises, and repeating it here would be an
@@ -838,7 +838,7 @@ static void test_fseeko_ftello(const char *name)
 /* flockfile.html: ftrylockfile() "shall return zero for success", and
  * the lock is recursive ("the lock count ... shall be incremented"), so
  * a nested acquisition must also succeed and needs a matching
- * funlockfile().  ntlibc is single-threaded today and src/stdio/file.c
+ * funlockfile().  spicule is single-threaded today and src/stdio/file.c
  * implements all three as no-ops; the clause these assert is the
  * RETURN VALUE, which a no-op still has to get right. */
 static void test_flockfile(const char *name)
@@ -1012,7 +1012,7 @@ static void test_v_forms(const char *name)
  * getc() on the same stream, inside a flockfile()/funlockfile() scope as
  * the page prescribes.  Pure library behaviour: Wine is a sound oracle.
  *
- * N/A, with the reason: the thread-safety clause itself.  ntlibc has no
+ * N/A, with the reason: the thread-safety clause itself.  spicule has no
  * threading to speak of (src/signal/signal.c's banner and the FILE
  * locking in src/stdio/file.c say as much), so "not required to be
  * thread-safe" and "thread-safe under flockfile()" have no observable
@@ -1428,7 +1428,7 @@ static void test_snprintf_eoverflow(void)
 }
 
 /* An L"..." literal follows the compiler host's wchar_t width.  The
- * native sanitizer build uses a 4-byte host wchar_t while ntlibc's public
+ * native sanitizer build uses a 4-byte host wchar_t while spicule's public
  * type, matching NT, is 2 bytes, so construct wide test strings in the
  * library's actual type.  Four rotating slots also make two stdio_w()
  * calls in one expression independent of argument evaluation order. */
@@ -1686,7 +1686,7 @@ static void test_printf_positional_arguments(void)
 	CHECK(!strcmp(b, "99"));
 
 	/* "... but not both".  A format that writes both forms is
-	 * undefined, so what follows pins ntlibc's choice rather than the
+	 * undefined, so what follows pins spicule's choice rather than the
 	 * standard's, and pins it because the alternative to a diagnosed
 	 * refusal is not a slightly wrong answer: it is every argument
 	 * after the offending specification read at an offset nobody
@@ -1713,7 +1713,7 @@ static void test_printf_z_modifier_width(void)
 	/* size_t, ssize_t and ptrdiff_t are 64 bits on the LLP64 target
 	 * this defect lived on and 32 bits on i386, so both the values and
 	 * the decimals they must print are per-arch.  Selected with
-	 * sizeof() rather than #if because ntlibc's <stdint.h> defines no
+	 * sizeof() rather than #if because spicule's <stdint.h> defines no
 	 * SIZE_MAX to test against (INT64_MAX and friends are there; the
 	 * pointer-width limits are not), and a runtime select compiles and
 	 * type-checks both arms on both arches.
@@ -1788,7 +1788,7 @@ static void test_printf_z_modifier_width(void)
  * locale's `grouping` is unspecified-length/no grouping, and
  * localeconv()'s POSIX-locale `grouping` is ""), so a conforming
  * implementation must accept the flag and produce exactly what the
- * unflagged conversion produces.  ntlibc's flag loop in
+ * unflagged conversion produces.  spicule's flag loop in
  * src/stdio/printf.c recognises only '-', '+', ' ', '0' and '#', so a
  * <apostrophe> ends the flag scan and then falls out of the conversion
  * switch's default arm, which emits the two bytes literally.  Measured:
@@ -2253,7 +2253,7 @@ static void test_scanf_m_modifier(void)
  * C standard by C11 and POSIX.1-2017 marks it [OB] (obsolescent), with
  * a RATIONALE saying so and a FUTURE DIRECTIONS saying it "may be
  * removed in a future version" -- but it is still normatively specified
- * in the edition this audit is against, so it is audited.  ntlibc does
+ * in the edition this audit is against, so it is audited.  spicule does
  * implement it: src/stdio/rw.c guards the definition with
  * `#if __STDC_VERSION__ < 201112L`, and this tree builds at -std=c99
  * (configure's CFLAGS_C99FSE), so the guard is satisfied and the symbol
@@ -2331,7 +2331,7 @@ static void test_gets(const char *name)
  * Every one of those is checkable here.  Note what is deliberately not
  * asserted: that the returned pathname can be opened.  The DESCRIPTION
  * says outright that "access to the file is not guaranteed", so
- * ntlibc's fixed "/dev/tty" (src/stdio/misc.c) is conforming on a
+ * spicule's fixed "/dev/tty" (src/stdio/misc.c) is conforming on a
  * platform with no such path -- the clause it would violate is the
  * empty-string one, and only if the pathname "cannot be determined",
  * which is a statement about the implementation's own knowledge, not
@@ -2370,7 +2370,7 @@ static void test_ctermid(void)
 	CHECK(q != 0 && !strcmp(q, t));
 
 	/* "shall return an empty string if the pathname ... cannot be
-	 * determined": ntlibc always determines one, so the complement is
+	 * determined": spicule always determines one, so the complement is
 	 * what holds here.  Either outcome is conforming; asserting the
 	 * measured one pins the behaviour. */
 	CHECK(strlen(t) > 0);
@@ -2395,7 +2395,7 @@ static void test_ctermid(void)
  *
  * N/A, with the mechanism named, for every clause that distinguishes a
  * real lock from a no-op -- the suspension rule, the "a single thread
- * owns" rule, and ftrylockfile()'s non-zero return.  ntlibc has no
+ * owns" rule, and ftrylockfile()'s non-zero return.  spicule has no
  * threads at all: there is no <pthread.h> in include/ (POSIX-GAP-
  * ACCOUNTING.md lists all 102 pthread interfaces as Absent), and
  * lib/libpthread.a is an 8-byte empty archive -- the "!<arch>\n"

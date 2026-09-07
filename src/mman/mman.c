@@ -37,7 +37,7 @@
  * https://pubs.opengroup.org/onlinepubs/9699919799/functions/munlockall.html
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -85,9 +85,9 @@ static int lock_future;
 
 #ifdef __clang_analyzer__
 #define returns_element_of(registry) \
-	__attribute__((annotate("ntlibc_relation_returns_element_of:" #registry)))
+	__attribute__((annotate("spicule_relation_returns_element_of:" #registry)))
 #define parameter_element_of(index, registry) \
-	__attribute__((annotate("ntlibc_relation_parameter_element_of:" #index ":" #registry)))
+	__attribute__((annotate("spicule_relation_parameter_element_of:" #index ":" #registry)))
 #else
 #define returns_element_of(registry)
 #define parameter_element_of(index, registry)

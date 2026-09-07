@@ -26,7 +26,7 @@
  * endpoint that actually answers AFD ioctls, and that is exactly the
  * part this project's own design audit (networking-audit.md sec 1)
  * flagged as unverifiable against Wine ahead of time: "the only place
- * ntlibc can test against is Wine, and Wine's AFD is provably not a
+ * spicule can test against is Wine, and Wine's AFD is provably not a
  * faithful clone of real Windows' AFD for at least socket creation and
  * connect."  Empirically, in this environment: opening a handle via
  * NtCreateFile+the AfdOpenPacketXX EA against \Device\Afd\Endpoint
@@ -96,7 +96,7 @@ static int unverified;
 #define CHECK(cond) do { if (!(cond)) { fails++; printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); } } while (0)
 
 /* htonl.html: "convert values between host and network byte order";
- * ntlibc only targets little-endian arches (arch/i386, arch/x86_64,
+ * spicule only targets little-endian arches (arch/i386, arch/x86_64,
  * per src/socket/inet.c's banner), so network byte order (big-endian)
  * and host byte order always differ here. */
 static void test_byteorder(void)
@@ -174,7 +174,7 @@ static void test_inet_pton_ntop(void)
 	 * 2026-08-27), input byte 0x88.  At the commit those runs fuzzed
 	 * (8b2af2c), AF_INET6 was not yet implemented and fuzz_inet.c's own
 	 * harness still asserted inet_pton(AF_INET6, ...) must fail with
-	 * -1/EAFNOSUPPORT for every input; ntlibc's pre-IPv6 inet_pton()
+	 * -1/EAFNOSUPPORT for every input; spicule's pre-IPv6 inet_pton()
 	 * did not, so the harness's own oracle called abort() (see
 	 * test/posix-inet.c's test_inet6_text_forms fence, "THE FORMER
 	 * FAILURE").  00d1af9/888a4d1/56f7fae/06e51e1 (later the same day)
@@ -750,7 +750,7 @@ int main(void)
 	test_socket_dgram();
 	if (listener >= 0) test_socketpair_dgram();
 
-#if NTLIBC_TEST(PASS, posix_socket_send_recv_and_socketpair_interfaces) /* sys_socket.h.html's sendto()/recvfrom(): on a connected
+#if SPICULE_TEST(PASS, posix_socket_send_recv_and_socketpair_interfaces) /* sys_socket.h.html's sendto()/recvfrom(): on a connected
 	socket -- stream or, since 2026-09-01, datagram -- both reduce to
 	send()/recv() plus the fixed peer address the connection already
 	carries (sendto.html: "If the socket is connected, the dest_addr
@@ -767,7 +767,7 @@ int main(void)
 		recvfrom(sv[1], b, sizeof b, 0, 0, 0);
 	}
 #endif
-#if NTLIBC_TEST(PASS, posix_socket_ipv6_address_types) /* netinet_in.h.html's struct sockaddr_in6, the IN6_IS_ADDR_
+#if SPICULE_TEST(PASS, posix_socket_ipv6_address_types) /* netinet_in.h.html's struct sockaddr_in6, the IN6_IS_ADDR_
 	address-predicate macros, IN6ADDR_..._INIT, in6addr_any and
 	in6addr_loopback are now declared and
 	src/socket/inet.c.  This is a type and some byte-test macros/
@@ -794,7 +794,7 @@ int main(void)
 		 *
 		 * `unverified` only ever comes from test_sockopt_no_network(),
 		 * test_getname_no_network() and network_probe() above -- all
-		 * unconditional and unrelated to the two NTLIBC_TEST-fenced cases
+		 * unconditional and unrelated to the two SPICULE_TEST-fenced cases
 		 * in this file.  A tools/test-policy.py probe recompiles this
 		 * whole file to validate ONE fenced case in isolation, and those
 		 * unconditional checks still run alongside it; without this
@@ -804,7 +804,7 @@ int main(void)
 		printf("posix-socket: %d assertion group(s) unverified in this "
 		       "environment (see SKIP lines above); no failures in what "
 		       "did run\n", unverified);
-		if (!NTLIBC_TEST_POLICY_PROBE) return 77;
+		if (!SPICULE_TEST_POLICY_PROBE) return 77;
 	}
 	printf("posix-socket: all ok\n");
 	return 0;

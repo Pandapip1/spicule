@@ -9,14 +9,14 @@
 #   tools/fuzz.sh 300 strtod utf  just those, 300s each
 #   tools/fuzz.sh --repro <file> <harness>   re-run one saved input
 #
-# The corpus persists between runs, in $NTLIBC_FUZZ_CORPUS (default
+# The corpus persists between runs, in $SPICULE_FUZZ_CORPUS (default
 # obj/fuzzcorpus), one subtree per harness:
 #
-#   $NTLIBC_FUZZ_CORPUS/<h>/corpus    libFuzzer's minimized corpus
-#   $NTLIBC_FUZZ_CORPUS/<h>/crashes   crash-<sha1>, leak-<sha1>, ...
+#   $SPICULE_FUZZ_CORPUS/<h>/corpus    libFuzzer's minimized corpus
+#   $SPICULE_FUZZ_CORPUS/<h>/crashes   crash-<sha1>, leak-<sha1>, ...
 #
-# This works because libFuzzer's file I/O goes through ntlibc to
-# NtCreateFile, and fuzz/ntstubs.c's NTLIBC_FUZZ_MIRROR implements a
+# This works because libFuzzer's file I/O goes through spicule to
+# NtCreateFile, and fuzz/ntstubs.c's SPICULE_FUZZ_MIRROR implements a
 # whole in-memory volume that mirrors the corpus directory into it.
 # See the block comment above mirror_init() in fuzz/ntstubs.c for why
 # the mirror is needed and for what is deliberately not mirrored.
@@ -26,7 +26,7 @@
 # reproducer worth keeping still belongs in test/ as a case in the
 # matching test/*.c; the corpus is search state, not a regression suite.
 #
-# Set NTLIBC_FUZZ_CORPUS= (empty) to run stateless, the way this script
+# Set SPICULE_FUZZ_CORPUS= (empty) to run stateless, the way this script
 # used to.
 #
 # -print_funcs=0 matters for speed: symbolizing each newly reached
@@ -39,13 +39,13 @@
 set -eu
 srcdir=$(cd "$(dirname "$0")/.." && pwd)
 
-# Leak detection on, for the reason given in tools/asan-build.sh: ntlibc's
+# Leak detection on, for the reason given in tools/asan-build.sh: spicule's
 # heap is ASan's heap here, so LSan can account for every block.  A fuzzer
 # is where a leak per call shows up fastest -- libFuzzer checks after each
 # input, so one leaking format string is reported in seconds rather than
 # waiting for an absurd RSS to be noticed.  It found the sprintf/snprintf
 # one-byte-per-call leak the moment it was switched on.
-LEAKS=${NTLIBC_LEAKS:-1}
+LEAKS=${SPICULE_LEAKS:-1}
 
 # handle_abort=1 is not cosmetic, and ASan does not default it on.
 #
@@ -53,7 +53,7 @@ LEAKS=${NTLIBC_LEAKS:-1}
 # sanitizer can see -- and end the run with the host's abort()
 # (fuzz/host_oracle.c's host_abort).  libFuzzer's own SIGABRT handler
 # never fires: it installs one with sigaction(), which resolves to
-# ntlibc's, which on a native build delivers nothing.  So a mismatch used
+# spicule's, which on a native build delivers nothing.  So a mismatch used
 # to print three lines to stderr and die with status 134, and libFuzzer
 # wrote no crash artefact and named no reproducing input.
 #
@@ -126,7 +126,7 @@ if [ "${1:-}" = "--repro" ]; then
 	# mirror root and the argument the harness is handed.  A relative
 	# artefact used to reach libFuzzer verbatim and die with
 	#     ERROR: The required directory "crash-abc" does not exist
-	# -- libFuzzer stats the name through ntlibc, which resolves it
+	# -- libFuzzer stats the name through spicule, which resolves it
 	# against ntstubs.c's simulated volume, where the caller's host cwd
 	# does not exist.  It is a clear failure rather than a silent wrong
 	# answer, but there is no reason to make the reporter in GitHub
@@ -137,7 +137,7 @@ if [ "${1:-}" = "--repro" ]; then
 	make -C "$srcdir/fuzz" "$srcdir/obj/fuzz/fuzz_$name" >/dev/null
 	# The artefact has to be visible in ntstubs.c's simulated volume, or
 	# the harness cannot read the file it was just handed.  Before
-	# NTLIBC_FUZZ_MIRROR existed this branch could not work at all: it
+	# SPICULE_FUZZ_MIRROR existed this branch could not work at all: it
 	# answered every artefact with
 	#     ERROR: The required directory "<file>" does not exist
 	# which is libFuzzer saying it could not stat the path -- the
@@ -145,7 +145,7 @@ if [ "${1:-}" = "--repro" ]; then
 	# -timeout=0 for the reason given at the bottom of this file: the
 	# alarm libFuzzer arms is fatal here, and a slow artefact replayed
 	# on its own would be killed by it with nothing said.
-	exec env NTLIBC_FUZZ_MIRROR="$artdir" \
+	exec env SPICULE_FUZZ_MIRROR="$artdir" \
 	     LD_PRELOAD="$ASAN_SO" \
 	     ASAN_OPTIONS=detect_leaks="$LEAKS":handle_abort=1 \
 	     UBSAN_OPTIONS=print_stacktrace=1 \
@@ -166,7 +166,7 @@ if [ ! -f "$srcdir/obj/include/bits/alltypes.h" ]; then
 	exit 1
 fi
 
-corpus=${NTLIBC_FUZZ_CORPUS-$srcdir/obj/fuzzcorpus}
+corpus=${SPICULE_FUZZ_CORPUS-$srcdir/obj/fuzzcorpus}
 : "${FUZZ_JOBS:=1}"
 case $FUZZ_JOBS in
 ''|*[!0-9]*|0) echo "fuzz: FUZZ_JOBS must be a positive integer" >&2; exit 2 ;;
@@ -178,13 +178,13 @@ esac
 # Same root cause as the handle_abort=1 note above, one signal along.
 # libFuzzer arms its per-unit timeout with setitimer(ITIMER_REAL) and
 # installs the SIGALRM handler with sigaction() -- and sigaction() in
-# these binaries is ntlibc's, a strong definition in the executable, so
-# libFuzzer's handler is registered in ntlibc's own table and the host
-# kernel never hears about it.  setitimer, which ntlibc does not define,
+# these binaries is spicule's, a strong definition in the executable, so
+# libFuzzer's handler is registered in spicule's own table and the host
+# kernel never hears about it.  setitimer, which spicule does not define,
 # resolves to glibc and really does arm the timer.  Confirmed by nm on a
 # built harness:
 #
-#     0000000000190368 t sigaction        <- ntlibc's, in the executable
+#     0000000000190368 t sigaction        <- spicule's, in the executable
 #                      U setitimer        <- glibc's, at run time
 #
 # So SIGALRM arrives with its default disposition and the process is
@@ -249,7 +249,7 @@ run_harness() {
 	# this block exists to end.
 	st=0
 	timeout -k 10 "$watchdog" env \
-	     NTLIBC_FUZZ_MIRROR="$mirror" LD_PRELOAD="$ASAN_SO" \
+	     SPICULE_FUZZ_MIRROR="$mirror" LD_PRELOAD="$ASAN_SO" \
 	     ASAN_OPTIONS=detect_leaks="$LEAKS":handle_abort=1 \
 	     UBSAN_OPTIONS=print_stacktrace=1 \
 	     "$srcdir/obj/fuzz/fuzz_$h" \
@@ -284,7 +284,7 @@ run_harness() {
 # Shard rather than starting every harness at once: libFuzzer is
 # single-threaded and -max_total_time is wall time, so one shard per core
 # uses the runner without oversubscribing it.
-work=$(mktemp -d "${TMPDIR:-/tmp}/ntlibc-fuzz.XXXXXX") || exit 1
+work=$(mktemp -d "${TMPDIR:-/tmp}/spicule-fuzz.XXXXXX") || exit 1
 trap 'rm -rf "$work"' EXIT
 n=0
 for h in $harnesses; do

@@ -83,7 +83,7 @@
  * the "not proven nonnull" findings was tried and reverted: once the
  * checker accepts a pointer is nonnull, it then demands proof the paired
  * length fits that pointer's own memory-contract span
- * (ntlibc.MemoryContract), which nothing here establishes -- trading each
+ * (spicule.MemoryContract), which nothing here establishes -- trading each
  * closed finding for a harder one. Left open.
  */
 #include <stdio.h>

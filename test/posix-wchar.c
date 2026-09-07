@@ -5,7 +5,7 @@
  * conversion functions.  Each block cites the page it was checked
  * against under https://pubs.opengroup.org/onlinepubs/9699919799/functions/<name>.html
  *
- * The decisive fact that shapes almost every test below: ntlibc's
+ * The decisive fact that shapes almost every test below: spicule's
  * wchar_t is a 16-bit UTF-16 code unit (WCHAR_MAX == 0xffff, see
  * include/wchar.h), not the 32-bit-holds-one-codepoint wchar_t POSIX's
  * text implicitly assumes elsewhere (glibc, most Issue 7 systems).  A
@@ -401,7 +401,7 @@ static void test_mbrtowc_overlong_and_range(void)
  * return-value contract is exactly four outcomes: 0, a byte count in
  * [1,n], (size_t)-1 (EILSEQ), or (size_t)-2 (incomplete).  A code point
  * above U+FFFF -- e.g. U+10FFFF, encoded as 4 UTF-8 bytes -- cannot be
- * represented in one 16-bit wchar_t, so ntlibc returns the high
+ * represented in one 16-bit wchar_t, so spicule returns the high
  * surrogate from the call that consumes the 4 bytes, and on the very
  * next call (even though the caller supplies no new bytes and *n* may
  * be 0) hands back the low surrogate through a FIFTH return value,
@@ -475,7 +475,7 @@ static void test_wcrtomb_basic(void)
  * high surrogate (0xd800-0xdbff) is, by itself, "an invalid
  * wide-character code" per wcrtomb.html's RETURN VALUE clause ("When wc
  * is not a valid wide character, ... errno ... [EILSEQ] and returns
- * (size_t)-1"). ntlibc instead treats it as the first half of a
+ * (size_t)-1"). spicule instead treats it as the first half of a
  * surrogate pair spanning two calls: it stashes the high surrogate in
  * *ps and returns 0 -- a return value POSIX never assigns any meaning
  * to (0 is not documented as "waiting for more input" anywhere in this
@@ -501,7 +501,7 @@ static void test_wcrtomb_surrogate_pair_divergence(void)
 
 	/* a high surrogate followed by something other than its low
 	 * surrogate: "the conversion state becomes undefined" on error is
-	 * the only applicable clause; ntlibc surfaces EILSEQ, which is a
+	 * the only applicable clause; spicule surfaces EILSEQ, which is a
 	 * reasonable reading but the pending-high-surrogate state itself is
 	 * not something POSIX's wcrtomb ever has, so this whole path is
 	 * outside the standard's contract. */
@@ -573,7 +573,7 @@ static void test_wctomb(void)
 
 	/* lone high surrogate: not a directly encodable scalar value in
 	 * one call -- wctomb has no cross-call state to defer to, so this
-	 * must fail; ntlibc reports -1/EILSEQ (see src/stdlib/mbtowc.c). */
+	 * must fail; spicule reports -1/EILSEQ (see src/stdlib/mbtowc.c). */
 	errno = 0;
 	CHECK(wctomb(buf, 0xd800) == -1);
 	CHECK(errno == EILSEQ);
@@ -675,7 +675,7 @@ static void test_mbsrtowcs(void)
 	CHECK(src == abcdef + 3);
 
 	/* dst == NULL: length needed, src untouched by the function's
-	 * "if dst is not a null pointer" clauses -- ntlibc still advances
+	 * "if dst is not a null pointer" clauses -- spicule still advances
 	 * its local copy but must not write through *src doesn't apply
 	 * (src is read-modified only when ws is non-null per the man page;
 	 * confirm the count is still right). */
@@ -742,14 +742,14 @@ static void test_wcsrtombs(void)
 
 /* btowc.html RETURN VALUE: "In the POSIX locale, btowc() shall not
  * return WEOF if c has a value in the range 0 to 255 inclusive." This
- * is the second major 16-bit/encoding divergence: ntlibc's only locale
+ * is the second major 16-bit/encoding divergence: spicule's only locale
  * is named "POSIX", but unlike the traditional single-byte-identity
  * POSIX locale, its multibyte encoding is UTF-8, under which bytes
  * 0x80-0xFF are never a complete one-byte character on their own (they
  * are lead or continuation bytes of a multibyte sequence). Honoring the
  * letter of this clause would mean claiming e.g. byte 0x80 is the
  * one-byte character U+0080 -- which contradicts every mbrtowc/EILSEQ
- * test above that correctly rejects a bare 0x80. ntlibc's btowc()
+ * test above that correctly rejects a bare 0x80. spicule's btowc()
  * returns WEOF for 0x80-0xFF, which is the UTF-8-correct answer and the
  * one asserted below, but it does not satisfy this clause as literally
  * written for the POSIX locale name. Recorded, not fenced: changing it
@@ -1176,7 +1176,7 @@ static void test_ungetwc(void)
 	remove("test.tmp");
 }
 
-#if NTLIBC_TEST(PASS, posix_wchar_ungetwc_discarded_by_positioning) /* A file-positioning function discards ungetwc()
+#if SPICULE_TEST(PASS, posix_wchar_ungetwc_discarded_by_positioning) /* A file-positioning function discards ungetwc()
 	 * pushback.  ungetwc.html DESCRIPTION: "A successful intervening
 	 * call (with the stream pointed to by stream) to a
 	 * file-positioning function (fseek(), fseeko(), fsetpos(), or
@@ -1239,7 +1239,7 @@ static void test_ungetwc_discarded_by_positioning(void)
 /* ---------------------------------------------------------------------
  * fwide -- fwide.html
  * ------------------------------------------------------------------- */
-#if NTLIBC_TEST(PASS, posix_wchar_freopen_clears_orientation) /* freopen() clears the stream's orientation and its
+#if SPICULE_TEST(PASS, posix_wchar_freopen_clears_orientation) /* freopen() clears the stream's orientation and its
 	 * conversion state.  freopen.html DESCRIPTION: "After a successful
 	 * call to the freopen() function, the orientation of the stream
 	 * shall be cleared, the encoding rule shall be cleared, and the
@@ -1302,7 +1302,7 @@ static void test_freopen_clears_orientation(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_wchar_ungetc_orients_byte) /* ungetc() gives an unoriented stream byte
+#if SPICULE_TEST(PASS, posix_wchar_ungetc_orients_byte) /* ungetc() gives an unoriented stream byte
 	 * orientation.  XSH 2.5, Standard I/O Streams: "once a byte
 	 * input/output function has been applied to a stream without
 	 * orientation, the stream shall become byte-oriented."  ungetc() is
@@ -2023,7 +2023,7 @@ static void test_open_wmemstream(void)
  * Uppercase/etc. as any other made-up code point would be.
  * iswalpha.html DESCRIPTION restricts the domain to "a valid
  * wide-character code, or ... WEOF" and calls anything else undefined;
- * ntlibc answers false for a lone surrogate rather than leaving it
+ * spicule answers false for a lone surrogate rather than leaving it
  * undefined.
  * ------------------------------------------------------------------- */
 static void test_iswalpha_family(void)
@@ -2147,7 +2147,7 @@ static void test_towlower(void)
 /* ---------------------------------------------------------------------
  * wctrans / towctrans -- wctrans.html, towctrans.html
  * "tolower" and "toupper" are "defined in all locales" (wctrans.html);
- * ntlibc's C locale defines no others.  towctrans() with the resulting
+ * spicule's C locale defines no others.  towctrans() with the resulting
  * wctrans_t is just towlower()/towupper() by another name.
  * ------------------------------------------------------------------- */
 static void test_wctrans(void)
@@ -2183,7 +2183,7 @@ static void test_wctrans(void)
  * time, not a classification-data gap, and no amount of real Unicode
  * data below changes that.
  * ------------------------------------------------------------------- */
-#if NTLIBC_TEST(PASS, posix_wchar_wcwidth_bmp) /* PASS (real as of 2026-09-01): wcwidth()/wcswidth() --
+#if SPICULE_TEST(PASS, posix_wchar_wcwidth_bmp) /* PASS (real as of 2026-09-01): wcwidth()/wcswidth() --
        * wcwidth.html DESCRIPTION, RETURN VALUE. This fence was UNIMPL
        * (declined) from 2026-08-24: the only wcwidth() the tree could
        * honestly ship then was one built on the ASCII-only iswprint()
@@ -2278,7 +2278,7 @@ static void test_wcswidth(void)
 /* C99 build, so the negative-array idiom rather than static_assert. */
 typedef char wcwidth_fence_needs_16bit_wchar_t[sizeof(wchar_t) == 2 ? 1 : -1];
 
-#if NTLIBC_TEST(NA, posix_wchar_wcwidth_non_bmp) /* N/A: wcwidth() -- wcwidth.html DESCRIPTION -- cannot report the
+#if SPICULE_TEST(NA, posix_wchar_wcwidth_non_bmp) /* N/A: wcwidth() -- wcwidth.html DESCRIPTION -- cannot report the
        * true column width of a non-BMP character.  Such a character is
        * two wchar_t (a UTF-16 surrogate pair, e.g. U+1F600 GRINNING
        * FACE = 0xd83d 0xde00); wcwidth() takes a single wchar_t, so it
@@ -3010,7 +3010,7 @@ static void test_wcsnrtombs(void)
 	CHECK(src == pair + 2);
 
 	/* A high surrogate that is the last wide character inside nwc has
-	 * no partner this call may read.  ntlibc reports [EILSEQ], the same
+	 * no partner this call may read.  spicule reports [EILSEQ], the same
 	 * answer wcsrtombs() gives for a lone high surrogate; POSIX does
 	 * not describe the case because it cannot arise with a 32-bit
 	 * wchar_t.  Asserted so the choice is pinned rather than incidental.

@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Black-box tests for ntlibc's first Tier-4 POSIX standard utilities
+ * Black-box tests for spicule's first Tier-4 POSIX standard utilities
  * batch: `find`, `xargs`, `expr`, `ls` (XCU find(1p), xargs(1p),
  * expr(1p), ls(1p)).  Same technique as test/util-sortset.c: the
  * standalone obj/bin/<name>.exe is spawned as a real process (via

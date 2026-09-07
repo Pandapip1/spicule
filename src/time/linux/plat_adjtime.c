@@ -38,7 +38,7 @@
  * field would need one).
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -49,7 +49,7 @@
 /* Linux syscall number -- aarch64 confirmed against this host's own
  * <sys/syscall.h> via a throwaway host-glibc oracle program (the same
  * technique src/time/linux/plat_time.c's own banner describes; this
- * build is -nostdinc against ntlibc's own generated headers, never
+ * build is -nostdinc against spicule's own generated headers, never
  * glibc's, so the number cannot come from a host header in this file
  * itself). x86_64/i386 confirmed against this host's own /nix/store
  * linux-headers asm/unistd_64.h / asm/unistd_32.h. Oracle output on

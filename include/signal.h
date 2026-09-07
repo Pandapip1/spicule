@@ -107,7 +107,7 @@ extern "C" {
 /* si_code values for SIGCHLD. All six are defined for POSIX conformance
  * though CLD_TRAPPED is never produced: it reports a trace-trap stop,
  * and this library has no ptrace/debugger interface. waitid() produces
- * the other five; CLD_STOPPED/CLD_CONTINUED come from ntlibc's own
+ * the other five; CLD_STOPPED/CLD_CONTINUED come from spicule's own
  * kill(SIGSTOP/SIGCONT) (NtSuspendProcess/NtResumeProcess), not from an
  * NT notification. Numeric values match musl/glibc. */
 #define CLD_EXITED    1

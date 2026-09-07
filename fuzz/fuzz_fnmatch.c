@@ -22,7 +22,7 @@
  *
  * Pattern length is capped at CAP_PAT (64). fnmatch backtracking is
  * exponential in the number of '*'s against a non-matching subject in
- * every implementation, ntlibc's included -- "*a*a*a*a*a*a*a*a*a*b"
+ * every implementation, spicule's included -- "*a*a*a*a*a*a*a*a*a*b"
  * against 40 a's is the documented cost of the grammar, not a defect.
  * Without the cap libFuzzer converges on exactly that and reports a
  * timeout that says nothing about correctness.

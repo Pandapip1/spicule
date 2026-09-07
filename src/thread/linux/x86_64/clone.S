@@ -5,7 +5,7 @@
  * own banner for why this trampoline has to be hand-written assembly at
  * all (clone(2) returns twice; a `ret` in the child would unwind into a
  * C epilogue against a stack pointer that never held the right values).
- * Same __ntlibc_linux_clone(fn, stack_top, flags, arg, tls) contract,
+ * Same __spicule_linux_clone(fn, stack_top, flags, arg, tls) contract,
  * musl's src/thread/x86_64/clone.s the direct model, same SysV AMD64
  * calling convention this whole build already assumes for every other
  * x86_64 C function (System V AMD64 ABI): fn=%rdi, stack_top=%rsi,
@@ -42,7 +42,7 @@
  * both confirmed against this host's own /nix/store linux-headers
  * asm/unistd_64.h.
  *
- *   long __ntlibc_linux_clone(unsigned (*fn)(void *), void *stack_top,
+ *   long __spicule_linux_clone(unsigned (*fn)(void *), void *stack_top,
  *                             long flags, void *arg, void *tls);
  *   %rdi = fn, %rsi = stack_top, %rdx = flags, %rcx = arg, %r8 = tls
  *
@@ -53,9 +53,9 @@
  * repeated here.
  */
 	.text
-	.global __ntlibc_linux_clone
-	.type __ntlibc_linux_clone, @function
-__ntlibc_linux_clone:
+	.global __spicule_linux_clone
+	.type __spicule_linux_clone, @function
+__spicule_linux_clone:
 	andq	$-16, %rsi		# stack pointers must stay 16-byte aligned
 	subq	$16, %rsi		# reserve 2 words on the child's own stack
 	movq	%rdi, (%rsi)		# fn
@@ -90,4 +90,4 @@ __ntlibc_linux_clone:
 					# banner -- so a plain per-thread exit
 					# is also this process's exit)
 	syscall
-	.size __ntlibc_linux_clone, . - __ntlibc_linux_clone
+	.size __spicule_linux_clone, . - __spicule_linux_clone

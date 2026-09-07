@@ -22,7 +22,7 @@
  * header gives for scratch/.
  *
  * crontab -e's editor: this binary re-execs *itself* as the editor.
- * Passing NTLIBC_TEST_AS_EDITOR=1 in the environment before spawning
+ * Passing SPICULE_TEST_AS_EDITOR=1 in the environment before spawning
  * makes main() below skip every normal test and instead behave as a
  * trivial, deterministic "editor" -- append one fixed, valid crontab
  * line to argv[1] and exit 0 -- which is exactly what crontab.c's
@@ -34,7 +34,7 @@
  * a test around.
  *
  * atd's/crond's own poll interval is sped up for these tests via
- * NTLIBC_ATD_POLL_MS/NTLIBC_CROND_POLL_MS (both files' own header
+ * SPICULE_ATD_POLL_MS/SPICULE_CROND_POLL_MS (both files' own header
  * comments document these as a deliberate test-speed-only knob, not a
  * spec deviation) so the at(1p)/batch(1p) cases stay in the
  * few-seconds range this tree's other tests already stay in. crond's own
@@ -46,7 +46,7 @@
  */
 /* usleep()/kill()/setenv()/unsetenv() below are all gated behind
  * _POSIX_SOURCE/_POSIX_C_SOURCE/_XOPEN_SOURCE/_GNU_SOURCE/_BSD_SOURCE
- * in ntlibc's own headers (include/unistd.h, include/signal.h,
+ * in spicule's own headers (include/unistd.h, include/signal.h,
  * include/stdlib.h) -- none of which a plain -std=c99 build defines on
  * its own. Same fix, same reasoning, as test/posix-stdlib.c's own
  * top-of-file _GNU_SOURCE define. */
@@ -261,7 +261,7 @@ static void test_at_dash_t_and_atd_runs_it(void)
 	}
 	CHECK(err_contains("job "));
 
-	setenv("NTLIBC_ATD_POLL_MS", "200", 1);
+	setenv("SPICULE_ATD_POLL_MS", "200", 1);
 	pid = spawn_daemon(atd_path);
 	CHECK(pid >= 0);
 
@@ -383,9 +383,9 @@ static void test_crontab_dash_e(void)
 	CHECK(crontab1("crontab-src2.txt") == 0);
 
 	setenv("EDITOR", self_exe, 1);
-	setenv("NTLIBC_TEST_AS_EDITOR", "1", 1);
+	setenv("SPICULE_TEST_AS_EDITOR", "1", 1);
 	CHECK(crontab1("-e") == 0);
-	unsetenv("NTLIBC_TEST_AS_EDITOR");
+	unsetenv("SPICULE_TEST_AS_EDITOR");
 
 	CHECK(crontab1("-l") == 0);
 	CHECK(out_contains("echo first"));
@@ -419,7 +419,7 @@ static void test_crond_runs_a_due_entry(void)
 	CHECK(write_file("crontab-timed.txt", entry) == 0);
 	CHECK(crontab1("crontab-timed.txt") == 0);
 
-	setenv("NTLIBC_CROND_POLL_MS", "500", 1);
+	setenv("SPICULE_CROND_POLL_MS", "500", 1);
 	pid = spawn_daemon(crond_path);
 	CHECK(pid >= 0);
 
@@ -445,7 +445,7 @@ static void cleanup_artifacts(void)
 	unlink("crontab-src2.txt");
 	unlink("crontab-bad.txt");
 	unlink("crontab-timed.txt");
-	/* Everything under $HOME/.ntlibc/{atjobs,crontabs}/ and the scratch home tree
+	/* Everything under $HOME/.spicule/{atjobs,crontabs}/ and the scratch home tree
 	 * itself: best-effort, not exhaustive -- these are already
 	 * confined under this test's own private scratch directory
 	 * (never a real developer/CI home), so anything this leaves
@@ -455,7 +455,7 @@ static void cleanup_artifacts(void)
 
 /* Editor stand-in mode: see this file's own header. Appends one fixed
  * valid crontab(5) line to argv[1] and exits. Never reached unless
- * NTLIBC_TEST_AS_EDITOR is set, which only test_crontab_dash_e()
+ * SPICULE_TEST_AS_EDITOR is set, which only test_crontab_dash_e()
  * above ever sets before spawning this same binary as $EDITOR. */
 static int run_as_editor(int argc, char **argv)
 {
@@ -469,7 +469,7 @@ static int run_as_editor(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
-	if (getenv("NTLIBC_TEST_AS_EDITOR")) return run_as_editor(argc, argv);
+	if (getenv("SPICULE_TEST_AS_EDITOR")) return run_as_editor(argc, argv);
 
 	if (find_obj_root(argv[0]) != 0) {
 		printf("SKIP util-atcron: cannot locate obj/ from argv[0] \"%s\"\n",
@@ -502,7 +502,7 @@ int main(int argc, char **argv)
 	 * test. Only one level deep is ever created by this file, so a
 	 * plain rmdir/mkdir pair (rather than a recursive remove) is
 	 * enough -- __spool_dir() (src/util/spool.c) creates the rest
-	 * (.ntlibc/, .ntlibc/atjobs/, .ntlibc/crontabs/) itself. */
+	 * (.spicule/, .spicule/atjobs/, .spicule/crontabs/) itself. */
 	rmdir(home_dir);
 	if (mkdir(home_dir, 0755) != 0 && errno != EEXIST) {
 		printf("SKIP util-atcron: cannot create scratch home (%s)\n", strerror(errno));

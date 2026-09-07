@@ -39,7 +39,7 @@
  * would otherwise outlive this command or tear down the whole shell.
  */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -78,7 +78,7 @@ static int parse_dd_num(const char *s withtok(null_terminated), uintmax_t *out)
 	char *end;
 	uintmax_t v;
 
-	/* OPEN LINT FINDING (ntlibc.ValidPointer, "dereference extent is not
+	/* OPEN LINT FINDING (spicule.ValidPointer, "dereference extent is not
 	 * proven sufficient"): callers pass a pointer into a NUL-terminated
 	 * argv string, but no ownership.h annotation expresses "offset into
 	 * a string of unknown static extent is in bounds" -- same gap

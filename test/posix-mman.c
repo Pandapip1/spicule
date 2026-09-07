@@ -612,7 +612,7 @@ static int test_mlock_munlock(void)
  * shm_open()/shm_unlink() now provide.
  * ================================================================ */
 
-#if NTLIBC_TEST(PASS, posix_mman_shm_open_unlink)
+#if SPICULE_TEST(PASS, posix_mman_shm_open_unlink)
 static void test_posix_mman_shm_open_unlink(void)
 {
 	int fd, again;
@@ -628,7 +628,7 @@ static void test_posix_mman_shm_open_unlink(void)
 	 * the interpretation of <slash> characters other than the leading
 	 * <slash> character is implementation-defined."  A leading slash
 	 * is the portable form. */
-	fd = shm_open("/ntlibc_mman_shm", O_CREAT | O_EXCL | O_RDWR, 0600);
+	fd = shm_open("/spicule_mman_shm", O_CREAT | O_EXCL | O_RDWR, 0600);
 	CHECK(fd >= 0);
 	if (fd < 0)
 		return;
@@ -655,7 +655,7 @@ static void test_posix_mman_shm_open_unlink(void)
 	/* ERRORS: "[EEXIST] O_CREAT and O_EXCL are set and the named
 	 * shared memory object already exists." */
 	errno = 0;
-	again = shm_open("/ntlibc_mman_shm", O_CREAT | O_EXCL | O_RDWR, 0600);
+	again = shm_open("/spicule_mman_shm", O_CREAT | O_EXCL | O_RDWR, 0600);
 	CHECK(again == -1);
 	CHECK(errno == EEXIST);
 
@@ -666,23 +666,23 @@ static void test_posix_mman_shm_open_unlink(void)
 	 * name shall subsequently cause shm_open() to behave as if no
 	 * shared memory object of this name exists (that is, shm_open()
 	 * will fail if O_CREAT is not set)." */
-	CHECK(shm_unlink("/ntlibc_mman_shm") == 0);
+	CHECK(shm_unlink("/spicule_mman_shm") == 0);
 	errno = 0;
-	CHECK(shm_open("/ntlibc_mman_shm", O_RDWR, 0) == -1);
+	CHECK(shm_open("/spicule_mman_shm", O_RDWR, 0) == -1);
 	CHECK(errno == ENOENT);
 
 	/* ERRORS: "[ENOENT] The named shared memory object does not
 	 * exist." */
 	errno = 0;
-	CHECK(shm_unlink("/ntlibc_mman_shm") == -1);
+	CHECK(shm_unlink("/spicule_mman_shm") == -1);
 	CHECK(errno == ENOENT);
 
 	/* Creation mode is persistent metadata and must retain independent
 	 * owner/group/other bits after applying umask.  This is the exact
 	 * permission shape exercised by Open POSIX shm_open/18-1. */
-	shm_unlink("/ntlibc_mman_shm_mode");
+	shm_unlink("/spicule_mman_shm_mode");
 	oldmask = umask(S_IRGRP | S_IWOTH);
-	fd = shm_open("/ntlibc_mman_shm_mode", O_CREAT | O_EXCL | O_RDONLY,
+	fd = shm_open("/spicule_mman_shm_mode", O_CREAT | O_EXCL | O_RDONLY,
 	              S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
 	umask(oldmask);
 	CHECK(fd >= 0);
@@ -690,7 +690,7 @@ static void test_posix_mman_shm_open_unlink(void)
 		CHECK(fstat(fd, &st) == 0);
 		CHECK((st.st_mode & 0777) == (S_IWUSR | S_IWGRP | S_IROTH));
 		CHECK(close(fd) == 0);
-		fd = shm_open("/ntlibc_mman_shm_mode", O_RDONLY, 0);
+		fd = shm_open("/spicule_mman_shm_mode", O_RDONLY, 0);
 		CHECK(fd >= 0);
 		if (fd >= 0) {
 			CHECK(fstat(fd, &st) == 0);
@@ -698,7 +698,7 @@ static void test_posix_mman_shm_open_unlink(void)
 			      (S_IWUSR | S_IWGRP | S_IROTH));
 			CHECK(close(fd) == 0);
 		}
-		CHECK(shm_unlink("/ntlibc_mman_shm_mode") == 0);
+		CHECK(shm_unlink("/spicule_mman_shm_mode") == 0);
 	}
 
 	/* A mapping is itself a reference to the object.  Removing the name
@@ -707,7 +707,7 @@ static void test_posix_mman_shm_open_unlink(void)
 	 * ordinary file-delete disposition rejects this shape, so keep it
 	 * explicit here instead of letting the simpler unmapped lifecycle
 	 * above stand in for it. */
-	fd = shm_open("/ntlibc_mman_shm_mapped", O_CREAT | O_EXCL | O_RDWR, 0600);
+	fd = shm_open("/spicule_mman_shm_mapped", O_CREAT | O_EXCL | O_RDWR, 0600);
 	CHECK(fd >= 0);
 	if (fd < 0)
 		return;
@@ -716,21 +716,21 @@ static void test_posix_mman_shm_open_unlink(void)
 	CHECK(p != MAP_FAILED);
 	if (p == MAP_FAILED) {
 		close(fd);
-		shm_unlink("/ntlibc_mman_shm_mapped");
+		shm_unlink("/spicule_mman_shm_mapped");
 		return;
 	}
 	memcpy(p, "mapped", sizeof "mapped");
 	CHECK(close(fd) == 0);
-	CHECK(shm_unlink("/ntlibc_mman_shm_mapped") == 0);
+	CHECK(shm_unlink("/spicule_mman_shm_mapped") == 0);
 	errno = 0;
-	CHECK(shm_open("/ntlibc_mman_shm_mapped", O_RDWR, 0) == -1);
+	CHECK(shm_open("/spicule_mman_shm_mapped", O_RDWR, 0) == -1);
 	CHECK(errno == ENOENT);
 	CHECK(!memcmp(p, "mapped", sizeof "mapped"));
 	CHECK(munmap(p, PG) == 0);
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_mman_mlockall_munlockall)
+#if SPICULE_TEST(PASS, posix_mman_mlockall_munlockall)
 static void test_posix_mman_mlockall_munlockall(void)
 {
 	char *p;
@@ -799,7 +799,7 @@ static void test_posix_mman_mlockall_munlockall(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_mman_posix_madvise_advice) /* posix_madvise() is now declared and implemented (<sys/mman.h>,
+#if SPICULE_TEST(PASS, posix_mman_posix_madvise_advice) /* posix_madvise() is now declared and implemented (<sys/mman.h>,
 	src/mman/mman.c) -- a real, complete implementation, not a
 	stub: every valid advice value is a genuine no-op (this
 	implementation has no page-replacement heuristic for any of
@@ -851,7 +851,7 @@ static void test_posix_mman_posix_madvise_advice(void)
 }
 #endif
 
-#if NTLIBC_TEST(PASS, posix_mman_typed_mem_open_offset) /* The three functions this case exercises -- posix_typed_mem_open(),
+#if SPICULE_TEST(PASS, posix_mman_typed_mem_open_offset) /* The three functions this case exercises -- posix_typed_mem_open(),
 	posix_typed_mem_get_info(), posix_mem_offset() -- are now
 	declared and implemented (<sys/mman.h>, src/mman/mman.c), each
 	giving this implementation's real, permanent answer rather than
@@ -890,7 +890,7 @@ static void test_posix_mman_typed_mem_open_offset(void)
 	 * the ERRORS clause for a name that names nothing: "[ENOENT] The
 	 * named typed memory object does not exist." */
 	errno = 0;
-	fd = posix_typed_mem_open("/ntlibc-no-such-typed-memory",
+	fd = posix_typed_mem_open("/spicule-no-such-typed-memory",
 				  O_RDWR, POSIX_TYPED_MEM_ALLOCATE);
 	CHECK(fd == -1);
 	CHECK(errno == ENOENT);

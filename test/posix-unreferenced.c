@@ -246,7 +246,7 @@ static void test_puts_epipe(void)
  * [EAGAIN] "The O_NONBLOCK flag is set for the file descriptor
  * underlying stream and the thread would be delayed in the write
  * operation." */
-#if NTLIBC_TEST(NA, posix_unreferenced_puts_eagain) /* N/A, verdict confirmed, reason made precise.  The old text
+#if SPICULE_TEST(NA, posix_unreferenced_puts_eagain) /* N/A, verdict confirmed, reason made precise.  The old text
        * said "this library has no O_NONBLOCK for a file descriptor at
        * all", which overstates: the bit is accepted and stored, by both
        * fcntl(F_SETFL) (src/fcntl/fcntl.c:55) and ioctl(FIONBIO)
@@ -276,7 +276,7 @@ static void test_puts_eagain(int fd1)
  * maximum file size", "...the file size limit of the process", or "The
  * file is a regular file and an attempt was made to write at or beyond
  * the offset maximum." */
-#if NTLIBC_TEST(NA, posix_unreferenced_puts_efbig) /* N/A THROUGH puts(), all three sub-clauses -- but each for its own
+#if SPICULE_TEST(NA, posix_unreferenced_puts_efbig) /* N/A THROUGH puts(), all three sub-clauses -- but each for its own
        * reason, and two of the three reasons this fence used to give were
        * out of date.  A "shall fail" entry is not discharged by some of
        * its conditions being vacuous, so they are taken one at a time.
@@ -326,7 +326,7 @@ static void test_puts_efbig(void)
 
 /* [EINTR] "The write operation was terminated due to the receipt of a
  * signal, and no data was transferred." */
-#if NTLIBC_TEST(NA, posix_unreferenced_puts_eintr) /* N/A: signals here are not asynchronous with respect to a blocked
+#if SPICULE_TEST(NA, posix_unreferenced_puts_eintr) /* N/A: signals here are not asynchronous with respect to a blocked
        * NT wait -- src/signal/signal.c delivers a signal by running the
        * handler from the raising thread (__raise_internal), and nothing
        * interrupts NtWriteFile, which this library always issues on a
@@ -345,7 +345,7 @@ static void test_puts_eintr(void)
 /* [EIO] "A physical I/O error has occurred, or the process is a member
  * of a background process group attempting to write to its controlling
  * terminal, TOSTOP is set..." */
-#if NTLIBC_TEST(NA, posix_unreferenced_puts_eio) /* N/A, both halves, for two different reasons.
+#if SPICULE_TEST(NA, posix_unreferenced_puts_eio) /* N/A, both halves, for two different reasons.
        *
        * Background-process-group write to a controlling terminal with
        * TOSTOP set: no mechanism.  Stated carefully, because a
@@ -376,7 +376,7 @@ static void test_puts_eio(void)
 
 /* [ENOSPC] "There was no free space remaining on the device containing
  * the file." */
-#if NTLIBC_TEST(NA, posix_unreferenced_puts_enospc) /* N/A: reachable only by filling the volume the scratch file lives
+#if SPICULE_TEST(NA, posix_unreferenced_puts_enospc) /* N/A: reachable only by filling the volume the scratch file lives
        * on.  src/internal/errno.c does map STATUS_DISK_FULL to ENOSPC,
        * so the path exists; a test that fills a disk to prove it is not
        * one this suite can run. */
@@ -392,7 +392,7 @@ static void test_puts_enospc(void)
 /* fputc.html ERRORS, may fail: "[ENOMEM] Insufficient storage space is
  * available."  and "[ENXIO] A request was made of a nonexistent device,
  * or the request was outside the capabilities of the device." */
-#if NTLIBC_TEST(NA, posix_unreferenced_puts_may_fail) /* N/A: both are "may fail", and neither is producible on demand --
+#if SPICULE_TEST(NA, posix_unreferenced_puts_may_fail) /* N/A: both are "may fail", and neither is producible on demand --
        * ENOMEM would need the buffer allocation in __ensure_buf() to
        * fail, and ENXIO a device that answers STATUS_NO_SUCH_DEVICE to a
        * write on an already-open handle. */
@@ -751,7 +751,7 @@ static void test_scanf_l_modifier(const char *name)
 
 /* scanf.html ERRORS, may fail: "[EINVAL] There are insufficient
  * arguments." */
-#if NTLIBC_TEST(NA, posix_unreferenced_scanf_einval) /* N/A: "may fail", and undetectable in principle here -- a
+#if SPICULE_TEST(NA, posix_unreferenced_scanf_einval) /* N/A: "may fail", and undetectable in principle here -- a
        * variadic callee cannot count the arguments it was handed, and
        * this implementation reads each one with va_arg() as the format
        * demands it.  Passing too few is undefined behaviour at the call
@@ -774,7 +774,7 @@ static void test_scanf_einval(const char *name)
  * associated with the corresponding stream."  Also [EAGAIN], [EINTR],
  * [EIO], and may-fail [ENOMEM]/[ENXIO] -- the same list, and for the
  * same reasons, as the puts() fences above. */
-#if NTLIBC_TEST(NA, posix_unreferenced_scanf_stream_errors) /* N/A: same mechanisms as the fputc fences above -- O_NONBLOCK
+#if SPICULE_TEST(NA, posix_unreferenced_scanf_stream_errors) /* N/A: same mechanisms as the fputc fences above -- O_NONBLOCK
        * stored but never consulted (EAGAIN; see that fence for the
        * corrected wording, and note the one live EAGAIN path in this
        * library, src/unistd/read.c:37's STATUS_PIPE_EMPTY arm, is
@@ -858,7 +858,7 @@ static void test_renameat_success(void)
  * new... The new argument shall not name any directory other than an
  * empty directory." -- an EMPTY directory at new must be removed and
  * replaced, not refused. */
-#if NTLIBC_TEST(PASS, posix_unreferenced_renameat_dir_over_empty_dir) /* FIXED.  NT's FileRenameInformation[Ex] will not
+#if SPICULE_TEST(PASS, posix_unreferenced_renameat_dir_over_empty_dir) /* FIXED.  NT's FileRenameInformation[Ex] will not
        * replace an existing directory even with
        * FILE_RENAME_REPLACE_IF_EXISTS, so the call comes back
        * STATUS_ACCESS_DENIED; src/stdio/misc.c's disambiguation (moved
@@ -1058,7 +1058,7 @@ static void test_renameat_empty_at_dirfd(void)
 /* "[EINVAL] The old pathname names an ancestor directory of the new
  * pathname, or either pathname argument contains a final component that
  * is dot or dot-dot." */
-#if NTLIBC_TEST(PASS, posix_unreferenced_renameat_einval) /* Both clauses are checked before the NT rename.  src/stdio/misc.c's renameat()
+#if SPICULE_TEST(PASS, posix_unreferenced_renameat_einval) /* Both clauses are checked before the NT rename.  src/stdio/misc.c's renameat()
        * hands both paths straight to __ntpath_at() and then to
        * NtSetInformationFile(FileRenameInformationEx); nothing anywhere
        * inspects the final component for "." or "..", and nothing tests
@@ -1092,7 +1092,7 @@ static void test_renameat_einval(void)
  * directory containing the file...", and "[EROFS] The requested
  * operation requires writing in a directory on a read-only file
  * system." */
-#if NTLIBC_TEST(BUG, posix_unreferenced_renameat_eacces) /* BUG (compiles and links; formerly UNIMPL):: the executable fixture below exercises the missing
+#if SPICULE_TEST(BUG, posix_unreferenced_renameat_eacces) /* BUG (compiles and links; formerly UNIMPL):: the executable fixture below exercises the missing
        * permission-denial mechanism.  The EPERM and EROFS alternatives
        * are N/A and remain documented separately here.
        *
@@ -1103,7 +1103,7 @@ static void test_renameat_einval(void)
        * NtSetInformationFile(FileRenameInformation) answer
        * STATUS_ACCESS_DENIED, which src/internal/errno.c:63 already
        * maps to EACCES.  The reporting path is live and correct; what
-       * is missing is any way to CREATE the denial, because ntlibc
+       * is missing is any way to CREATE the denial, because spicule
        * declares no security APIs at all (NtSetSecurityObject,
        * RtlAddAccessDeniedAce -- real ntdll entry points, absent from
        * src/internal/nt.h).  That is the same choice the permission-bit
@@ -1143,7 +1143,7 @@ static void test_renameat_eacces(void)
 /* "[EBUSY] The directory named by old or new is currently in use by the
  * system or another process, and the implementation considers this an
  * error." */
-#if NTLIBC_TEST(NA, posix_unreferenced_renameat_ebusy) /* N/A: the clause is optional and neither the Wine runner nor the
+#if SPICULE_TEST(NA, posix_unreferenced_renameat_ebusy) /* N/A: the clause is optional and neither the Wine runner nor the
        * currently supported NT behavior supplies a stable trigger.  Do not
        * treat this as settled inapplicability.
        *
@@ -1196,7 +1196,7 @@ static void test_renameat_ebusy(void)
  * would contain new cannot be extended", "[ELOOP] A loop exists in
  * symbolic links...", "[EXDEV] The links named by new and old are on
  * different file systems..." */
-#if NTLIBC_TEST(NA, posix_unreferenced_renameat_misc_errors) /* N/A: the executable ENAMETOOLONG check below is live elsewhere;
+#if SPICULE_TEST(NA, posix_unreferenced_renameat_misc_errors) /* N/A: the executable ENAMETOOLONG check below is live elsewhere;
        * this fence retains the remaining unprovokable platform cases.
        * EIO   -- not provocable on demand (N/A).
        * EMLINK -- NTFS directories have no link count that renames
@@ -1282,7 +1282,7 @@ static void test_fchmodat_success(void)
 	dfd = open("chm.d", O_RDONLY);
 	CHECK(dfd >= 0);
 	if (dfd >= 0) {
-#if NTLIBC_TEST(PASS, posix_unreferenced_fchmodat_wine_readonly) /* Wine
+#if SPICULE_TEST(PASS, posix_unreferenced_fchmodat_wine_readonly) /* Wine
  * accepts the root-directory-relative attribute update but leaves the
  * readonly bit unchanged. */
 		/* relative to the descriptor */
@@ -1294,7 +1294,7 @@ static void test_fchmodat_success(void)
 		CHECK(close(dfd) == 0);
 	}
 
-#if NTLIBC_TEST(PASS, posix_unreferenced_fchmodat_wine_readonly)
+#if SPICULE_TEST(PASS, posix_unreferenced_fchmodat_wine_readonly)
 	/* AT_SYMLINK_NOFOLLOW on something that is not a symbolic link is
 	 * simply the file itself -- "If path names a symbolic link, then
 	 * the mode of the symbolic link is changed" says nothing else
@@ -1379,7 +1379,7 @@ static void test_fchmodat_empty_at_dirfd(void)
 /* XBD 4.13 Pathname Resolution, again -- but this one is NOT about the
  * *at() family, and is filed here only because it was found while
  * fixing the dirfd-relative dot handling next door. */
-#if NTLIBC_TEST(BUG, posix_unreferenced_pathres_dotdot_over_nondir) /* BUG -- IN THE SHARED ABSOLUTE/AT_FDCWD PATH BUILDER, REACHABLE
+#if SPICULE_TEST(BUG, posix_unreferenced_pathres_dotdot_over_nondir) /* BUG -- IN THE SHARED ABSOLUTE/AT_FDCWD PATH BUILDER, REACHABLE
        * FROM EVERY PATH-TAKING FUNCTION IN THIS LIBRARY, not only the
        * *at() ones.  src/internal/path.c's __ntpath() resolves through
        * RtlDosPathNameToNtPathName_U, i.e. Windows path normalisation,
@@ -1480,7 +1480,7 @@ static void test_fchmodat_dot_component(void)
 	CHECK(dfd >= 0);
 	if (dfd < 0) return;
 
-#if NTLIBC_TEST(PASS, posix_unreferenced_fchmodat_wine_readonly)
+#if SPICULE_TEST(PASS, posix_unreferenced_fchmodat_wine_readonly)
 	/* dot as the first component */
 	CHECK(fchmodat(dfd, "./f", 0444, 0) == 0);
 	CHECK(!(mode_of("chm.d/f") & 0222));
@@ -1558,7 +1558,7 @@ static void test_fchmodat_dot_component(void)
  * and the process does not have appropriate privileges", "[EACCES] Search
  * permission is denied on a component of the path prefix", "[EROFS] The
  * named file resides on a read-only file system." */
-#if NTLIBC_TEST(BUG, posix_unreferenced_fchmodat_eperm) /* BUG (compiles and links; formerly UNIMPL):: the executable fixture below exercises the missing
+#if SPICULE_TEST(BUG, posix_unreferenced_fchmodat_eperm) /* BUG (compiles and links; formerly UNIMPL):: the executable fixture below exercises the missing
        * ownership/permission-denial mechanism.  EROFS is N/A and remains
        * documented separately here.
        *
@@ -1568,7 +1568,7 @@ static void test_fchmodat_dot_component(void)
        * violate" is a statement about this library, not about NT, which
        * has both: files carry an owner SID and a DACL, and
        * STATUS_ACCESS_DENIED is already mapped to EACCES by
-       * src/internal/errno.c:63.  ntlibc declares none of the security
+       * src/internal/errno.c:63.  spicule declares none of the security
        * APIs that would let a test establish either condition, which is
        * the choice recorded in test/posix-unistd.c's permission-bit
        * banner.  The observation about src/stat/chmod.c retrying with
@@ -1608,7 +1608,7 @@ static void test_fchmodat_eperm(void)
  * resolution of the path argument", and may fail "[ELOOP] More than
  * {SYMLOOP_MAX} symbolic links were encountered during resolution of the
  * path argument." */
-#if NTLIBC_TEST(NA, posix_unreferenced_fchmodat_eloop) /* N/A on the CI leg's Wine ONLY, and the reason previously
+#if SPICULE_TEST(NA, posix_unreferenced_fchmodat_eloop) /* N/A on the CI leg's Wine ONLY, and the reason previously
        * recorded here was false.  This is the canonical account of the
        * symlink gap; the [ELOOP] line in test_renameat_misc_errors()
        * above points here rather than repeating it.
@@ -1645,7 +1645,7 @@ static void test_fchmodat_eperm(void)
        * which predates it by about a year.  So wine-9.0's
        * default_fd_ioctl() has no FSCTL_SET_REPARSE_POINT case and
        * falls through to set_error(STATUS_NOT_SUPPORTED), which is
-       * precisely the 0xc00000bb measured.  ntlibc's sequence is
+       * precisely the 0xc00000bb measured.  spicule's sequence is
        * correct and works unmodified on a current Wine, so there is
        * nothing to fix in this tree, and the Wine side is already fixed
        * upstream.
@@ -2059,7 +2059,7 @@ static void test_psignal(const char *name)
  * detecting the failure: "no indication of an error shall be returned",
  * so the caller sets errno to zero beforehand and checks it, or uses
  * ferror(stderr). */
-#if NTLIBC_TEST(NA, posix_unreferenced_psignal_ebadf) /* N/A: identical to the puts() fences above -- EBADF is the one
+#if SPICULE_TEST(NA, posix_unreferenced_psignal_ebadf) /* N/A: identical to the puts() fences above -- EBADF is the one
        * fputc error a test can actually arrange (reopen stderr
        * read-only), and doing so here would only re-prove what
        * test_puts_ebadf() already proves about the shared __fwrite()
@@ -2256,7 +2256,7 @@ static void test_strxfrm_l(void)
 /* strxfrm.html ERRORS, may fail: "[EINVAL] The string pointed to by the
  * s2 argument contains characters outside the domain of the collating
  * sequence." */
-#if NTLIBC_TEST(NA, posix_unreferenced_strxfrm_l_einval) /* N/A: "may fail", and there is no such string.  This library's
+#if SPICULE_TEST(NA, posix_unreferenced_strxfrm_l_einval) /* N/A: "may fail", and there is no such string.  This library's
        * collating sequence is the C locale's, whose domain is every
        * value a char can hold (src/string/strxfrm.c transforms by
        * copying), so no input is outside it.  The clause has no
@@ -2289,14 +2289,14 @@ int main(void)
 	test_psignal(name);
 
 	test_renameat_success();
-#if NTLIBC_TEST(PASS, posix_unreferenced_renameat_dir_over_empty_dir) /* see the definition fence above */
+#if SPICULE_TEST(PASS, posix_unreferenced_renameat_dir_over_empty_dir) /* see the definition fence above */
 	test_renameat_dir_over_empty_dir();
 #endif
 	test_renameat_errors();
 	test_renameat_enotdir_dir_over_file();
 	test_renameat_new_relative_to_dirfd();
 	test_renameat_empty_at_dirfd();
-#if NTLIBC_TEST(PASS, posix_unreferenced_renameat_einval) /* see the definition fence above */
+#if SPICULE_TEST(PASS, posix_unreferenced_renameat_einval) /* see the definition fence above */
 	test_renameat_einval();
 #endif
 	test_fchmodat_success();

@@ -51,17 +51,17 @@
 #             to SIGSTOP itself.
 #
 # Usage: tools/linux-build-misc.sh
-# Env:   NTLIBC_CC (default clang), NTLIBC_ARCH (default x86_64 -- see
-#          tools/linux-build.sh's own note: this is ntlibc's own
+# Env:   SPICULE_CC (default clang), SPICULE_ARCH (default x86_64 -- see
+#          tools/linux-build.sh's own note: this is spicule's own
 #          generated-header width convention, unrelated to the host's
 #          real CPU architecture)
 
 set -eu
 
 srcdir=$(cd "$(dirname "$0")/.." && pwd)
-CC=${NTLIBC_CC:-clang}
-ARCH=${NTLIBC_ARCH:-x86_64}
-OBJ=${NTLIBC_LINUX_OBJ:-$srcdir/obj/linux-pilot-misc}
+CC=${SPICULE_CC:-clang}
+ARCH=${SPICULE_ARCH:-x86_64}
+OBJ=${SPICULE_LINUX_OBJ:-$srcdir/obj/linux-pilot-misc}
 TAG=linux-build-misc
 
 cd "$srcdir"
@@ -70,7 +70,7 @@ if [ -f config.mak ]; then
 	cfg_arch=$(sed -n 's/^ARCH *= *//p' config.mak | head -1)
 	if [ -n "$cfg_arch" ] && [ "$cfg_arch" != "$ARCH" ]; then
 		echo "$TAG: tree is configured for ARCH=$cfg_arch but this build is $ARCH." >&2
-		echo "$TAG: reconfigure (./configure --host=$ARCH-win32 CC=...) or set NTLIBC_ARCH=$cfg_arch." >&2
+		echo "$TAG: reconfigure (./configure --host=$ARCH-win32 CC=...) or set SPICULE_ARCH=$cfg_arch." >&2
 		exit 1
 	fi
 fi
@@ -83,7 +83,7 @@ fi
 
 INC="-Isrc/internal -Iobj/include -Iinclude -Iarch/$ARCH -Iarch/generic"
 CFLAGS="-std=c99 -nostdinc -fno-builtin -g -O0 -ffunction-sections -fdata-sections \
-$INC -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_NTLIBC_INTERNAL -Wall -Wno-unused-function"
+$INC -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_SPICULE_INTERNAL -Wall -Wno-unused-function"
 
 FILES="
 	src/exit/linux/plat_exit.c
@@ -126,9 +126,9 @@ FILES="
 #     linux-build-fs.sh's own comment already documents)
 #   - src/thread/linux/plat_thread.c: __plat_thread_alertable_yield()
 #     -- the allocator's own lock (src/internal/plat_malloc_generic.h's
-#     ntlibc_malloc_lock(), reached for real by __malloc()/__free()
+#     spicule_malloc_lock(), reached for real by __malloc()/__free()
 #     above); __plat_thread_spawn() (this file's only OTHER function
-#     needing anything unresolved, __ntlibc_linux_clone() in
+#     needing anything unresolved, __spicule_linux_clone() in
 #     src/thread/linux/aarch64/clone.S) is never called by anything in
 #     this FILES list, so --gc-sections drops it before the link ever
 #     needs that symbol -- confirmed by linking successfully without

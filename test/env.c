@@ -48,28 +48,28 @@ int main(void)
 	 * variable's VALUE string, so it could never have hit this bug. */
 	before = getenv("PATH");
 
-	CHECK(setenv("PATH", "/ntlibc-env-test-value", 1) == 0);
+	CHECK(setenv("PATH", "/spicule-env-test-value", 1) == 0);
 	after = getenv("PATH");
-	CHECK(after != 0 && !strcmp(after, "/ntlibc-env-test-value"));
+	CHECK(after != 0 && !strcmp(after, "/spicule-env-test-value"));
 
 	/* Overwrite it again -- exercises free() on a value THIS test
 	 * itself just malloc()'d via setenv(), not the original
 	 * inherited one, catching a fix that only handled the first
 	 * (kernel-owned) generation correctly. */
-	CHECK(setenv("PATH", "/ntlibc-env-test-value-2", 1) == 0);
+	CHECK(setenv("PATH", "/spicule-env-test-value-2", 1) == 0);
 	after = getenv("PATH");
-	CHECK(after != 0 && !strcmp(after, "/ntlibc-env-test-value-2"));
+	CHECK(after != 0 && !strcmp(after, "/spicule-env-test-value-2"));
 
 	/* A brand-new variable: exercises __putenv()'s append path
 	 * (realloc() of the environ array itself). */
-	CHECK(setenv("NTLIBC_ENV_TEST_NEW", "1", 1) == 0);
-	CHECK(getenv("NTLIBC_ENV_TEST_NEW") != 0);
+	CHECK(setenv("SPICULE_ENV_TEST_NEW", "1", 1) == 0);
+	CHECK(getenv("SPICULE_ENV_TEST_NEW") != 0);
 
 	/* unsetenv() on the variable this test overwrote also frees its
 	 * (by now, this test's own malloc()'d) value -- exercised here
 	 * too, rather than only via setenv()'s own free(). */
-	CHECK(unsetenv("NTLIBC_ENV_TEST_NEW") == 0);
-	CHECK(getenv("NTLIBC_ENV_TEST_NEW") == 0);
+	CHECK(unsetenv("SPICULE_ENV_TEST_NEW") == 0);
+	CHECK(getenv("SPICULE_ENV_TEST_NEW") == 0);
 
 	/* Restore PATH so a caller relying on it later in the same
 	 * process (there is none today, but the courtesy costs nothing)

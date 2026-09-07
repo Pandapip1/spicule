@@ -10,7 +10,7 @@
  * harness passes the corresponding double.
  *
  * Guard bytes enforce maxsize even in UBSan-only mode.  The locale form
- * must agree byte-for-byte with the ordinary form because ntlibc has one
+ * must agree byte-for-byte with the ordinary form because spicule has one
  * immutable locale, and a successful return must name the complete,
  * NUL-terminated result inside the advertised buffer.
  */

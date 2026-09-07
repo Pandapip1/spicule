@@ -94,7 +94,7 @@ static int fails;
 #define AM_AP 6
 
 /* Child role: fd number is argv[2]; read from it and compare against the
- * NTLIBC_STRESS_MARK environment variable, which also exercises env-block
+ * SPICULE_STRESS_MARK environment variable, which also exercises env-block
  * marshalling under the same heap churn. */
 static int readfd_child(int argc, char **argv)
 {
@@ -105,7 +105,7 @@ static int readfd_child(int argc, char **argv)
 
 	if (argc != 3) return RC_BADARGC;
 	fd = atoi(argv[2]);
-	mark = getenv("NTLIBC_STRESS_MARK");
+	mark = getenv("SPICULE_STRESS_MARK");
 	if (!mark) return RC_NOENV;
 	n = read(fd, buf, sizeof buf - 1);
 	if (n <= 0) return RC_READFAIL;
@@ -255,14 +255,14 @@ static void test_runtimedata_survives_heap_churn(const char *self)
 
 		ev = malloc((size_t)(nenv + 3) * sizeof *ev);
 		if (!ev) { CHECK(0); close(p[1]); close(STRESS_FD); continue; }
-		markvar = malloc(marklen + sizeof "NTLIBC_STRESS_MARK=");
-		fillvar = malloc(FILLER_MAX + sizeof "NTLIBC_STRESS_FILLER=");
+		markvar = malloc(marklen + sizeof "SPICULE_STRESS_MARK=");
+		fillvar = malloc(FILLER_MAX + sizeof "SPICULE_STRESS_FILLER=");
 		CHECK(markvar != 0 && fillvar != 0);
 		if (markvar && fillvar) {
 			int k;
 			for (k = 0; k < nenv; k++) ev[k] = environ[k];
-			sprintf(markvar, "NTLIBC_STRESS_MARK=%s", markbuf);
-			sprintf(fillvar, "NTLIBC_STRESS_FILLER=%s", filler);
+			sprintf(markvar, "SPICULE_STRESS_MARK=%s", markbuf);
+			sprintf(fillvar, "SPICULE_STRESS_FILLER=%s", filler);
 			ev[nenv] = markvar;
 			ev[nenv + 1] = fillvar;
 			ev[nenv + 2] = 0;

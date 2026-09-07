@@ -1093,7 +1093,7 @@ static int bi_get(struct sh_builtin_ctx *ctx)
 }
 
 /* ==== Tier 6: terminal messaging -- write(1p)/mesg(1p) -- env_effect 0.
- * See src/util/mesg.c/util_write.c for what's real given ntlibc's
+ * See src/util/mesg.c/util_write.c for what's real given spicule's
  * one-real-user model. ==== */
 static int bi_mesg(struct sh_builtin_ctx *ctx) __attribute__((nonnull(1)));
 static int bi_mesg(struct sh_builtin_ctx *ctx)

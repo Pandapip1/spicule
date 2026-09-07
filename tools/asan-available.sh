@@ -81,7 +81,7 @@
 set -eu
 
 declared=
-for term in ${NTLIBC_TEST_PROFILE:-}; do
+for term in ${SPICULE_TEST_PROFILE:-}; do
 	case $term in
 	capability.overcommit=*) declared=${term#capability.overcommit=} ;;
 	esac
@@ -96,7 +96,7 @@ done
 # ASan at all, so it is the one branch that must not go untested --
 # and with a fixed path there is no way to reach it on a machine where
 # the declaration is true.
-OVERCOMMIT_PATH=${NTLIBC_OVERCOMMIT_PATH:-/proc/sys/vm/overcommit_memory}
+OVERCOMMIT_PATH=${SPICULE_OVERCOMMIT_PATH:-/proc/sys/vm/overcommit_memory}
 sysctl_value=unknown
 [ -r "$OVERCOMMIT_PATH" ] &&
 	sysctl_value=$(cat "$OVERCOMMIT_PATH" 2>/dev/null || echo unknown)
@@ -118,7 +118,7 @@ fi
 # that was read and is not 2.  "unknown" (no /proc, unreadable) is not
 # that: treating it as a veto would send every ASan binary in a
 # /proc-less container to a start-up failure, with the path pointing at
-# nothing.  Caught by the control that NTLIBC_OVERCOMMIT_PATH exists to
+# nothing.  Caught by the control that SPICULE_OVERCOMMIT_PATH exists to
 # make possible, which is the whole argument for it being overridable.
 if [ "$sysctl_value" != 2 ] && [ "$sysctl_value" != unknown ]; then
 	echo "asan-available: WARNING -- the profile declares" >&2

@@ -20,7 +20,7 @@
  * ------------------------------------------
  * src/util/crontime.c does the real work (ranges/steps/lists/names,
  * the dom-vs-dow OR-not-AND special case); this file's only job is to
- * notice when $HOME/.ntlibc/crontabs/crontab (src/util/spool.h) has
+ * notice when $HOME/.spicule/crontabs/crontab (src/util/spool.h) has
  * changed -- stat()ing its mtime once per poll tick, exactly the way
  * src/util/spool.h's own header documents crond doing it, no lock
  * needed because crontab(1p) always publishes a complete file via
@@ -31,7 +31,7 @@
  * -------------------------------------------------------
  * crontab(5)'s finest field is minutes, so a schedule can only ever
  * mean to the wall-clock minute -- this file polls every
- * NTLIBC_CROND_POLL_MS (default 1000ms, the same test-speed-only
+ * SPICULE_CROND_POLL_MS (default 1000ms, the same test-speed-only
  * override src/util/atd.c documents for its own poll interval) but
  * only ever *fires* an entry once per distinct wall-clock minute
  * (tracked via last_fired_minute below, an epoch-seconds-over-60
@@ -58,7 +58,7 @@
  * pass -- see src/util/atbatch.h's identical note for at(1p)/
  * batch(1p)), so real cron's "mail the job's output to the user" has
  * the same honest fallback here: every run's combined stdout+stderr
- * is appended to $HOME/.ntlibc/crontabs/cron.log, preceded by a
+ * is appended to $HOME/.spicule/crontabs/cron.log, preceded by a
  * header line naming the entry and the time it ran, so a user who
  * wants to know what their crontab has been doing has exactly one
  * place to look.
@@ -239,7 +239,7 @@ static void split_percent(const char *raw, char **cmd_out, char **stdin_out)
 	*stdin_out = body;
 }
 
-struct running_job { pid_t pid; char stdin_path[NTLIBC_SPOOL_PATH_MAX]; };
+struct running_job { pid_t pid; char stdin_path[SPICULE_SPOOL_PATH_MAX]; };
 #define MAX_RUNNING 128
 static struct running_job g_running[MAX_RUNNING];
 static int g_nrunning;
@@ -274,8 +274,8 @@ static void run_entry(const char *crontabs_dir, const struct cron_entry *e, time
 {
 	extern char **environ;
 	char *cmd, *stdin_body;
-	char logpath[NTLIBC_SPOOL_PATH_MAX];
-	char stdin_path[NTLIBC_SPOOL_PATH_MAX];
+	char logpath[SPICULE_SPOOL_PATH_MAX];
+	char stdin_path[SPICULE_SPOOL_PATH_MAX];
 	FILE *log, *sf;
 	char *sh_path;
 	posix_spawn_file_actions_t fa;
@@ -347,10 +347,10 @@ static void run_entry(const char *crontabs_dir, const struct cron_entry *e, time
 int __util_crond_main(
 	int argc, char **argv elements_withtok(null_terminated, argc))
 {
-	char crontabs_dir[NTLIBC_SPOOL_PATH_MAX];
-	char path[NTLIBC_SPOOL_PATH_MAX];
+	char crontabs_dir[SPICULE_SPOOL_PATH_MAX];
+	char path[SPICULE_SPOOL_PATH_MAX];
 	long poll_ms = 1000;
-	const char *env_poll = getenv("NTLIBC_CROND_POLL_MS");
+	const char *env_poll = getenv("SPICULE_CROND_POLL_MS");
 	time_t last_mtime = 0;
 	long last_fired_minute = -1;
 	int have_mtime = 0;

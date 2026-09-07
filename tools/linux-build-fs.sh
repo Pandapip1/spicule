@@ -23,16 +23,16 @@
 # doors.
 #
 # Usage: tools/linux-build-fs.sh
-# Env:   NTLIBC_CC (default clang), NTLIBC_ARCH (default x86_64 -- see
+# Env:   SPICULE_CC (default clang), SPICULE_ARCH (default x86_64 -- see
 #          tools/linux-build.sh's own banner for why this is unrelated
 #          to the host's real CPU architecture)
 
 set -eu
 
 srcdir=$(cd "$(dirname "$0")/.." && pwd)
-CC=${NTLIBC_CC:-clang}
-ARCH=${NTLIBC_ARCH:-x86_64}
-OBJ=${NTLIBC_LINUX_OBJ:-$srcdir/obj/linux-pilot-fs}
+CC=${SPICULE_CC:-clang}
+ARCH=${SPICULE_ARCH:-x86_64}
+OBJ=${SPICULE_LINUX_OBJ:-$srcdir/obj/linux-pilot-fs}
 TAG=linux-build-fs
 
 cd "$srcdir"
@@ -41,7 +41,7 @@ if [ -f config.mak ]; then
 	cfg_arch=$(sed -n 's/^ARCH *= *//p' config.mak | head -1)
 	if [ -n "$cfg_arch" ] && [ "$cfg_arch" != "$ARCH" ]; then
 		echo "$TAG: tree is configured for ARCH=$cfg_arch but this build is $ARCH." >&2
-		echo "$TAG: reconfigure (./configure --host=$ARCH-win32 CC=...) or set NTLIBC_ARCH=$cfg_arch." >&2
+		echo "$TAG: reconfigure (./configure --host=$ARCH-win32 CC=...) or set SPICULE_ARCH=$cfg_arch." >&2
 		exit 1
 	fi
 fi
@@ -54,7 +54,7 @@ fi
 
 INC="-Isrc/internal -Iobj/include -Iinclude -Iarch/$ARCH -Iarch/generic"
 CFLAGS="-std=c99 -nostdinc -fno-builtin -g -O0 -ffunction-sections -fdata-sections \
-$INC -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_NTLIBC_INTERNAL -Wall -Wno-unused-function"
+$INC -D_XOPEN_SOURCE=700 -D_ALL_SOURCE -D_SPICULE_INTERNAL -Wall -Wno-unused-function"
 
 FILES="
 	src/fcntl/fcntl.c
@@ -102,13 +102,13 @@ FILES="
 # deliberately not the same translation unit).
 #
 # src/thread/linux/plat_thread.c was the next gap this same chain
-# uncovered: src/internal/plat_malloc_generic.h's ntlibc_malloc_lock(),
+# uncovered: src/internal/plat_malloc_generic.h's spicule_malloc_lock(),
 # called for real (not a dead branch) by __plat_alloc()/__plat_dealloc()
 # on every allocation/free, calls __plat_thread_alertable_yield() to
 # spin-wait for the allocator's lock. Only this one function of
 # plat_thread.c's many is ever reached here: __plat_thread_spawn() (the
 # only other function in this file that references anything else
-# unresolved, __ntlibc_linux_clone() in src/thread/linux/
+# unresolved, __spicule_linux_clone() in src/thread/linux/
 # aarch64/clone.S) is never called by anything in this FILES list, so
 # --gc-sections drops that whole function's own section, and its own
 # unresolved reference, before the link ever needs to satisfy it --

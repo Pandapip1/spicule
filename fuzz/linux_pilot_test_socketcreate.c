@@ -1,11 +1,11 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Linux socket-CREATION pilot smoke test -- NOT part of ntlibc, same
+ * Linux socket-CREATION pilot smoke test -- NOT part of spicule, same
  * standing as fuzz/linux_pilot_test.c and fuzz/linux_pilot_test_socket.c
  * (the earlier recv()/send()-only pilot).
  *
- * Exercises the REAL ntlibc public entry points socket()/bind()/listen()/
+ * Exercises the REAL spicule public entry points socket()/bind()/listen()/
  * connect()/accept()/send()/recv() (src/socket/{socket,bind,connect,
  * listen,accept,sendrecv}.c, statically linked here, unmodified) against
  * the new src/socket/linux/plat_socket.c backend, running as a real,
@@ -57,7 +57,7 @@ int main(void)
 	struct sockaddr_in addr;
 	struct sockaddr_in peer;
 	socklen_t peerlen;
-	const char msg1[] = "hello from a real connect()ed ntlibc socket on linux";
+	const char msg1[] = "hello from a real connect()ed spicule socket on linux";
 	const char msg2[] = "and a real accept()ed reply travels back the other way";
 	char buf[128];
 

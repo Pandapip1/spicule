@@ -2,16 +2,16 @@
 # SPDX-FileCopyrightText: (C) 2026 Gavin John
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# tsan-probe.sh -- opt-in ThreadSanitizer probe for ntlibc's shared state.
+# tsan-probe.sh -- opt-in ThreadSanitizer probe for spicule's shared state.
 #
 # This is NOT part of `make all`, `make check`, or `make asan`, and it must
 # never become a build dependency: it needs clang, glibc's pthreads, and a
 # *dynamic* TSan runtime, none of which the tcc+Wine build has.
 #
-# Why it exists.  ntlibc has no threads of its own -- there is no pthreads
+# Why it exists.  spicule has no threads of its own -- there is no pthreads
 # implementation in src/, and flockfile() is a documented no-op.  But a libc
 # is used by programs, and NT programs create threads, so the question that
-# matters is whether ntlibc is safe to *call* from two threads.  errno used
+# matters is whether spicule is safe to *call* from two threads.  errno used
 # to be a plain global (src/internal/errno.c) and this probe reported the
 # race on every run; it is now per-thread (a TEB slot, commit 9800308 -- see
 # __teb() in src/internal/$ARCH/teb.c) and the probe reports zero errno
@@ -22,12 +22,12 @@
 #
 # The probe builds src/*.c natively the same mechanical way tools/asan-build.sh
 # does -- compile everything, keep what the compiler accepts, stub NT with
-# fuzz/ntstubs.c -- and then runs a driver that calls ntlibc from two host
+# fuzz/ntstubs.c -- and then runs a driver that calls spicule from two host
 # pthreads.
 #
 # -shared-libsan is load-bearing, not cosmetic, and for a sharper reason than
 # in asan-build.sh.  With the static runtime, TSan's own start-up calls
-# confstr() from __sanitizer::GetLibcVersion(); that binds to ntlibc's
+# confstr() from __sanitizer::GetLibcVersion(); that binds to spicule's
 # confstr() in src/unistd/sysconf.c, which runs instrumented before
 # __tsan::Initialize() has finished, and the process dies in TraceSwitchPart
 # before main().  The dynamic runtime resolves those calls through libc.so.
@@ -37,19 +37,19 @@
 # what identifies the variable anyway.  Set TSAN_SYMBOLIZE=1 to override.
 #
 # Usage: tools/tsan-probe.sh
-# Env:   NTLIBC_CC (default clang), NTLIBC_TSAN_OBJ (default obj/tsan),
-#        NTLIBC_ARCH (default x86_64), TSAN_SYMBOLIZE (default 0)
-#        NTLIBC_TSAN_GATE (default 1; 0 makes every race report-only)
+# Env:   SPICULE_CC (default clang), SPICULE_TSAN_OBJ (default obj/tsan),
+#        SPICULE_ARCH (default x86_64), TSAN_SYMBOLIZE (default 0)
+#        SPICULE_TSAN_GATE (default 1; 0 makes every race report-only)
 # Exit:  0 if every observed race is on the spec-permitted suppression
 #        list; 1 if any is the known-open aligned_list finding or anything
-#        unclassified (unless NTLIBC_TSAN_GATE=0).
+#        unclassified (unless SPICULE_TSAN_GATE=0).
 
 set -eu
 
 srcdir=$(cd "$(dirname "$0")/.." && pwd)
-CC=${NTLIBC_CC:-clang}
-OBJ=${NTLIBC_TSAN_OBJ:-$srcdir/obj/tsan}
-ARCH=${NTLIBC_ARCH:-x86_64}
+CC=${SPICULE_CC:-clang}
+OBJ=${SPICULE_TSAN_OBJ:-$srcdir/obj/tsan}
+ARCH=${SPICULE_ARCH:-x86_64}
 SYMBOLIZE=${TSAN_SYMBOLIZE:-0}
 
 if [ ! -f "$srcdir/obj/include/bits/alltypes.h" ]; then
@@ -69,7 +69,7 @@ SAN="-fsanitize=thread -shared-libsan -Wl,-rpath,$(dirname "$RT")"
 INC="-I$srcdir/src/internal -I$srcdir/obj/include -I$srcdir/include \
      -I$srcdir/arch/$ARCH -I$srcdir/arch/generic"
 CFLAGS="$SAN -g -O1 -std=c99 -nostdinc -fno-builtin -fvisibility=hidden \
-        -D_XOPEN_SOURCE=700 -D_NTLIBC_INTERNAL -D_NTLIBC_NATIVE_BUILD $INC"
+        -D_XOPEN_SOURCE=700 -D_SPICULE_INTERNAL -D_SPICULE_NATIVE_BUILD $INC"
 
 rm -rf "$OBJ"
 mkdir -p "$OBJ/obj"
@@ -106,7 +106,7 @@ echo "tsan: $(wc -l < "$OBJ/compiled.txt") src/*.c compiled natively,\
 
 # The driver lives here rather than in test/, because test/ is built for the
 # NT target where none of this can run.  <pthread.h> is glibc's and we build
-# -nostdinc against ntlibc's headers, so the two entry points are declared by
+# -nostdinc against spicule's headers, so the two entry points are declared by
 # hand; pthread_t is an unsigned long on every glibc port this can run on.
 cat > "$OBJ/driver.c" <<'EOF'
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
@@ -181,7 +181,7 @@ EOF
 TINC="-I$srcdir/obj/include -I$srcdir/include -I$srcdir/arch/$ARCH -I$srcdir/arch/generic"
 # Objects, not an archive, and hidden -- same reason as asan-build.sh: the
 # sanitizer DSO exports weak str*/mem* interceptors that would otherwise
-# satisfy those references and leave ntlibc's versions untested.
+# satisfy those references and leave spicule's versions untested.
 # $CC/$SAN/$TINC are flag lists and must word-split; the object glob must
 # also word-split (deliberate, per the comment above).
 # shellcheck disable=SC2046,SC2086
@@ -254,14 +254,14 @@ fi
 #   aligned_list (src/malloc/malloc.c) -- KNOWN OPEN FINDING, NOT
 #   suppressed.  malloc()/free() are required to be thread-safe; the core
 #   allocator already is (RtlAllocateHeap serialises unless called with
-#   HEAP_NO_SERIALIZE, which ntlibc never passes), but the aligned-
+#   HEAP_NO_SERIALIZE, which spicule never passes), but the aligned-
 #   allocation bookkeeping list posix_memalign()/free() push and unlink is
 #   read-modify-written with no interlock.  This is real and unfixed, so
 #   this target stays red on it on purpose rather than reporting green
 #   over a genuine bug -- see CONTRIBUTING.md.
 #
 #   anything else -- new, unjudged, fails the run so it gets looked at.
-gate=${NTLIBC_TSAN_GATE:-1}
+gate=${SPICULE_TSAN_GATE:-1}
 open=0 unexpected=0
 : > "$OBJ/classified.txt"
 sort -u "$OBJ/raced_syms.txt" | while read -r s; do
@@ -280,7 +280,7 @@ open=$(grep -c '^open$' "$OBJ/classified.txt" || true)
 unexpected=$(grep -c '^unexpected$' "$OBJ/classified.txt" || true)
 echo "tsan: $open known open finding(s), $unexpected unexpected race(s)"
 if [ "$gate" = 1 ] && { [ "$open" != 0 ] || [ "$unexpected" != 0 ]; }; then
-	echo "tsan: FAIL -- see above (set NTLIBC_TSAN_GATE=0 to report only)"
+	echo "tsan: FAIL -- see above (set SPICULE_TSAN_GATE=0 to report only)"
 	exit 1
 fi
 if [ "$open" = 0 ] && [ "$unexpected" = 0 ]; then

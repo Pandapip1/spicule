@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Test-harness scaffolding for the pthread_mutex_t front-door pilot --
- * NOT part of ntlibc, same standing as every other fuzz/
+ * NOT part of spicule, same standing as every other fuzz/
  * linux_pilot_harness_*.c file.
  *
  * src/thread/pthread_mutex.c's mutex_acquire() calls __sig_drain_pending()
@@ -31,7 +31,7 @@ void __sig_current_mask_copy(sigset_t *mask)
 }
 
 /* __pthread_current() needs calloc() for its per-thread control block.
- * ntlibc's real malloc.c is built entirely on NT's process heap --
+ * spicule's real malloc.c is built entirely on NT's process heap --
  * porting a real allocator is out of scope for proving the mutex works,
  * so a fixed-size static pool stands in (one call per real OS thread,
  * never freed -- this test doesn't exercise thread exit). */

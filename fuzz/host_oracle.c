@@ -2,32 +2,32 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * The oracle: the host C library's answer to the same question, for the
- * harnesses that check ntlibc for *wrong results* rather than only for
+ * harnesses that check spicule for *wrong results* rather than only for
  * memory errors.  strtod("1e442") returning NaN is not something a
  * sanitizer can see; a differential check is.
  *
  * This is the one file in fuzz/ compiled against the *host* headers, so
- * it cannot include anything of ntlibc's.  It also cannot just call
- * strtod(): ntlibc's strtod is linked into the same executable and would
- * win, and the oracle would be comparing ntlibc against itself.  dlsym on
- * libc.so.6 gets the real one -- ntlibc's definitions are built hidden, so
+ * it cannot include anything of spicule's.  It also cannot just call
+ * strtod(): spicule's strtod is linked into the same executable and would
+ * win, and the oracle would be comparing spicule against itself.  dlsym on
+ * libc.so.6 gets the real one -- spicule's definitions are built hidden, so
  * they are not in the dynamic symbol table and cannot be found this way.
  *
  * Reporting lives here too, and deliberately so: a harness must not format
- * a mismatch with ntlibc's own snprintf, which is itself under test.
+ * a mismatch with spicule's own snprintf, which is itself under test.
  *
  * errno itself needs the same treatment as strtod: `errno` is
- * `*__errno_location()`, and ntlibc's harnesses link this file's object
- * directly against ntlibc's *.o (see Makefile), which defines its own
+ * `*__errno_location()`, and spicule's harnesses link this file's object
+ * directly against spicule's *.o (see Makefile), which defines its own
  * __errno_location.  The plain `errno` macro from <errno.h> would therefore
- * resolve, at static link time, straight to ntlibc's thread-local errno
+ * resolve, at static link time, straight to spicule's thread-local errno
  * rather than glibc's -- there is no dynamic symbol lookup involved for a
  * call to a symbol the static linker can already see defined in the same
  * executable, so RTLD-level tricks (LD_PRELOAD, RTLD_NEXT) do not even
- * enter into it.  ntlibc's __errno_location is hidden-visibility, so it is
+ * enter into it.  spicule's __errno_location is hidden-visibility, so it is
  * absent from the dynamic symbol table; going through dlsym() on the
  * explicit libc.so.6 handle above (same as strtod et al.) reaches glibc's
- * real __errno_location and cannot see ntlibc's hidden one at all.
+ * real __errno_location and cannot see spicule's hidden one at all.
  */
 #define _GNU_SOURCE
 #include <dlfcn.h>
@@ -60,7 +60,7 @@ static void *sym(const char *n)
 	return p;
 }
 
-/* glibc's real errno, not ntlibc's -- see the comment at the top of the
+/* glibc's real errno, not spicule's -- see the comment at the top of the
  * file for why the plain `errno` macro cannot be used here. */
 static int *host_errno_loc(void)
 {
@@ -127,7 +127,7 @@ unsigned long long host_strtoull(const char *s, size_t *endoff, int base, int *e
  * and here they are: inet_pton.html specifies the strict dotted-quad
  * grammar with no short forms and no octal or hex parts, and glibc and
  * src/socket/inet.c both implement exactly that.  (inet_addr is
- * deliberately NOT oracled -- ntlibc's goes through strtoul with base 0,
+ * deliberately NOT oracled -- spicule's goes through strtoul with base 0,
  * which accepts leading whitespace and a sign that glibc's own parser
  * does not, so the comparison would be a stream of disagreements about
  * an under-specified corner rather than about defects.)
@@ -146,7 +146,7 @@ int host_inet_pton6(const char *s, unsigned char out[16])
 {
 	static inet_pton_fn f;
 	if (!f) f = (inet_pton_fn)sym("inet_pton");
-	return f(10 /* Linux AF_INET6; ntlibc's Windows value is 23 */, s, out);
+	return f(10 /* Linux AF_INET6; spicule's Windows value is 23 */, s, out);
 }
 
 /* The time harness's oracle: glibc's timegm() and gmtime_r().
@@ -164,13 +164,13 @@ int host_inet_pton6(const char *s, unsigned char out[16])
  *
  * <time.h> here is the host's, so `struct tm` is the host's layout --
  * which is exactly why the seam is a flat array of ints rather than a
- * struct: the harness is compiled against ntlibc's headers and the two
+ * struct: the harness is compiled against spicule's headers and the two
  * layouts are not required to agree.
  *
  * glibc's timegm reports out-of-range results as (time_t)-1 with errno
  * EOVERFLOW; *ok distinguishes that from the legitimate instant
  * 1969-12-31T23:59:59Z, which is also -1.  The caller must not compare
- * when *ok is 0 -- not because ntlibc is then excused, but because the
+ * when *ok is 0 -- not because spicule is then excused, but because the
  * two libraries have made different (and both defensible) choices about
  * a case POSIX leaves as "shall return (time_t)-1 ... [EOVERFLOW]".
  */
@@ -231,10 +231,10 @@ int host_snprintf_0(char *b, size_t n, const char *f)                 { return h
 
 /*
  * Formatted with the host's snprintf and written with write(2).  Not
- * fprintf: in this executable `fprintf` is ntlibc's (it is the definition
+ * fprintf: in this executable `fprintf` is spicule's (it is the definition
  * the linker sees), so an oracle that reported through it would be
  * printing the numbers with the very code it is meant to be checking --
- * and ntlibc's printf does not implement %a, which is exactly the format
+ * and spicule's printf does not implement %a, which is exactly the format
  * a bit-level float difference has to be shown in.
  */
 static char rbuf[4096];
@@ -271,7 +271,7 @@ static void addq(const char *s)
 }
 
 /*
- * The host's abort(), not ntlibc's.  ntlibc's abort goes through its own
+ * The host's abort(), not spicule's.  spicule's abort goes through its own
  * raise(), which on a native build has no real signal to deliver -- the
  * process would just stop, and libFuzzer would neither print a report nor
  * name the reproducing input.  A genuine SIGABRT is what its crash
@@ -288,7 +288,7 @@ static void host_abort(void)
 void oracle_mismatch_d(const char *what, const char *in, double got, double want)
 {
 	addf("MISMATCH %s\n  input : ", what); addq(in);
-	addf("\n  ntlibc: %.17g (%a)\n  glibc : %.17g (%a)\n", got, got, want, want);
+	addf("\n  spicule: %.17g (%a)\n  glibc : %.17g (%a)\n", got, got, want, want);
 	emit();
 	host_abort();
 }
@@ -296,7 +296,7 @@ void oracle_mismatch_d(const char *what, const char *in, double got, double want
 void oracle_mismatch_i(const char *what, const char *in, long long got, long long want)
 {
 	addf("MISMATCH %s\n  input : ", what); addq(in);
-	addf("\n  ntlibc: %lld\n  glibc : %lld\n", got, want);
+	addf("\n  spicule: %lld\n  glibc : %lld\n", got, want);
 	emit();
 	host_abort();
 }
@@ -304,7 +304,7 @@ void oracle_mismatch_i(const char *what, const char *in, long long got, long lon
 void oracle_mismatch_s(const char *what, const char *in, const char *got, const char *want)
 {
 	addf("MISMATCH %s\n  input : ", what); addq(in);
-	addf("\n  ntlibc: "); addq(got);
+	addf("\n  spicule: "); addq(got);
 	addf("\n  glibc : "); addq(want);
 	addf("\n");
 	emit();

@@ -66,7 +66,7 @@ cd "$srcdir" || exit 1
 : "${GATE_JOBS_DIR:=}"
 own_jobs_dir=0
 if [ -z "$GATE_JOBS_DIR" ]; then
-	GATE_JOBS_DIR=$(mktemp -d "${TMPDIR:-/tmp}/ntlibc-gate.XXXXXX") || exit 1
+	GATE_JOBS_DIR=$(mktemp -d "${TMPDIR:-/tmp}/spicule-gate.XXXXXX") || exit 1
 	own_jobs_dir=1
 fi
 mkdir -p "$GATE_JOBS_DIR/logs" "$GATE_JOBS_DIR/trees" || exit 1
@@ -441,7 +441,7 @@ fi
 # entirely.  Every other stage here compiles against -I./include
 # -I./arch/$ARCH -Iobj/include -Llib, so none of them can see a header
 # that is never installed, an installed header that pulls in a path only
-# the source tree has, or a broken tools/ntlibc-tcc wrapper.  The script
+# the source tree has, or a broken tools/spicule-tcc wrapper.  The script
 # configures and builds a second out-of-tree copy, installs it into a
 # temporary prefix, and builds and runs against that prefix alone.
 #

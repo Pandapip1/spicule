@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
-/* This translation unit implements ntlibc's freestanding -nostdinc
+/* This translation unit implements spicule's freestanding -nostdinc
  * public-header contract; transitive ABI declarations are intentional,
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
@@ -33,9 +33,9 @@ int __fpclassifyf(float x)
 	return FP_NORMAL;
 }
 
-/* ntlibc is built with three different `long double` bit layouts - see
+/* spicule is built with three different `long double` bit layouts - see
  * src/math/fabs.c's own fabsl() banner for the three-way split used
- * here (NTLIBC_LDBL_EXTENDED alone conflates x87 and aarch64's
+ * here (SPICULE_LDBL_EXTENDED alone conflates x87 and aarch64's
  * binary128; this function now matches src/internal/
  * ldbl_layout_check.c's already-confirmed three layouts one for one).
  *
@@ -62,7 +62,7 @@ int __fpclassifyf(float x)
  * fraction bits. */
 int __fpclassifyl(long double x)
 {
-#if !NTLIBC_LDBL_EXTENDED
+#if !SPICULE_LDBL_EXTENDED
 	union { long double f; uint64_t i; } u = { x };
 	int e = (int)(u.i >> 52 & 0x7ff);
 	if (!e) return u.i & 0x7fffffffffffffffULL ? FP_SUBNORMAL : FP_ZERO;
@@ -102,11 +102,11 @@ int __signbitf(float x)
  * format the sign bit lives in the top bit of the sign+exponent
  * halfword; under aarch64's real binary128 it lives in the top bit of
  * the HIGH 64-bit word of a hi/lo split, not bit 63 of an 8-byte
- * object (NTLIBC_LDBL_EXTENDED alone cannot tell those two apart -- see
+ * object (SPICULE_LDBL_EXTENDED alone cannot tell those two apart -- see
  * src/math/fabs.c's own fabsl() banner). */
 int __signbitl(long double x)
 {
-#if !NTLIBC_LDBL_EXTENDED
+#if !SPICULE_LDBL_EXTENDED
 	union { long double f; uint64_t i; } u = { x };
 	return (int)(u.i >> 63);
 #elif defined(__i386__) || defined(__x86_64__)

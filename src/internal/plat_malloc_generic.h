@@ -97,8 +97,8 @@
  * uses real CLONE_VM-sharing threads (src/thread/linux/plat_thread.c's
  * __plat_thread_spawn()) and would corrupt these lists instantly
  * without a real lock; the spin cost is unobservable either way. */
-#ifndef _NTLIBC_PLAT_MALLOC_GENERIC_H
-#define _NTLIBC_PLAT_MALLOC_GENERIC_H
+#ifndef _SPICULE_PLAT_MALLOC_GENERIC_H
+#define _SPICULE_PLAT_MALLOC_GENERIC_H
 
 #include "plat_malloc.h"
 #include "plat_pages.h"
@@ -112,64 +112,64 @@
  * the compiler builtins do the same job without it, real functions or
  * not. */
 
-#define NTLIBC_MALLOC_PAGE_SIZE 4096u
-#define NTLIBC_MALLOC_SLAB_BYTES ((size_t)64 * 1024u)
-#define NTLIBC_MALLOC_HDR_SIZE 16u
-#define NTLIBC_MALLOC_NUM_CLASSES 12 /* 16, 32, 64, ..., 16 << 11 = 32768 */
+#define SPICULE_MALLOC_PAGE_SIZE 4096u
+#define SPICULE_MALLOC_SLAB_BYTES ((size_t)64 * 1024u)
+#define SPICULE_MALLOC_HDR_SIZE 16u
+#define SPICULE_MALLOC_NUM_CLASSES 12 /* 16, 32, 64, ..., 16 << 11 = 32768 */
 
-struct ntlibc_malloc_chunk_hdr {
+struct spicule_malloc_chunk_hdr {
 	size_t size;  /* usable bytes available to the caller */
 	long class;   /* index into free_list[], or -1 for a large (direct
 	              * page-source mapping, one per allocation) chunk */
 };
 
-static void *ntlibc_malloc_free_list[NTLIBC_MALLOC_NUM_CLASSES];
+static void *spicule_malloc_free_list[SPICULE_MALLOC_NUM_CLASSES];
 
 /* This allocator's own private lock -- see this header's own banner for
  * why it is not __plat_fast_lock()/__plat_fast_unlock(). Same shape as
  * that lock (plain spin-CAS, yielding the CPU between attempts) and the
  * same reasoning applies to why a spin is the right tool here: every
  * critical section below is a handful of free-list pointer reads/writes,
- * never a blocking call (ntlibc_malloc_refill_locked() releases this
+ * never a blocking call (spicule_malloc_refill_locked() releases this
  * lock before its own __plat_pages_alloc() call, precisely so a real
  * mmap(2) round trip is never made under it), so the holder is always
  * running and always about to release. __plat_thread_alertable_yield()
  * (src/internal/plat_thread.h, a raw sched_yield(2) on this backend) is
  * reused rather than hand-rolling a second yield syscall wrapper in this
  * already-portable header. */
-static int ntlibc_malloc_lock_word;
+static int spicule_malloc_lock_word;
 
-static void ntlibc_malloc_lock(void)
+static void spicule_malloc_lock(void)
 {
 	int c;
 	for (;;) {
 		c = 0;
-		if (__atomic_compare_exchange_n(&ntlibc_malloc_lock_word, &c, 1, 1,
+		if (__atomic_compare_exchange_n(&spicule_malloc_lock_word, &c, 1, 1,
 		                                __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
 			return;
 		__plat_thread_alertable_yield();
 	}
 }
 
-static void ntlibc_malloc_unlock(void)
+static void spicule_malloc_unlock(void)
 {
-	__atomic_store_n(&ntlibc_malloc_lock_word, 0, __ATOMIC_RELEASE);
+	__atomic_store_n(&spicule_malloc_lock_word, 0, __ATOMIC_RELEASE);
 }
 
-static size_t ntlibc_malloc_class_size(int class) { return (size_t)NTLIBC_MALLOC_HDR_SIZE << class; }
+static size_t spicule_malloc_class_size(int class) { return (size_t)SPICULE_MALLOC_HDR_SIZE << class; }
 
-static int ntlibc_malloc_class_for(size_t n)
+static int spicule_malloc_class_for(size_t n)
 {
 	int class;
-	size_t sz = NTLIBC_MALLOC_HDR_SIZE;
-	for (class = 0; class < NTLIBC_MALLOC_NUM_CLASSES; class++, sz <<= 1)
+	size_t sz = SPICULE_MALLOC_HDR_SIZE;
+	for (class = 0; class < SPICULE_MALLOC_NUM_CLASSES; class++, sz <<= 1)
 		if (sz >= n) return class;
 	return -1; /* too big for any class -- large path */
 }
 
-static size_t ntlibc_malloc_roundup_page(size_t n)
+static size_t spicule_malloc_roundup_page(size_t n)
 {
-	return (n + (NTLIBC_MALLOC_PAGE_SIZE - 1)) & ~(size_t)(NTLIBC_MALLOC_PAGE_SIZE - 1);
+	return (n + (SPICULE_MALLOC_PAGE_SIZE - 1)) & ~(size_t)(SPICULE_MALLOC_PAGE_SIZE - 1);
 }
 
 /* Refill free_list[class] with one freshly page-sourced slab's worth
@@ -180,39 +180,39 @@ static size_t ntlibc_malloc_roundup_page(size_t n)
  * needs it to be -- worst case two threads both refill the same class
  * at once and the second one's extra chunks simply also go on the
  * list. */
-static void ntlibc_malloc_refill_locked(int class)
+static void spicule_malloc_refill_locked(int class)
 {
-	size_t csz = ntlibc_malloc_class_size(class);
-	size_t stride = NTLIBC_MALLOC_HDR_SIZE + csz;
-	size_t n = NTLIBC_MALLOC_SLAB_BYTES / stride;
+	size_t csz = spicule_malloc_class_size(class);
+	size_t stride = SPICULE_MALLOC_HDR_SIZE + csz;
+	size_t n = SPICULE_MALLOC_SLAB_BYTES / stride;
 	unsigned char *slab;
 	size_t i;
 
-	ntlibc_malloc_unlock();
-	slab = __plat_pages_alloc(NTLIBC_MALLOC_SLAB_BYTES);
-	ntlibc_malloc_lock();
+	spicule_malloc_unlock();
+	slab = __plat_pages_alloc(SPICULE_MALLOC_SLAB_BYTES);
+	spicule_malloc_lock();
 	if (!slab) return;
 
 	for (i = 0; i < n; i++) {
-		struct ntlibc_malloc_chunk_hdr *h = (struct ntlibc_malloc_chunk_hdr *)(slab + i * stride);
-		void *user = (unsigned char *)h + NTLIBC_MALLOC_HDR_SIZE;
+		struct spicule_malloc_chunk_hdr *h = (struct spicule_malloc_chunk_hdr *)(slab + i * stride);
+		void *user = (unsigned char *)h + SPICULE_MALLOC_HDR_SIZE;
 		h->size = csz;
 		h->class = class;
-		*(void **)user = ntlibc_malloc_free_list[class];
-		ntlibc_malloc_free_list[class] = user;
+		*(void **)user = spicule_malloc_free_list[class];
+		spicule_malloc_free_list[class] = user;
 	}
 }
 
 withtok(platform_heap_allocated)
 void *__plat_alloc(size_t n, int zero) // NOLINT(bugprone-easily-swappable-parameters) -- fixed allocator-backend contract; size and zero-fill flag have distinct roles
 {
-	struct ntlibc_malloc_chunk_hdr *h;
+	struct spicule_malloc_chunk_hdr *h;
 	void *user;
 	int class;
 
 	if (n == 0) n = 1;
 
-	if (n > ntlibc_malloc_class_size(NTLIBC_MALLOC_NUM_CLASSES - 1)) {
+	if (n > spicule_malloc_class_size(SPICULE_MALLOC_NUM_CLASSES - 1)) {
 		/* Large path: one mapping, no free list involved. n arrives here
 		 * as a caller-controlled size (calloc()'s own m*n overflow check
 		 * in src/malloc/malloc.c guards against the *multiply* wrapping,
@@ -226,14 +226,14 @@ void *__plat_alloc(size_t n, int zero) // NOLINT(bugprone-easily-swappable-param
 		 * next line. */
 		size_t total;
 		unsigned char *base;
-		if (n > (size_t)-1 - NTLIBC_MALLOC_HDR_SIZE - (NTLIBC_MALLOC_PAGE_SIZE - 1)) return 0;
-		total = ntlibc_malloc_roundup_page(NTLIBC_MALLOC_HDR_SIZE + n);
+		if (n > (size_t)-1 - SPICULE_MALLOC_HDR_SIZE - (SPICULE_MALLOC_PAGE_SIZE - 1)) return 0;
+		total = spicule_malloc_roundup_page(SPICULE_MALLOC_HDR_SIZE + n);
 		base = __plat_pages_alloc(total);
 		if (!base) return 0;
-		h = (struct ntlibc_malloc_chunk_hdr *)base;
+		h = (struct spicule_malloc_chunk_hdr *)base;
 		h->size = n;
 		h->class = -1;
-		user = base + NTLIBC_MALLOC_HDR_SIZE;
+		user = base + SPICULE_MALLOC_HDR_SIZE;
 		/* __plat_pages_alloc() already returns zeroed memory -- memset
 		 * anyway rather than trust that invariant silently at every
 		 * call site; see this header's own banner on correctness over
@@ -242,38 +242,38 @@ void *__plat_alloc(size_t n, int zero) // NOLINT(bugprone-easily-swappable-param
 		return user;
 	}
 
-	class = ntlibc_malloc_class_for(n);
-	ntlibc_malloc_lock();
-	if (!ntlibc_malloc_free_list[class]) ntlibc_malloc_refill_locked(class);
-	if (!ntlibc_malloc_free_list[class]) { ntlibc_malloc_unlock(); return 0; }
-	user = ntlibc_malloc_free_list[class];
-	ntlibc_malloc_free_list[class] = *(void **)user;
-	ntlibc_malloc_unlock();
+	class = spicule_malloc_class_for(n);
+	spicule_malloc_lock();
+	if (!spicule_malloc_free_list[class]) spicule_malloc_refill_locked(class);
+	if (!spicule_malloc_free_list[class]) { spicule_malloc_unlock(); return 0; }
+	user = spicule_malloc_free_list[class];
+	spicule_malloc_free_list[class] = *(void **)user;
+	spicule_malloc_unlock();
 
-	h = (struct ntlibc_malloc_chunk_hdr *)((unsigned char *)user - NTLIBC_MALLOC_HDR_SIZE);
+	h = (struct spicule_malloc_chunk_hdr *)((unsigned char *)user - SPICULE_MALLOC_HDR_SIZE);
 	if (zero) __builtin_memset(user, 0, h->size);
 	return user;
 }
 
 size_t __plat_alloc_size(void *p)
 {
-	struct ntlibc_malloc_chunk_hdr *h = (struct ntlibc_malloc_chunk_hdr *)((unsigned char *)p - NTLIBC_MALLOC_HDR_SIZE);
+	struct spicule_malloc_chunk_hdr *h = (struct spicule_malloc_chunk_hdr *)((unsigned char *)p - SPICULE_MALLOC_HDR_SIZE);
 	return h->size;
 }
 
 void __plat_dealloc(void *p consume(platform_heap_allocated))
 {
-	struct ntlibc_malloc_chunk_hdr *h;
+	struct spicule_malloc_chunk_hdr *h;
 	if (!p) return;
-	h = (struct ntlibc_malloc_chunk_hdr *)((unsigned char *)p - NTLIBC_MALLOC_HDR_SIZE);
+	h = (struct spicule_malloc_chunk_hdr *)((unsigned char *)p - SPICULE_MALLOC_HDR_SIZE);
 	if (h->class < 0) {
-		__plat_pages_free(h, ntlibc_malloc_roundup_page(NTLIBC_MALLOC_HDR_SIZE + h->size));
+		__plat_pages_free(h, spicule_malloc_roundup_page(SPICULE_MALLOC_HDR_SIZE + h->size));
 		return;
 	}
-	ntlibc_malloc_lock();
-	*(void **)p = ntlibc_malloc_free_list[h->class];
-	ntlibc_malloc_free_list[h->class] = p;
-	ntlibc_malloc_unlock();
+	spicule_malloc_lock();
+	*(void **)p = spicule_malloc_free_list[h->class];
+	spicule_malloc_free_list[h->class] = p;
+	spicule_malloc_unlock();
 }
 
 /* No in-place growth/shrink attempted (a free-list-of-classes design
@@ -286,12 +286,12 @@ void __plat_dealloc(void *p consume(platform_heap_allocated))
 withtok(platform_heap_allocated)
 void *__plat_realloc(void *p consume_if_nonnull_return(platform_heap_allocated), size_t n)
 {
-	struct ntlibc_malloc_chunk_hdr *h;
+	struct spicule_malloc_chunk_hdr *h;
 	void *q;
 	size_t old;
 
 	if (!p) return __plat_alloc(n, 0);
-	h = (struct ntlibc_malloc_chunk_hdr *)((unsigned char *)p - NTLIBC_MALLOC_HDR_SIZE);
+	h = (struct spicule_malloc_chunk_hdr *)((unsigned char *)p - SPICULE_MALLOC_HDR_SIZE);
 	old = h->size;
 	if (n == 0) { __plat_dealloc(p); return 0; }
 	q = __plat_alloc(n, 0);

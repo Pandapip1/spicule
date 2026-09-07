@@ -46,6 +46,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include "util.h"
+#include "ownership_stubs.h"
 
 static int link_one(const char *src, const char *dst, int opt_s, int opt_f)
 {
@@ -68,6 +69,17 @@ int __util_ln_main(
 	struct stat dst_st;
 	int dir_form;
 
+	/* ntlibc.ValidPointer cannot prove argv[i][0] nonnull here: the
+	 * dereference sits directly inside this loop's compound condition,
+	 * and the elements_withtok(null_terminated, argc) fact this checker
+	 * successfully uses elsewhere only when a loop body first binds
+	 * argv[i] to a local before dereferencing it does not reach a raw
+	 * subscript inside the header itself. Left open -- restructuring
+	 * this loop only to relocate the dereference into a body statement
+	 * would be a checker-driven code change with no other justification
+	 * (tools/lint.sh's loopcond stage does not flag this condition
+	 * shape). Known checker gap, not a real bug: argv[i] for i < argc
+	 * is always live. */
 	for (i = 1; i < argc && argv[i][0] == '-' && argv[i][1]; i++) {
 		const char *a = argv[i];
 		if (!strcmp(a, "--")) { i++; break; }
@@ -116,8 +128,15 @@ int __util_ln_main(
 		char base_copy[PATH_MAX];
 		char target[PATH_MAX];
 		char *base;
-		size_t sn = strlen(argv[i]);
+		size_t sn;
 		int n;
+
+		/* argv[i] is genuinely null-terminated by this function's own
+		 * elements_withtok(null_terminated, argc) contract on argv --
+		 * restated here since that token does not survive the direct
+		 * argv[i] read this checker can trace on its own. */
+		__ownership_string_terminated(argv[i]);
+		sn = strlen(argv[i]);
 
 		if (sn >= sizeof base_copy) {
 			__util_diagf("ln: %s: %s\n", argv[i], strerror(ENAMETOOLONG));

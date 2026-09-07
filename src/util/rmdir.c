@@ -39,6 +39,7 @@
 #include <libgen.h>
 #include <unistd.h>
 #include "util.h"
+#include "ownership_stubs.h"
 
 /* Ascends from `dir` (already removed by the caller) via dirname(),
  * rmdir()-ing each ancestor until one is not empty (quiet stop, not an
@@ -61,8 +62,21 @@ static int rmdir_ascend(const char *dir)
 		size_t pn = strnlen(buf, sizeof buf);
 		if (pn == sizeof buf) return 0;
 		memcpy(prev, buf, pn + 1);
+		/* prev is pn+1 bytes copied from buf up to and including
+		 * buf's own NUL (strnlen already proved buf[pn] == 0 here,
+		 * since the pn == sizeof buf case returned above) --
+		 * genuinely null-terminated, restated since include/libgen.h
+		 * declares neither dirname() nor this memcpy() as producing
+		 * that token. */
+		__ownership_string_terminated(prev);
 
 		parent = dirname(buf); /* mutates buf in place; parent aliases it */
+		/* dirname() returns a pointer to a null-terminated string by
+		 * its own POSIX contract; include/libgen.h does not carry a
+		 * withtok(null_terminated) annotation for it, so restated
+		 * here rather than risk a header-wide change other callers
+		 * were not audited against. */
+		__ownership_string_terminated(parent);
 		if (!strcmp(parent, ".") || !strcmp(parent, prev)) return 0;
 
 		if (rmdir(parent) != 0) {
@@ -80,6 +94,17 @@ int __util_rmdir_main(
 {
 	int i, opt_p = 0, fail = 0;
 
+	/* ntlibc.ValidPointer cannot prove argv[i][0] nonnull here: the
+	 * dereference sits directly inside this loop's compound condition,
+	 * where the elements_withtok(null_terminated, argc) fact this
+	 * checker successfully uses elsewhere (once a loop body first binds
+	 * argv[i] to a local before dereferencing it) does not reach a raw
+	 * subscript inside the header itself. Left open -- restructuring
+	 * this loop only to relocate the dereference into a body statement
+	 * would be a checker-driven code change with no other justification
+	 * (tools/lint.sh's loopcond stage does not flag this condition
+	 * shape). Known checker gap, not a real bug: argv[i] for i < argc
+	 * is always live. */
 	for (i = 1; i < argc && argv[i][0] == '-' && argv[i][1]; i++) {
 		if (!strcmp(argv[i], "--")) { i++; break; }
 		if (!strcmp(argv[i], "-p")) { opt_p = 1; continue; }

@@ -52,8 +52,9 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include "util.h"
+#include "ownership_stubs.h"
 
-static int mv_one(const char *src, const char *dst)
+static int mv_one(const char *src withtok(null_terminated), const char *dst withtok(null_terminated))
 {
 	struct stat sst;
 
@@ -111,6 +112,18 @@ int __util_mv_main(
 		char *a = argv[i];
 		char *p;
 
+		/* a is one of argv's own elements (i < nargs <= argc);
+		 * restate the argv-wide null-terminated guarantee here, the
+		 * same way src/util/cp.c's identical loop shape already does
+		 * -- a plain local like `a` is not something the checker can
+		 * trace back to argv on its own. The raw a[0] read just below
+		 * stays open (same as cp.c's own identical loop): closing it
+		 * needs __ownership_pointer_nonnull() instead, which was
+		 * tried and reverted -- it reopened the strcmp() finding below
+		 * and broke the unrelated target = argv[nargs - 1] read
+		 * further down. */
+		__ownership_string_terminated(a);
+
 		if (a[0] != '-' || a[1] == 0) break;
 		if (!strcmp(a, "--")) { i++; break; }
 
@@ -135,6 +148,9 @@ int __util_mv_main(
 	}
 
 	target = argv[nargs - 1];
+	/* Restated for the same reason as `a` above: the loop bound this
+	 * function uses is `nargs`, not `argc`. */
+	__ownership_string_terminated(target);
 	target_is_dir = stat(target, &tst) == 0 && S_ISDIR(tst.st_mode);
 
 	if (noperands > 2 && !target_is_dir) {
@@ -145,6 +161,10 @@ int __util_mv_main(
 	for (; i < nargs - 1; i++) {
 		const char *src = argv[i];
 
+		/* Same restatement as above, again because of the `nargs`
+		 * loop bound. */
+		__ownership_string_terminated(src);
+
 		if (target_is_dir) {
 			char *dst = __util_join_basename(target, src);
 			if (!dst) {
@@ -152,6 +172,11 @@ int __util_mv_main(
 				had_error = 1;
 				continue;
 			}
+			/* Left open: dst's null_terminated token from
+			 * __util_join_basename()'s dual (heap_allocated +
+			 * null_terminated) return does not survive to this call
+			 * -- the same open finding src/util/cp.c's byte-for-byte
+			 * identical cp_one(src, dst, ...) call has. */
 			if (mv_one(src, dst) < 0) had_error = 1;
 			free(dst);
 		} else {

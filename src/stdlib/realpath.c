@@ -58,7 +58,7 @@ char *realpath(const char *__restrict path,
 		 * this array's extent. */
 		const char *name = names[vfs];
 		size_t bytes;
-		__ownership_string_terminated(name); /* a literal from names[] */
+		unsafe_assume_string_terminated(name); /* a literal from names[] */
 		len = strlen(name);
 		if (!__size_add_checked(len, 1, &bytes)) return 0;
 		if (!resolved) {
@@ -79,7 +79,7 @@ char *realpath(const char *__restrict path,
 	(void)close(fd);
 	errno = saved;
 	if (!p) return 0;
-	__ownership_string_terminated(p); /* __handle_path()'s own contract */
+	unsafe_assume_string_terminated(p); /* __handle_path()'s own contract */
 	for (q = p; *q; q++) if (*q == '\\') *q = '/';
 	len = strlen(p);
 	if (len > 3 && p[len-1] == '/') p[--len] = 0;

@@ -28,7 +28,7 @@ __wraps static uint64_t lcg64(uint64_t v) { return 6364136223846793005ULL * v + 
 /* OPEN LINT FINDING (spicule.ValidPointer), here and in initstate()/
  * setstate()/random_step() below: x is always init_state+1 or a caller's
  * validated state buffer + 1, never NULL -- but x is a file-scope global,
- * and __ownership_pointer_nonnull() (tried and confirmed a no-op by
+ * and unsafe_assume_pointer_nonnull() (tried and confirmed a no-op by
  * probing a minimal repro) does not narrow a global's own nonnull state
  * the way it does for a parameter or local. Left open as a real checker
  * gap, not papered over. */

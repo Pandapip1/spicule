@@ -25,6 +25,13 @@ __wraps static long random_step(void);
 __wraps static uint32_t lcg31(uint32_t v) { return (1103515245u * v + 12345u) & 0x7fffffff; }
 __wraps static uint64_t lcg64(uint64_t v) { return 6364136223846793005ULL * v + 1; }
 
+/* OPEN LINT FINDING (spicule.ValidPointer), here and in initstate()/
+ * setstate()/random_step() below: x is always init_state+1 or a caller's
+ * validated state buffer + 1, never NULL -- but x is a file-scope global,
+ * and __ownership_pointer_nonnull() (tried and confirmed a no-op by
+ * probing a minimal repro) does not narrow a global's own nonnull state
+ * the way it does for a parameter or local. Left open as a real checker
+ * gap, not papered over. */
 static void seed_state(unsigned s)
 {
 	int k;

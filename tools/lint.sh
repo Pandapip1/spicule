@@ -1539,7 +1539,7 @@ stage_resourceleak() {
 # triaged down to zero, and only then promoted).
 # RedundantPointerAxiomChecker (spicule.RedundantPointerAxiom, tools/clang/
 # OwnershipChecker.cpp) audits src/internal/ownership_stubs.h's manual
-# __ownership_pointer_nonnull()/__ownership_string_terminated() leaf axioms
+# unsafe_assume_pointer_nonnull()/unsafe_assume_string_terminated() leaf axioms
 # the way spicule.MemoryContract already audits the span axioms: an axiom
 # whose fact the analysis can now prove without it is dead scaffolding left
 # behind by a later checker improvement that closed the gap at its point of

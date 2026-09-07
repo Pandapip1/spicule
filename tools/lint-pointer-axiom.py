@@ -5,8 +5,8 @@
 
 Parses tools/clang/OwnershipChecker.cpp's RedundantPointerAxiomChecker
 (spicule.RedundantPointerAxiom) diagnostic output -- the opt-in self-audit of
-src/internal/ownership_stubs.h's __ownership_pointer_nonnull() and
-__ownership_string_terminated() leaf axioms, the direct counterpart of the
+src/internal/ownership_stubs.h's unsafe_assume_pointer_nonnull() and
+unsafe_assume_string_terminated() leaf axioms, the direct counterpart of the
 "manual memory proof axiom is redundant / can be narrowed" audit
 spicule.MemoryContract already performs on the span axioms.
 

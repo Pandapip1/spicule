@@ -578,7 +578,7 @@ int fd_get_after_install_through_copied_local_needs_no_restatement(void *handle)
 /* spicule.RedundantPointerAxiom (OwnershipChecker.cpp's
  * RedundantPointerAxiomChecker, tools/lint.sh's opt-in `pointeraxiom`
  * stage) audits the two axioms above the way spicule.MemoryContract
- * already audits __ownership_readable_span/__ownership_writable_span:
+ * already audits unsafe_assume_readable_span/unsafe_assume_writable_span:
  * a restatement of a fact the analysis can already prove without it is
  * dead scaffolding left behind by a checker improvement that closed the
  * gap at its point of origin.
@@ -603,7 +603,7 @@ int fd_get_after_install_through_copied_local_needs_no_restatement(void *handle)
 int nonnull_parameter_axiom_is_redundant(char *p) __attribute__((nonnull(1)));
 int nonnull_parameter_axiom_is_redundant(char *p)
 {
-	__ownership_pointer_nonnull(p); /* ownership-expect: pointer-axiom-redundant */
+	unsafe_assume_pointer_nonnull(p); /* ownership-expect: pointer-axiom-redundant */
 	return p[0];
 }
 
@@ -612,12 +612,12 @@ int nonnull_parameter_axiom_is_redundant(char *p)
 int address_of_local_axiom_is_redundant(void)
 {
 	int value = 7;
-	__ownership_pointer_nonnull(&value); /* ownership-expect: pointer-axiom-redundant */
+	unsafe_assume_pointer_nonnull(&value); /* ownership-expect: pointer-axiom-redundant */
 	return value;
 }
 
 /* withtok(null_terminated) grants both halves of what
- * __ownership_string_terminated() would grant -- the token itself
+ * unsafe_assume_string_terminated() would grant -- the token itself
  * (CapabilityTokenChecker::checkBeginFunction) and the nonnull-ness that
  * token implies (parameterGrantsNullTerminatedScalar) -- so this
  * restatement is dead in both passes at once, which is the only
@@ -625,7 +625,7 @@ int address_of_local_axiom_is_redundant(void)
 int withtok_parameter_string_axiom_is_redundant(
     const char *path withtok(null_terminated))
 {
-	__ownership_string_terminated(path); /* ownership-expect: pointer-axiom-redundant */
+	unsafe_assume_string_terminated(path); /* ownership-expect: pointer-axiom-redundant */
 	return path[0] == '/';
 }
 
@@ -645,14 +645,14 @@ int elements_withtok_element_string_axiom_is_still_needed(
 {
 	int i = 0;
 	while (i < argc) {
-		__ownership_string_terminated(argv[i]);
+		unsafe_assume_string_terminated(argv[i]);
 		i++;
 	}
 	return i;
 }
 
 /* The nonnull axiom on that same element, by contrast, IS redundant:
- * __ownership_pointer_nonnull() has no token effect at all, so the one
+ * unsafe_assume_pointer_nonnull() has no token effect at all, so the one
  * fact it asserts is the one elementProvenNullTerminated already
  * establishes. */
 int elements_withtok_element_nonnull_axiom_is_redundant(
@@ -660,7 +660,7 @@ int elements_withtok_element_nonnull_axiom_is_redundant(
 {
 	int i = 0;
 	while (i < argc) {
-		__ownership_pointer_nonnull(argv[i]); /* ownership-expect: pointer-axiom-redundant */
+		unsafe_assume_pointer_nonnull(argv[i]); /* ownership-expect: pointer-axiom-redundant */
 		i++;
 	}
 	return i;
@@ -677,7 +677,7 @@ int guarded_string_axiom_is_not_flagged(const char *p)
 {
 	if (!p)
 		return 0;
-	__ownership_string_terminated(p);
+	unsafe_assume_string_terminated(p);
 	return p[0] == '/';
 }
 
@@ -690,6 +690,6 @@ int guarded_nonnull_axiom_can_be_narrowed(char *p)
 {
 	if (!p)
 		return 0;
-	__ownership_pointer_nonnull(p); /* ownership-expect: pointer-axiom-narrowable */
+	unsafe_assume_pointer_nonnull(p); /* ownership-expect: pointer-axiom-narrowable */
 	return p[0];
 }

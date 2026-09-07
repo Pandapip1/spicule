@@ -1566,7 +1566,7 @@ static bool aggregateIndexProven(const ArraySubscriptExpr *Access,
   SVal Index = C.getSVal(Access->getIdx());
   // At a call site's checkPreCall -- RedundantPointerAxiomChecker auditing
   // an axiom whose argument is an aggregate element, e.g.
-  // __ownership_string_terminated(argv[i]) -- only the argument expression
+  // unsafe_assume_string_terminated(argv[i]) -- only the argument expression
   // itself still has an environment binding: its own sub-expressions, this
   // index among them, were pruned once the argument's value was computed,
   // and evaluate to Unknown. Both index shapes that actually occur are
@@ -4721,10 +4721,10 @@ public:
 
 // Self-audit of the two manual pointer proof axioms src/internal/
 // ownership_stubs.h declares for ValidPointerChecker
-// (__ownership_pointer_nonnull, __ownership_string_terminated), the direct
+// (unsafe_assume_pointer_nonnull, unsafe_assume_string_terminated), the direct
 // counterpart of MemoryContractChecker::checkPreCall's own "manual memory
 // proof axiom is redundant / can be narrowed" audit of
-// __ownership_readable_span/__ownership_writable_span, and deliberately
+// unsafe_assume_readable_span/unsafe_assume_writable_span, and deliberately
 // worded and structured to read as one family with it.
 //
 // A leaf axiom is a human's promise about a fact the analysis could not
@@ -4786,7 +4786,7 @@ class RedundantPointerAxiomChecker : public Checker<check::PreCall> {
     return false;
   }
 
-  // __ownership_string_invalidated() (ownership_stubs.h) is the only
+  // unsafe_assume_string_invalidated() (ownership_stubs.h) is the only
   // declaration in this tree that drops null_terminated, and null_terminated
   // is declared l_unlimited, so nothing else can take the token away
   // (TokenAlgebra.h's Consume does clear even a duplicable token, but no
@@ -4799,7 +4799,7 @@ class RedundantPointerAxiomChecker : public Checker<check::PreCall> {
     if (const auto *Call = dyn_cast<CallExpr>(Statement))
       if (const FunctionDecl *Callee = Call->getDirectCallee())
         if (Callee->getIdentifier() &&
-            Callee->getName() == "__ownership_string_invalidated")
+            Callee->getName() == "unsafe_assume_string_invalidated")
           return true;
     for (const Stmt *Child : Statement->children())
       if (bodyDropsStringTermination(Child))
@@ -4847,7 +4847,7 @@ class RedundantPointerAxiomChecker : public Checker<check::PreCall> {
     // An elements_withtok(family, extent) element, family being
     // null_terminated-shaped and the index provably in bounds: nonnull at
     // every read of it, by the aggregate's own declared contract.  Sound
-    // for THIS axiom precisely because __ownership_pointer_nonnull() has
+    // for THIS axiom precisely because unsafe_assume_pointer_nonnull() has
     // no token effect at all -- see declaredNullTerminated below for why
     // the same evidence does not license removing the string axiom.
     if (const auto *Subscript = dyn_cast<ArraySubscriptExpr>(Object))
@@ -4868,15 +4868,15 @@ class RedundantPointerAxiomChecker : public Checker<check::PreCall> {
   }
 
   // Evidence that Argument already carries, for the whole function body,
-  // the null_terminated token __ownership_string_terminated() would grant:
+  // the null_terminated token unsafe_assume_string_terminated() would grant:
   // a scalar withtok(null_terminated) parameter, which
   // CapabilityTokenChecker::checkBeginFunction grants once on entry and
   // nothing in this tree ever consumes (null_terminated is l_unlimited and
-  // no declaration consumes it; only __ownership_string_invalidated()
+  // no declaration consumes it; only unsafe_assume_string_invalidated()
   // drops it, which bodyDropsStringTermination rules out above).
   //
   // Nonnull-ness alone is deliberately NOT enough to call this axiom dead,
-  // the way it is for __ownership_pointer_nonnull: the string axiom also
+  // the way it is for unsafe_assume_pointer_nonnull: the string axiom also
   // grants null_terminated through the grant()/consume() token map
   // spicule.CapabilityToken maintains in a pass this checker never shares
   // (see ValidPointerChecker::isPointerNonNullAxiom's own comment), so an
@@ -4885,7 +4885,7 @@ class RedundantPointerAxiomChecker : public Checker<check::PreCall> {
   //
   // That is not hypothetical, and it is why an elements_withtok() element
   // is accepted as evidence for the nonnull axiom above but NOT here.
-  // Deleting the __ownership_string_terminated(argv[i]) restatement from
+  // Deleting the unsafe_assume_string_terminated(argv[i]) restatement from
   // src/util/{cut,ln,mkdir_util,pathchk,rm}.c -- every one of which
   // ValidPointer can prove nonnull on its own through
   // elementProvenNullTerminated -- makes spicule.CapabilityToken and

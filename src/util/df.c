@@ -121,6 +121,9 @@ int __util_df_main(
 
 	for (; i < argc; i++) {
 		char *a = argv[i];
+		/* a[0]: "pointer dereference is not proven nonnull" -- left
+		 * open, same accepted class as the identical argv[i][0] access
+		 * in src/util/du.c and friends (see that file's own comment). */
 		if (a[0] != '-' || a[1] == 0) break;
 		if (!strcmp(a, "--")) { i++; break; }
 		if (!strcmp(a, "-k")) { blocksize = 1024; continue; }

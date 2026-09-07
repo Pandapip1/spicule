@@ -87,7 +87,7 @@ char *realpath(const char *__restrict path,
 		return resolved;
 	}
 	if (len + 1 > PATH_MAX) { __free(p); errno = ENAMETOOLONG; return 0; }
-	__ownership_writable_span(resolved, len + 1);
+	unsafe_assume_writable_span(resolved, len + 1);
 	memcpy(resolved, p, len + 1);
 	__free(p);
 	return resolved;

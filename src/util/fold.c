@@ -123,7 +123,7 @@ static void fold_line(const char *line, size_t len, int had_nl, long width, int 
 		i += clen;
 	}
 
-	__ownership_readable_span(line + seg_start, len - seg_start);
+	unsafe_assume_readable_span(line + seg_start, len - seg_start);
 	fwrite(line + seg_start, 1, len - seg_start, stdout);
 	if (had_nl) fputc('\n', stdout);
 }

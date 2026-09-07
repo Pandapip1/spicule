@@ -249,8 +249,8 @@ static int do_glob(char *prefix withtok(readable_span(prefixcap)),
 		} else if (preflen == 0) m = xstrdup(".");
 		else {
 			char tmp[PATH_MAX];
-			__ownership_writable_span(tmp, preflen - 1);
-			__ownership_readable_span(prefix, preflen - 1);
+			unsafe_assume_writable_span(tmp, preflen - 1);
+			unsafe_assume_readable_span(prefix, preflen - 1);
 			memcpy(tmp, prefix, preflen - 1);
 			tmp[preflen - 1] = 0;
 			m = xstrdup(tmp);
@@ -281,7 +281,7 @@ static int do_glob(char *prefix withtok(readable_span(prefixcap)),
 		if (!name) return -1;
 		/* unescape()'s contract is writable_span(len), not
 		 * null_terminated, but its body always leaves a real NUL. */
-		__ownership_string_terminated(name);
+		unsafe_assume_string_terminated(name);
 		namelen = strlen(name);
 		if (join(newprefix, sizeof newprefix, prefix, preflen, name, namelen, want_slash,
 		         &newlen)) {
@@ -620,7 +620,7 @@ static int literal_prefix_exists(const struct comp_list *stk, int flags,
 		if (c->kind == CK_WILD) return 0;
 		name = unescape(c->start, c->len, flags);
 		if (!name) return -1;
-		__ownership_string_terminated(name);
+		unsafe_assume_string_terminated(name);
 		namelen = strlen(name);
 		if (namelen >= sizeof path - len) { __free(name); return 0; }
 		if (snprintf(path + len, sizeof path - len, "%s", name) !=
@@ -746,7 +746,7 @@ int glob(const char *pattern withtok(null_terminated), int flags,
 			}
 			out.v = (char **)__malloc(bytes);
 			if (!out.v) { out.n = out.cap = 0; errno = ENOMEM; return GLOB_NOSPACE; }
-			__ownership_readable_span(old, bytes);
+			unsafe_assume_readable_span(old, bytes);
 			memcpy((void *)out.v, (const void *)old, bytes);
 		}
 		__free((void *)pglob->gl_pathv);

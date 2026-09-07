@@ -140,7 +140,7 @@ inline ParameterLockFacts collect(const clang::ParmVarDecl *Parameter) {
 // mutex_acquire(), src/thread/pthread_cond.c's static cond_wait()) --
 // neither carries handle()/static_handle() of its own. So do
 // src/internal/ownership_stubs.h's own analyzer-only "leaf axiom" proof
-// primitives (__ownership_pthread_mutex_locked() and its siblings), which
+// primitives (unsafe_assume_pthread_mutex_locked() and its siblings), which
 // OwnershipChecker.cpp's own CapabilityMap consumes at the exact point a
 // hand-rolled state transition (e.g. a direct data->owner assignment) needs
 // to be asserted into ownership-token terms; requiring handle: excludes

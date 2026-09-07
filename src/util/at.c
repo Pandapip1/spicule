@@ -149,7 +149,7 @@ static int do_list(const char *dir, const char *qfilter, char **ids, int nids)
 			time_t run_at;
 			char queue[32];
 			char id[64];
-			__ownership_string_terminated(de->d_name); /* POSIX dirent contract */
+			unsafe_assume_string_terminated(de->d_name); /* POSIX dirent contract */
 			l = strlen(de->d_name);
 			if (l <= 4 || strcmp(de->d_name + l - 4, ".job")) continue;
 			if (l - 4 >= sizeof id) continue;
@@ -158,7 +158,7 @@ static int do_list(const char *dir, const char *qfilter, char **ids, int nids)
 			if (job_path(dir, id, "job", path, sizeof path) < 0 ||
 			    __spool_job_header(path, &run_at, queue, sizeof queue) < 0)
 				continue;
-			__ownership_string_terminated(queue); /* __spool_job_header() contract */
+			unsafe_assume_string_terminated(queue); /* __spool_job_header() contract */
 			if (qfilter && strcmp(queue, qfilter)) continue;
 			print_job_line(stdout, id, run_at, queue);
 		}

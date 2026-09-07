@@ -103,7 +103,7 @@
 #include <errno.h>
 #include <limits.h>
 #include "util.h"
-#include "ownership_stubs.h" /* __ownership_string_terminated(): every fixed-size
+#include "ownership_stubs.h" /* unsafe_assume_string_terminated(): every fixed-size
 	buffer this file assembles digit-by-digit in a loop (format_signed()'s/
 	format_unsigned()'s own `digs`), via snprintf() (format_unsigned()'s
 	`withpfx`, format_float()'s `buf`), or byte-by-byte by hand
@@ -395,7 +395,7 @@ static const char *parse_spec(const char *p, struct spec *sp)
  * genuinely NUL-terminated by its caller (format_signed()'s/
  * format_unsigned()'s `digs`, format_unsigned()'s `withpfx`,
  * format_char()'s `""`/`c`, format_float()'s `buf` -- see each call
- * site's own __ownership_string_terminated()), so it is safe to declare
+ * site's own unsafe_assume_string_terminated()), so it is safe to declare
  * withtok(null_terminated) outright; sp is always the caller's own
  * `&sp`. */
 static void emit_padded(const char *sign, const char *body withtok(null_terminated),
@@ -407,7 +407,7 @@ static void emit_padded(const char *sign, const char *body withtok(null_terminat
 	size_t blen = strlen(body);
 	size_t total;
 
-	if (sign) __ownership_string_terminated(sign); /* always a string literal when non-NULL: "", "-", "+", or " " */
+	if (sign) unsafe_assume_string_terminated(sign); /* always a string literal when non-NULL: "", "-", "+", or " " */
 	slen = sign ? strlen(sign) : 0;
 	total = slen + blen;
 	size_t pad = sp->width > 0 && (size_t)sp->width > total ?
@@ -467,7 +467,7 @@ static void format_signed(const char *arg, const struct spec *sp)
 	 * directly, or digs[n] after the loop) -- genuinely terminated either
 	 * way, but a loop-computed offset is not a fact a raw per-byte walk
 	 * lets the checker see through on its own. */
-	__ownership_string_terminated(digs);
+	unsafe_assume_string_terminated(digs);
 	emit_padded(sign, digs, sp, sp->prec < 0);
 }
 
@@ -547,7 +547,7 @@ static void format_unsigned(const char *arg, const struct spec *sp, int base, in
 		 * branch above sets withpfx[0] = 0 by hand -- but snprintf()'s
 		 * own contract does not grant null_terminated on its output
 		 * buffer (see this file's own include comment). */
-		__ownership_string_terminated(withpfx);
+		unsafe_assume_string_terminated(withpfx);
 		emit_padded("", withpfx, sp, sp->prec < 0);
 	}
 }
@@ -564,7 +564,7 @@ static void format_unsigned(const char *arg, const struct spec *sp, int base, in
  * src/util/patch.c's parse_name_line() re-asserts its own T** out-param's
  * result by hand instead of annotating the parameter), so withtok(...)
  * here pushes the proof onto run_one_pass()'s own call site, which
- * restates it with __ownership_string_terminated() right after each
+ * restates it with unsafe_assume_string_terminated() right after each
  * arg_take() that feeds a %s conversion. sp is always the caller's own
  * `&sp`. */
 static void format_str(const char *arg withtok(null_terminated), const struct spec *sp)
@@ -599,7 +599,7 @@ static void format_char(const char *arg, const struct spec *sp)
 	}
 	c[0] = arg[0];
 	c[1] = 0;
-	__ownership_string_terminated(c); /* c[1] = 0 just above, by hand */
+	unsafe_assume_string_terminated(c); /* c[1] = 0 just above, by hand */
 	emit_padded(0, c, sp, 0);
 }
 
@@ -648,7 +648,7 @@ static void format_float(const char *arg, const struct spec *sp, char conv)
 	 * successful snprintf() always NUL-terminates a nonzero-size buffer
 	 * -- but, again, not a fact snprintf()'s own contract grants (see
 	 * this file's own include comment). */
-	__ownership_string_terminated(buf);
+	unsafe_assume_string_terminated(buf);
 	emit_padded(sign, body, sp, sp->prec >= 0 ? 0 : 1);
 }
 
@@ -705,7 +705,7 @@ static int run_one_pass(const char *format, struct argcur *a)
 				 * (see format_str()'s own comment); arg is genuinely
 				 * either "" or a genuine null_terminated argv operand
 				 * either way, so restate it here by hand. */
-				__ownership_string_terminated(arg);
+				unsafe_assume_string_terminated(arg);
 				format_str(arg, &sp);
 				break;
 			case 'f': case 'e': case 'g':

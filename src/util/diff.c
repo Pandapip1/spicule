@@ -79,7 +79,7 @@
  * OWNERSHIP LINT: the (pointer, length) parameter pairs below (dline/
  * hunk/group/editop arrays and their .s/.a0/.hstart/etc. fields) are
  * always live and in-bounds by construction, but adding
- * __attribute__((nonnull(...))) or __ownership_pointer_nonnull() to close
+ * __attribute__((nonnull(...))) or unsafe_assume_pointer_nonnull() to close
  * the "not proven nonnull" findings was tried and reverted: once the
  * checker accepts a pointer is nonnull, it then demands proof the paired
  * length fits that pointer's own memory-contract span
@@ -117,7 +117,7 @@ static int read_whole_stream(FILE *f, char **out withtok(heap_allocated),
 			if (!g) { free(buf); return 0; }
 			buf = g; cap = newcap;
 		}
-		__ownership_writable_span(buf + len, cap - len);
+		unsafe_assume_writable_span(buf + len, cap - len);
 		got = fread(buf + len, 1, cap - len, f);
 		len += got;
 		if (got == 0) break;
@@ -961,8 +961,8 @@ static int namecmp(const void *pa, const void *pb)
 	 * copy of a dirent's d_name (list_dir_sorted() below) -- true by
 	 * construction, but unprovable through qsort's generic `const void *`
 	 * shape, hence asserted by hand. */
-	__ownership_string_terminated(*a);
-	__ownership_string_terminated(*b);
+	unsafe_assume_string_terminated(*a);
+	unsafe_assume_string_terminated(*b);
 	return strcmp(*a, *b);
 }
 
@@ -1215,7 +1215,7 @@ int __util_diff_main(
 		base = strrchr(filepath, '/');
 		base = base ? base + 1 : filepath;
 		snprintf(resolved, sizeof resolved, "%s/%s", dirpath, base);
-		__ownership_string_terminated(resolved); /* snprintf() always NUL-terminates a nonzero-size buffer */
+		unsafe_assume_string_terminated(resolved); /* snprintf() always NUL-terminates a nonzero-size buffer */
 
 		if (dir_is_first) return diff_files(resolved, filepath, resolved, filepath, &opts, stdout, 0);
 		return diff_files(filepath, resolved, filepath, resolved, &opts, stdout, 0);

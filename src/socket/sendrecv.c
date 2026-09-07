@@ -97,8 +97,8 @@ ssize_t recvfrom(int fd, void *buf withtok(writable_span(len)), size_t len,
 	if (src_addr && addrlen) {
 		socklen_t n2 = *addrlen < (socklen_t)f->peer_len ?
 			*addrlen : (socklen_t)f->peer_len;
-		__ownership_writable_span(src_addr, n2);
-		__ownership_readable_span(f->peer, n2);
+		unsafe_assume_writable_span(src_addr, n2);
+		unsafe_assume_readable_span(f->peer, n2);
 		memcpy(src_addr, f->peer, n2);
 		*addrlen = f->peer_len;
 	}

@@ -175,7 +175,7 @@ static void print_words(struct pctx *c, const struct sh_word *w, int leading_spa
 		 * survive the struct field the checker cannot trace back to
 		 * scan_word()'s own separately analyzed body, the same reason
 		 * parse.c restates it on p->cur.text. */
-		__ownership_string_terminated(w->text);
+		unsafe_assume_string_terminated(w->text);
 		if (!strcmp(w->text, "!")) emit_string(c, "'!'");
 		else emit_string(c, w->text);
 	}

@@ -706,7 +706,7 @@ static int list_variables(const char *prefix)
 			if (fputs(*e, stdout) < 0 || fputc('\n', stdout) == EOF) return -1;
 			continue;
 		}
-		__ownership_readable_span(*e, name_length);
+		unsafe_assume_readable_span(*e, name_length);
 		if (fwrite(*e, 1, name_length, stdout) != name_length ||
 		    fputc('=', stdout) == EOF || write_quoted(*e + name_length + 1) < 0 ||
 		    fputc('\n', stdout) == EOF) return -1;
@@ -857,8 +857,8 @@ static int bi_export(struct sh_builtin_ctx *ctx)
 			ctx->status = 2;
 			return 0;
 		}
-		__ownership_writable_span(name, namelen);
-		__ownership_readable_span(arg, namelen);
+		unsafe_assume_writable_span(name, namelen);
+		unsafe_assume_readable_span(arg, namelen);
 		memcpy(name, arg, namelen);
 		name[namelen] = 0;
 		if (!is_valid_name(name)) {
@@ -937,8 +937,8 @@ static int bi_readonly(struct sh_builtin_ctx *ctx)
 			ctx->status = 2;
 			return 0;
 		}
-		__ownership_writable_span(name, namelen);
-		__ownership_readable_span(arg, namelen);
+		unsafe_assume_writable_span(name, namelen);
+		unsafe_assume_readable_span(arg, namelen);
 		memcpy(name, arg, namelen);
 		name[namelen] = 0;
 		if (!is_valid_name(name)) {

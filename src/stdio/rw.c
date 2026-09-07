@@ -93,7 +93,7 @@ size_t __fread(void *ptr withtok(writable_span(size * nmemb)),
 		return 0;
 	}
 	total = size * nmemb;
-	__ownership_writable_span(ptr, total);
+	unsafe_assume_writable_span(ptr, total);
 	if (!f->readable) { errno = EBADF; f->err = 1; return 0; }
 	while (f->nunget && got < total) p[got++] = (unsigned char)f->unget[--f->nunget];
 	if (got < total && __toread(f) < 0) return got / size;
@@ -141,7 +141,7 @@ size_t __fwrite(const void *ptr withtok(readable_span(size * nmemb)),
 		__ensure_buf(f);
 		if (!f->buf) { f->err = 1; break; }
 		if (f->wpos == 0 && total - put >= f->bufsz) {
-			__ownership_readable_span(p + put, total - put);
+			unsafe_assume_readable_span(p + put, total - put);
 			ssize_t r = __file_write(f, p + put, total - put);
 			if (r <= 0) { f->err = 1; break; }
 			put += (size_t)r;

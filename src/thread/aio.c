@@ -110,7 +110,7 @@ static void wake_waiters_locked(const struct aio_request *request)
 		 * indexed at this same count by that function's two
 		 * suspend_list_ready() calls before this waiter was ever
 		 * registered -- not visible here across the struct field. */
-		__ownership_pointer_nonnull(waiter->list);
+		unsafe_assume_pointer_nonnull(waiter->list);
 		for (i = 0; i < waiter->count; i++) {
 			if (waiter->list[i] != request->cb) continue;
 			waiter->triggered = 1;
@@ -196,7 +196,7 @@ static void finish_locked(struct aio_request *request, int error, ssize_t result
 	 * (perform(), in submit()'s synchronous path) makes the checker treat
 	 * each re-read as a fresh, unrelated value. wake_waiters_locked() runs
 	 * last since it doesn't need any of this. */
-	__ownership_pointer_nonnull(cb);
+	unsafe_assume_pointer_nonnull(cb);
 	*individual = cb->aio_sigevent;
 	*have_individual = event_wants_notify(individual);
 	*have_list = 0;
@@ -220,7 +220,7 @@ static ssize_t perform(struct aio_request *request, int *error)
 	 * submit()'s synchronous path both only reach this with cb already
 	 * set), an invariant established in those other functions that this
 	 * one can't see through the struct field. */
-	__ownership_pointer_nonnull(cb);
+	unsafe_assume_pointer_nonnull(cb);
 	errno = 0;
 	if (request->op == OP_SYNC) {
 		result = fsync(cb->aio_fildes);
@@ -234,19 +234,19 @@ static ssize_t perform(struct aio_request *request, int *error)
 				 * (mirroring read()'s own withtok(writable_span(count))
 				 * on its buffer parameter) -- not locally derivable from
 				 * these struct fields alone. */
-				__ownership_writable_span(cb->aio_buf, cb->aio_nbytes);
+				unsafe_assume_writable_span(cb->aio_buf, cb->aio_nbytes);
 				result = pread(cb->aio_fildes, (void *)cb->aio_buf,
 				               cb->aio_nbytes, cb->aio_offset);
 			} else {
-				__ownership_readable_span(cb->aio_buf, cb->aio_nbytes);
+				unsafe_assume_readable_span(cb->aio_buf, cb->aio_nbytes);
 				result = pwrite(cb->aio_fildes, (const void *)cb->aio_buf,
 				                cb->aio_nbytes, cb->aio_offset);
 			}
 		} else if (request->op == OP_READ) {
-			__ownership_writable_span(cb->aio_buf, cb->aio_nbytes);
+			unsafe_assume_writable_span(cb->aio_buf, cb->aio_nbytes);
 			result = read(cb->aio_fildes, (void *)cb->aio_buf, cb->aio_nbytes);
 		} else {
-			__ownership_readable_span(cb->aio_buf, cb->aio_nbytes);
+			unsafe_assume_readable_span(cb->aio_buf, cb->aio_nbytes);
 			result = write(cb->aio_fildes, (const void *)cb->aio_buf, cb->aio_nbytes);
 		}
 	}
@@ -671,7 +671,7 @@ int aio_cancel(int fd, struct aiocb *cb)
 		 * request->cb after finish_locked() (below) has already taken
 		 * request through another call makes the checker treat each
 		 * re-read as a fresh, unrelated value. */
-		__ownership_pointer_nonnull(req_cb);
+		unsafe_assume_pointer_nonnull(req_cb);
 		if (req_cb->aio_fildes != fd || (cb && req_cb != cb))
 			continue;
 		matched = 1;

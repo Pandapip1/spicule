@@ -51,11 +51,11 @@ int has_teb(void) { return __teb() != 0; }
 /* Analyzer-only ownership proof calls erase to no-ops in ordinary builds.
  * Their abstract token effect is not a runtime side effect and therefore
  * does not invalidate a surrounding compiler purity claim. */
-void __ownership_string_terminated(const void *);
+void unsafe_assume_string_terminated(const void *);
 int prove_terminated(const char *p) __attribute__((pure));
 int prove_terminated(const char *p)
 {
-	__ownership_string_terminated(p);
+	unsafe_assume_string_terminated(p);
 	return *p;
 }
 

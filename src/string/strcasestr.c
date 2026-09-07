@@ -11,7 +11,7 @@ char *strcasestr(const char *h withtok(null_terminated),
 {
 	size_t l = strlen(n);
 	for (; *h; h++) if (!strncasecmp(h, n, l)) {
-		__ownership_string_terminated(h);
+		unsafe_assume_string_terminated(h);
 		return (char *)h;
 	}
 	return 0;

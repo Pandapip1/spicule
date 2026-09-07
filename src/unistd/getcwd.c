@@ -31,7 +31,7 @@ char *getcwd(char *buf withtok(heap_allocated), size_t size)
 		const char *path = vfs == __VFS_ROOT ? "/" : "/dev";
 		/* Both arms are string literals; the checker's literal
 		 * recognition doesn't reach through the ternary assignment. */
-		__ownership_string_terminated(path);
+		unsafe_assume_string_terminated(path);
 		len = strlen(path);
 		if (!buf) {
 			if (!size) size = len + 1;

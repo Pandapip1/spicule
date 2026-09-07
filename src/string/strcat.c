@@ -17,7 +17,7 @@ char *strcat(char *__restrict dest withtok(null_terminated)
 	 * implementation cannot add a bound without changing the public API. */
 	// NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.strcpy)
 	strcpy(dest + strlen(dest), src);
-	__ownership_string_terminated(dest);
+	unsafe_assume_string_terminated(dest);
 	return dest;
 }
 

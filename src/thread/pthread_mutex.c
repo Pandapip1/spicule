@@ -176,7 +176,7 @@ int pthread_mutex_init(pthread_mutex_t *__restrict mutex construct(pthread_mutex
 	data->prioceiling = attributes ? attributes->prioceiling :
 		sched_get_priority_min(SCHED_FIFO);
 	data->robust = attributes ? attributes->robust : PTHREAD_MUTEX_STALLED;
-	__ownership_pthread_mutex_initialized(mutex);
+	unsafe_assume_pthread_mutex_initialized(mutex);
 	return 0;
 }
 
@@ -200,7 +200,7 @@ int pthread_mutex_destroy(pthread_mutex_t *mutex destroy(pthread_mutex) static_h
 	data->magic = MUTEX_DEAD;
 	__plat_fast_unlock();
 	if (semaphore) __plat_sync_close(semaphore);
-	__ownership_pthread_mutex_destroyed(mutex);
+	unsafe_assume_pthread_mutex_destroyed(mutex);
 	return 0;
 }
 
@@ -247,17 +247,17 @@ static int mutex_acquire(pthread_mutex_t *mutex consume(pthread_mutex_unlocked) 
 			__plat_fast_unlock();
 			if (data->robust == PTHREAD_MUTEX_ROBUST &&
 			    data->robust_state == ROBUST_OWNER_DEAD) {
-				__ownership_pthread_mutex_locked(mutex);
+				unsafe_assume_pthread_mutex_locked(mutex);
 				return EOWNERDEAD;
 			}
-			__ownership_pthread_mutex_locked(mutex);
+			unsafe_assume_pthread_mutex_locked(mutex);
 			return 0;
 		}
 		if (owned_by(data, self)) {
 			if (data->type == PTHREAD_MUTEX_RECURSIVE) {
 				data->recursion++;
 				__plat_fast_unlock();
-				__ownership_pthread_mutex_locked(mutex);
+				unsafe_assume_pthread_mutex_locked(mutex);
 				return 0;
 			}
 			if (data->type == PTHREAD_MUTEX_ERRORCHECK || try_only) {
@@ -350,7 +350,7 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex handle(pthread_mutex) static_han
 	}
 	__plat_fast_unlock();
 	if (wake) __plat_semaphore_post(data->semaphore);
-	__ownership_pthread_mutex_unlocked(mutex);
+	unsafe_assume_pthread_mutex_unlocked(mutex);
 	return 0;
 }
 

@@ -86,7 +86,7 @@
 #include <errno.h>
 #include <regex.h>
 #include "util.h"
-#include "ownership_stubs.h" /* __ownership_string_terminated(): restates argv's null-termination through struct expr_ctx's char **v, which the checker can't trace on its own (same idiom as find.c/test.c) */
+#include "ownership_stubs.h" /* unsafe_assume_string_terminated(): restates argv's null-termination through struct expr_ctx's char **v, which the checker can't trace on its own (same idiom as find.c/test.c) */
 
 /* parse_primary()'s '(' case is the only self-recursion this parser
  * does: it calls back into parse_or(), which walks straight back down
@@ -154,9 +154,9 @@ static const char *peek(struct expr_ctx *c)
 	 * reassigned -- genuinely never NULL for this expr_ctx's whole
 	 * lifetime, but that fact does not survive a struct field read this
 	 * per-function analysis cannot see through. */
-	__ownership_pointer_nonnull(c->v);
+	unsafe_assume_pointer_nonnull(c->v);
 	tok = c->v[c->i];
-	__ownership_string_terminated(tok);
+	unsafe_assume_string_terminated(tok);
 	return tok;
 }
 
@@ -209,7 +209,7 @@ static char *dupstr(struct expr_ctx *c, const char *s)
 {
 	size_t n;
 	char *p;
-	__ownership_string_terminated(s); /* string literal, numstr()'s buffer, or an argv element -- all null-terminated */
+	unsafe_assume_string_terminated(s); /* string literal, numstr()'s buffer, or an argv element -- all null-terminated */
 	n = strlen(s) + 1;
 	p = malloc(n);
 	if (!p) { xerr(c, "out of memory"); return oom_sentinel; }
@@ -245,7 +245,7 @@ static char *parse_primary(struct expr_ctx *c) __attribute__((nonnull(1), return
 static int is_cmp_op(const char *s) __attribute__((nonnull(1), __pure__));
 static int is_cmp_op(const char *s)
 {
-	__ownership_string_terminated(s);
+	unsafe_assume_string_terminated(s);
 	return !strcmp(s, "=") || !strcmp(s, ">") || !strcmp(s, ">=") ||
 	       !strcmp(s, "<") || !strcmp(s, "<=") || !strcmp(s, "!=");
 }
@@ -261,7 +261,7 @@ static char *do_arith(struct expr_ctx *c, char *a consume(heap_allocated), const
 	long x, y, r;
 	char *result;
 	if (c->err) { result = dupstr(c, ""); goto done; }
-	__ownership_string_terminated(op);
+	unsafe_assume_string_terminated(op);
 	if (!is_num_candidate(a) || !is_num_candidate(b)) {
 		xerr(c, "non-numeric argument");
 		result = dupstr(c, "");
@@ -343,9 +343,9 @@ static char *do_cmp(struct expr_ctx *c, char *a consume(heap_allocated), const c
 	const char *value;
 	char *result;
 	if (c->err) { result = dupstr(c, ""); goto done; }
-	__ownership_string_terminated(op);
-	__ownership_string_terminated(a);
-	__ownership_string_terminated(b);
+	unsafe_assume_string_terminated(op);
+	unsafe_assume_string_terminated(a);
+	unsafe_assume_string_terminated(b);
 	if (is_num_candidate(a) && is_num_candidate(b)) {
 		long x = strtol(a, NULL, 10), y = strtol(b, NULL, 10);
 		if (x < y) r = -1;
@@ -453,7 +453,7 @@ static char *parse_match(struct expr_ctx *c)
 		const char *tok = peek(c);
 		char *rhs;
 		if (!tok) break;
-		__ownership_string_terminated(tok);
+		unsafe_assume_string_terminated(tok);
 		if (strcmp(tok, ":")) break;
 		c->i++;
 		rhs = parse_primary(c);
@@ -486,7 +486,7 @@ static char *parse_add(struct expr_ctx *c)
 		const char *tok = peek(c);
 		char *rhs;
 		if (!tok) break;
-		__ownership_string_terminated(tok);
+		unsafe_assume_string_terminated(tok);
 		if (strcmp(tok, "+") && strcmp(tok, "-")) break;
 		c->i++;
 		rhs = parse_mul(c);

@@ -122,7 +122,7 @@ static char *dupn(const char *s, size_t n)
 	if (!__util_size_add(n, 1, &bytes)) return NULL;
 	r = malloc(bytes);
 	if (!r) return NULL;
-	__ownership_readable_span(s, n);
+	unsafe_assume_readable_span(s, n);
 	memcpy(r, s, n);
 	r[n] = 0;
 	return r;
@@ -188,8 +188,8 @@ static int scan_number(struct awk_lexer *lx, struct awk_token *out)
 	}
 	n = lx->pos - start;
 	if (n >= sizeof small) n = sizeof small - 1;
-	__ownership_writable_span(small, n);
-	__ownership_readable_span(lx->src + start, n);
+	unsafe_assume_writable_span(small, n);
+	unsafe_assume_readable_span(lx->src + start, n);
 	memcpy(small, lx->src + start, n);
 	small[n] = 0;
 	out->type = T_NUMBER;
@@ -248,7 +248,7 @@ static int scan_string(struct awk_lexer *lx, struct awk_token *out)
 	 * write immediately above, but a raw per-byte scan_putc() loop is
 	 * exactly the shape a checker cannot see through on its own (same
 	 * idiom src/string/strdup.c's own memcpy-plus-no-adjustment uses). */
-	__ownership_string_terminated(buf);
+	unsafe_assume_string_terminated(buf);
 	out->type = T_STRING;
 	out->text = buf;
 	return 1;
@@ -290,7 +290,7 @@ static int scan_ere(struct awk_lexer *lx, struct awk_token *out)
 	buf[n] = 0;
 	/* struct awk_token.text withtok(null_terminated) -- see scan_string()'s
 	 * own identical comment above. */
-	__ownership_string_terminated(buf);
+	unsafe_assume_string_terminated(buf);
 	out->type = T_ERE;
 	out->text = buf;
 	return 1;

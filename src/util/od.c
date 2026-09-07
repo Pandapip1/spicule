@@ -51,7 +51,7 @@
 #include <errno.h>
 #include <limits.h>
 #include "util.h"
-#include "ownership_stubs.h" /* __ownership_string_terminated(): instream_read() below opens is->files[is->idx], sliced from __util_od_main's own argv (elements_withtok(null_terminated, argc)) into struct instream's char **files field -- a struct field the analyzer cannot see through back to that parameter contract, the same idiom src/util/find.c's byte-for-byte identical struct find_ctx (char **v; ...) already uses for its own argv slice. */
+#include "ownership_stubs.h" /* unsafe_assume_string_terminated(): instream_read() below opens is->files[is->idx], sliced from __util_od_main's own argv (elements_withtok(null_terminated, argc)) into struct instream's char **files field -- a struct field the analyzer cannot see through back to that parameter contract, the same idiom src/util/find.c's byte-for-byte identical struct find_ctx (char **v; ...) already uses for its own argv slice. */
 
 static int od_output_failed;
 
@@ -136,7 +136,7 @@ static size_t instream_read(struct instream *is, unsigned char *buf, size_t want
 				 * argv+i slice of it), whose elements the analyzer
 				 * cannot trace across the struct field -- see this
 				 * file's own #include comment above. */
-				__ownership_string_terminated(is->files[is->idx]);
+				unsafe_assume_string_terminated(is->files[is->idx]);
 				is->cur = fopen(is->files[is->idx], "rb");
 				if (!is->cur) {
 					__util_diagf("od: %s: %s\n", is->files[is->idx], strerror(errno));

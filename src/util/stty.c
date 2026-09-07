@@ -110,7 +110,7 @@
 #include <unistd.h>	/* _POSIX_VDISABLE */
 #include <termios.h>
 #include "util.h"
-#include "ownership_stubs.h" /* __ownership_string_terminated() */
+#include "ownership_stubs.h" /* unsafe_assume_string_terminated() */
 
 /* ---- accumulated, not-yet-applied operand state -------------------
  *
@@ -550,7 +550,7 @@ static int parse_operand(int argc, char **argv, int *ip, struct pending *p)
 	 * null-terminated suffix of the same buffer) -- the pointer
 	 * arithmetic loses the token this checker tracks even though the
 	 * fact stays true, so restated here. */
-	__ownership_string_terminated(name);
+	unsafe_assume_string_terminated(name);
 
 	for (i = 0; i < NBOOLFLAGS; i++) {
 		if (!strcmp(name, boolflags[i].name)) {

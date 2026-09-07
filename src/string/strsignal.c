@@ -52,7 +52,7 @@ char *strsignal(int sig)
 	if (sig < 0 || (size_t)sig >= sizeof __sigmsgs / sizeof *__sigmsgs)
 		return (char *)"Unknown signal";
 	result = (char *)__sigmsgs[sig];
-	__ownership_string_terminated(result);
+	unsafe_assume_string_terminated(result);
 	return result;
 }
 

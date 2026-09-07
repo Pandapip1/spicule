@@ -137,8 +137,8 @@ char *tmpnam(char *s)
 	if (!*mktemp(tmpl)) return 0; // NOLINT(clang-analyzer-security.insecureAPI.mktemp) -- see above: mkstemp() is the defect, not the fix
 	errno = e;
 	if (!s) s = buf;
-	__ownership_writable_span(s, sizeof tmpl);
-	__ownership_readable_span(tmpl, sizeof tmpl);
+	unsafe_assume_writable_span(s, sizeof tmpl);
+	unsafe_assume_readable_span(tmpl, sizeof tmpl);
 	memcpy(s, tmpl, sizeof tmpl);
 	return s;
 }
@@ -172,7 +172,7 @@ char *ctermid(char *s)
 {
 	static char buf[L_ctermid] = "/dev/tty";
 	if (s) {
-		__ownership_writable_span(s, sizeof "/dev/tty");
+		unsafe_assume_writable_span(s, sizeof "/dev/tty");
 		memcpy(s, "/dev/tty", sizeof "/dev/tty");
 		return s;
 	}

@@ -15,6 +15,6 @@ wchar_t *wcsdup(const wchar_t *s)
 	size_t n = (wcslen(s) + 1) * sizeof(wchar_t);
 	wchar_t *d = malloc(n);
 	if (!d) return 0;
-	__ownership_readable_span(s, n);
+	unsafe_assume_readable_span(s, n);
 	return memcpy(d, s, n);
 }

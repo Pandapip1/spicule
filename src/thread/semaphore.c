@@ -387,7 +387,7 @@ int sem_unlink(const char *name)
 			if (!entry->refs) {
 				__plat_sync_close(entry->sem.__handle);
 				free(entry->path);
-				__ownership_writable_span(entry, sizeof *entry);
+				unsafe_assume_writable_span(entry, sizeof *entry);
 				memset(entry, 0, sizeof *entry);
 			}
 		}

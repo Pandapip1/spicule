@@ -51,11 +51,11 @@ void establish_readable(
 void establish_disjoint(
 	void *first grant(fixture_disjoint_span(second, length)),
 	const void *second, size_t length);
-void __ownership_writable_span(
+void unsafe_assume_writable_span(
 	void *buffer grant(fixture_writable_span(length)), size_t length);
-void __ownership_readable_span(
+void unsafe_assume_readable_span(
 	const void *buffer grant(fixture_readable_span(length)), size_t length);
-void __ownership_disjoint_span(
+void unsafe_assume_disjoint_span(
 	void *first grant(fixture_disjoint_span(second, length)),
 	const void *second, size_t length);
 
@@ -107,15 +107,15 @@ void use_explicit_memory_proofs(char *destination, const char *source,
  * still necessary and therefore must not receive the redundancy warning. */
 void use_necessary_manual_proof(char *destination, size_t length)
 {
-	__ownership_writable_span(destination, length);
+	unsafe_assume_writable_span(destination, length);
 	memset(destination, 0, length);
 }
 
 void retain_necessary_alias_proofs(char *destination, const char *source,
 	size_t length)
 {
-	__ownership_readable_span(source, length);
-	__ownership_disjoint_span(destination, source, length);
+	unsafe_assume_readable_span(source, length);
+	unsafe_assume_disjoint_span(destination, source, length);
 }
 
 void granted_array_base_suffix(size_t length, size_t offset)

@@ -75,11 +75,21 @@ static int dd_mul_overflows(uintmax_t a, uintmax_t b, uintmax_t *out)
 
 /* dd(1p)'s block-size expression grammar -- see this file's header. */
 // NOLINTNEXTLINE(misc-no-recursion) -- suffix-expression parsing consumes input on every recursive step
-static int parse_dd_num(const char *s, uintmax_t *out)
+static int parse_dd_num(const char *s withtok(null_terminated), uintmax_t *out)
 {
 	char *end;
 	uintmax_t v;
 
+	/* OPEN LINT FINDING (ntlibc.ValidPointer, "dereference extent is not
+	 * proven sufficient"): every real caller passes a pointer into a
+	 * NUL-terminated argv string (some via `val = eq + 1` after
+	 * confirming a[klen] is non-NUL, so val is always at least the
+	 * terminator itself), but that fact reaches here through symbolic
+	 * pointer arithmetic on an opaque, unsized argv element -- no
+	 * existing ownership.h annotation expresses "offset klen+1 into a
+	 * null-terminated string of unknown static extent is in bounds",
+	 * the same class of gap already accepted in src/util/sort.c and
+	 * src/util/join.c. Left open rather than papered over. */
 	if (!*s) return -1;
 	errno = 0;
 	v = strtoumax(s, &end, 10);
@@ -88,6 +98,10 @@ static int parse_dd_num(const char *s, uintmax_t *out)
 	 * ERANGE instead of failing outright; without this check the clamped
 	 * value would silently stand in for whatever was actually typed. */
 	if (v == UINTMAX_MAX && errno == ERANGE) return -1;
+	/* end still points within (or at the terminating NUL of) the same
+	 * string s did on entry -- strtoumax()'s endptr contract -- but that
+	 * fact does not survive the plain char * variable's own type. */
+	__ownership_string_terminated(end);
 	s = end;
 
 	if (*s == 'b') { if (dd_mul_overflows(v, 512, &v) < 0) return -1; s++; }
@@ -96,6 +110,10 @@ static int parse_dd_num(const char *s, uintmax_t *out)
 
 	if (*s == 'x') {
 		uintmax_t rhs;
+		/* s+1 is still inside the same NUL-terminated string s is, but
+		 * the pointer-arithmetic expression itself doesn't carry the
+		 * token this checker can trace. */
+		__ownership_string_terminated(s + 1);
 		if (parse_dd_num(s + 1, &rhs) < 0) return -1;
 		if (dd_mul_overflows(v, rhs, &v) < 0) return -1;
 		*out = v;
@@ -131,6 +149,10 @@ static int parse_conv(const char *val, int *notrunc, int *sync, int *noerror)
 
 	*notrunc = *sync = *noerror = 0;
 	for (tok = strtok(buf, ","); tok; tok = strtok(0, ",")) {
+		/* strtok() always returns either NULL or a NUL-terminated token
+		 * carved out of buf (itself NUL-terminated above); that fact
+		 * does not survive strtok()'s own unannotated declaration. */
+		__ownership_string_terminated(tok);
 		if (!strcmp(tok, "notrunc")) *notrunc = 1;
 		else if (!strcmp(tok, "sync")) *sync = 1;
 		else if (!strcmp(tok, "noerror")) *noerror = 1;

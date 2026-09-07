@@ -454,3 +454,84 @@ char *struct_field_array_element_nonnull_axiom_is_trusted(
 	__ownership_pointer_nonnull(slice->v);
 	return slice->v[0];
 }
+
+/* null_terminated implies nonnull, asserted once at the point the token is
+ * GRANTED rather than at every later dereference (OwnershipChecker.cpp's
+ * tokenImpliesNonNull and its three grant-point consumers:
+ * AggregateElementTokenChecker::checkBeginFunction/checkPostStmt and
+ * CapabilityTokenChecker::checkBeginFunction -- plus ValidPointerChecker's
+ * own by-name mirrors of those same three grant points,
+ * parameterGrantsNullTerminatedScalar/elementProvenNullTerminated/
+ * isStringTerminatedAxiom, needed because that checker never shares a
+ * pass with the CapabilityToken family; see isPointerNonNullAxiom's own
+ * comment). Before this fix, each case below needed its own manual
+ * __ownership_pointer_nonnull()/__ownership_string_terminated() restatement
+ * the way struct_field_array_element_nonnull_axiom_is_trusted above still
+ * does for the genuinely unrelated struct-field-capture shape. */
+tokdef null_terminated l_unlimited implicit_drop string_literal;
+
+void __ownership_string_terminated(const void * grant(null_terminated));
+
+/* A scalar withtok(null_terminated) parameter's own nonnull-ness needs no
+ * separate axiom or __attribute__((nonnull)). */
+int scalar_withtok_null_terminated_needs_no_axiom(
+    const char *path withtok(null_terminated))
+{
+	return path[0] == '/';
+}
+
+/* elements_withtok(null_terminated, argc): the aggregate pointer itself
+ * (argv) and each in-bounds element (argv[i]) are both nonnull with no
+ * separate __ownership_pointer_nonnull() call, directly inside a loop
+ * condition/body -- the src/util/find.c __util_find_main() shape this
+ * fixture mirrors. */
+int elements_withtok_array_and_element_need_no_axiom(
+    int argc, char **argv elements_withtok(null_terminated, argc))
+{
+	int i = 0;
+	while (i < argc) {
+		if (argv[i][0] == '-') break;
+		i++;
+	}
+	return i;
+}
+
+/* The manual __ownership_string_terminated() axiom itself also proves
+ * nonnull, with no separate __ownership_pointer_nonnull() call. */
+int string_terminated_axiom_also_proves_nonnull(const char *p)
+{
+	__ownership_string_terminated(p);
+	return p[0] == '/';
+}
+
+/* dirname()/basename() (src/misc/dirname.c, src/misc/basename.c) always
+ * return a live, NUL-terminated string for any input, recognized by name
+ * in ValidPointerChecker (returnsNullTerminatedString) -- no manual
+ * restatement needed at the call site. */
+char *dirname(char *s);
+char *basename(char *s);
+
+int dirname_result_needs_no_restatement(char *path)
+{
+	char *d = dirname(path);
+	return d[0] == '/';
+}
+
+int basename_result_needs_no_restatement(char *path)
+{
+	char *b = basename(path);
+	return b[0] == '/';
+}
+
+/* snprintf()/vsnprintf() NUL-terminate their destination whenever the size
+ * argument is provably nonzero (src/stdio/printf.c's vxprintf_mem: `if
+ * (cap) { ...; s[pos] = 0; }`) -- proven here via sizeof, the overwhelmingly
+ * common real case (snprintfSizeProvenNonzero's own comment). */
+int snprintf(char *s, size_t n, const char *fmt, ...) __attribute__((nonnull(3)));
+
+int snprintf_with_proven_nonzero_size_needs_no_restatement(void)
+{
+	char buf[64];
+	snprintf(buf, sizeof buf, "%s", "hi");
+	return buf[0] == 'h';
+}

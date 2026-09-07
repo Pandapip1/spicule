@@ -8,6 +8,6 @@ withtok(null_terminated)
 char *strrchr(const char *s withtok(null_terminated), int c)
 {
 	char *result = memrchr(s, c, strlen(s)+1);
-	if (result) __ownership_string_terminated(result);
+	if (result) unsafe_assume_string_terminated(result);
 	return result;
 }

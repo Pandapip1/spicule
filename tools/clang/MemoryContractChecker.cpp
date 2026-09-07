@@ -1204,7 +1204,7 @@ class MemoryContractChecker
 
   static bool isManualProofCall(const FunctionDecl *Function) {
     return Function && Function->getIdentifier() &&
-           Function->getName().starts_with("__ownership_");
+           Function->getName().starts_with("unsafe_assume_");
   }
 
   /* A pointer-returning function carries its byte extent on the function

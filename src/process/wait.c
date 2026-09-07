@@ -271,7 +271,7 @@ static pid_t do_waitpid(pid_t pid, int *status, int options, struct rusage *ru, 
 		if (c) {
 			if (status) *status = c->jobstat;
 			if (ru) {
-				__ownership_writable_span(ru, sizeof *ru);
+				unsafe_assume_writable_span(ru, sizeof *ru);
 				memset(ru, 0, sizeof *ru);
 			}
 			if (!nowait) c->jobstat = 0;

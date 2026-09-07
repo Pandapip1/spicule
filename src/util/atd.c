@@ -135,7 +135,7 @@ static pid_t spawn_job(const char *dir, const char *id, const char *running_path
 		errno = ENAMETOOLONG;
 		return -1;
 	}
-	__ownership_string_terminated(outpath); /* the snprintf() length check above */
+	unsafe_assume_string_terminated(outpath); /* the snprintf() length check above */
 	sh_path = __find_program("sh", 1);
 	if (!sh_path) { errno = ENOENT; return -1; }
 
@@ -171,7 +171,7 @@ static void poll_once(const char *dir)
 		char queue[32];
 		pid_t pid;
 
-		__ownership_string_terminated(de->d_name); /* POSIX dirent contract */
+		unsafe_assume_string_terminated(de->d_name); /* POSIX dirent contract */
 		l = strlen(de->d_name);
 		if (l <= 4 || strcmp(de->d_name + l - 4, ".job")) continue;
 		if (l - 4 >= sizeof id) continue;
@@ -180,7 +180,7 @@ static void poll_once(const char *dir)
 
 		if (snprintf(path, sizeof path, "%s/%s.job", dir, id) >= (int)sizeof path) continue;
 		if (__spool_job_header(path, &run_at, queue, sizeof queue) < 0) continue;
-		__ownership_string_terminated(queue); /* __spool_job_header() contract */
+		unsafe_assume_string_terminated(queue); /* __spool_job_header() contract */
 		if (run_at > now) continue;
 
 		if (!strcmp(queue, "b")) {
@@ -191,7 +191,7 @@ static void poll_once(const char *dir)
 
 		if (snprintf(running, sizeof running, "%s/%s.job.running", dir, id) >= (int)sizeof running)
 			continue;
-		__ownership_string_terminated(running); /* the snprintf() length check above */
+		unsafe_assume_string_terminated(running); /* the snprintf() length check above */
 		if (rename(path, running) < 0) continue; /* another instance claimed it first */
 
 		if (g_nrunning >= MAX_RUNNING) {

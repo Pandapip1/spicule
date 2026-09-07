@@ -55,7 +55,7 @@ int setsockopt(int fd, int level, int optname, const void *optval, socklen_t opt
 	switch (optname) {
 	case SO_REUSEADDR:
 		if (!optval || optlen < (socklen_t)sizeof(int)) { errno = EINVAL; return -1; }
-		__ownership_readable_span(optval, sizeof(v));
+		unsafe_assume_readable_span(optval, sizeof(v));
 		memcpy(&v, optval, sizeof(v));
 		if (v) f->pad |= AFD_ST_REUSEADDR; else f->pad &= ~AFD_ST_REUSEADDR;
 		return 0;
@@ -94,7 +94,7 @@ int getsockopt(int fd, int level, int optname, void *__restrict optval, socklen_
 
 	{
 		socklen_t n = *optlen < (socklen_t)sizeof(v) ? *optlen : (socklen_t)sizeof(v);
-		__ownership_writable_span(optval, n);
+		unsafe_assume_writable_span(optval, n);
 		memcpy(optval, &v, n);
 		*optlen = sizeof(v);
 	}

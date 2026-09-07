@@ -278,7 +278,7 @@ static std::optional<CapabilityKind> dialectTokenKind(ASTContext &Context,
 // Duplicable-ness alone does not imply nonnull. A token with qual:
 // string_literal has no such escape hatch, so granting it -- by any
 // mechanism: a scalar withtok(family), an elements_withtok(family, extent)
-// per-element read, or the manual __ownership_string_terminated() axiom --
+// per-element read, or the manual unsafe_assume_string_terminated() axiom --
 // also, definitionally, proves the pointer nonnull.
 static bool tokenImpliesNonNull(const TypedefNameDecl *Token) {
   return hasQualifier(Token, "qual:string_literal");
@@ -406,7 +406,7 @@ static bool expressionProvidesStringLiteralToken(
 // set of real per-function contracts neither checker can derive from the
 // declaration alone (libgen.h declares plain `char *dirname(char *)`, with
 // no withtok/grant annotation to read), asserted once here instead of
-// requiring every call site's own __ownership_string_terminated()
+// requiring every call site's own unsafe_assume_string_terminated()
 // restatement.
 static bool returnsNullTerminatedString(const CallEvent &Call) {
   const auto *Function = dyn_cast_or_null<FunctionDecl>(Call.getDecl());
@@ -3571,7 +3571,7 @@ class ValidPointerChecker
     return Name == "getline" || Name == "getdelim";
   }
 
-  // src/internal/ownership_stubs.h's __ownership_pointer_nonnull(object) is
+  // src/internal/ownership_stubs.h's unsafe_assume_pointer_nonnull(object) is
   // the leaf axiom for exactly the gap this checker's own nonnull proof
   // otherwise cannot close: a struct field or array element (e.g. a
   // `char **` argv slice stashed in a parser context struct, indexed
@@ -3587,7 +3587,7 @@ class ValidPointerChecker
   // fixed set of real per-function contracts this checker cannot derive
   // from first principles, asserted once by a human at the call site
   // where the fact is actually true, the same discipline
-  // __ownership_string_terminated() already applies to the NUL-
+  // unsafe_assume_string_terminated() already applies to the NUL-
   // terminated property nearby. It is deliberately NOT routed through
   // this project's own grant()/consume() token-state map the way that
   // sibling axiom is: that map (CapabilityMap/SymbolCapabilityMap, see
@@ -3608,10 +3608,10 @@ class ValidPointerChecker
     const auto *Function = dyn_cast_or_null<FunctionDecl>(Call.getDecl());
     if (!Function || !Function->getIdentifier())
       return false;
-    return Function->getName() == "__ownership_pointer_nonnull";
+    return Function->getName() == "unsafe_assume_pointer_nonnull";
   }
 
-  // __ownership_string_terminated(object) (ownership_stubs.h) grants
+  // unsafe_assume_string_terminated(object) (ownership_stubs.h) grants
   // null_terminated on object through this project's own grant()/consume()
   // token map (CapabilityTokenChecker's generic grant: protocol match --
   // it is not otherwise special-cased by name anywhere), which is exactly
@@ -3620,13 +3620,13 @@ class ValidPointerChecker
   // terminated right here is, by the same qual:string_literal reasoning as
   // tokenImpliesNonNull, also genuinely live right here -- so this axiom
   // is recognized by name, the same way isPointerNonNullAxiom is, rather
-  // than requiring a second, separate __ownership_pointer_nonnull() call
+  // than requiring a second, separate unsafe_assume_pointer_nonnull() call
   // at every one of this axiom's own call sites.
   static bool isStringTerminatedAxiom(const CallEvent &Call) {
     const auto *Function = dyn_cast_or_null<FunctionDecl>(Call.getDecl());
     if (!Function || !Function->getIdentifier())
       return false;
-    return Function->getName() == "__ownership_string_terminated";
+    return Function->getName() == "unsafe_assume_string_terminated";
   }
 
   // src/internal/fd.c's __fd_install(handle, flags, type) either returns a
@@ -4419,7 +4419,7 @@ public:
       }
     }
 
-    // __ownership_pointer_nonnull(object): see isPointerNonNullAxiom's own
+    // unsafe_assume_pointer_nonnull(object): see isPointerNonNullAxiom's own
     // comment above for why this is asserted directly against Clang's
     // native nonnull constraint (the same mechanism isAlwaysNonNull and
     // writesNonNullEndPointer already use just above) instead of through
@@ -4440,7 +4440,7 @@ public:
       }
     }
 
-    // __ownership_string_terminated(object): see isStringTerminatedAxiom's
+    // unsafe_assume_string_terminated(object): see isStringTerminatedAxiom's
     // own comment above -- granting null_terminated is definitionally also
     // granting nonnull, asserted the same way as the axiom just above.
     if (isStringTerminatedAxiom(Call) && Call.getNumArgs() > 0) {

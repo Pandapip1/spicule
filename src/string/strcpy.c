@@ -13,7 +13,7 @@ char *strcpy(char *__restrict dest grant(null_terminated),
 	const char *__restrict src withtok(null_terminated))
 {
 	stpcpy(dest, src);
-	__ownership_string_terminated(dest);
+	unsafe_assume_string_terminated(dest);
 	return dest;
 }
 

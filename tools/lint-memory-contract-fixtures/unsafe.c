@@ -37,11 +37,11 @@ void consume_too_many_elements(void)
 }
 void establish_writable(
 	void *buffer grant(fixture_writable_span(length)), size_t length);
-void __ownership_writable_span(
+void unsafe_assume_writable_span(
 	void *buffer grant(fixture_writable_span(length)), size_t length);
-void __ownership_readable_span(
+void unsafe_assume_readable_span(
 	const void *buffer grant(fixture_readable_span(length)), size_t length);
-void __ownership_disjoint_span(
+void unsafe_assume_disjoint_span(
 	void *first grant(fixture_disjoint_span(second, length)),
 	const void *second, size_t length);
 int maybe_establish_writable(
@@ -160,7 +160,7 @@ void movable_path_axiom(char *buffer, size_t length, int use_local)
 			return;
 		buffer = local;
 	}
-	__ownership_writable_span(buffer, length); /* memory-contract-expect */
+	unsafe_assume_writable_span(buffer, length); /* memory-contract-expect */
 }
 
 void violate_contracts(char *text)
@@ -197,15 +197,15 @@ void redundant_heap_axiom(size_t length)
 {
 	char *buffer = __malloc(length);
 	if (!buffer) return;
-	__ownership_writable_span(buffer, length); /* memory-contract-expect */
+	unsafe_assume_writable_span(buffer, length); /* memory-contract-expect */
 	memset(buffer, 0, length);
 }
 
 void redundant_static_axioms(void)
 {
 	char source[4], destination[4];
-	__ownership_readable_span(source, sizeof source); /* memory-contract-expect */
-	__ownership_disjoint_span(destination, source, sizeof source); /* memory-contract-expect */
+	unsafe_assume_readable_span(source, sizeof source); /* memory-contract-expect */
+	unsafe_assume_disjoint_span(destination, source, sizeof source); /* memory-contract-expect */
 }
 
 void overlapping(void)

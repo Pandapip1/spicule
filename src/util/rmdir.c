@@ -52,14 +52,14 @@ static int rmdir_ascend(const char *dir)
 		 * == 0, since pn == sizeof buf returned above already) --
 		 * restated since include/libgen.h declares neither dirname()
 		 * nor memcpy() as producing this token. */
-		__ownership_string_terminated(prev);
+		unsafe_assume_string_terminated(prev);
 
 		parent = dirname(buf); /* mutates buf in place; parent aliases it */
 		/* dirname()'s POSIX contract guarantees null-termination, but
 		 * include/libgen.h carries no withtok() for it -- restated
 		 * here rather than annotate the header for other, unaudited
 		 * callers. */
-		__ownership_string_terminated(parent);
+		unsafe_assume_string_terminated(parent);
 		if (!strcmp(parent, ".") || !strcmp(parent, prev)) return 0;
 
 		if (rmdir(parent) != 0) {

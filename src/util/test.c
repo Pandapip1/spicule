@@ -39,7 +39,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include "util.h"
-#include "ownership_stubs.h" /* __ownership_string_terminated(): restates argv's null-termination through struct texpr's char **v, which the checker can't trace on its own (same idiom as find.c) */
+#include "ownership_stubs.h" /* unsafe_assume_string_terminated(): restates argv's null-termination through struct texpr's char **v, which the checker can't trace on its own (same idiom as find.c) */
 
 /* test(1p) EXIT STATUS: "0 expression evaluated to true", "1 expression
  * evaluated to false or expression was missing", ">1 An error
@@ -100,7 +100,7 @@ static int to_int(struct texpr *t, const char *s, long *out)
 static int is_binop(const char *s) __attribute__((nonnull(1), __pure__));
 static int is_binop(const char *s)
 {
-	__ownership_string_terminated(s);
+	unsafe_assume_string_terminated(s);
 	return !strcmp(s, "=") || !strcmp(s, "!=") ||
 	       !strcmp(s, "-eq") || !strcmp(s, "-ne") ||
 	       !strcmp(s, "-lt") || !strcmp(s, "-le") ||
@@ -177,9 +177,9 @@ static int do_unary(struct texpr *t, const char *op, const char *arg) // NOLINT(
 static int do_binary(struct texpr *t, const char *a, const char *op, const char *b) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
 	long x, y;
-	__ownership_string_terminated(a);
-	__ownership_string_terminated(op);
-	__ownership_string_terminated(b);
+	unsafe_assume_string_terminated(a);
+	unsafe_assume_string_terminated(op);
+	unsafe_assume_string_terminated(b);
 	if (!strcmp(op, "=")) return strcmp(a, b) == 0 ? T_TRUE : T_FALSE;
 	if (!strcmp(op, "!=")) return strcmp(a, b) != 0 ? T_TRUE : T_FALSE;
 	if (to_int(t, a, &x) || to_int(t, b, &y)) return T_ERR;
@@ -217,7 +217,7 @@ static int t_primary(struct texpr *t)
 
 	if (t->i >= t->n) { terr(t, "argument expected", 0); return T_ERR; }
 	tok = t->v[t->i];
-	__ownership_string_terminated(tok);
+	unsafe_assume_string_terminated(tok);
 
 	if (!strcmp(tok, "(")) {
 		int r;
@@ -226,7 +226,7 @@ static int t_primary(struct texpr *t)
 		if (t->err) return T_ERR;
 		if (t->i < t->n) {
 			const char *close = t->v[t->i];
-			__ownership_string_terminated(close);
+			unsafe_assume_string_terminated(close);
 			if (strcmp(close, ")")) { terr(t, "')' expected", 0); return T_ERR; } // NOLINT(bugprone-suspicious-string-compare) -- nonzero intentionally detects a mismatched closing token
 		} else {
 			terr(t, "')' expected", 0); return T_ERR;
@@ -256,7 +256,7 @@ static int t_nexpr(struct texpr *t)
 {
 	if (t->i < t->n) {
 		const char *tok = t->v[t->i];
-		__ownership_string_terminated(tok);
+		unsafe_assume_string_terminated(tok);
 		if (!strcmp(tok, "!")) {
 			int r;
 			t->i++;
@@ -275,7 +275,7 @@ static int t_aexpr(struct texpr *t)
 	size_t remaining = t->i < t->n ? t->n - t->i : 0;
 	while (remaining > 0 && !t->err && t->i < t->n) {
 		const char *tok = t->v[t->i];
-		__ownership_string_terminated(tok);
+		unsafe_assume_string_terminated(tok);
 		if (strcmp(tok, "-a")) break;
 		{
 			int rhs;
@@ -300,7 +300,7 @@ static int t_oexpr(struct texpr *t)
 	size_t remaining = t->i < t->n ? t->n - t->i : 0;
 	while (remaining > 0 && !t->err && t->i < t->n) {
 		const char *tok = t->v[t->i];
-		__ownership_string_terminated(tok);
+		unsafe_assume_string_terminated(tok);
 		if (strcmp(tok, "-o")) break;
 		{
 			int rhs;
@@ -332,7 +332,7 @@ static int eval_argc(struct texpr *t)
 	case 1:
 		/* "1 argument: Exit true (0) if $1 is not null; otherwise,
 		 * exit false." */
-		__ownership_string_terminated(v[0]);
+		unsafe_assume_string_terminated(v[0]);
 		return v[0][0] != 0 ? T_TRUE : T_FALSE;
 	case 2:
 		/* "If $1 is '!', exit true if $2 is null, false if $2 is not
@@ -340,8 +340,8 @@ static int eval_argc(struct texpr *t)
 		 * negated evaluation of it, so `test ! -n` is false: it is
 		 * the negation of "-n" being a non-null string, not a
 		 * malformed unary primary and not "not (-n)". */
-		__ownership_string_terminated(v[0]);
-		__ownership_string_terminated(v[1]);
+		unsafe_assume_string_terminated(v[0]);
+		unsafe_assume_string_terminated(v[1]);
 		if (!strcmp(v[0], "!")) return v[1][0] == 0 ? T_TRUE : T_FALSE;
 		if (is_unop(v[0])) return do_unary(t, v[0], v[1]);
 		terr(t, "unary operator expected", v[0]);
@@ -350,9 +350,9 @@ static int eval_argc(struct texpr *t)
 		/* "If $2 is a binary primary, perform the binary test of $1
 		 * and $3." -- checked first, which is what makes
 		 * `test "(" = ")"` a string comparison. */
-		__ownership_string_terminated(v[0]);
-		__ownership_string_terminated(v[1]);
-		__ownership_string_terminated(v[2]);
+		unsafe_assume_string_terminated(v[0]);
+		unsafe_assume_string_terminated(v[1]);
+		unsafe_assume_string_terminated(v[2]);
 		if (is_binop(v[1])) return do_binary(t, v[0], v[1], v[2]);
 		if (!strcmp(v[0], "!")) {
 			struct texpr sub = *t;
@@ -371,8 +371,8 @@ static int eval_argc(struct texpr *t)
 	case 4:
 		/* "If $1 is '!', negate the three-argument test of $2, $3,
 		 * and $4." */
-		__ownership_string_terminated(v[0]);
-		__ownership_string_terminated(v[3]);
+		unsafe_assume_string_terminated(v[0]);
+		unsafe_assume_string_terminated(v[3]);
 		if (!strcmp(v[0], "!")) {
 			struct texpr sub = *t;
 			int r;
@@ -410,9 +410,9 @@ static int eval_argc(struct texpr *t)
 		 * read here directly (not through a snapshot local, and after
 		 * t_oexpr()'s own call has already crossed a function boundary
 		 * this per-function analysis cannot see through), so restate the
-		 * fact the same way __ownership_string_terminated() above
+		 * fact the same way unsafe_assume_string_terminated() above
 		 * restates NUL-termination for that identical read. */
-		__ownership_pointer_nonnull(t->v);
+		unsafe_assume_pointer_nonnull(t->v);
 		if (!t->err && t->i != t->n) { terr(t, "unexpected argument", t->v[t->i]); return T_ERR; }
 		return t->err ? T_ERR : r;
 	}
@@ -428,7 +428,7 @@ int __util_test_main(
 	size_t n = (size_t)argc;
 	if (n) n--;
 
-	__ownership_string_terminated(argv[0]); /* argv[0] always exists (argc >= 1) */
+	unsafe_assume_string_terminated(argv[0]); /* argv[0] always exists (argc >= 1) */
 
 	/* "In the second form of the utility, where the utility name used
 	 * is [ rather than test, the application shall ensure that the
@@ -439,7 +439,7 @@ int __util_test_main(
 		const char *last;
 		if (n < 1) { __util_diagf("[: missing `]'\n"); return T_ERR; }
 		last = argv[n];
-		__ownership_string_terminated(last);
+		unsafe_assume_string_terminated(last);
 		if (strcmp(last, "]")) { // NOLINT(bugprone-suspicious-string-compare) -- nonzero intentionally detects a mismatched closing bracket argument
 			__util_diagf("[: missing `]'\n");
 			return T_ERR;

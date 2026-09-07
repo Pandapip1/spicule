@@ -89,7 +89,7 @@ static int read_whole_file(const char *path, struct sfile *out)
 	char *buf;
 	FILE *f;
 
-	__ownership_string_terminated(path); /* real C string by this function's own contract */
+	unsafe_assume_string_terminated(path); /* real C string by this function's own contract */
 	f = fopen(path, "rb");
 	if (!f) return -1;
 	buf = malloc(cap);
@@ -118,7 +118,7 @@ static int read_whole_file(const char *path, struct sfile *out)
 			}
 			buf = g; cap = newcap;
 		}
-		__ownership_writable_span(buf + len, cap - len - 1);
+		unsafe_assume_writable_span(buf + len, cap - len - 1);
 		got = fread(buf + len, 1, cap - len - 1, f);
 		len += got;
 		if (got == 0) break;
@@ -163,8 +163,8 @@ static int verify_checksum(const struct sfile *s, const char **rest_out, size_t 
 	 * NUL-terminated buffer -- both facts genuinely true by
 	 * construction, not visible to the checker across the struct
 	 * field. */
-	__ownership_pointer_nonnull(s->buf);
-	__ownership_string_terminated(s->buf);
+	unsafe_assume_pointer_nonnull(s->buf);
+	unsafe_assume_string_terminated(s->buf);
 	if (s->len < 3 || s->buf[0] != '\001' || s->buf[1] != 'h') return -1;
 	expect = strtoul(s->buf + 2, &end, 10);
 	nl = strchr(s->buf, '\n');
@@ -273,7 +273,7 @@ static int write_body(FILE *out, struct line_ref *lines, size_t n)
 	 * src/sh/execute.c's and src/sh/print.c's own ownership commits --
 	 * left open here for the same reason, not annotated around. */
 	for (i = 0; i < n; i++) {
-		__ownership_readable_span(lines[i].p, lines[i].len);
+		unsafe_assume_readable_span(lines[i].p, lines[i].len);
 		if (fwrite(lines[i].p, 1, lines[i].len, out) != lines[i].len) return -1;
 		if (fputc('\n', out) == EOF) return -1;
 	}
@@ -307,8 +307,8 @@ static int get_one(const char *path, int pflag, const char *rflag)
 	if (rflag) {
 		/* rflag is an argv element (real C string); sid was just
 		 * filled by find_sid()'s own successful snprintf(). */
-		__ownership_string_terminated(rflag);
-		__ownership_string_terminated(sid);
+		unsafe_assume_string_terminated(rflag);
+		unsafe_assume_string_terminated(sid);
 	}
 	if (rflag && strcmp(rflag, sid) != 0) {
 		__util_diagf("get: %s: no such delta: %s\n", path, rflag);
@@ -330,7 +330,7 @@ static int get_one(const char *path, int pflag, const char *rflag)
 		const char *dir, *base;
 		FILE *g;
 
-		__ownership_string_terminated(path); /* an argv element */
+		unsafe_assume_string_terminated(path); /* an argv element */
 		dircopy = strdup(path);
 		basecopy = strdup(path);
 		if (!dircopy || !basecopy) { free(dircopy); free(basecopy); rc = 1; goto out; }
@@ -345,12 +345,12 @@ static int get_one(const char *path, int pflag, const char *rflag)
 			rc = 1;
 			goto out;
 		}
-		__ownership_string_terminated(dir); /* dirname()'s own contract, same as basename() above */
+		unsafe_assume_string_terminated(dir); /* dirname()'s own contract, same as basename() above */
 		if (strcmp(dir, ".") == 0) snprintf(gpath, sizeof gpath, "%s", base + 2);
 		else snprintf(gpath, sizeof gpath, "%s/%s", dir, base + 2);
 		free(dircopy); free(basecopy);
 
-		__ownership_string_terminated(gpath); /* snprintf() always NUL-terminates a nonzero-size buffer */
+		unsafe_assume_string_terminated(gpath); /* snprintf() always NUL-terminates a nonzero-size buffer */
 		g = fopen(gpath, "wb");
 		if (!g) { __util_diagf("get: %s: %s\n", gpath, strerror(errno)); rc = 1; goto out; }
 		/* fclose(g) must run whether or not write_body() failed --

@@ -132,7 +132,7 @@
 #include <unistd.h>
 #include <limits.h>
 #include "util.h"
-#include "ownership_stubs.h" /* __ownership_string_terminated(): snprintf()/hand-rolled copies don't grant null_terminated automatically, so it's re-asserted by hand after each. */
+#include "ownership_stubs.h" /* unsafe_assume_string_terminated(): snprintf()/hand-rolled copies don't grant null_terminated automatically, so it's re-asserted by hand after each. */
 
 /* ==== line storage ========================================================
  *
@@ -184,7 +184,7 @@ static int lb_push_fmt(struct linebuf *lb, const char *fmt withtok(null_terminat
 {
 	char buf[512];
 	snprintf(buf, sizeof buf, fmt, arg);
-	__ownership_string_terminated(buf); /* snprintf() doesn't itself grant null_terminated */
+	unsafe_assume_string_terminated(buf); /* snprintf() doesn't itself grant null_terminated */
 	return lb_push_str(lb, buf);
 }
 
@@ -574,7 +574,7 @@ static int parse_name_line(const struct pline *pl, const char *pfx withtok(null_
 	if (!copy) return 0;
 	for (i = 0; i < namelen; i++) copy[i] = p[i];
 	copy[namelen] = 0;
-	__ownership_string_terminated(copy); /* copy[namelen]=0 just above, by hand */
+	unsafe_assume_string_terminated(copy); /* copy[namelen]=0 just above, by hand */
 	*out = copy;
 	return 1;
 }
@@ -695,10 +695,10 @@ static int parse_unified_section(struct linebuf *L, size_t *ip, struct patchfile
 static int parse_unified_section(struct linebuf *L, size_t *ip, struct patchfile *pf)
 {
 	if (!parse_name_line(&L->v[*ip], "--- ", &pf->old_name)) return 0;
-	__ownership_string_terminated(pf->old_name); /* parse_name_line()'s postcondition doesn't carry across the out-param */
+	unsafe_assume_string_terminated(pf->old_name); /* parse_name_line()'s postcondition doesn't carry across the out-param */
 	(*ip)++;
 	if (*ip >= L->n || !parse_name_line(&L->v[*ip], "+++ ", &pf->new_name)) return 0;
-	__ownership_string_terminated(pf->new_name);
+	unsafe_assume_string_terminated(pf->new_name);
 	(*ip)++;
 	pf->fmt = FMT_UNIFIED;
 	while (*ip < L->n && starts_with(&L->v[*ip], "@@ -")) {
@@ -801,10 +801,10 @@ static int parse_context_section(struct linebuf *L, size_t *ip, struct patchfile
 static int parse_context_section(struct linebuf *L, size_t *ip, struct patchfile *pf)
 {
 	if (!parse_name_line(&L->v[*ip], "*** ", &pf->old_name)) return 0;
-	__ownership_string_terminated(pf->old_name);
+	unsafe_assume_string_terminated(pf->old_name);
 	(*ip)++;
 	if (*ip >= L->n || !parse_name_line(&L->v[*ip], "--- ", &pf->new_name)) return 0;
-	__ownership_string_terminated(pf->new_name);
+	unsafe_assume_string_terminated(pf->new_name);
 	(*ip)++;
 	pf->fmt = FMT_CONTEXT;
 	while (*ip < L->n && is_all_stars(&L->v[*ip])) {
@@ -949,12 +949,12 @@ static char *strip_components(const char *name withtok(null_terminated), long st
 	/* `p` is a fresh local copy of `name`'s value; the checker's
 	 * null_terminated tracking keys off the carrier variable, not the
 	 * value, so it must be re-asserted here and after each advance below. */
-	__ownership_string_terminated(p);
+	unsafe_assume_string_terminated(p);
 	for (k = 0; k < strip; k++) {
 		const char *slash = strchr(p, '/');
 		if (!slash) break;
 		p = slash + 1;
-		__ownership_string_terminated(p);
+		unsafe_assume_string_terminated(p);
 	}
 	return strdup(p);
 }
@@ -1370,8 +1370,8 @@ int __util_patch_main(
 		} else {
 			/* null_terminated doesn't survive push_section()'s struct-array
 			 * copy into `sections[si]` -- re-assert once more here. */
-			if (pf->old_name) __ownership_string_terminated(pf->old_name);
-			if (pf->new_name) __ownership_string_terminated(pf->new_name);
+			if (pf->old_name) unsafe_assume_string_terminated(pf->old_name);
+			if (pf->new_name) unsafe_assume_string_terminated(pf->new_name);
 			path = pick_target_name(pf->old_name, pf->new_name, o.p);
 			if (!path) {
 				__util_diagf("patch: %s: refusing unsafe or missing patch target filename\n",
@@ -1382,7 +1382,7 @@ int __util_patch_main(
 		}
 		/* `path` is a plain local, so re-assert null_terminated for the
 		 * fopen()/write_linebuf() calls below that require it. */
-		__ownership_string_terminated(path);
+		unsafe_assume_string_terminated(path);
 
 		memset(&target, 0, sizeof target);
 		{
@@ -1424,7 +1424,7 @@ int __util_patch_main(
 				char rejpath[4096];
 				if (o.r) snprintf(rejpath, sizeof rejpath, "%s", o.r);
 				else snprintf(rejpath, sizeof rejpath, "%s.rej", path);
-				__ownership_string_terminated(rejpath); /* snprintf() always NUL-terminates a nonzero-size buffer */
+				unsafe_assume_string_terminated(rejpath); /* snprintf() always NUL-terminates a nonzero-size buffer */
 				if (write_rejects(rejpath, rejects, nrej) != 0) {
 					__util_diagf("patch: %s: cannot write reject file\n", rejpath);
 					exit_status = 2;
@@ -1438,7 +1438,7 @@ int __util_patch_main(
 		if (o.b && have_target && !o.o) {
 			char bpath[4096];
 			snprintf(bpath, sizeof bpath, "%s.orig", path);
-			__ownership_string_terminated(bpath); /* snprintf() always NUL-terminates a nonzero-size buffer */
+			unsafe_assume_string_terminated(bpath); /* snprintf() always NUL-terminates a nonzero-size buffer */
 			if (write_linebuf(bpath, &target) != 0) {
 				__util_diagf("patch: %s: cannot write backup file\n", bpath);
 				exit_status = 2;

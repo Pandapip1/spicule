@@ -146,7 +146,7 @@ static char *xstrdup(const char *s withtok(null_terminated))
 	for (size_t i = 0; i < n; i++) r[i] = s[i];
 	/* Copies s's terminating NUL too, so r is null-terminated by
 	 * construction -- just not through a shape the checker can see. */
-	__ownership_string_terminated(r);
+	unsafe_assume_string_terminated(r);
 	return r;
 }
 
@@ -169,7 +169,7 @@ static char *dupn_local(const char *s, size_t n)
 	if (!r) oom();
 	for (size_t i = 0; i < n; i++) r[i] = s[i];
 	r[n] = 0;
-	__ownership_string_terminated(r); /* r[n]=0 just above, by hand */
+	unsafe_assume_string_terminated(r); /* r[n]=0 just above, by hand */
 	return r;
 }
 
@@ -224,12 +224,12 @@ static char *num_to_str_fmt(double n, const char *fmt)
 			/* snprintf() guarantees NUL-termination within a nonzero
 			 * buffer size (C11 7.21.6.5p2), not visible through this
 			 * opaque variadic call. */
-			__ownership_string_terminated(buf);
+			unsafe_assume_string_terminated(buf);
 			return xstrdup(buf);
 		}
 	}
 	if (snprintf(buf, sizeof buf, fmt, n) < 0) buf[0] = 0; /* explicit NUL on the one error path */
-	__ownership_string_terminated(buf); /* same C11 guarantee as above on the success path */
+	unsafe_assume_string_terminated(buf); /* same C11 guarantee as above on the success path */
 	return xstrdup(buf);
 }
 
@@ -252,7 +252,7 @@ static void v_num_init(struct awk_value *v, double n) { v->num = n; v->str = NUL
  * once here rather than at each call site. */
 static void v_str_init(struct awk_value *v, char *s, unsigned char kind)
 {
-	__ownership_string_terminated(s);
+	unsafe_assume_string_terminated(s);
 	v->num = 0; v->str = s; v->kind = kind; v->numcached = 0; v->strcached = 1;
 }
 static void v_uninit_init(struct awk_value *v) { v->num = 0; v->str = NULL; v->kind = VK_UNINIT; v->numcached = 1; v->strcached = 0; }
@@ -279,7 +279,7 @@ static const char *v_str(struct awk_value *v, const char *fmt)
 	/* Re-asserted here: v->str's capability doesn't reliably survive the
 	 * intervening strcached=1 sibling-field write, across this
 	 * checker's path-sensitive tracking. */
-	__ownership_string_terminated(result);
+	unsafe_assume_string_terminated(result);
 	return result;
 }
 
@@ -299,7 +299,7 @@ static const char *output_str(const char *ofmt, struct awk_value *v)
 		v->strcached = 1;
 	}
 	result = v_str(v, ofmt);
-	__ownership_string_terminated(result); /* v_str()'s own declared contract, re-asserted on a fresh local copy right before the return */
+	unsafe_assume_string_terminated(result); /* v_str()'s own declared contract, re-asserted on a fresh local copy right before the return */
 	return result;
 }
 static int v_truth(struct awk_value *v)
@@ -330,7 +330,7 @@ static const char *convfmt_str(struct awk_interp *ip)
 	 * sidesteps infinite recursion in the (contrived) case of a script
 	 * assigning CONVFMT a bare number. */
 	if ((c->kind == VK_STR || c->kind == VK_STRNUM) && c->strcached) {
-		__ownership_string_terminated(c->str); /* see cell_str()'s own comment on why this is re-asserted right at the read */
+		unsafe_assume_string_terminated(c->str); /* see cell_str()'s own comment on why this is re-asserted right at the read */
 		return c->str;
 	}
 	return "%.6g";
@@ -341,7 +341,7 @@ static const char *ofmt_str(struct awk_interp *ip)
 {
 	struct awk_cell *c = lookup_cell(ip, "OFMT");
 	if ((c->kind == VK_STR || c->kind == VK_STRNUM) && c->strcached) {
-		__ownership_string_terminated(c->str); /* see cell_str()'s own comment on why this is re-asserted right at the read */
+		unsafe_assume_string_terminated(c->str); /* see cell_str()'s own comment on why this is re-asserted right at the read */
 		return c->str;
 	}
 	return "%.6g";
@@ -404,7 +404,7 @@ static const char *cell_str(struct awk_interp *ip, struct awk_cell *c)
 	result = c->str;
 	/* Re-asserted here: same path-sensitivity limitation as v_str()'s
 	 * identical comment above. */
-	__ownership_string_terminated(result);
+	unsafe_assume_string_terminated(result);
 	return result;
 }
 
@@ -426,7 +426,7 @@ static struct awk_value cell_to_value(struct awk_interp *ip, struct awk_cell *c)
 	v.strcached = c->strcached;
 	if (c->strcached) {
 		const char *cs = cell_str(ip, c);
-		__ownership_string_terminated(cs); /* cell_str()'s own declared contract, re-asserted right at this use */
+		unsafe_assume_string_terminated(cs); /* cell_str()'s own declared contract, re-asserted right at this use */
 		v.str = xstrdup(cs);
 	} else {
 		v.str = NULL;
@@ -446,7 +446,7 @@ static void assign_value_to_cell(struct awk_cell *c, struct awk_value *v)
 	c->strcached = v->strcached;
 	{
 		char *moved = v->str;
-		__ownership_string_terminated(moved); /* re-asserted on a fresh local copy right at the move (harmless when NULL); see cell_str()'s own comment on why this checker needs it re-established this close to the use */
+		unsafe_assume_string_terminated(moved); /* re-asserted on a fresh local copy right at the move (harmless when NULL); see cell_str()'s own comment on why this checker needs it re-established this close to the use */
 		c->str = moved;
 	}
 	v->str = NULL;
@@ -486,11 +486,11 @@ static struct awk_cell *array_elem(struct awk_cell *arrcell, const char *key)
  * than on struct awk_node's own shared field. */
 static struct awk_cell *lookup_cell(struct awk_interp *ip, const char *name)
 {
-	__ownership_string_terminated(name);
+	unsafe_assume_string_terminated(name);
 	if (ip->frame) {
 		int i;
 		for (i = 0; i < ip->frame->nparams; i++) {
-			__ownership_string_terminated(ip->frame->names[i]);
+			unsafe_assume_string_terminated(ip->frame->names[i]);
 			if (!strcmp(ip->frame->names[i], name)) return ip->frame->cells[i];
 		}
 	}
@@ -501,7 +501,7 @@ static void set_global_str(struct awk_interp *ip, const char *name, const char *
 {
 	struct awk_cell *c = lookup_cell(ip, name);
 	struct awk_value v;
-	__ownership_string_terminated(val); /* every caller passes a literal or an already-NUL-terminated cell/field string */
+	unsafe_assume_string_terminated(val); /* every caller passes a literal or an already-NUL-terminated cell/field string */
 	v_str_init(&v, xstrdup(val), VK_STR);
 	assign_value_to_cell(c, &v);
 	v_free(&v);
@@ -528,16 +528,16 @@ static char *build_subsep_key(struct awk_interp *ip, struct awk_node **subs, int
 	const char *subsep_cell_str = cell_str(ip, lookup_cell(ip, "SUBSEP"));
 	char *subsep;
 	size_t subsep_len;
-	__ownership_string_terminated(subsep_cell_str); /* cell_str()'s own declared contract, re-asserted right at this use -- see cell_str()'s own comment */
+	unsafe_assume_string_terminated(subsep_cell_str); /* cell_str()'s own declared contract, re-asserted right at this use -- see cell_str()'s own comment */
 	subsep = xstrdup(subsep_cell_str);
-	__ownership_string_terminated(subsep); /* xstrdup()'s own declared contract, re-asserted right at this use */
+	unsafe_assume_string_terminated(subsep); /* xstrdup()'s own declared contract, re-asserted right at this use */
 	subsep_len = strlen(subsep);
 
 	for (i = 0; i < n; i++) {
 		struct awk_value v = eval(ip, subs[i]);
 		const char *s = v_str(&v, convfmt_str(ip));
 		size_t slen;
-		__ownership_string_terminated(s); /* v_str()'s own declared contract, re-asserted right at this use */
+		unsafe_assume_string_terminated(s); /* v_str()'s own declared contract, re-asserted right at this use */
 		slen = strlen(s);
 		size_t addlen = slen + (i ? subsep_len : 0);
 		key = xrealloc(key, len + addlen + 1);
@@ -684,7 +684,7 @@ static void split_record(struct awk_interp *ip)
 	int n, i;
 
 	free_fields(ip);
-	__ownership_string_terminated(ip->rec); /* re-asserted right at the read; see cell_str()'s own comment on why this checker needs it re-established this close to the use */
+	unsafe_assume_string_terminated(ip->rec); /* re-asserted right at the read; see cell_str()'s own comment on why this checker needs it re-established this close to the use */
 	split_into(ip->rec, strlen(ip->rec), fs, rs[0] == 0, &out, &n);
 	fields_reserve(ip, n);
 	for (i = 0; i < n; i++) ip->flds[i] = out[i];
@@ -701,10 +701,10 @@ static void rebuild_record(struct awk_interp *ip)
 	int i;
 	char *rec;
 
-	__ownership_string_terminated(ofs); /* cell_str()'s own declared contract, re-asserted right at this use */
+	unsafe_assume_string_terminated(ofs); /* cell_str()'s own declared contract, re-asserted right at this use */
 	ofslen = strlen(ofs);
 	for (i = 0; i < ip->nf; i++) {
-		__ownership_string_terminated(ip->flds[i]); /* ip->flds's own comment (awk_priv.h), re-asserted right at this use */
+		unsafe_assume_string_terminated(ip->flds[i]); /* ip->flds's own comment (awk_priv.h), re-asserted right at this use */
 		len += strlen(ip->flds[i]) + (i ? ofslen : 0);
 	}
 	if (!__util_size_add(len, 1, &bytes)) oom();
@@ -718,13 +718,13 @@ static void rebuild_record(struct awk_interp *ip)
 			for (size_t j = 0; j < ofslen; j++) rec[len + j] = ofs[j];
 			len += ofslen;
 		}
-		__ownership_string_terminated(field); /* ip->flds's own comment, re-asserted right at this use */
+		unsafe_assume_string_terminated(field); /* ip->flds's own comment, re-asserted right at this use */
 		flen = strlen(field);
 		for (size_t j = 0; j < flen; j++) rec[len + j] = field[j];
 		len += flen;
 	}
 	rec[len] = 0;
-	__ownership_string_terminated(rec); /* rec[len]=0 just above, by hand */
+	unsafe_assume_string_terminated(rec); /* rec[len]=0 just above, by hand */
 	free(ip->rec);
 	ip->rec = rec;
 }
@@ -735,7 +735,7 @@ static void rebuild_record(struct awk_interp *ip)
  * own result) -- established once here rather than at each call site. */
 static void set_record(struct awk_interp *ip, char *rec)
 {
-	__ownership_string_terminated(rec);
+	unsafe_assume_string_terminated(rec);
 	free(ip->rec);
 	ip->rec = rec;
 	split_record(ip);
@@ -748,7 +748,7 @@ static struct awk_value get_field(struct awk_interp *ip, long idx)
 	if (idx == 0) s = ip->rec ? ip->rec : "";
 	else if (idx >= 1 && idx <= ip->nf) s = ip->flds[idx - 1];
 	else s = "";
-	__ownership_string_terminated(s); /* ip->rec/ip->flds[]'s own comments (awk_priv.h), re-asserted right at this use */
+	unsafe_assume_string_terminated(s); /* ip->rec/ip->flds[]'s own comments (awk_priv.h), re-asserted right at this use */
 	v_str_init(&v, xstrdup(s), looks_numeric(s) ? VK_STRNUM : VK_STR);
 	return v;
 }
@@ -756,7 +756,7 @@ static struct awk_value get_field(struct awk_interp *ip, long idx)
 static void set_field(struct awk_interp *ip, long idx, struct awk_value *val)
 {
 	const char *s = v_str(val, convfmt_str(ip));
-	__ownership_string_terminated(s); /* v_str()'s own declared contract, re-asserted right at this use */
+	unsafe_assume_string_terminated(s); /* v_str()'s own declared contract, re-asserted right at this use */
 	if (idx == 0) {
 		set_record(ip, xstrdup(s));
 		return;
@@ -783,7 +783,7 @@ static void set_field(struct awk_interp *ip, long idx, struct awk_value *val)
 	} else {
 		free(ip->flds[idx - 1]);
 	}
-	__ownership_string_terminated(s); /* v_str()'s own declared contract, re-asserted right at this (second) use */
+	unsafe_assume_string_terminated(s); /* v_str()'s own declared contract, re-asserted right at this (second) use */
 	ip->flds[idx - 1] = xstrdup(s);
 	rebuild_record(ip);
 }
@@ -1047,7 +1047,7 @@ static double do_getline(struct awk_interp *ip, struct awk_node *node)
 	case GL_FILE: {
 		struct awk_value fv = eval(ip, node->b);
 		const char *fname = v_str(&fv, convfmt_str(ip));
-		__ownership_string_terminated(fname); /* v_str()'s own declared contract, re-asserted right at this use */
+		unsafe_assume_string_terminated(fname); /* v_str()'s own declared contract, re-asserted right at this use */
 		f = get_input_stream(ip, fname, 0);
 		v_free(&fv);
 		if (!f) return -1;
@@ -1057,7 +1057,7 @@ static double do_getline(struct awk_interp *ip, struct awk_node *node)
 	case GL_CMD: {
 		struct awk_value cv = eval(ip, node->b);
 		const char *cmd = v_str(&cv, convfmt_str(ip));
-		__ownership_string_terminated(cmd); /* v_str()'s own declared contract, re-asserted right at this use */
+		unsafe_assume_string_terminated(cmd); /* v_str()'s own declared contract, re-asserted right at this use */
 		upd_nr = 1;
 		flush_all_streams(ip);
 		f = get_input_stream(ip, cmd, 1);
@@ -1249,7 +1249,7 @@ static char *awk_format(struct awk_interp *ip, const char *fmt, struct awk_value
 		}
 	}
 	if (!out) out = xstrdup("");
-	__ownership_string_terminated(out); /* buf_append() always maintains a trailing NUL, see its own comment */
+	unsafe_assume_string_terminated(out); /* buf_append() always maintains a trailing NUL, see its own comment */
 	return out;
 }
 
@@ -1280,7 +1280,7 @@ static char *expand_replacement(const char *repl, const char *matched, size_t ml
 		}
 	}
 	if (!out) out = xstrdup("");
-	__ownership_string_terminated(out); /* buf_append() always maintains a trailing NUL, see its own comment */
+	unsafe_assume_string_terminated(out); /* buf_append() always maintains a trailing NUL, see its own comment */
 	return out;
 }
 
@@ -1302,7 +1302,7 @@ static int do_sub(regex_t *re, const char *text withtok(null_terminated), const 
 		buf_append(&out, &len, &cap, text + pos, (size_t)m.rm_so);
 		{
 			char *r = expand_replacement(repl, text + pos + m.rm_so, (size_t)(m.rm_eo - m.rm_so));
-			__ownership_string_terminated(r); /* expand_replacement()'s own declared contract, re-asserted right at this use */
+			unsafe_assume_string_terminated(r); /* expand_replacement()'s own declared contract, re-asserted right at this use */
 			buf_append(&out, &len, &cap, r, strlen(r));
 			free(r);
 		}
@@ -1319,7 +1319,7 @@ static int do_sub(regex_t *re, const char *text withtok(null_terminated), const 
 	}
 	if (pos <= tlen) buf_append(&out, &len, &cap, text + pos, tlen - pos);
 	if (!out) out = xstrdup("");
-	__ownership_string_terminated(out); /* buf_append() always maintains a trailing NUL, see its own comment */
+	unsafe_assume_string_terminated(out); /* buf_append() always maintains a trailing NUL, see its own comment */
 	*outp = out;
 	return count;
 }
@@ -1333,7 +1333,7 @@ static FILE *resolve_redir_stream(struct awk_interp *ip, struct awk_node *n)
 		struct awk_value v = eval(ip, n->a);
 		const char *target = v_str(&v, convfmt_str(ip));
 		FILE *f;
-		__ownership_string_terminated(target); /* v_str()'s own declared contract, re-asserted right at this use */
+		unsafe_assume_string_terminated(target); /* v_str()'s own declared contract, re-asserted right at this use */
 		f = get_output_stream(ip, target, n->redir);
 		if (!f) { __util_diagf("awk: can't open output %s\n", target); v_free(&v); awk_unwind_fatal(); }
 		v_free(&v);
@@ -1405,7 +1405,7 @@ static void assign_lvalue(struct awk_interp *ip, struct awk_node *lv, struct awk
 	case N_VAR: {
 		struct awk_cell *c = lookup_cell(ip, lv->str);
 		assign_value_to_cell(c, val);
-		__ownership_string_terminated(lv->str); /* same reasoning as lookup_cell()'s own comment above */
+		unsafe_assume_string_terminated(lv->str); /* same reasoning as lookup_cell()'s own comment above */
 		if (!strcmp(lv->str, "NF")) set_nf(ip, d2long(cell_num(c)));
 		return;
 	}
@@ -1448,7 +1448,7 @@ static struct awk_value eval(struct awk_interp *ip, struct awk_node *n)
 	switch (n->type) {
 	case N_NUM: v_num_init(&v, n->num); return v;
 	case N_STR:
-		__ownership_string_terminated(n->str); /* same provenance as lookup_cell()'s own comment above */
+		unsafe_assume_string_terminated(n->str); /* same provenance as lookup_cell()'s own comment above */
 		v_str_init(&v, xstrdup(n->str), VK_STR);
 		return v;
 	case N_REGEX: {
@@ -1562,8 +1562,8 @@ static struct awk_value eval(struct awk_interp *ip, struct awk_node *n)
 		struct awk_value a = eval(ip, n->a), b = eval(ip, n->b);
 		const char *sa = v_str(&a, convfmt_str(ip)), *sb = v_str(&b, convfmt_str(ip));
 		size_t la, lb, bytes;
-		__ownership_string_terminated(sa); /* v_str()'s own declared contract, re-asserted right at this use */
-		__ownership_string_terminated(sb);
+		unsafe_assume_string_terminated(sa); /* v_str()'s own declared contract, re-asserted right at this use */
+		unsafe_assume_string_terminated(sb);
 		la = strlen(sa); lb = strlen(sb);
 		char *s;
 		if (!__util_size_add(la, lb, &bytes) || !__util_size_add(bytes, 1, &bytes)) oom();
@@ -1631,12 +1631,12 @@ static struct awk_value call_builtin(struct awk_interp *ip, struct awk_node *cal
 	/* call->str is an N_CALL awk_node's own function-name text -- the
 	 * parser only ever fills it from a NUL-terminated token, same
 	 * provenance as lookup_cell()'s own comment above. */
-	__ownership_string_terminated(name);
+	unsafe_assume_string_terminated(name);
 
 	if (!strcmp(name, "length")) {
 		if (na == 0) {
 			const char *rec0 = ip->rec ? ip->rec : "";
-			__ownership_string_terminated(rec0); /* ip->rec's own comment (awk_priv.h), or the "" literal */
+			unsafe_assume_string_terminated(rec0); /* ip->rec's own comment (awk_priv.h), or the "" literal */
 			v_num_init(&v, (double)strlen(rec0));
 			return v;
 		}
@@ -1647,7 +1647,7 @@ static struct awk_value call_builtin(struct awk_interp *ip, struct awk_node *cal
 		{
 			struct awk_value s = eval(ip, a[0]);
 			const char *str = v_str(&s, convfmt_str(ip));
-			__ownership_string_terminated(str); /* v_str()'s own declared contract, re-asserted right at this use */
+			unsafe_assume_string_terminated(str); /* v_str()'s own declared contract, re-asserted right at this use */
 			v_num_init(&v, (double)strlen(str));
 			v_free(&s);
 			return v;
@@ -1665,7 +1665,7 @@ static struct awk_value call_builtin(struct awk_interp *ip, struct awk_node *cal
 		 * string), not an error or the whole string. */
 		struct awk_value s = eval(ip, a[0]);
 		const char *str = v_str(&s, convfmt_str(ip));
-		__ownership_string_terminated(str); /* v_str()'s own declared contract, re-asserted right at this use */
+		unsafe_assume_string_terminated(str); /* v_str()'s own declared contract, re-asserted right at this use */
 		double slen = (double)strlen(str);
 		double m = na > 1 ? v_num_p(ip, a[1]) : 1;
 		double end = na > 2 ? m + v_num_p(ip, a[2]) : slen + 1; /* exclusive */
@@ -1701,7 +1701,7 @@ static struct awk_value call_builtin(struct awk_interp *ip, struct awk_node *cal
 	if (!strcmp(name, "split")) {
 		struct awk_value s = eval(ip, a[0]);
 		const char *str = v_str(&s, convfmt_str(ip));
-		__ownership_string_terminated(str); /* v_str()'s own declared contract, re-asserted right at this use */
+		unsafe_assume_string_terminated(str); /* v_str()'s own declared contract, re-asserted right at this use */
 		struct awk_cell *arrc = lookup_cell(ip, a[1]->str);
 		char **out; int n, i;
 		char fsbuf[2] = { ' ', 0 };
@@ -1717,7 +1717,7 @@ static struct awk_value call_builtin(struct awk_interp *ip, struct awk_node *cal
 			else {
 				struct awk_value fsv = eval(ip, a[2]);
 				const char *fsv_str = v_str(&fsv, convfmt_str(ip));
-				__ownership_string_terminated(fsv_str); /* v_str()'s own declared contract, re-asserted right at this use */
+				unsafe_assume_string_terminated(fsv_str); /* v_str()'s own declared contract, re-asserted right at this use */
 				dynfs = xstrdup(fsv_str);
 				v_free(&fsv);
 				fs = dynfs;
@@ -1774,12 +1774,12 @@ static struct awk_value call_builtin(struct awk_interp *ip, struct awk_node *cal
 			cur = eval_lvalue_read(ip, target);
 		} else {
 			const char *rec0 = ip->rec ? ip->rec : "";
-			__ownership_string_terminated(rec0); /* ip->rec's own comment (awk_priv.h), or the "" literal */
+			unsafe_assume_string_terminated(rec0); /* ip->rec's own comment (awk_priv.h), or the "" literal */
 			v_str_init(&cur, xstrdup(rec0), VK_STR);
 		}
 		{
 			const char *cur_str = v_str(&cur, convfmt_str(ip));
-			__ownership_string_terminated(cur_str); /* v_str()'s own declared contract, re-asserted right at this use */
+			unsafe_assume_string_terminated(cur_str); /* v_str()'s own declared contract, re-asserted right at this use */
 			count = do_sub(re, cur_str, repl, !strcmp(name, "gsub"), &result);
 		}
 		v_free(&cur);
@@ -1801,7 +1801,7 @@ static struct awk_value call_builtin(struct awk_interp *ip, struct awk_node *cal
 		regex_t *re = resolve_ere(ip, a[1]);
 		regmatch_t m;
 		const char *str = v_str(&s, convfmt_str(ip));
-		__ownership_string_terminated(str); /* v_str()'s own declared contract, re-asserted right at this use */
+		unsafe_assume_string_terminated(str); /* v_str()'s own declared contract, re-asserted right at this use */
 		if (regexec(re, str, 1, &m, 0) == 0) {
 			set_global_num(ip, "RSTART", m.rm_so + 1);
 			set_global_num(ip, "RLENGTH", m.rm_eo - m.rm_so);
@@ -1864,7 +1864,7 @@ static struct awk_value call_builtin(struct awk_interp *ip, struct awk_node *cal
 	if (!strcmp(name, "tolower") || !strcmp(name, "toupper")) {
 		struct awk_value s = eval(ip, a[0]);
 		const char *str = v_str(&s, convfmt_str(ip));
-		__ownership_string_terminated(str); /* v_str()'s own declared contract, re-asserted right at this use */
+		unsafe_assume_string_terminated(str); /* v_str()'s own declared contract, re-asserted right at this use */
 		size_t len = strlen(str), i, bytes;
 		char *r;
 		if (!__util_size_add(len, 1, &bytes)) oom();
@@ -1907,7 +1907,7 @@ static struct awk_value call_builtin(struct awk_interp *ip, struct awk_node *cal
 	{
 		int i;
 		for (i = 0; i < ip->prog->nfuncs; i++) {
-			__ownership_string_terminated(ip->prog->funcs[i].name); /* parser-owned identifier text, same as name above */
+			unsafe_assume_string_terminated(ip->prog->funcs[i].name); /* parser-owned identifier text, same as name above */
 			if (!strcmp(ip->prog->funcs[i].name, name))
 				return call_user_func(ip, &ip->prog->funcs[i], a, na);
 		}
@@ -2111,7 +2111,7 @@ static enum awk_sig exec_stmt(struct awk_interp *ip, struct awk_node *n, struct 
 		while ((node = awk_hiter_next(&it))) {
 			struct awk_value kv;
 			enum awk_sig s;
-			__ownership_string_terminated(node->key); /* awk_htab.c always strcpy()'s a NUL-terminated key here */
+			unsafe_assume_string_terminated(node->key); /* awk_htab.c always strcpy()'s a NUL-terminated key here */
 			v_str_init(&kv, xstrdup(node->key), looks_numeric(node->key) ? VK_STRNUM : VK_STR);
 			assign_value_to_cell(var, &kv);
 			v_free(&kv);
@@ -2191,8 +2191,8 @@ void awk_interp_set_str(struct awk_interp *ip, const char *name, const char *val
 	/* Both parameters come from a -v assignment or var=value operand
 	 * (awk.c) or a fixed name this file passes itself (e.g. "NF"
 	 * elsewhere) -- always a plain, already NUL-terminated C string. */
-	__ownership_string_terminated(name);
-	__ownership_string_terminated(val);
+	unsafe_assume_string_terminated(name);
+	unsafe_assume_string_terminated(val);
 	v_str_init(&v, xstrdup(val), looks_numeric(val) ? VK_STRNUM : VK_STR);
 	assign_value_to_cell(c, &v);
 	v_free(&v);
@@ -2205,7 +2205,7 @@ void awk_interp_setup_argv(struct awk_interp *ip, const char *prog_name, int nar
 	int i;
 	char key[32];
 
-	__ownership_string_terminated(prog_name); /* argv[0], always NUL-terminated per exec()'s own contract */
+	unsafe_assume_string_terminated(prog_name); /* argv[0], always NUL-terminated per exec()'s own contract */
 	promote_to_array(argv_cell);
 	{
 		struct awk_cell *e = array_elem(argv_cell, "0");
@@ -2219,7 +2219,7 @@ void awk_interp_setup_argv(struct awk_interp *ip, const char *prog_name, int nar
 		struct awk_value v;
 		snprintf(key, sizeof key, "%d", i + 1);
 		e = array_elem(argv_cell, key);
-		__ownership_string_terminated(args[i]); /* an argv[] element, same as prog_name above */
+		unsafe_assume_string_terminated(args[i]); /* an argv[] element, same as prog_name above */
 		v_str_init(&v, xstrdup(args[i]), looks_numeric(args[i]) ? VK_STRNUM : VK_STR);
 		assign_value_to_cell(e, &v);
 		v_free(&v);
@@ -2234,7 +2234,7 @@ void awk_interp_setup_environ(struct awk_interp *ip, char **envp)
 	int i;
 	promote_to_array(ec);
 	for (i = 0; envp && envp[i]; i++) {
-		__ownership_string_terminated(envp[i]); /* POSIX envp: every element up to the NULL terminator is itself a NUL-terminated "NAME=value" string */
+		unsafe_assume_string_terminated(envp[i]); /* POSIX envp: every element up to the NULL terminator is itself a NUL-terminated "NAME=value" string */
 		const char *eq = strchr(envp[i], '=');
 		if (!eq) continue;
 		{

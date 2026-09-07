@@ -131,7 +131,7 @@ static void key_schedule(uint64_t key, uint64_t subkeys[16])
 	/* Both callers pass a real 16-element array (crypt()'s local subkeys
 	 * or setkey()'s despriv_subkeys), never NULL; the checker has no
 	 * caller-side facts when analyzing this static helper on its own. */
-	__ownership_pointer_nonnull(subkeys);
+	unsafe_assume_pointer_nonnull(subkeys);
 	for (i = 0; i < 16; i++) {
 		c = rotl28(c, SHIFTS[i]);
 		d = rotl28(d, SHIFTS[i]);
@@ -151,7 +151,7 @@ static uint64_t des_block(uint64_t block, const uint64_t subkeys[16], unsigned s
 	int round;
 	/* Both callers pass a real 16-element array; see key_schedule()'s
 	 * matching note above. */
-	__ownership_pointer_nonnull(subkeys);
+	unsafe_assume_pointer_nonnull(subkeys);
 	for (round = 0; round < 16; round++) {
 		uint64_t E = permute(R, Etab, 48, 32);
 		uint64_t subkey = subkeys[decrypt ? 15 - round : round];

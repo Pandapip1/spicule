@@ -112,7 +112,7 @@ static void put_field(char *field, size_t width, const char *fmt, long value)
 	char tmp[32];
 	size_t len;
 	snprintf(tmp, sizeof tmp, fmt, value);
-	__ownership_string_terminated(tmp);
+	unsafe_assume_string_terminated(tmp);
 	len = strlen(tmp);
 	if (len > width) len = width; /* callers keep values in range */
 	memset(field, ' ', width);
@@ -128,7 +128,7 @@ static int write_header(FILE *out, const struct ar_member *m)
 	/* m->name is always NUL-terminated: build_member()'s strcpy() from a
 	 * basename already checked to fit, or parse_header()'s explicit
 	 * m->name[AR_NAME_MAX] = 0. */
-	__ownership_string_terminated(m->name);
+	unsafe_assume_string_terminated(m->name);
 	nl = strlen(m->name);
 
 	memset(hdr, ' ', sizeof hdr);
@@ -175,7 +175,7 @@ static int parse_header(const char raw[AR_HDR_LEN], struct ar_member *m)
 	if (i >= 0 && field[i] == '/') field[i] = 0;
 	strncpy(m->name, field, AR_NAME_MAX);
 	m->name[AR_NAME_MAX] = 0;
-	__ownership_string_terminated(m->name);
+	unsafe_assume_string_terminated(m->name);
 	if (strchr(m->name, '/') || strchr(m->name, '\\')) return -1;
 
 	memcpy(field, raw + 16, 12); field[12] = 0; m->mtime = strtol(field, NULL, 10);
@@ -262,7 +262,7 @@ static const char *basename_of(const char *path)
 {
 	const char *slash;
 	/* path is always an argv-derived operand string. */
-	__ownership_string_terminated(path);
+	unsafe_assume_string_terminated(path);
 	slash = strrchr(path, '/');
 	const char *bslash = strrchr(path, '\\');
 	if (bslash && (!slash || bslash > slash)) slash = bslash;
@@ -275,7 +275,7 @@ static int name_wanted(const char *name, char **files, int nfiles)
 static int name_wanted(const char *name, char **files, int nfiles)
 {
 	int i;
-	__ownership_string_terminated(name);
+	unsafe_assume_string_terminated(name);
 	if (nfiles == 0) return 1;
 	for (i = 0; i < nfiles; i++)
 		if (files[i] && strcmp(basename_of(files[i]), name) == 0) return 1;
@@ -332,7 +332,7 @@ static int p_visit(FILE *ar, const struct ar_member *m, long data_off, void *ctx
 		size_t want = remain < (long)sizeof buf ? (size_t)remain : sizeof buf;
 		size_t got = fread(buf, 1, want, ar);
 		if (got == 0) break;
-		__ownership_readable_span(buf, got);
+		unsafe_assume_readable_span(buf, got);
 		if (fwrite(buf, 1, got, stdout) != got) {
 			__util_diagf("ar: error writing to standard output: %s\n", strerror(errno));
 			return -1;
@@ -360,7 +360,7 @@ static int x_visit(FILE *ar, const struct ar_member *m, long data_off, void *ctx
 	if (!name_wanted(m->name, ctx->files, ctx->nfiles)) return 0;
 	if (fseek(ar, data_off, SEEK_SET) != 0) { ctx->failed = 1; return 0; }
 
-	__ownership_string_terminated(m->name);
+	unsafe_assume_string_terminated(m->name);
 	out = fopen(m->name, "wb");
 	if (!out) {
 		__util_diagf("ar: cannot create '%s': %s\n", m->name, strerror(errno));
@@ -372,7 +372,7 @@ static int x_visit(FILE *ar, const struct ar_member *m, long data_off, void *ctx
 		size_t want = remain < (long)sizeof buf ? (size_t)remain : sizeof buf;
 		size_t got = fread(buf, 1, want, ar);
 		if (got == 0) break;
-		__ownership_readable_span(buf, got);
+		unsafe_assume_readable_span(buf, got);
 		if (fwrite(buf, 1, got, out) != got) {
 			__util_diagf("ar: error writing '%s': %s\n", m->name, strerror(errno));
 			ctx->failed = 1;
@@ -457,7 +457,7 @@ static int copy_bytes(FILE *src, FILE *dst, long off, long len)
 		size_t want = len < (long)sizeof buf ? (size_t)len : sizeof buf;
 		size_t got = fread(buf, 1, want, src);
 		if (got == 0) return -1;
-		__ownership_readable_span(buf, got);
+		unsafe_assume_readable_span(buf, got);
 		if (fwrite(buf, 1, got, dst) != got) return -1;
 		len -= (long)got;
 	}
@@ -474,7 +474,7 @@ static int emit_member(FILE *out, const struct ar_member *m, FILE *src_ar, long 
 	if (write_header(out, m) < 0) return -1;
 	if (path) {
 		FILE *in;
-		__ownership_string_terminated(path);
+		unsafe_assume_string_terminated(path);
 		in = fopen(path, "rb");
 		if (!in) return -1;
 		if (copy_bytes(in, out, 0, m->size) < 0) { (void)fclose(in); return -1; }
@@ -490,7 +490,7 @@ static int build_member(const char *filepath, struct ar_member *m)
 {
 	struct stat st;
 	const char *bn = basename_of(filepath);
-	__ownership_string_terminated(bn);
+	unsafe_assume_string_terminated(bn);
 	if (strlen(bn) > AR_NAME_MAX) {
 		__util_diagf("ar: %s: member name longer than %d bytes -- not supported "
 		                "by this build's archive format (see src/util/ar.c's header)\n",
@@ -533,7 +533,7 @@ static int do_delete(const char *archive, char **files, int nfiles, int verbose)
 	if (!src) { free(arr); __util_diagf("ar: %s: %s\n", archive, strerror(errno)); return 1; }
 
 	snprintf(tmppath, sizeof tmppath, "%s.artmp", archive);
-	__ownership_string_terminated(tmppath);
+	unsafe_assume_string_terminated(tmppath);
 	tmp = fopen(tmppath, "wb");
 	if (!tmp) {
 		/* fclose(src) is cleanup for the fopen(tmppath) failure just
@@ -554,7 +554,7 @@ static int do_delete(const char *archive, char **files, int nfiles, int verbose)
 	 * pattern as this project's other growable arrays) -- so n > i here
 	 * implies arr != NULL, a fact that does not survive that call's own
 	 * out-parameter return. */
-	if (n > 0) __ownership_pointer_nonnull(arr);
+	if (n > 0) unsafe_assume_pointer_nonnull(arr);
 	for (i = 0; i < n; i++) {
 		if (name_wanted(arr[i].m.name, files, nfiles)) {
 			if (verbose) printf("d - %s\n", arr[i].m.name);
@@ -605,7 +605,7 @@ static int do_append_or_replace(const char *archive, char **files, int nfiles,
 	if (!consumed) { free(arr); __util_diagf("ar: %s\n", strerror(ENOMEM)); return 1; }
 
 	snprintf(tmppath, sizeof tmppath, "%s.artmp", archive);
-	__ownership_string_terminated(tmppath);
+	unsafe_assume_string_terminated(tmppath);
 	tmp = fopen(tmppath, "wb");
 	if (!tmp) {
 		free(arr); free(consumed);
@@ -625,8 +625,8 @@ static int do_append_or_replace(const char *archive, char **files, int nfiles,
 			if (!quick) {
 				for (fi = 0; fi < nfiles; fi++) {
 					const char *bn = basename_of(files[fi]);
-					__ownership_string_terminated(bn);
-					__ownership_string_terminated(arr[i].m.name);
+					unsafe_assume_string_terminated(bn);
+					unsafe_assume_string_terminated(arr[i].m.name);
 					if (strcmp(bn, arr[i].m.name) != 0) continue;
 					struct ar_member nm;
 					if (build_member(files[fi], &nm) < 0) { status = 1; consumed[fi] = 1; break; }

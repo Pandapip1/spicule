@@ -13,7 +13,7 @@
 #include <string.h>
 #include <errno.h>
 #include "libc.h"
-#include "ownership_stubs.h" /* __ownership_pointer_nonnull(), __ownership_string_terminated() */
+#include "ownership_stubs.h" /* unsafe_assume_pointer_nonnull(), unsafe_assume_string_terminated() */
 
 /* Casting compar itself to qsort_r's comparator type and calling it that
  * way is UB (C99 6.3.2.3p8) and traps under -fsanitize=function; this
@@ -104,16 +104,16 @@ int alphasort(const struct dirent **a, const struct dirent **b)
 	/* *a/*b are always live dirent entries from scandir()'s own list,
 	 * never NULL; qsort_r never calls a comparator outside that array
 	 * (see include/dirent.h's own comment on this pair). */
-	__ownership_pointer_nonnull(*a);
-	__ownership_pointer_nonnull(*b);
-	__ownership_string_terminated((*a)->d_name);
-	__ownership_string_terminated((*b)->d_name);
+	unsafe_assume_pointer_nonnull(*a);
+	unsafe_assume_pointer_nonnull(*b);
+	unsafe_assume_string_terminated((*a)->d_name);
+	unsafe_assume_string_terminated((*b)->d_name);
 	return strcmp((*a)->d_name, (*b)->d_name);
 }
 
 int versionsort(const struct dirent **a, const struct dirent **b)
 {
-	__ownership_pointer_nonnull(*a);
-	__ownership_pointer_nonnull(*b);
+	unsafe_assume_pointer_nonnull(*a);
+	unsafe_assume_pointer_nonnull(*b);
 	return strverscmp((*a)->d_name, (*b)->d_name);
 }

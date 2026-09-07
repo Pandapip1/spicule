@@ -163,7 +163,7 @@ static void process_char_mode(FILE *f, const struct range *ranges, size_t nr, in
 					/* clen <= ulen - off by char_len()'s contract, so this
 					 * stays within [line, line+ulen] -- same restatement as
 					 * process_field_mode()'s fwrite() below. */
-					__ownership_readable_span(line + off, clen);
+					unsafe_assume_readable_span(line + off, clen);
 					fwrite(line + off, 1, clen, stdout);
 				}
 				off += clen;
@@ -210,7 +210,7 @@ static void process_field_mode(FILE *f, const struct range *ranges, size_t nr, c
 					 * cursor arithmetic above, not traced by the checker
 					 * across the memchr loop -- same restatement
 					 * src/util/join.c's join_write() does for its fwrite(). */
-					__ownership_readable_span(start, flen);
+					unsafe_assume_readable_span(start, flen);
 					fwrite(start, 1, flen, stdout);
 					wrote_any = 1;
 				}
@@ -315,7 +315,7 @@ int __util_cut_main(
 			/* argv[i], i < argc, is NUL-terminated per argv's own
 			 * elements_withtok(null_terminated, argc) contract -- restated
 			 * since the checker doesn't trace that through the uses below. */
-			__ownership_string_terminated(argv[i]);
+			unsafe_assume_string_terminated(argv[i]);
 			/* use_stdin, not `f != stdin`, decides the fclose() below --
 			 * the checker can't prove opaque pointers unequal, so a direct
 			 * comparison avoids a false conditional-leak finding on fopen()

@@ -131,7 +131,7 @@ int getgroups(int n, gid_t *g withtok(writable_elements(n)))
 	 * non-NULL array (gidsetsize 0 is the only NULL-g case); the
 	 * writable_elements(n) token above proves the extent once g is
 	 * known live, but not liveness itself. */
-	if (n != 0) { __ownership_pointer_nonnull(g); g[0] = getegid(); }
+	if (n != 0) { unsafe_assume_pointer_nonnull(g); g[0] = getegid(); }
 	return held;
 }
 /* The group and session this process is in; see the banner for why they

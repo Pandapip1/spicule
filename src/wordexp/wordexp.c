@@ -218,7 +218,7 @@ static char *xstrdup(const char *s withtok(null_terminated))
 	char *p = __malloc(n);
 	if (!p) return 0;
 	memcpy(p, s, n);
-	__ownership_string_terminated(p);
+	unsafe_assume_string_terminated(p);
 	return p;
 }
 
@@ -230,7 +230,7 @@ static int is_split_char(char c)
 	/* Both branches are real C strings, but the checker's string-literal
 	 * recognition only fires on a literal initializer at declaration,
 	 * not a later reassignment. */
-	__ownership_string_terminated(ifs);
+	unsafe_assume_string_terminated(ifs);
 	return strchr(ifs, c) != 0;
 }
 static int is_namestart(char c) { return isalpha((unsigned char)c) || c == '_'; }
@@ -264,7 +264,7 @@ static int assign_param(struct assign_ctx *ctx, const char *name withtok(null_te
 	for (a = ctx->head; a; a = a->next) {
 		/* a->name is xstrdup()'d below on an earlier call; not
 		 * visible to a per-call analysis. */
-		__ownership_string_terminated(a->name);
+		unsafe_assume_string_terminated(a->name);
 		if (!strcmp(a->name, name)) return setenv(name, value, 1) < 0 ? WRDE_NOSPACE : 0;
 	}
 	a = __malloc(sizeof *a);
@@ -274,7 +274,7 @@ static int assign_param(struct assign_ctx *ctx, const char *name withtok(null_te
 	 * makes it a real C string. */
 	a->name = xstrdup(name);
 	old = getenv(name);
-	if (old) __ownership_string_terminated(old);
+	if (old) unsafe_assume_string_terminated(old);
 	a->had_old = old != 0;
 	a->old = old ? xstrdup(old) : 0;
 	if (!a->name || (old && !a->old)) {
@@ -396,7 +396,7 @@ static int expand_param_word(const char *start withtok(readable_span(input_len))
 		/* Every we.we_wordv[] entry is a real C string (built by
 		 * pv_pack()/xstrdup()), but that fact doesn't survive the
 		 * wordexp_t out-parameter boundary for a per-call analysis. */
-		__ownership_string_terminated(we.we_wordv[i]);
+		unsafe_assume_string_terminated(we.we_wordv[i]);
 		n += strlen(we.we_wordv[i]);
 	}
 	if (we.we_wordc > 1 && *ifs) n += we.we_wordc - 1;
@@ -413,7 +413,7 @@ static int expand_param_word(const char *start withtok(readable_span(input_len))
 	n = 0;
 	for (i = 0; i < we.we_wordc; i++) {
 		size_t z;
-		__ownership_string_terminated(we.we_wordv[i]);
+		unsafe_assume_string_terminated(we.we_wordv[i]);
 		z = strlen(we.we_wordv[i]);
 		if (i && *ifs) s[n++] = *ifs;
 		if (z > INT_MAX ||
@@ -486,11 +486,11 @@ static int expand_param(const char **pp, struct fbuf *b, int flags, int sh,
 		if (snprintf(name, sizeof name, "%.*s", (int)len, start) !=
 		    (int)len)
 			return WRDE_SYNTAX;
-		__ownership_string_terminated(name);
+		unsafe_assume_string_terminated(name);
 		*pp = p + 1;
 		val = getenv(name);
 		if (!val && (flags & WRDE_UNDEF)) return WRDE_BADVAL;
-		if (val) __ownership_string_terminated(val);
+		if (val) unsafe_assume_string_terminated(val);
 		return fbuf_push_long(b, val ? (long)strlen(val) : 0) ? WRDE_NOSPACE : 0;
 	}
 
@@ -560,9 +560,9 @@ static int expand_param(const char **pp, struct fbuf *b, int flags, int sh,
 	if (len >= sizeof name) return WRDE_SYNTAX;
 	if (snprintf(name, sizeof name, "%.*s", (int)len, start) != (int)len)
 		return WRDE_SYNTAX;
-	__ownership_string_terminated(name);
+	unsafe_assume_string_terminated(name);
 	val = getenv(name);
-	if (val) __ownership_string_terminated(val);
+	if (val) unsafe_assume_string_terminated(val);
 	if (braced && *p != '}') {
 		const char *word, *end;
 		char op, *replacement;
@@ -637,7 +637,7 @@ static int expand_param(const char **pp, struct fbuf *b, int flags, int sh,
 		if (op == '?') {
 			if (flags & WRDE_SHOWERR) {
 				const char *message = *replacement ? replacement : "parameter is unset";
-				__ownership_string_terminated(message);
+				unsafe_assume_string_terminated(message);
 				(void)write(2, message, strlen(message));
 				(void)write(2, "\n", 1);
 			}
@@ -686,7 +686,7 @@ static int expand_trim_pattern(const char *start, size_t len, int flags, // NOLI
 		text = __malloc(bytes);
 	}
 	if (!text) return WRDE_NOSPACE;
-	__ownership_readable_span(start, len);
+	unsafe_assume_readable_span(start, len);
 	memcpy(text, start, len);
 	text[len] = 0;
 	for (p = text; *p;) {
@@ -773,7 +773,7 @@ static int expand_tilde(const char **pp, struct fbuf *b)
 		home = getenv("HOME");
 	} else if (len < sizeof name) {
 		struct passwd *pw;
-		__ownership_readable_span(start, len);
+		unsafe_assume_readable_span(start, len);
 		memcpy(name, start, len);
 		name[len] = 0;
 		pw = getpwnam(name);
@@ -1140,7 +1140,7 @@ static int run_cmdsub(const char **pp, int flags, char **out)
  * core engine can no longer treat a later *pp read as the same
  * proven-in-bounds value, even though it only ever advances within the
  * original buffer. Neither returns_nonnull nor a manual
- * __ownership_readable_span() axiom after the call fixes this. Left open. */
+ * unsafe_assume_readable_span() axiom after the call fixes this. Left open. */
 static int validate_words(const char *words, int flags)
     __attribute__((nonnull(1)));
 static int validate_words(const char *words, int flags)
@@ -1279,7 +1279,7 @@ static int emit_field(struct fbuf *b, struct pv *out)
 				/* glob(3)'s contract: gl_pathv[0..gl_pathc) are real,
 				 * NUL-terminated pathnames; <glob.h>'s gl_pathv field
 				 * has no per-element contract of its own. */
-				__ownership_string_terminated(g.gl_pathv[j]);
+				unsafe_assume_string_terminated(g.gl_pathv[j]);
 				char *w = xstrdup(g.gl_pathv[j]);
 				if (!w || pv_push(out, w)) { globfree(&g); __free(plain); return WRDE_NOSPACE; }
 			}
@@ -1312,7 +1312,7 @@ static int split_appended(struct fbuf *b, struct pv *out, int *active,
 	if (!n) return 0;
 	text = __malloc(n);
 	if (!text) return WRDE_NOSPACE;
-	__ownership_readable_span(b->data + before, n);
+	unsafe_assume_readable_span(b->data + before, n);
 	memcpy(text, b->data + before, n);
 	b->n = before;
 	for (i = 0; i < n; i++) {
@@ -1466,7 +1466,7 @@ static int expand_impl(const char *words, wordexp_t *pwordexp, int flags, int sh
 			}
 			out.v = (char **)__malloc(bytes);
 			if (!out.v) { errno = ENOMEM; return WRDE_NOSPACE; }
-			__ownership_readable_span(old, bytes);
+			unsafe_assume_readable_span(old, bytes);
 			memcpy((void *)out.v, (const void *)old, bytes);
 			out.n = out.cap = count;
 		}

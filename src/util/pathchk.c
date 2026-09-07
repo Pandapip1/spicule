@@ -43,7 +43,7 @@
 #include <limits.h>
 #include <unistd.h>
 #include "util.h"
-#include "ownership_stubs.h" /* __ownership_string_terminated(): restates argv[i]'s NUL-termination across the check_one() call boundary */
+#include "ownership_stubs.h" /* unsafe_assume_string_terminated(): restates argv[i]'s NUL-termination across the check_one() call boundary */
 
 #define ISSEP(c) ((c) == '/' || (c) == '\\')
 
@@ -184,7 +184,7 @@ int __util_pathchk_main(
 	}
 
 	for (; i < argc; i++) {
-		__ownership_string_terminated(argv[i]); /* elements_withtok's grant doesn't survive across the check_one() call boundary */
+		unsafe_assume_string_terminated(argv[i]); /* elements_withtok's grant doesn't survive across the check_one() call boundary */
 		if (check_one(argv[i])) status = 1;
 	}
 

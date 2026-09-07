@@ -52,8 +52,13 @@ char *realpath(const char *__restrict path,
 	if (vfs == __VFS_MISSING) { errno = ENOENT; return 0; }
 	if (vfs != __VFS_NONE) {
 		static const char *const names[] = { 0, "/", "/dev", "/dev/console", "/dev/null", "/dev/tty" };
+		/* OPEN LINT FINDING (spicule.ValidPointer): vfs is one of
+		 * libc.h's own small enum of values, all < the 6-entry names[]
+		 * array, but the checker cannot correlate that enum's range with
+		 * this array's extent. */
 		const char *name = names[vfs];
 		size_t bytes;
+		unsafe_assume_string_terminated(name); /* a literal from names[] */
 		len = strlen(name);
 		if (!__size_add_checked(len, 1, &bytes)) return 0;
 		if (!resolved) {
@@ -74,6 +79,7 @@ char *realpath(const char *__restrict path,
 	(void)close(fd);
 	errno = saved;
 	if (!p) return 0;
+	unsafe_assume_string_terminated(p); /* __handle_path()'s own contract */
 	for (q = p; *q; q++) if (*q == '\\') *q = '/';
 	len = strlen(p);
 	if (len > 3 && p[len-1] == '/') p[--len] = 0;
@@ -87,7 +93,7 @@ char *realpath(const char *__restrict path,
 		return resolved;
 	}
 	if (len + 1 > PATH_MAX) { __free(p); errno = ENAMETOOLONG; return 0; }
-	__ownership_writable_span(resolved, len + 1);
+	unsafe_assume_writable_span(resolved, len + 1);
 	memcpy(resolved, p, len + 1);
 	__free(p);
 	return resolved;

@@ -46,15 +46,12 @@ int fstat(int fd, struct stat *st)
 int fstatat(int dirfd, const char *path, struct stat *st, int flags)
 {
 	if (!path) { errno = EFAULT; return -1; }
-	/* path is non-NULL here, and every POSIX path argument is by contract
-	 * a real NUL-terminated pathname string -- true by that public API
-	 * contract, not otherwise visible to the checker across stat()/
-	 * lstat()'s own call boundary (the same shape src/dlfcn/linux/
-	 * plat_dlfcn.c's __plat_dlopen() uses for its own file parameter).
-	 * Stating this via withtok(null_terminated) instead would cascade the
-	 * same requirement into every stat()/lstat()/fstatat() caller
-	 * tree-wide, per src/unistd/unlink.c's identical, already-documented
-	 * tradeoff. */
+	/* path is non-NULL here, and every POSIX path argument is by contract a
+	 * real NUL-terminated pathname string -- not otherwise visible to the
+	 * checker across this call boundary (same shape as src/dlfcn/linux/
+	 * plat_dlfcn.c's __plat_dlopen()). withtok(null_terminated) instead
+	 * would cascade the requirement into every stat()/lstat()/fstatat()
+	 * caller tree-wide, per src/unistd/unlink.c's identical tradeoff. */
 	unsafe_assume_string_terminated(path);
 	/* /dev/stdin, /dev/stdout, /dev/stderr are fd-table lookups, portable
 	 * across backends, so handled here rather than in __plat_fstatat();

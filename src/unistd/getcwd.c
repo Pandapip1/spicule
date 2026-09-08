@@ -57,10 +57,7 @@ char *getcwd(char *buf withtok(heap_allocated), size_t size)
 	} else if (len + 1 > size) {
 		errno = ERANGE; return 0;
 	}
-	{
-		size_t i;
-		for (i = 0; i <= len; i++) buf[i] = tmp[i];
-	}
+	for (size_t i = 0; i <= len; i++) buf[i] = tmp[i];
 	return buf;
 }
 

@@ -105,16 +105,12 @@ struct out {
 	size_t written;
 };
 
-/* o/t both required: o->left is dereferenced unconditionally at
- * entry with no guard, and t flows into memcpy() unconditionally --
- * this tree's own established mem/str doctrine (242ed40) treats that
- * as a genuine use regardless of length. Every real call site passes
- * &o (a stack local, never NULL) and either fmt (proven live by the
- * `while (*fmt)` loop that reached it) or field (a stack array).
- *
- * o->p's own span is unprovable for the same reason vstrfmon()'s own
- * comment below documents for putc_n()/`*o.p = 0`: o->p == s, and s is
- * deliberately not required nonnull. */
+/* o/t both required: o->left is dereferenced unconditionally, and t flows
+ * into memcpy() unconditionally (this tree's mem/str doctrine treats that as
+ * a genuine use regardless of length). Every call site passes &o and a live
+ * buffer. o->p's own span is unprovable for the same reason vstrfmon()'s
+ * comment below documents: o->p == s, and s is deliberately not required
+ * nonnull. */
 static int put(struct out *o, const char *t, size_t l) __attribute__((nonnull(1, 2)));
 static int put(struct out *o, const char *t, size_t l)
 {
@@ -126,11 +122,10 @@ static int put(struct out *o, const char *t, size_t l)
 	return 0;
 }
 
-/* o required, same as put() above. o->p itself is only ever NULL if a
- * caller passes s == NULL with maxsize != 0, which vstrfmon()'s own
- * comment below already documents as a deliberately unenforced caller
- * contract (POSIX undefined behaviour), not something this checker's
- * dereference-nonnull proof can or should treat as a library bug. */
+/* o required, same as put() above. o->p is only ever NULL if a caller
+ * passes s == NULL with maxsize != 0 -- vstrfmon()'s comment below
+ * documents that as a deliberately unenforced caller contract (POSIX
+ * undefined behaviour), not a library bug. */
 static int putc_n(struct out *o, char c, size_t n) __attribute__((nonnull(1)));
 static int putc_n(struct out *o, char c, size_t n)
 {
@@ -144,18 +139,14 @@ static int putc_n(struct out *o, char c, size_t n)
 }
 
 /* Append to the field buffer, refusing to overflow it. f/fl/t all
- * required: *fl is dereferenced unconditionally at entry with no
- * guard, and f/t both flow into memcpy() unconditionally, same
- * doctrine as put() above. Every real call site passes field (a
- * stack array) and &fl (a stack local).
+ * required: *fl is dereferenced unconditionally, and f/t both flow into
+ * memcpy() unconditionally, same doctrine as put() above.
  *
- * f[*fl + i] is in-bounds by construction: the guard just above proves
- * *fl + l <= FIELD_MAX, so *fl + i < FIELD_MAX for every i < l. Checker
- * gap (spicule.ValidPointer), not a workaround target: f is a plain
- * `char *` parameter here, with no compile-time array type to compare
- * the index against, regardless of what a real caller happens to pass
- * (see OwnershipChecker.cpp's arrayIndexProvenInBounds's own comment on
- * exactly this "array reached only through a pointer" limitation). */
+ * f[*fl + i] is in-bounds by construction (the guard above proves
+ * *fl + l <= FIELD_MAX), but that's a checker gap left open rather than
+ * restructured to help it prove an already-true fact: f is a plain
+ * `char *` here with no compile-time array type to index against (see
+ * OwnershipChecker.cpp's arrayIndexProvenInBounds comment). */
 static int fappend(char *restrict f, size_t *fl, const char *restrict t, size_t l)
     __attribute__((nonnull(1, 2, 3)));
 static int fappend(char *restrict f, size_t *fl, const char *restrict t, size_t l)
@@ -167,17 +158,13 @@ static int fappend(char *restrict f, size_t *fl, const char *restrict t, size_t 
 	return 0;
 }
 
-/* fmt required: dereferenced unconditionally at `while (*fmt)`, no
- * guard, and every real caller (strfmon()/strfmon_l() below) forwards
- * its own fmt unchecked. s is deliberately NOT marked: with maxsize
- * == 0 this returns E2BIG before ever touching s (`if (maxsize == 0)
- * ...; o.p = s;`), so a NULL s genuinely does not crash on that one
- * path -- an artifact of the E2BIG check rather than a documented
- * "s is optional" contract, but not something `nonnull` may
- * overstate either way. The same tradeoff reaches put()/putc_n()'s
- * o->p writes above and this function's own final `*o.p = 0;`: a
- * caller passing s == NULL with maxsize != 0 is POSIX undefined
- * behaviour, not a bug this library corrects. */
+/* fmt required: dereferenced unconditionally at `while (*fmt)`, and every
+ * caller forwards its own fmt unchecked. s is deliberately NOT marked: with
+ * maxsize == 0 this returns E2BIG before ever touching s, so a NULL s
+ * doesn't crash on that one path -- an artifact of the E2BIG check, not a
+ * documented "s is optional" contract. A caller passing s == NULL with
+ * maxsize != 0 is POSIX undefined behaviour, not a bug this library
+ * corrects. */
 static ssize_t vstrfmon(char *s, size_t maxsize, const char *fmt, va_list ap)
     __attribute__((nonnull(3)));
 static ssize_t vstrfmon(char *s, size_t maxsize, const char *fmt, va_list ap)

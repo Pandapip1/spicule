@@ -15,13 +15,11 @@ __wraps char *dirname(char *s)
 {
 	size_t i, start = 0;
 	if (!s || !*s) return (char *)".";
-	/* s is non-NULL here, and dirname()'s own POSIX contract requires a
-	 * real NUL-terminated string -- true by that public API contract, not
-	 * otherwise visible to the checker across this function's own call
-	 * boundary (the same shape src/stat/stat.c's fstatat() and
-	 * src/dlfcn/linux/plat_dlfcn.c's __plat_dlopen() use for their own
-	 * path parameters). Stating this via withtok(null_terminated) instead
-	 * would cascade into every dirname()/basename() caller tree-wide. */
+	/* s is non-NULL here, and dirname()'s POSIX contract requires a real
+	 * NUL-terminated string -- not otherwise visible to the checker across
+	 * this call boundary (same shape as src/stat/stat.c's fstatat()).
+	 * withtok(null_terminated) instead would cascade into every
+	 * dirname()/basename() caller tree-wide. */
 	unsafe_assume_string_terminated(s);
 	if (((unsigned)(s[0] | 32) - 'a') < 26u && s[1] == ':') start = 2;
 	i = strlen(s) - 1;

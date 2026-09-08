@@ -387,6 +387,15 @@ tryflag CFLAGS_C99FSE -fno-builtin
 # platform=nt's tcc), so no platform/arch guard is needed here.
 tryflag CFLAGS_C99FSE -mno-outline-atomics
 
+# This tree has no __stack_chk_guard/__stack_chk_fail (tcc, the only NT
+# compiler, never inserts stack-protector calls), but a native host cc
+# (clang/gcc building for platform=linux) defaults to inserting them
+# anyway, and the -nostdlib link fails on those two undefined symbols.
+# Already diagnosed and fixed the identical way in
+# tools/linux-build-crt.sh and tools/posix-opts.py's own CFLAGS;
+# tcc accepts this flag as a no-op, so no platform guard is needed here.
+tryflag CFLAGS_C99FSE -fno-stack-protector
+
 if test "$debug" = yes ; then
 CFLAGS_AUTO=-g
 fi

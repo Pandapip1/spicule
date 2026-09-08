@@ -38,6 +38,14 @@ static const WCHAR *afd_transport_for(int socktype)
 	return socktype == SOCK_DGRAM ? afd_transport_udp : afd_transport_tcp;
 }
 
+/* See afd.h's AFD_ENDPOINT_CONNECTIONLESS/AFD_ENDPOINT_MESSAGE_ORIENTED
+ * banner: UDP's real EndpointFlags is CONNECTIONLESS|MESSAGE_ORIENTED
+ * (0x11), not the 0 that is only correct for TCP. */
+static uint32_t afd_endpoint_flags_for(int socktype)
+{
+	return socktype == SOCK_DGRAM ? (AFD_ENDPOINT_CONNECTIONLESS | AFD_ENDPOINT_MESSAGE_ORIENTED) : 0;
+}
+
 /* Header size + name + NUL, not sizeof(AFD_OPEN_PACKET)/AFD_CREATE_PACKET
  * (those pad and count a placeholder TransportName[1]). The NUL is kept
  * in the buffer though not counted by the name-length field, matching
@@ -109,7 +117,7 @@ void __afd_build_open_ea_for(int shape, int socktype, void *buf)
 		 * AFD_CREATE_PACKET, read back by AfdCreateSocket() in
 		 * drivers/network/afd/afd/main.c. */
 		AFD_CREATE_PACKET *pkt = (AFD_CREATE_PACKET *)value;
-		pkt->EndpointFlags = 0; /* connection-oriented */
+		pkt->EndpointFlags = afd_endpoint_flags_for(socktype);
 		pkt->GroupID = 0;
 		pkt->SizeOfTransportName = (uint32_t)AFD_TRANSPORT_BYTES;
 		unsafe_assume_writable_span(pkt->TransportName,
@@ -118,7 +126,7 @@ void __afd_build_open_ea_for(int shape, int socktype, void *buf)
 	} else {
 		/* phnt ntafd.h's AFD_OPEN_PACKET. */
 		AFD_OPEN_PACKET *pkt = (AFD_OPEN_PACKET *)value;
-		pkt->EndpointFlags = 0; /* not CONNECTIONLESS/RAW/MESSAGE_ORIENTED */
+		pkt->EndpointFlags = afd_endpoint_flags_for(socktype);
 		pkt->GroupID = 0;
 		/* Fields ReactOS's AFD_CREATE_PACKET lacks. socktype must
 		 * agree with the transport device name (via

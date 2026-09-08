@@ -459,6 +459,28 @@ typedef struct _FILE_FULL_EA_INFORMATION {
 #define AFD_EA_NAME "AfdOpenPacketXX"
 #define AFD_EA_NAME_LEN 15 /* strlen(AFD_EA_NAME), not counting the NUL EaName itself is stored with */
 
+/* EndpointFlags bit values, cross-checked the same two-source way as
+ * the rest of this file:
+ *
+ *   - ReactOS's sdk/include/reactos/drivers/afd/shared.h #defines these
+ *     numerically (AFD_ENDPOINT_CONNECTIONLESS 0x1, AFD_ENDPOINT_
+ *     MESSAGE_ORIENTED 0x10, AFD_ENDPOINT_RAW 0x100, ...).
+ *   - phnt's ntafd.h describes the same field as an AFD_ENDPOINT_FLAGS
+ *     bitfield (ConnectionLess at bit 0, MessageMode at bit 4, Raw at
+ *     bit 8, ...) -- the same layout by a different name, independently.
+ *
+ * ReactOS's WSPSocket (dll/win32/msafd/misc/dllmain.c) sets
+ * CONNECTIONLESS whenever the provider's XP1_CONNECTIONLESS applies
+ * (only valid for SOCK_DGRAM/SOCK_RAW) and MESSAGE_ORIENTED whenever
+ * XP1_MESSAGE_ORIENTED applies; Microsoft's built-in UDP/IP provider
+ * declares both, so a UDP endpoint's EndpointFlags is
+ * CONNECTIONLESS|MESSAGE_ORIENTED (0x11) -- 0, this project's prior
+ * value for every socket type, is what TCP (neither flag) gets, not
+ * what UDP gets.  socket()'s open packet (afdsupport.c) is the only
+ * place that matters: nothing else in this header inspects the flag. */
+#define AFD_ENDPOINT_CONNECTIONLESS   0x1UL
+#define AFD_ENDPOINT_MESSAGE_ORIENTED 0x10UL
+
 /* Every field spelled as a fixed-width type, for the LP64-vs-LLP64
  * reason in this header's banner: `make asan` compiles it natively. */
 typedef struct _AFD_OPEN_PACKET {

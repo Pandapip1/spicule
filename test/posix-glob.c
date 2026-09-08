@@ -397,9 +397,27 @@ static void test_glob_err_callback(void)
 	 * if this environment's permission model does not actually revoke
 	 * this process's own opendir() access, glob() returns something
 	 * other than GLOB_ABORTED and there is no EACCES fixture here to
-	 * exercise the rest of the clause against. */
+	 * exercise the rest of the clause against.
+	 *
+	 * chmod("noperm", 0) itself can also fail outright: real Windows
+	 * (all four windows-test CI legs) has no ACL-based permission model
+	 * for directory execute bits, so __plat_chmod()'s $LXMOD EA write
+	 * fails there (EINVAL) in a way it does not under Wine. That's
+	 * chmod() failing honestly, not a fixture bug -- probe it live and
+	 * fall back the same as the GLOB_ABORTED probe just below. */
 	CHECK(mkdir("noperm", 0755) == 0);
-	CHECK(chmod("noperm", 0) == 0);
+	if (chmod("noperm", 0) != 0) {
+		printf("SKIP posix-glob GLOB_ERR/errfunc tests "
+		       "(chmod(\"noperm\", 0) failed here, errno=%d; this "
+		       "platform's chmod() cannot clear a directory's execute "
+		       "bits -- no ACL-based permission model, and the $LXMOD "
+		       "EA write it would need is not always honoured on real "
+		       "Windows) -- the EACCES-triggered GLOB_ABORTED/errfunc "
+		       "clauses were not exercised\n", errno);
+		unverified++;
+		rmdir("noperm");
+		return;
+	}
 
 	glob_err_seen = 0;
 	r = glob("noperm/*", 0, glob_errfunc, &g);

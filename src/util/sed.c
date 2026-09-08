@@ -791,12 +791,14 @@ static struct sed_cmd *prog_push(struct program *pr) __attribute__((nonnull(1)))
 		if (!g) return 0;
 		pr->cmds = g;
 		pr->cap = newcap;
+	} else {
+		/* pr->cap > 0 already (grown by a prior call and never reset),
+		 * hence pr->cmds != NULL -- the same cross-call growable-array
+		 * invariant as wfile_get()'s own t->entries. When this call
+		 * itself just grew pr->cmds above, g's own NULL check already
+		 * proves it nonnull without restating it here. */
+		unsafe_assume_pointer_nonnull(pr->cmds);
 	}
-	/* pr->cap > 0 at this point (just grown above, or already grown by a
-	 * prior call and never reset), hence pr->cmds != NULL -- the same
-	 * cross-call growable-array invariant as wfile_get()'s own
-	 * t->entries. */
-	unsafe_assume_pointer_nonnull(pr->cmds);
 	memset(&pr->cmds[pr->n], 0, sizeof pr->cmds[pr->n]);
 	return &pr->cmds[pr->n++];
 }
@@ -1444,10 +1446,13 @@ static int run_program(struct sed_state *st, struct program *pr, int opt_n)
 				int restart = 0;
 				long pc = 0;
 
-				/* pc < (long)pr->n here implies pr->n > 0, hence
-				 * pr->cmds != NULL -- see prog_push()'s own comment. */
-				unsafe_assume_pointer_nonnull(pr->cmds);
 				while (pc < (long)pr->n) {
+					/* pc < (long)pr->n here implies pr->n > 0, hence
+					 * pr->cmds != NULL -- see prog_push()'s own
+					 * comment. Asserted here, where that guard
+					 * actually holds, rather than unconditionally
+					 * before the loop (where pr->n could be 0). */
+					unsafe_assume_pointer_nonnull(pr->cmds);
 					struct sed_cmd *cmd = &pr->cmds[(size_t)pc];
 					int sel;
 

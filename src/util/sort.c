@@ -731,9 +731,11 @@ int __util_sort_main(
 				continue;
 			lines[keep++] = lines[write_i];
 		}
+		/* keep <= nlines, so keep > 0 implies lines is live; asserted
+		 * once here, where that guard is visible, rather than
+		 * unconditionally on every loop iteration below. */
+		if (keep) unsafe_assume_pointer_nonnull(lines);
 		for (write_i = 0; write_i < keep; write_i++) {
-			/* keep <= nlines, so keep > 0 implies lines is live. */
-			unsafe_assume_pointer_nonnull(lines);
 			if (fprintf(outf, "%s\n", lines[write_i].text) < 0) {
 				/* The output error fixes the result; close only releases outf. */
 				if (outfile) (void)fclose(outf);

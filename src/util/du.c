@@ -41,19 +41,12 @@
  *      512-byte blocks, so that is this utility's unqualified default).
  *
  *  -r  du(1p) OPTIONS: historically "generate messages about files that
- *      cannot be read", and the standard's own RATIONALE notes this was
- *      once unconditional, real, portable behaviour on some systems and
- *      a documented no-op on others -- so there is no single "the"
- *      behaviour to silently pick.  Resolved here the same way rm(1p)'s
- *      -f is read literally rather than guessed at (see rm.c's header):
- *      -r *adds* a diagnostic on an inaccessible entry that this
- *      implementation would otherwise skip quietly.  Without -r, an
- *      entry nftw() reports FTW_NS/FTW_DNR is skipped with no message
- *      (the portable, modern default many implementations settled on);
- *      with -r, the same entry gets a "du: cannot access ..." line on
- *      stderr before being skipped.  Either way it still counts toward a
- *      nonzero exit status: a silently-skipped entry is not the same as
- *      a successfully-measured one, message or no message.
+ *      cannot be read"; RATIONALE notes real implementations disagree on
+ *      whether this is a no-op, so there is no single behaviour to
+ *      silently pick. Read literally here: without -r, an entry nftw()
+ *      reports FTW_NS/FTW_DNR is skipped with no message; with -r, it
+ *      gets a "du: cannot access ..." line on stderr first. Either way
+ *      it still counts toward a nonzero exit status.
  *
  * EXIT STATUS: du(1p) "0 ... >0 An error occurred." -- diagnose-or-not
  * per -r above, but never silently claim success over an entry that
@@ -68,13 +61,10 @@
 #include "util.h"
 
 /* One accumulator per nesting level currently open, indexed by struct
- * FTW's own `level` -- see this file's header on why a level-indexed
- * array is enough: nftw()'s FTW_DEPTH post-order walk never has two
- * directories at the same level "open" (accumulating) at once, so a
- * slot is always safe to reuse the moment its owning directory's FTW_DP
- * has been folded into its parent's slot. 4096 is far beyond any real
- * pathname's component count this platform's own PATH_MAX (used
- * elsewhere in this tier, e.g. src/util/mkdir_util.c) could reach. */
+ * FTW's own `level`: FTW_DEPTH's post-order walk never has two
+ * directories at the same level open at once, so a slot is always safe
+ * to reuse once its directory's FTW_DP folds it into its parent's slot.
+ * 4096 is far beyond any real pathname's component count. */
 #define DU_MAXLEVEL 4096
 static uintmax_t level_sum[DU_MAXLEVEL]; /* 512-byte units, always */
 static int du_all, du_summary, du_rflag, du_had_error;
@@ -90,26 +80,14 @@ static void print_line(uintmax_t blocks512, const char *path)
 	printf("%ju\t%s\n", to_units(blocks512), path);
 }
 
-/* ftwbuf->level below (and, once that dereference is reached, st->st_blocks
- * in the FTW_F/FTW_SL/FTW_DP cases) is flagged "pointer dereference is not
- * proven nonnull" by tools/lint.sh ownership: left open, same accepted
- * class as src/util/rm.c/cp.c's own nftw() callbacks would be if they
- * dereferenced either parameter at all (they cast both to (void) instead,
- * see rm_walk_cb()/cpt_cb()). Unlike those two, this really is true and
- * provable in principle -- src/ftw/ftw.c's report() always calls this
- * callback as `ws->fn4(path, st, type, &f)` with a real, non-null `st` and
- * `&f` (report()'s own stack-local struct FTW) on every call -- but
- * stating it with __attribute__((nonnull(2, 4))) here was tried and
- * reverted: it does silence this pair, but it also lets
- * spicule.OwnershipChecker's exploration reach past this function's first
- * statement into the FTW_DP case below, where it cannot prove
- * level_sum[lvl]'s lower bound (lvl is never actually negative -- FTW's
- * `level` is a plain recursion-depth counter src/ftw/ftw.c's walk() only
- * ever increments from 0 -- but nothing in ownership.h's vocabulary states
- * a scalar struct field's numeric range the way extent_at_least/
- * element_extent state a pointer's byte/element extent), a net regression
- * from 2 findings to 3. Verified with a direct clang --analyze run scoped
- * to this file before keeping or reverting either change. */
+/* ftwbuf->level and st->st_blocks below are flagged "not proven nonnull"
+ * by tools/lint.sh ownership: left open. Both really are always non-null
+ * (src/ftw/ftw.c's report() never calls this with anything else), but
+ * annotating it with __attribute__((nonnull(2, 4))) was tried and
+ * reverted -- it lets spicule.OwnershipChecker's exploration reach the
+ * FTW_DP case's level_sum[lvl] indexing, which it then can't bound
+ * (ownership.h has no vocabulary for a scalar field's numeric range), a
+ * net regression from 2 findings to 3. */
 static int du_cb(const char *path, const struct stat *st, int type, struct FTW *ftwbuf)
 {
 	int lvl = ftwbuf->level;
@@ -169,18 +147,11 @@ int __util_du_main(
 	for (; i < argc; i++) {
 		char *a = argv[i];
 		char *p;
-		/* a[0]: "pointer dereference is not proven nonnull" -- left
-		 * open, same accepted class as the identical argv[i][0] access
-		 * in src/util/rm.c, cp.c, mv.c, df.c, uuencode.c, and
-		 * uudecode.c's own option loops. argv's own
-		 * elements_withtok(null_terminated, argc) above proves every
-		 * element up to argc has a reachable NUL, but include/
-		 * string_tokens.h's null_terminated token is defined purely as
-		 * that reachability fact (see its own comment) -- it carries no
-		 * companion "and the pointer itself is not NULL" qualifier, so
-		 * spicule.OwnershipChecker's AggregateElementToken machinery has
-		 * nothing to hand spicule.ValidPointer here. No annotation in
-		 * ownership.h currently closes this. */
+		/* a[0]: "not proven nonnull" -- left open, same accepted class
+		 * as the identical argv[i][0] access in rm.c, cp.c, mv.c, df.c,
+		 * uuencode.c and uudecode.c's own option loops (null_terminated
+		 * proves a reachable NUL, not that the pointer itself is
+		 * non-NULL; no annotation in ownership.h currently closes this). */
 		if (a[0] != '-' || a[1] == 0) break;
 		if (!strcmp(a, "--")) { i++; break; }
 		for (p = a + 1; *p; p++) {

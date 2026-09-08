@@ -104,15 +104,11 @@
 #include <limits.h>
 #include "util.h"
 #include "ownership_stubs.h" /* unsafe_assume_string_terminated(): every fixed-size
-	buffer this file assembles digit-by-digit in a loop (format_signed()'s/
-	format_unsigned()'s own `digs`), via snprintf() (format_unsigned()'s
-	`withpfx`, format_float()'s `buf`), or byte-by-byte by hand
-	(format_char()'s `c`) is genuinely NUL-terminated by the time it
-	reaches emit_padded(), but none of those constructions is a plain
-	`p[fixed_offset] = 0` a raw per-byte walk lets the checker see through
-	on its own -- the same gap src/util/patch.c's own comment on this
-	same include describes for its own snprintf()-then-terminate and
-	hand-rolled-copy shapes. */
+	buffer this file assembles by loop, snprintf(), or by hand is genuinely
+	NUL-terminated by the time it reaches emit_padded(), but none of those
+	constructions is a plain `p[fixed_offset] = 0` the checker can trace on
+	its own -- same gap src/util/patch.c's own comment on this include
+	describes. */
 
 /* ---- argument cursor ---------------------------------------------- */
 
@@ -380,24 +376,14 @@ static const char *parse_spec(const char *p, struct spec *sp)
 }
 
 /* sign/body padding shared by every conversion below. zero_ok gates
- * whether the '0' flag applies (it never does for %s/%c/%b, and it is
- * suppressed for numeric conversions whose precision was given -- the
- * same C rule src/stdio/printf.c's own formatter follows). sign is
- * genuinely optional -- format_char() passes a literal NULL for both of
- * its own calls -- so it is deliberately NOT withtok(null_terminated)
- * (that qualifier has no zero_vacuous escape hatch the way
- * readable_span/writable_span do, so declaring it here would make
- * format_char()'s own NULL argument itself a new finding); every
- * non-NULL sign every caller ever actually passes is one of "", "-",
- * "+", " " -- string literals, established by hand just below rather
- * than relying on withtok(null_terminated) to accept a value that may
- * legitimately be NULL. body, by contrast, is never NULL and always
- * genuinely NUL-terminated by its caller (format_signed()'s/
- * format_unsigned()'s `digs`, format_unsigned()'s `withpfx`,
- * format_char()'s `""`/`c`, format_float()'s `buf` -- see each call
- * site's own unsafe_assume_string_terminated()), so it is safe to declare
- * withtok(null_terminated) outright; sp is always the caller's own
- * `&sp`. */
+ * whether the '0' flag applies (never for %s/%c/%b; suppressed for a
+ * numeric conversion with an explicit precision, the same C rule
+ * src/stdio/printf.c's formatter follows). sign is deliberately not
+ * withtok(null_terminated): format_char() legitimately passes NULL, and
+ * that qualifier has no zero_vacuous escape hatch; every non-NULL sign
+ * is a string literal, established by hand below. body is never NULL
+ * and always NUL-terminated by its caller, so it can carry
+ * withtok(null_terminated) outright. */
 static void emit_padded(const char *sign, const char *body withtok(null_terminated),
 	const struct spec *sp, int zero_ok) __attribute__((nonnull(2, 3)));
 static void emit_padded(const char *sign, const char *body withtok(null_terminated),
@@ -471,8 +457,7 @@ static void format_signed(const char *arg, const struct spec *sp)
 	emit_padded(sign, digs, sp, sp->prec < 0);
 }
 
-/* arg is always run_one_pass()'s own `arg` (never NULL), sp is always the
- * caller's own `&sp`. */
+/* arg/sp: same as format_signed() above. */
 static void format_unsigned(const char *arg, const struct spec *sp, int base, int upper) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 	__attribute__((nonnull(1, 2)));
 static void format_unsigned(const char *arg, const struct spec *sp, int base, int upper) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
@@ -492,23 +477,12 @@ static void format_unsigned(const char *arg, const struct spec *sp, int base, in
 		 * zero well before this one-pass-per-value-bit guard. */
 		unsigned bits_left = (unsigned)(sizeof v * CHAR_BIT);
 		do {
-			/* v % base/v /= base with base itself a plain, unconstrained
-			 * `int` parameter cannot be bounded against
-			 * "0123456789abcdef"'s own fixed 16-character extent by this
-			 * project's ownership vocabulary -- there is no annotation
-			 * for "this parameter is always one of {8, 10, 16}"
-			 * (integer_sentinel/long_sentinel name ONE excluded value,
-			 * not a general range), and even clamping base to a runtime
-			 * variable ranged [2, 16] first does not let the checker's
-			 * modulus-based bound proof see through a non-constant
-			 * divisor. Switching on the three real values every actual
-			 * caller ever passes turns each arm's `% 8`/`% 10`/`% 16`
-			 * into a literal, compile-time-constant modulus, provably
-			 * bounding its own result -- arithmetically identical to the
-			 * single `% (unsigned)base` this replaces, and defensively
-			 * defined for a base outside {8, 10, 16} (a caller error
-			 * this file's four real callers never commit) rather than
-			 * left as undefined behavior. */
+			/* Switched rather than `% (unsigned)base` so each arm's modulus
+			 * is a compile-time constant the checker can bound against
+			 * "0123456789abcdef"'s extent -- no ownership annotation states
+			 * "this int is always one of {8, 10, 16}". Arithmetically
+			 * identical; a base outside that set (never a real caller)
+			 * falls to base 10. */
 			unsigned digit_val;
 			switch (base) {
 			case 8:  digit_val = (unsigned)(v % 8);  v /= 8;  break;
@@ -557,16 +531,10 @@ static void format_unsigned(const char *arg, const struct spec *sp, int base, in
  * this writes directly from `arg` (length-bounded) instead of building
  * a NUL-terminated copy just to hand it to a strlen()-based helper.
  *
- * arg is always run_one_pass()'s own `arg`: either "" or a genuine argv
- * operand written by arg_take(), never NULL and always NUL-terminated --
- * but arg_take()'s own `out` is a `const char **` out-parameter, whose
- * postcondition cannot itself carry null_terminated (the same reason
- * src/util/patch.c's parse_name_line() re-asserts its own T** out-param's
- * result by hand instead of annotating the parameter), so withtok(...)
- * here pushes the proof onto run_one_pass()'s own call site, which
- * restates it with unsafe_assume_string_terminated() right after each
- * arg_take() that feeds a %s conversion. sp is always the caller's own
- * `&sp`. */
+ * withtok(null_terminated) here pushes the proof onto run_one_pass()'s
+ * call site (arg_take()'s `const char **` out-param can't itself carry
+ * the postcondition), which restates it right after each arg_take()
+ * that feeds a %s conversion. */
 static void format_str(const char *arg withtok(null_terminated), const struct spec *sp)
 	__attribute__((nonnull(1, 2)));
 static void format_str(const char *arg withtok(null_terminated), const struct spec *sp)
@@ -586,8 +554,7 @@ static void format_str(const char *arg withtok(null_terminated), const struct sp
 	}
 }
 
-/* arg is always run_one_pass()'s own `arg` (never NULL), sp is always the
- * caller's own `&sp`. */
+/* arg/sp: same as format_signed() above. */
 static void format_char(const char *arg, const struct spec *sp)
 	__attribute__((nonnull(1, 2)));
 static void format_char(const char *arg, const struct spec *sp)
@@ -607,8 +574,7 @@ static void format_char(const char *arg, const struct spec *sp)
  * already-exact float-to-decimal conversion -- see this file's header
  * for why that is not the same thing as wrapping the whole utility
  * around vprintf(). */
-/* arg is always run_one_pass()'s own `arg` (never NULL), sp is always the
- * caller's own `&sp`. */
+/* arg/sp: same as format_signed() above. */
 static void format_float(const char *arg, const struct spec *sp, char conv)
 	__attribute__((nonnull(1, 2)));
 static void format_float(const char *arg, const struct spec *sp, char conv)

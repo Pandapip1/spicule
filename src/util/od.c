@@ -51,7 +51,9 @@
 #include <errno.h>
 #include <limits.h>
 #include "util.h"
-#include "ownership_stubs.h" /* unsafe_assume_string_terminated(): instream_read() below opens is->files[is->idx], sliced from __util_od_main's own argv (elements_withtok(null_terminated, argc)) into struct instream's char **files field -- a struct field the analyzer cannot see through back to that parameter contract, the same idiom src/util/find.c's byte-for-byte identical struct find_ctx (char **v; ...) already uses for its own argv slice. */
+#include "ownership_stubs.h" /* unsafe_assume_string_terminated(): struct instream's
+	files field is sliced from argv, but the analyzer can't trace that
+	contract through a struct field -- same idiom as find.c's find_ctx. */
 
 static int od_output_failed;
 

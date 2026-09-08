@@ -26,7 +26,6 @@
 #include <errno.h>
 #include "libc.h"
 #include "plat_stat.h"
-#include "ownership_stubs.h"
 
 int fstat(int fd, struct stat *st)
 {
@@ -43,16 +42,9 @@ int fstat(int fd, struct stat *st)
 	return result;
 }
 
-int fstatat(int dirfd, const char *path, struct stat *st, int flags)
+int fstatat(int dirfd, const char *path withtok(null_terminated), struct stat *st, int flags)
 {
 	if (!path) { errno = EFAULT; return -1; }
-	/* path is non-NULL here, and every POSIX path argument is by contract a
-	 * real NUL-terminated pathname string -- not otherwise visible to the
-	 * checker across this call boundary (same shape as src/dlfcn/linux/
-	 * plat_dlfcn.c's __plat_dlopen()). withtok(null_terminated) instead
-	 * would cascade the requirement into every stat()/lstat()/fstatat()
-	 * caller tree-wide, per src/unistd/unlink.c's identical tradeoff. */
-	unsafe_assume_string_terminated(path);
 	/* /dev/stdin, /dev/stdout, /dev/stderr are fd-table lookups, portable
 	 * across backends, so handled here rather than in __plat_fstatat();
 	 * mirrors src/fcntl/open.c's own /dev/std* special case. */
@@ -66,7 +58,7 @@ int fstatat(int dirfd, const char *path, struct stat *st, int flags)
 	return __plat_fstatat(dirfd, path, flags, st);
 }
 
-int stat(const char *path, struct stat *st) { return fstatat(AT_FDCWD, path, st, 0); }
-int lstat(const char *path, struct stat *st) { return fstatat(AT_FDCWD, path, st, AT_SYMLINK_NOFOLLOW); }
+int stat(const char *path withtok(null_terminated), struct stat *st) { return fstatat(AT_FDCWD, path, st, 0); }
+int lstat(const char *path withtok(null_terminated), struct stat *st) { return fstatat(AT_FDCWD, path, st, AT_SYMLINK_NOFOLLOW); }
 
 // NOLINTEND(misc-include-cleaner)

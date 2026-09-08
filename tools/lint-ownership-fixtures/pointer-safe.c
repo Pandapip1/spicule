@@ -574,3 +574,122 @@ int fd_get_after_install_through_copied_local_needs_no_restatement(void *handle)
 	f->state = 2;
 	return newfd;
 }
+
+/* spicule.RedundantPointerAxiom (OwnershipChecker.cpp's
+ * RedundantPointerAxiomChecker, tools/lint.sh's opt-in `pointeraxiom`
+ * stage) audits the two axioms above the way spicule.MemoryContract
+ * already audits unsafe_assume_readable_span/unsafe_assume_writable_span:
+ * a restatement of a fact the analysis can already prove without it is
+ * dead scaffolding left behind by a checker improvement that closed the
+ * gap at its point of origin.
+ *
+ * The pointer-axiom-* expectation tags below belong to
+ * tools/lint-pointer-axiom.py's own fixture gate, not to
+ * tools/lint-ownership.py's -- exactly the split the opt-in
+ * spicule.ResourceLeak checker's own resource-leak tag already has.
+ * Every case below is otherwise a genuine "safe" case: none of them has
+ * any ValidPointer finding of its own.
+ *
+ * The negative half of this audit's proof obligation is
+ * struct_field_array_element_nonnull_axiom_is_trusted above -- the
+ * struct-held array element whose axiom is still the only thing proving
+ * that read nonnull, and which therefore must NOT be flagged here.
+ * pointer-unsafe.c's struct_field_array_element_is_flagged_without_the_
+ * axiom is the standing proof that it really is load-bearing. */
+
+/* __attribute__((nonnull)) already asserts this parameter at entry
+ * (ValidPointerChecker::checkBeginFunction), on every path, so the
+ * restatement proves nothing new. */
+int nonnull_parameter_axiom_is_redundant(char *p) __attribute__((nonnull(1)));
+int nonnull_parameter_axiom_is_redundant(char *p)
+{
+	unsafe_assume_pointer_nonnull(p); /* ownership-expect: pointer-axiom-redundant */
+	return p[0];
+}
+
+/* A local object's own address is nonnull by construction; no axiom of
+ * any kind was ever needed for it. */
+int address_of_local_axiom_is_redundant(void)
+{
+	int value = 7;
+	unsafe_assume_pointer_nonnull(&value); /* ownership-expect: pointer-axiom-redundant */
+	return value;
+}
+
+/* withtok(null_terminated) grants both halves of what
+ * unsafe_assume_string_terminated() would grant -- the token itself
+ * (CapabilityTokenChecker::checkBeginFunction) and the nonnull-ness that
+ * token implies (parameterGrantsNullTerminatedScalar) -- so this
+ * restatement is dead in both passes at once, which is the only
+ * condition under which the string axiom is reported at all. */
+int withtok_parameter_string_axiom_is_redundant(
+    const char *path withtok(null_terminated))
+{
+	unsafe_assume_string_terminated(path); /* ownership-expect: pointer-axiom-redundant */
+	return path[0] == '/';
+}
+
+/* An elements_withtok() element -- the argv[i] shape src/util/{cut,ln,
+ * mkdir_util,pathchk,rm}.c all have -- is the load-bearing counterexample
+ * to that reasoning, and must NOT be flagged. ValidPointer can prove this
+ * element nonnull on its own here (elementProvenNullTerminated, the same
+ * proof that makes the nonnull axiom on such an element redundant), but
+ * the element's null_terminated token does not reach the element's later
+ * uses in spicule.CapabilityToken's own pass, so the axiom is still the
+ * only thing granting it there: deleting these calls from the five real
+ * files above makes spicule.CapabilityToken and spicule.OwnershipType
+ * report "required ownership capability token is not held" at the very
+ * next use. Nonnull-ness is not evidence about a token grant. */
+int elements_withtok_element_string_axiom_is_still_needed(
+    int argc, char **argv elements_withtok(null_terminated, argc))
+{
+	int i = 0;
+	while (i < argc) {
+		unsafe_assume_string_terminated(argv[i]);
+		i++;
+	}
+	return i;
+}
+
+/* The nonnull axiom on that same element, by contrast, IS redundant:
+ * unsafe_assume_pointer_nonnull() has no token effect at all, so the one
+ * fact it asserts is the one elementProvenNullTerminated already
+ * establishes. */
+int elements_withtok_element_nonnull_axiom_is_redundant(
+    int argc, char **argv elements_withtok(null_terminated, argc))
+{
+	int i = 0;
+	while (i < argc) {
+		unsafe_assume_pointer_nonnull(argv[i]); /* ownership-expect: pointer-axiom-redundant */
+		i++;
+	}
+	return i;
+}
+
+/* An ordinary unannotated parameter's NUL-termination is not something
+ * this analysis can derive, so string_terminated_axiom_also_proves_nonnull
+ * above stays unflagged even though the axiom's nonnull half is
+ * self-fulfilling: the token half is still the only thing granting
+ * null_terminated there. The same is true here, with the nonnull half
+ * additionally proven by a real guard -- a path fact, which never
+ * licenses removing a token grant. */
+int guarded_string_axiom_is_not_flagged(const char *p)
+{
+	if (!p)
+		return 0;
+	unsafe_assume_string_terminated(p);
+	return p[0] == '/';
+}
+
+/* A guard proves this parameter nonnull on the path that reaches the
+ * axiom, but says nothing about the paths that do not, so the axiom is
+ * reported as narrowable rather than dead -- the same distinction
+ * MemoryContractChecker draws between "is redundant" and "can be
+ * narrowed" for its own span axioms. */
+int guarded_nonnull_axiom_can_be_narrowed(char *p)
+{
+	if (!p)
+		return 0;
+	unsafe_assume_pointer_nonnull(p); /* ownership-expect: pointer-axiom-narrowable */
+	return p[0];
+}

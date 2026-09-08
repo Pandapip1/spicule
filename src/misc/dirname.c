@@ -7,20 +7,13 @@
 // NOLINTBEGIN(misc-include-cleaner)
 #include <string.h>
 #include <libgen.h>
-#include "ownership_stubs.h"
 
 #define ISSEP(c) ((c) == '/' || (c) == '\\')
 
-__wraps char *dirname(char *s)
+__wraps char *dirname(char *s withtok(null_terminated))
 {
 	size_t i, start = 0;
 	if (!s || !*s) return (char *)".";
-	/* s is non-NULL here, and dirname()'s POSIX contract requires a real
-	 * NUL-terminated string -- not otherwise visible to the checker across
-	 * this call boundary (same shape as src/stat/stat.c's fstatat()).
-	 * withtok(null_terminated) instead would cascade into every
-	 * dirname()/basename() caller tree-wide. */
-	unsafe_assume_string_terminated(s);
 	if (((unsigned)(s[0] | 32) - 'a') < 26u && s[1] == ':') start = 2;
 	i = strlen(s) - 1;
 	/* Strip trailing separators, but keep a root. */

@@ -4,7 +4,8 @@
 #include <ctype.h>
 #include <string.h>
 
-int strverscmp(const char *l0, const char *r0)
+int strverscmp(const char *l0 withtok(null_terminated),
+	const char *r0 withtok(null_terminated))
 {
 	const unsigned char *l = (const void *)l0;
 	const unsigned char *r = (const void *)r0;

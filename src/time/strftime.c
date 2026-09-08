@@ -32,11 +32,8 @@
 #include "time_impl.h"
 #include "ownership_stubs.h" /* unsafe_assume_pointer_nonnull() */
 
-/* out is required: `out[n++] = ...`/`out[n] = 0;` are unconditional
- * whenever the computed digit count fits (`needed < out_size`), with no
- * NULL check of out itself, and every one of this file's own call sites
- * passes `s + pos` where s is do_strftime()'s own (now-required) buffer
- * -- never NULL, since pointer arithmetic on a non-null pointer stays
+/* out is required and never checked for NULL: every call site here passes
+ * `s + pos`, and pointer arithmetic on do_strftime()'s own non-null s stays
  * non-null. */
 static int format_number(char *out, size_t out_size, long long value,
 	int width, int plus, int automatic_plus) __attribute__((nonnull(1)));
@@ -65,23 +62,13 @@ static int format_number(char *out, size_t out_size, long long value, // NOLINT(
 	return n;
 }
 
-/* s/f/tm are all required. f is dereferenced unconditionally by the
- * main loop's own condition (`for (; *f; f++)`) as soon as this
- * function is called at all. s is written unconditionally at `done`
- * (`s[pos] = 0;`) on every non-overflow return, and directly by PUT_CH
- * whenever anything is emitted -- strftime() (this function's only real
- * caller) already refuses to call it at all when max == 0, so there is
- * always room for at least the check that decides overflow. tm is
- * dereferenced unconditionally near the top of the loop body
- * (`tm->tm_wday`/`tm->tm_mon`, computing wday/mon for every conversion
- * that follows) whenever the format string is non-empty; no caller in
- * this tree ever passes a NULL tm together with a non-empty format
- * (test/time.c and friends always pass a real `struct tm`).
- *
- * s also carries writable_span(max): every PUT_CH/PUT_NUM write is at a
- * symbolic offset (pos), so the checker needs a real extent to check it
- * against, the same fact do_strftime's own `s[pos] = 0;` at `done`
- * relies on. */
+/* s/f/tm are all required: f and s are dereferenced unconditionally by the
+ * main loop (f's own `for (; *f; f++)` condition, s at `done`'s `s[pos] = 0;`
+ * and by every PUT_CH), and tm is dereferenced for wday/mon as soon as the
+ * format string is non-empty -- no caller in this tree passes a NULL tm
+ * together with one. s also carries writable_span(max): PUT_CH/PUT_NUM write
+ * at a symbolic offset (pos), so the checker needs a real extent to check
+ * against. */
 static size_t do_strftime(char *restrict s withtok(writable_span(max)), size_t max, const char *restrict f, const struct tm *restrict tm)
     __attribute__((nonnull(1, 3, 4)));
 static size_t do_strftime(char *restrict s withtok(writable_span(max)), size_t max, const char *restrict f, const struct tm *restrict tm)
@@ -128,19 +115,10 @@ static size_t do_strftime(char *restrict s withtok(writable_span(max)), size_t m
 		}
 		if (!*f) break;
 
-		/* strftime.html: "If the alternative format or specification
-		 * does not exist for the current locale (see ERA in XBD
-		 * LC_TIME), the behavior shall be as if the unmodified
-		 * conversion specification were used."  The POSIX/C locale
-		 * defines no ERA, so every %E<x> and %O<x> falls back to
-		 * plain %<x> here -- this target has only the C locale (this
-		 * file's banner), so the fallback is unconditional rather
-		 * than locale-dependent.  Consuming the E/O and re-dispatching
-		 * on the following character is the whole fix: previously
-		 * 'E'/'O' matched no case, so the switch below's `default`
-		 * passed "%E"/"%O" through literally and left the base
-		 * specifier that followed (e.g. the 'C' in "%EC") to be
-		 * emitted as an unrelated, unescaped literal character. */
+		/* POSIX: with no ERA defined for the locale, %E<x>/%O<x> fall back
+		 * to plain %<x>; this target has only the C locale, which defines
+		 * no ERA, so the fallback is unconditional. Consume E/O and
+		 * re-dispatch on the following character. */
 		if ((*f == 'E' || *f == 'O') && f[1]) f++;
 
 		wday = (unsigned)tm->tm_wday < 7 ? tm->tm_wday : 0;
@@ -281,23 +259,13 @@ done:
 #undef PUT_NUM
 }
 
-/* s/f/tm are deliberately NOT marked here, unlike do_strftime() above:
- * strftime()'s own body never dereferences any of the three itself, only
- * checks max and forwards all three unchanged, so there is nothing in
- * ITS OWN body for the attribute to describe -- the same "forwarded,
- * callee already owns the contract" shape as time.h's own ctime_r()/
- * clock_gettime() comments.
- *
- * do_strftime()'s own s does carry writable_span(max), which is real
- * (that's strftime()'s actual POSIX contract), but is deliberately NOT
- * repeated on strftime()'s own s here: this codebase's in-tree callers
- * pass a buffer whose size relationship to `max` is often several
- * frames removed from strftime()'s own call (src/util/ls.c's fmt_time(),
- * src/util/diff.c's format_ctx_timestamp()) and not provable from this
- * checker's per-function view -- forwarding the Require onto strftime()
- * itself would turn each of those already-correct call sites into a new,
- * unfixable finding rather than a real bug. Left as this function's own
- * residual, real but not analyzable across that many call frames. */
+/* s/f/tm aren't annotated here: strftime() itself never dereferences them,
+ * only forwards to do_strftime(), which owns the real contract. Its s does
+ * carry writable_span(max), but that Require isn't repeated on strftime()'s
+ * own s: several in-tree callers (src/util/ls.c's fmt_time(),
+ * src/util/diff.c's format_ctx_timestamp()) pass a buffer whose size
+ * relationship to max isn't provable at this per-function granularity, and
+ * forwarding the Require would flag those already-correct call sites. */
 size_t strftime(char *restrict s, size_t max, const char *restrict f, const struct tm *restrict tm)
 {
 	if (!max) return 0;

@@ -7,7 +7,8 @@
 // NOLINTBEGIN(misc-include-cleaner)
 #include <string.h>
 
-char *strtok_r(char *__restrict s, const char *__restrict sep, char **__restrict p)
+char *strtok_r(char *__restrict s, const char *__restrict sep withtok(null_terminated),
+	char **__restrict p)
 {
 	if (!s) {
 		s = *p;

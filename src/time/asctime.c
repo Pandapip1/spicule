@@ -19,30 +19,22 @@ char *asctime_r(const struct tm *tm, char *buf withtok(writable_span(30)))
 	unsafe_assume_writable_span(p, 30);
 	const char *wd = (unsigned)tm->tm_wday < 7 ? __spicule_day_name_abbr[tm->tm_wday] : "???";
 	const char *mo = (unsigned)tm->tm_mon < 12 ? __spicule_month_name_abbr[tm->tm_mon] : "???";
-	/* Both branches are always a real string literal (either "???" or one
-	 * of names.c's fixed tables); the checker can't see into a global
-	 * array's initializer. */
+	/* Both branches are a real string literal; the checker can't see through
+	 * a global array's initializer. */
 	unsafe_assume_pointer_nonnull(wd);
 	unsafe_assume_pointer_nonnull(mo);
 
 	*p++ = wd[0]; *p++ = wd[1]; *p++ = wd[2]; *p++ = ' ';
 	*p++ = mo[0]; *p++ = mo[1]; *p++ = mo[2]; *p++ = ' ';
-	/* Open finding, left as-is: every write below through '*p' is sound
-	 * (__num_digits' own `if (n > cap) n = cap;` bounds each returned n
-	 * by the cap literal actually passed here, so p never leaves the
-	 * writable_span(30) asserted above), but the checker has no
-	 * annotation in ownership.h for "this return value is bounded by
-	 * this parameter", so it cannot carry that bound from __num_digits'
-	 * return across the `p += n;` that follows. Not a real bug. */
+	/* Open finding: __num_digits' own `if (n > cap) n = cap;` bounds each n
+	 * by the cap passed here, so p stays within writable_span(30), but the
+	 * checker can't carry that bound across the `p += n;` below. Not a bug. */
 	n = __num_digits(p, 2, (unsigned)tm->tm_mday, 2, ' '); p += n; *p++ = ' ';
 	n = __num_digits(p, 2, (unsigned)tm->tm_hour, 2, '0'); p += n; *p++ = ':';
 	n = __num_digits(p, 2, (unsigned)tm->tm_min, 2, '0'); p += n; *p++ = ':';
 	n = __num_digits(p, 2, (unsigned)tm->tm_sec, 2, '0'); p += n; *p++ = ' ';
-	/* tm_year is `int` and unbounded (callers may hand back an out-of-range
-	 * value); widen to `long long` before the +1900 add so a caller-
-	 * supplied extreme value overflows there rather than in `int` --
-	 * plain `long` would not help here, since it is 32-bit on this
-	 * (LLP64) target same as `int`. */
+	/* long is also 32-bit here (LLP64), so widen to long long before +1900
+	 * to make an out-of-range tm_year overflow there instead of in int. */
 	n = __num_digits(p, 8, (unsigned long)((long long)tm->tm_year + 1900), 4, '0'); p += n;
 	*p++ = '\n';
 	*p = 0;

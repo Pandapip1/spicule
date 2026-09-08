@@ -95,7 +95,7 @@ struct stat {
 
 async_signal_safe
 io_operation
-int stat(const char *__restrict, struct stat *__restrict);
+int stat(const char *__restrict withtok(null_terminated), struct stat *__restrict);
 /* tools/clang/ErrnoDisciplineChecker.cpp's spicule.ErrnoDiscipline:
  * src/stat/stat.c's fstat() sets errno on every failure return, either
  * via __fd_get() (already errno-capable) or __plat_fstat() (both
@@ -105,8 +105,8 @@ async_signal_safe
 io_operation
 int fstat(int, struct stat *) __attribute__((nonnull(2)));
 io_operation
-int lstat(const char *__restrict, struct stat *__restrict);
-int fstatat(int, const char *__restrict, struct stat *__restrict, int);
+int lstat(const char *__restrict withtok(null_terminated), struct stat *__restrict);
+int fstatat(int, const char *__restrict withtok(null_terminated), struct stat *__restrict, int);
 fallible
 async_signal_safe
 int chmod(const char *, mode_t);

@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later */
 #include <string.h>
 
-void *memchr(const void *src, int c, size_t n)
+void *memchr(const void *src withtok(readable_span(n)), int c, size_t n)
 {
 	const unsigned char *s = src;
 	c = (unsigned char)c;

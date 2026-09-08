@@ -3,7 +3,7 @@
 #define _GNU_SOURCE // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) -- GNU feature-test macro has its specified reserved spelling
 #include <string.h>
 
-void *memrchr(const void *m, int c, size_t n)
+void *memrchr(const void *m withtok(readable_span(n)), int c, size_t n)
 {
 	const unsigned char *s = m;
 	c = (unsigned char)c;

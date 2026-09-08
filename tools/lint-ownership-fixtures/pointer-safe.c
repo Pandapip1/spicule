@@ -497,10 +497,21 @@ int elements_withtok_array_and_element_need_no_axiom(
 }
 
 /* The manual unsafe_assume_string_terminated() axiom itself also proves
- * nonnull, with no separate unsafe_assume_pointer_nonnull() call. */
+ * nonnull, with no separate unsafe_assume_pointer_nonnull() call.
+ *
+ * `p` is also a directly-named, unescaped parameter of this function with
+ * no withtok(null_terminated) of its own yet, so spicule.OwnParameterAxiom
+ * (tools/lint.sh's opt-in `ownparamaxiom` stage) flags this as a
+ * withtok(null_terminated) candidate -- src/util/get.c's real
+ * read_whole_file() has this exact shape. Nothing here makes it
+ * REDUNDANT (nothing proves `p` nonnull before the axiom runs, so
+ * spicule.RedundantPointerAxiom's own gate never even reaches its
+ * verdict, hence no pointer-axiom-* tag on this line) -- the two
+ * checkers are asking genuinely different questions about the same
+ * call. */
 int string_terminated_axiom_also_proves_nonnull(const char *p)
 {
-	unsafe_assume_string_terminated(p);
+	unsafe_assume_string_terminated(p); /* ownership-expect: own-parameter-axiom */
 	return p[0] == '/';
 }
 
@@ -599,7 +610,15 @@ int fd_get_after_install_through_copied_local_needs_no_restatement(void *handle)
 
 /* __attribute__((nonnull)) already asserts this parameter at entry
  * (ValidPointerChecker::checkBeginFunction), on every path, so the
- * restatement proves nothing new. */
+ * restatement proves nothing new.
+ *
+ * Also not flagged by spicule.OwnParameterAxiom (tools/lint.sh's opt-in
+ * `ownparamaxiom` stage): `p` already carries the exact
+ * __attribute__((nonnull(1))) contract that checker would otherwise
+ * suggest, so suggesting it again would tell a reader to add something
+ * already right there on the declaration two lines up -- deleting the
+ * now-redundant axiom itself is spicule.RedundantPointerAxiom's own job
+ * (the pointer-axiom-redundant tag just below), not this checker's. */
 int nonnull_parameter_axiom_is_redundant(char *p) __attribute__((nonnull(1)));
 int nonnull_parameter_axiom_is_redundant(char *p)
 {
@@ -621,7 +640,12 @@ int address_of_local_axiom_is_redundant(void)
  * (CapabilityTokenChecker::checkBeginFunction) and the nonnull-ness that
  * token implies (parameterGrantsNullTerminatedScalar) -- so this
  * restatement is dead in both passes at once, which is the only
- * condition under which the string axiom is reported at all. */
+ * condition under which the string axiom is reported at all.
+ *
+ * The same "already there" reasoning as nonnull_parameter_axiom_is_
+ * redundant above keeps spicule.OwnParameterAxiom silent here too: `path`
+ * already carries withtok(null_terminated), the exact rewrite this
+ * checker would otherwise suggest. */
 int withtok_parameter_string_axiom_is_redundant(
     const char *path withtok(null_terminated))
 {
@@ -677,7 +701,7 @@ int guarded_string_axiom_is_not_flagged(const char *p)
 {
 	if (!p)
 		return 0;
-	unsafe_assume_string_terminated(p);
+	unsafe_assume_string_terminated(p); /* ownership-expect: own-parameter-axiom */
 	return p[0] == '/';
 }
 
@@ -685,11 +709,84 @@ int guarded_string_axiom_is_not_flagged(const char *p)
  * axiom, but says nothing about the paths that do not, so the axiom is
  * reported as narrowable rather than dead -- the same distinction
  * MemoryContractChecker draws between "is redundant" and "can be
- * narrowed" for its own span axioms. */
+ * narrowed" for its own span axioms.
+ *
+ * spicule.OwnParameterAxiom's own verdict does not share that
+ * redundant/narrowable distinction at all: `p` is a directly-named,
+ * unescaped parameter with no __attribute__((nonnull)) of its own
+ * regardless of whether the guard above happens to make the axiom
+ * provable on this one path, so it is flagged as an own-parameter
+ * candidate exactly like the completely unguarded cases above and
+ * below. */
 int guarded_nonnull_axiom_can_be_narrowed(char *p)
 {
 	if (!p)
 		return 0;
-	unsafe_assume_pointer_nonnull(p); /* ownership-expect: pointer-axiom-narrowable */
+	unsafe_assume_pointer_nonnull(p); /* ownership-expect: pointer-axiom-narrowable ownership-expect: own-parameter-axiom */
 	return p[0];
+}
+
+/* spicule.OwnParameterAxiom (OwnershipChecker.cpp's OwnParameterAxiomChecker,
+ * tools/lint.sh's opt-in `ownparamaxiom` stage) below: the plain nonnull
+ * axiom's own counterpart to string_terminated_axiom_also_proves_nonnull
+ * above, on a second parameter rather than the first so the suggested
+ * __attribute__((nonnull(N))) rewrite's index is actually exercised
+ * (N=2). `flag` is read so it is not itself an unused-parameter
+ * distraction in this fixture. */
+int unguarded_nonnull_axiom_on_second_parameter_is_an_attribute_candidate(
+    int flag, char *p)
+{
+	unsafe_assume_pointer_nonnull(p); /* ownership-expect: own-parameter-axiom */
+	return flag + p[0];
+}
+
+/* Three must-NOT-fire shapes spicule.OwnParameterAxiom shares with
+ * spicule.RedundantPointerAxiom's own namedParameter(): a local variable
+ * is never a ParmVarDecl, regardless of whether it was derived from a
+ * call, a ternary, or a global, so none of the three below can ever match
+ * -- namedParameter()'s dyn_cast<ParmVarDecl> fails before anything else
+ * about the value is even considered. */
+extern char *global_string;
+
+int local_variable_derived_from_call_is_not_flagged(char *path)
+{
+	char *d = dirname(path);
+	unsafe_assume_string_terminated(d);
+	return d[0] == '/';
+}
+
+int local_variable_derived_from_ternary_is_not_flagged(
+    int flag, char *a, char *b)
+{
+	char *p = flag ? a : b;
+	unsafe_assume_pointer_nonnull(p);
+	return p[0];
+}
+
+int local_variable_derived_from_global_is_not_flagged(void)
+{
+	char *p = global_string;
+	unsafe_assume_pointer_nonnull(p);
+	return p[0];
+}
+
+/* Two more must-NOT-fire shapes, this time both already excluded by
+ * namedParameter()'s own shared declarationEscapesEntryFact() call: a
+ * parameter reassigned, or whose address is taken, before the axiom runs
+ * is no longer connected to the value the CALLER passed, so neither
+ * withtok(null_terminated) nor a nonnull parameter attribute on the
+ * ORIGINAL parameter would describe what the axiom is actually asserting
+ * here. */
+int parameter_reassigned_before_axiom_is_not_flagged(char *p, char *other)
+{
+	p = other;
+	unsafe_assume_pointer_nonnull(p);
+	return p[0];
+}
+
+int parameter_address_taken_before_axiom_is_not_flagged(char *p)
+{
+	char **holder = &p;
+	unsafe_assume_pointer_nonnull(p);
+	return (*holder)[0];
 }

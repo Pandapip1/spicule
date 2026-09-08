@@ -1564,6 +1564,28 @@ static bool aggregateIndexProven(const ArraySubscriptExpr *Access,
                                  SymbolRef Upper, ProgramStateRef State,
                                  CheckerContext &C) {
   SVal Index = C.getSVal(Access->getIdx());
+  // At a call site's checkPreCall -- RedundantPointerAxiomChecker auditing
+  // an axiom whose argument is an aggregate element, e.g.
+  // unsafe_assume_string_terminated(argv[i]) -- only the argument expression
+  // itself still has an environment binding: its own sub-expressions, this
+  // index among them, were pruned once the argument's value was computed,
+  // and evaluate to Unknown. Both index shapes that actually occur are
+  // recoverable without that binding: a constant folds from the AST, and a
+  // variable's current value reads straight out of this path's own store,
+  // the same way the extent parameter's value is read by this function's
+  // callers. Inert everywhere else, since a live index expression never
+  // evaluates to Unknown.
+  if (Index.isUnknown()) {
+    const Expr *Subscript = Access->getIdx()->IgnoreParenImpCasts();
+    Expr::EvalResult Result;
+    if (Subscript->EvaluateAsInt(Result, C.getASTContext())) {
+      Index = C.getSValBuilder().makeIntVal(Result.Val.getInt());
+    } else if (const auto *Reference = dyn_cast<DeclRefExpr>(Subscript)) {
+      if (const auto *Variable = dyn_cast<VarDecl>(Reference->getDecl()))
+        Index = State->getSVal(
+            State->getLValue(Variable, C.getLocationContext()));
+    }
+  }
   std::optional<DefinedOrUnknownSVal> DefinedIndex =
       Index.getAs<DefinedOrUnknownSVal>();
   if (!DefinedIndex || !Upper)
@@ -3483,6 +3505,15 @@ class ValidPointerChecker
                      check::PostStmt<ImplicitCastExpr>> {
   mutable std::unique_ptr<BugType> BT;
 
+  // RedundantPointerAxiomChecker below is this checker's own opt-in
+  // self-audit: it asks whether one of the manual leaf axioms recognized
+  // here was already provable without it. Asking that question means
+  // reusing this checker's own axiom recognizers and grant-point mirrors
+  // verbatim rather than re-deriving them, since a second, drifting copy
+  // of "what counts as already proven" is exactly how an audit starts
+  // calling load-bearing axioms dead.
+  friend class RedundantPointerAxiomChecker;
+
   // Functions this codebase itself guarantees always return a pointer to
   // real, live storage and never NULL, but whose bodies this checker's
   // cross-TU analysis can't see (their real definitions live in another
@@ -4167,29 +4198,26 @@ class ValidPointerChecker
   }
 
 public:
-  void checkPointerExpression(const Expr *Pointer, const Stmt *Dereference,
-                              CheckerContext &C) const {
-    if (isAlwaysNonNullGlobal(Pointer))
-      return;
-    // Reinterpreting an already-nonnull pointer through a pointer-to-
-    // pointer cast never turns it into a null one, but evaluating the
-    // CAST expression's own SVal loses that fact: printf.c/scanf.c's
-    // shared gf() macro dereferences a format cursor `q` as `*(q)` or
-    // through `*(const wchar_t *)(const void *)(q)`, and only the cast
-    // side was ever flagged "not proven nonnull" even though the same
-    // `q` a few lines away, without the cast, was not -- evaluating a
-    // BitCast/NoOp pointer-to-pointer CastExpr's SVal doesn't in general
-    // preserve the symbolic region identity a nonnull fact was
-    // established for.
-    //
-    // Deliberately narrow: only CK_BitCast/CK_NoOp are looked through,
-    // never CK_LValueToRValue (which would evaluate the pointer
-    // variable's own storage location instead of the value stored there,
-    // trivially "nonnull" the way any local's address is, wrongly
-    // proving every unconstrained raw parameter), and only when the
-    // sub-expression is itself pointer-typed. A genuinely null or
-    // unconstrained pointer behind the cast is still caught, both here
-    // and by clang's own core.NullDereference.
+  // Reinterpreting an already-nonnull pointer through a pointer-to-
+  // pointer cast never turns it into a null one, but evaluating the
+  // CAST expression's own SVal loses that fact: printf.c/scanf.c's
+  // shared gf() macro dereferences a format cursor `q` as `*(q)` or
+  // through `*(const wchar_t *)(const void *)(q)`, and only the cast
+  // side was ever flagged "not proven nonnull" even though the same
+  // `q` a few lines away, without the cast, was not -- evaluating a
+  // BitCast/NoOp pointer-to-pointer CastExpr's SVal doesn't in general
+  // preserve the symbolic region identity a nonnull fact was
+  // established for.
+  //
+  // Deliberately narrow: only CK_BitCast/CK_NoOp are looked through,
+  // never CK_LValueToRValue (which would evaluate the pointer
+  // variable's own storage location instead of the value stored there,
+  // trivially "nonnull" the way any local's address is, wrongly
+  // proving every unconstrained raw parameter), and only when the
+  // sub-expression is itself pointer-typed. A genuinely null or
+  // unconstrained pointer behind the cast is still caught, both here
+  // and by clang's own core.NullDereference.
+  static const Expr *nonNullEvalExpr(const Expr *Pointer) {
     const Expr *EvalExpr = Pointer;
     for (;;) {
       const auto *Cast = dyn_cast<CastExpr>(EvalExpr->IgnoreParens());
@@ -4202,18 +4230,48 @@ public:
         break;
       EvalExpr = Cast->getSubExpr();
     }
-    SVal Value = C.getSVal(EvalExpr);
+    return EvalExpr;
+  }
+
+  // The whole nonnull proof checkPointerExpression performs on a value
+  // before it reports, factored out so RedundantPointerAxiomChecker's
+  // opt-in audit (below) asks the identical question about an axiom's own
+  // argument that this checker would ask about a dereference of it -- a
+  // redundancy verdict derived from a weaker or stronger test than the one
+  // actually gating the tree would either miss dead axioms or, far worse,
+  // call a load-bearing one dead. A concrete, non-symbolic region (a
+  // local's address, a global, a string literal) is nonnull by
+  // construction and never needs a path constraint at all.
+  //
+  // Taken as an SVal rather than as an expression because the audit's own
+  // call site cannot use nonNullEvalExpr(): by the time a call's
+  // checkPreCall runs, only the argument expression itself still has a
+  // binding in the environment -- the pointer-to-pointer cast's own
+  // sub-expression has already been pruned, and evaluating it there yields
+  // Unknown, which proves nothing about anything.
+  static bool valueProvenNonNull(SVal Value, ProgramStateRef State) {
     const MemRegion *Region = Value.getAsRegion();
     if (Region && !Region->getSymbolicBase())
+      return true;
+    return State->isNonNull(Value).isConstrainedTrue();
+  }
+
+  static bool pointerProvenNonNull(const Expr *Pointer, CheckerContext &C) {
+    return isAlwaysNonNullGlobal(Pointer) ||
+           valueProvenNonNull(C.getSVal(nonNullEvalExpr(Pointer)),
+                              C.getState());
+  }
+
+  void checkPointerExpression(const Expr *Pointer, const Stmt *Dereference,
+                              CheckerContext &C) const {
+    if (pointerProvenNonNull(Pointer, C))
       return;
-    if (!C.getState()->isNonNull(Value).isConstrainedTrue()) {
-      ProgramStateRef NullState = C.getState();
-      if (std::optional<DefinedOrUnknownSVal> Defined =
-              Value.getAs<DefinedOrUnknownSVal>())
-        NullState = C.getState()->assume(*Defined, false);
-      report("pointer dereference is not proven nonnull", Dereference,
-             NullState ? NullState : C.getState(), C);
-    }
+    ProgramStateRef NullState = C.getState();
+    if (std::optional<DefinedOrUnknownSVal> Defined =
+            C.getSVal(nonNullEvalExpr(Pointer)).getAs<DefinedOrUnknownSVal>())
+      NullState = C.getState()->assume(*Defined, false);
+    report("pointer dereference is not proven nonnull", Dereference,
+           NullState ? NullState : C.getState(), C);
   }
 
   void checkPreStmt(const UnaryOperator *Unary, CheckerContext &C) const {
@@ -4658,6 +4716,245 @@ public:
     }
     if (!alignmentProven(Region, Type, C.getASTContext()))
       report("dereference alignment is not proven valid", Statement, State, C);
+  }
+};
+
+// Self-audit of the two manual pointer proof axioms src/internal/
+// ownership_stubs.h declares for ValidPointerChecker
+// (unsafe_assume_pointer_nonnull, unsafe_assume_string_terminated), the direct
+// counterpart of MemoryContractChecker::checkPreCall's own "manual memory
+// proof axiom is redundant / can be narrowed" audit of
+// unsafe_assume_readable_span/unsafe_assume_writable_span, and deliberately
+// worded and structured to read as one family with it.
+//
+// A leaf axiom is a human's promise about a fact the analysis could not
+// derive at the moment the axiom was written. Every later checker
+// improvement that closes one of those gaps at its point of origin -- a
+// returns_nonnull attribute honored, a withtok(null_terminated) parameter
+// asserted at entry, __fd_install()/__fd_get() related by name -- silently
+// turns some existing call sites into dead restatements that keep asserting
+// something nothing needs any more. Nothing but a hand grep over every call
+// site has ever found those; this asks the question automatically, at every
+// call site, on every analysis run.
+//
+// Split into its own registered checker instead of another callback on
+// ValidPointerChecker for the same reason ResourceLeakChecker is split out
+// of ResourceLifecycleChecker below: it is a new diagnostic with an
+// untriaged tree-wide backlog, and tools/lint.sh's always-on
+// stage_ownership has to keep proving zero findings while that backlog is
+// worked down. Enabling a checker name is this project's existing rollout
+// switch for exactly that (tools/lint.sh's opt-in `pointeraxiom` stage).
+// spicule.ValidPointer must be enabled in the same clang invocation:
+// every constraint read here is one ValidPointerChecker's own
+// checkBeginFunction/checkPostCall/checkPostStmt narrowed, so run alone
+// this checker would silently find nothing rather than prove anything.
+class RedundantPointerAxiomChecker : public Checker<check::PreCall> {
+  mutable std::unique_ptr<BugType> RedundantBT;
+  mutable std::unique_ptr<BugType> NarrowBT;
+
+  static bool namesDeclaration(const Expr *Expression,
+                               const VarDecl *Variable) {
+    const auto *Reference =
+        dyn_cast<DeclRefExpr>(Expression->IgnoreParenCasts());
+    return Reference && Reference->getDecl()->getCanonicalDecl() ==
+                            Variable->getCanonicalDecl();
+  }
+
+  // A fact established for a parameter at function entry describes the
+  // value the CALLER passed, not whatever the parameter happens to hold
+  // later: a body that assigns through it, or hands its address to
+  // something that might, has broken the connection this audit would
+  // otherwise draw between the entry assertion and the axiom's argument.
+  // Taking the address counts because a `&p` escape is precisely the case
+  // this AST walk cannot follow.
+  static bool declarationEscapesEntryFact(const Stmt *Statement,
+                                          const VarDecl *Variable) {
+    if (!Statement)
+      return false;
+    if (const auto *Binary = dyn_cast<BinaryOperator>(Statement))
+      if (Binary->isAssignmentOp() &&
+          namesDeclaration(Binary->getLHS(), Variable))
+        return true;
+    if (const auto *Unary = dyn_cast<UnaryOperator>(Statement))
+      if ((Unary->getOpcode() == UO_AddrOf ||
+           Unary->isIncrementDecrementOp()) &&
+          namesDeclaration(Unary->getSubExpr(), Variable))
+        return true;
+    for (const Stmt *Child : Statement->children())
+      if (declarationEscapesEntryFact(Child, Variable))
+        return true;
+    return false;
+  }
+
+  // unsafe_assume_string_invalidated() (ownership_stubs.h) is the only
+  // declaration in this tree that drops null_terminated, and null_terminated
+  // is declared l_unlimited, so nothing else can take the token away
+  // (TokenAlgebra.h's Consume does clear even a duplicable token, but no
+  // declaration anywhere consumes this family). A body that drops the
+  // token genuinely needs a later re-grant, so no restatement inside such
+  // a body is called redundant.
+  static bool bodyDropsStringTermination(const Stmt *Statement) {
+    if (!Statement)
+      return false;
+    if (const auto *Call = dyn_cast<CallExpr>(Statement))
+      if (const FunctionDecl *Callee = Call->getDirectCallee())
+        if (Callee->getIdentifier() &&
+            Callee->getName() == "unsafe_assume_string_invalidated")
+          return true;
+    for (const Stmt *Child : Statement->children())
+      if (bodyDropsStringTermination(Child))
+        return true;
+    return false;
+  }
+
+  // The parameter of the currently analyzed function that Argument names
+  // directly, or null when Argument is anything else.
+  static const ParmVarDecl *namedParameter(const Expr *Argument,
+                                           const FunctionDecl *Function) {
+    const auto *Reference = dyn_cast<DeclRefExpr>(Argument);
+    const auto *Parameter =
+        Reference ? dyn_cast<ParmVarDecl>(Reference->getDecl()) : nullptr;
+    if (!Parameter || Parameter->getDeclContext() != Function ||
+        declarationEscapesEntryFact(Function->getBody(), Parameter))
+      return nullptr;
+    return Parameter;
+  }
+
+  // Evidence that Argument is nonnull on EVERY path into this call, drawn
+  // from declarations and expression shape rather than from this one
+  // path's branch constraints -- the same distinction
+  // MemoryContractChecker::typedObjectSpanProven draws for its own
+  // "redundant" verdict, and for the same reason: a guard on the path that
+  // happens to reach the axiom says nothing about the paths that do not,
+  // so a fact established only by such a guard is reported as narrowable
+  // rather than as dead.
+  static bool declaredNonNull(const Expr *Argument, CheckerContext &C) {
+    if (ValidPointerChecker::isAlwaysNonNullGlobal(Argument))
+      return true;
+    const Expr *Object = Argument->IgnoreParenCasts();
+    if (const auto *Unary = dyn_cast<UnaryOperator>(Object))
+      if (Unary->getOpcode() == UO_AddrOf)
+        return true;
+    if (Object->getType()->isArrayType() ||
+        Object->getType()->isFunctionType() || isa<StringLiteral>(Object))
+      return true;
+    if (declaredNullTerminated(Argument, C))
+      return true;
+    const auto *Function =
+        dyn_cast_or_null<FunctionDecl>(C.getLocationContext()->getDecl());
+    if (!Function)
+      return false;
+    // An elements_withtok(family, extent) element, family being
+    // null_terminated-shaped and the index provably in bounds: nonnull at
+    // every read of it, by the aggregate's own declared contract.  Sound
+    // for THIS axiom precisely because unsafe_assume_pointer_nonnull() has
+    // no token effect at all -- see declaredNullTerminated below for why
+    // the same evidence does not license removing the string axiom.
+    if (const auto *Subscript = dyn_cast<ArraySubscriptExpr>(Object))
+      return ValidPointerChecker::elementProvenNullTerminated(Subscript, C);
+    const ParmVarDecl *Parameter = namedParameter(Object, Function);
+    if (!Parameter)
+      return false;
+    const auto *NonNull = Function->getAttr<NonNullAttr>();
+    if (!NonNull)
+      return false;
+    unsigned Index = 0;
+    for (const ParmVarDecl *Candidate : Function->parameters()) {
+      if (Candidate == Parameter)
+        return NonNull->isNonNull(Index);
+      Index++;
+    }
+    return false;
+  }
+
+  // Evidence that Argument already carries, for the whole function body,
+  // the null_terminated token unsafe_assume_string_terminated() would grant:
+  // a scalar withtok(null_terminated) parameter, which
+  // CapabilityTokenChecker::checkBeginFunction grants once on entry and
+  // nothing in this tree ever consumes (null_terminated is l_unlimited and
+  // no declaration consumes it; only unsafe_assume_string_invalidated()
+  // drops it, which bodyDropsStringTermination rules out above).
+  //
+  // Nonnull-ness alone is deliberately NOT enough to call this axiom dead,
+  // the way it is for unsafe_assume_pointer_nonnull: the string axiom also
+  // grants null_terminated through the grant()/consume() token map
+  // spicule.CapabilityToken maintains in a pass this checker never shares
+  // (see ValidPointerChecker::isPointerNonNullAxiom's own comment), so an
+  // axiom whose nonnull half became provable elsewhere can still be the
+  // only thing granting the token half.
+  //
+  // That is not hypothetical, and it is why an elements_withtok() element
+  // is accepted as evidence for the nonnull axiom above but NOT here.
+  // Deleting the unsafe_assume_string_terminated(argv[i]) restatement from
+  // src/util/{cut,ln,mkdir_util,pathchk,rm}.c -- every one of which
+  // ValidPointer can prove nonnull on its own through
+  // elementProvenNullTerminated -- makes spicule.CapabilityToken and
+  // spicule.OwnershipType report "required ownership capability token is
+  // not held" at the very next use of that element. The element grant does
+  // not reach those uses in that pass, exactly as each of those call
+  // sites' own comments already claims. Only the whole-body scalar grant
+  // is safe to call redundant.
+  static bool declaredNullTerminated(const Expr *Argument, CheckerContext &C) {
+    const auto *Function =
+        dyn_cast_or_null<FunctionDecl>(C.getLocationContext()->getDecl());
+    if (!Function || bodyDropsStringTermination(Function->getBody()))
+      return false;
+    const ParmVarDecl *Parameter =
+        namedParameter(Argument->IgnoreParenCasts(), Function);
+    return Parameter &&
+           ValidPointerChecker::parameterGrantsNullTerminatedScalar(
+               Parameter, C.getASTContext());
+  }
+
+  void report(StringRef Reason, std::unique_ptr<BugType> &Type,
+              StringRef Title, const CallEvent &Call,
+              CheckerContext &C) const {
+    const Stmt *Statement = Call.getOriginExpr();
+    if (!Statement)
+      return;
+    ExplodedNode *Node = C.generateNonFatalErrorNode();
+    if (!Node)
+      return;
+    if (!Type)
+      Type = std::make_unique<BugType>(this, Title, categories::MemoryError);
+    auto Report = std::make_unique<PathSensitiveBugReport>(
+        *Type, diagnosticMessage(Reason, Statement, C), Node);
+    Report->addRange(Statement->getSourceRange());
+    C.emitReport(std::move(Report));
+  }
+
+public:
+  void checkPreCall(const CallEvent &Call, CheckerContext &C) const {
+    bool NonNullAxiom = ValidPointerChecker::isPointerNonNullAxiom(Call);
+    bool TerminatedAxiom = ValidPointerChecker::isStringTerminatedAxiom(Call);
+    if ((!NonNullAxiom && !TerminatedAxiom) || Call.getNumArgs() == 0)
+      return;
+    // An axiom that is necessary in its defining function can become
+    // provable after that function is inlined into a stronger caller, and
+    // such a caller-specific fact cannot be used to narrow the source-level
+    // axiom -- MemoryContractChecker::checkPreCall gates its own audit on
+    // exactly this, for exactly this reason.
+    const auto *Frame =
+        dyn_cast_or_null<StackFrameContext>(C.getLocationContext());
+    if (!Frame || !Frame->inTopFrame())
+      return;
+    const Expr *Argument = Call.getArgExpr(0);
+    // This runs before ValidPointerChecker::checkPostCall asserts the
+    // axiom's own fact, so the state read here is the state the call site
+    // would have if the axiom were simply deleted.
+    if (!Argument ||
+        (!ValidPointerChecker::isAlwaysNonNullGlobal(Argument) &&
+         !ValidPointerChecker::valueProvenNonNull(Call.getArgSVal(0),
+                                                  C.getState())))
+      return;
+    bool Redundant = NonNullAxiom ? declaredNonNull(Argument, C)
+                                  : declaredNullTerminated(Argument, C);
+    if (Redundant)
+      report("manual pointer proof axiom is redundant", RedundantBT,
+             "Redundant pointer proof axiom", Call, C);
+    else if (NonNullAxiom)
+      report("manual pointer proof axiom can be narrowed", NarrowBT,
+             "Overbroad pointer proof axiom", Call, C);
   }
 };
 
@@ -5471,6 +5768,11 @@ extern "C" void clang_registerCheckers(CheckerRegistry &Registry) {
       "spicule.ValidPointer",
       "Proves every memory access has a nonnull, live, in-bounds, aligned "
       "pointer",
+      "");
+  Registry.addChecker<RedundantPointerAxiomChecker>(
+      "spicule.RedundantPointerAxiom",
+      "Proves a manual pointer proof axiom is still load-bearing "
+      "(opt-in, spicule.ValidPointer must also be enabled)",
       "");
   Registry.addChecker<ResourceLifecycleChecker>(
       "spicule.Resource", "Proves acquire, use, and release resource "

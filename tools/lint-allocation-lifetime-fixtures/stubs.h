@@ -68,3 +68,10 @@ struct word_vector {
 };
 withtok(heap_allocated)
 void *pack_items(void);
+
+/* The real include/stdio.h stdin/stdout/stderr shape, plus a mutable sibling
+ * carrying the identical marker that never_allocated's side conditions
+ * exclude.  See safe.c's stream_guarded_by_singleton() and unsafe.c's
+ * mutable_singleton_leak() for the two directions. */
+extern void *const standard_stream never_allocated;
+extern void *mutable_stream never_allocated;

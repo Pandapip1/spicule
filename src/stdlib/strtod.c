@@ -52,19 +52,13 @@
 #define BN_LIMBS 180
 typedef struct { unsigned char n; uint32_t d[BN_LIMBS]; } bn_t;
 
-/* Every bn_*() function below shares the identical `const bn_t *`/
- * `bn_t *` contract, verified individually against each one's own body,
- * not assumed from the family shape: each dereferences its own a/b/dst/
- * src argument's `->n` (and often `->d[]`) unconditionally as its first
- * real operation -- even a `if (!a->n) return;`-shaped early-out (bn_bits,
- * bn_shl, bn_shr1) still has to read a->n to evaluate that condition,
- * which already requires a itself to be non-null. None of these ever
- * defensively checks its own bn_t pointer for NULL, and every real call
- * site in this file passes the address of a real on-stack bn_t (parse_hex()'s/
- * parse_dec()'s own N/D, or one bn_*() function's own parameter forwarded
- * from its caller's already-required one) -- never NULL. The checker's
- * own report names only one pointer per function (its usual one-finding-
- * per-function masking); the rest were verified by hand the same way. */
+/* Every bn_*() function below shares the identical `const bn_t *`/`bn_t *`
+ * contract: each dereferences its own a/b/dst/src argument's `->n` (and
+ * often `->d[]`) unconditionally as its first real operation -- even a
+ * `if (!a->n) return;`-shaped early-out still has to read a->n to evaluate
+ * the condition. None of these ever checks its own bn_t pointer for NULL,
+ * and every real call site in this file passes the address of a real
+ * on-stack bn_t -- never NULL. */
 static void bn_copy(bn_t *dst, const bn_t *src) __attribute__((nonnull(1, 2)));
 static void bn_setu32(bn_t *a, uint32_t v) __attribute__((nonnull(1)));
 static void bn_muladd(bn_t *a, uint32_t m, uint32_t c) __attribute__((nonnull(1)));
@@ -316,15 +310,11 @@ static double bn_scale_round(bn_t *N, bn_t *D, int e2, int sticky, int p, int em
 #define gc(p, s) ((s) == 1 ? (unsigned)(unsigned char)*(p) \
 	                           : (unsigned)*(const wchar_t *)(p))
 
-/* s/word are both required. word's `while (*word)` loop condition
- * dereferences it unconditionally as soon as this function is called;
- * the checker's own report names only this one. s (aliased through the
- * gc() macro at `gc(s + (size_t)n * st, st)`) is dereferenced the same
- * way whenever the loop body runs at all -- which it always does for
- * this file's three real call sites ("inf"/"infinity"/"nan", none
- * empty) -- verified by hand the same way this file's bn_*() family
- * above was. Every real call site passes strtox()'s own s, itself
- * required (see below), never NULL. */
+/* s/word are both required: word's `while (*word)` loop dereferences it
+ * unconditionally, and s (via the gc() macro) is dereferenced the same way
+ * whenever the loop body runs, which it always does for this file's three
+ * call sites ("inf"/"infinity"/"nan", none empty). Every call site passes
+ * strtox()'s own required s, never NULL. */
 static int ci_prefix(const char *s, const char *word, size_t st) __attribute__((nonnull(1, 2)));
 static int ci_prefix(const char *s, const char *word, size_t st)
 {
@@ -336,19 +326,12 @@ static int ci_prefix(const char *s, const char *word, size_t st)
 	return n;
 }
 
-/* s/end/ok/nz are all required. s is dereferenced (via the gc() macro,
- * `c = gc(p2, st);` with p2 initialized to s) unconditionally by the
- * `for (;;)` loop's own first iteration, which always runs -- the
- * checker's own report names this one (`*(p)`/the wide-character cast
- * variant of the same expression). ok is written on every return path
- * (`*ok = 0;` on the empty-subject-sequence early return, `*ok = 1;`
- * on the normal one) with no NULL check anywhere; end/nz are written
- * together with ok on the normal path (`*end = p2; *ok = 1; *nz = m !=
- * 0;`), unconditionally once that path is reached. Every real call
- * site is strtox()'s own `parse_hex(s + 2 * st, &end, &ok, &nz, ...)`,
- * where s is strtox()'s own required s0-derived cursor and end/ok/nz
- * are strtox()'s own on-stack locals -- never NULL regardless of
- * whether strtox()'s own (genuinely optional) endptr is. */
+/* s/end/ok/nz are all required. s is dereferenced (via the gc() macro)
+ * unconditionally on the `for (;;)` loop's first iteration, which always
+ * runs. ok is written on every return path with no NULL check; end/nz join
+ * it unconditionally on the normal path. Every call site is strtox()'s own
+ * `parse_hex(s + 2 * st, &end, &ok, &nz, ...)`, whose s/end/ok/nz are
+ * required or on-stack locals -- never NULL. */
 static double parse_hex(const char *s, const char **end, int *ok, int *nz, int p, int emin, size_t st)
     __attribute__((nonnull(1, 2, 3, 4)));
 static double parse_hex(const char *s, const char **end, int *ok, int *nz, int p, int emin, size_t st) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
@@ -393,13 +376,10 @@ static double parse_hex(const char *s, const char **end, int *ok, int *nz, int p
 	return bn_scale_round(&N, &D, exp, 0, p, emin);
 }
 
-/* Same shape and same reasoning as parse_hex() above: s is dereferenced
- * unconditionally by the `for (;;)` loop's first iteration (the
- * checker's own report names this one); ok is written on every return
- * path (`*ok = 0;` early, `*ok = 1;` normal); end/nz join it
- * unconditionally on the normal path (`*end = p2; *ok = 1; *nz = nd !=
- * 0;`). Every real call site (strtox()'s `parse_dec(s, &end, &ok, &nz,
- * ...)`) passes the identical required-s/on-stack-locals shape. */
+/* Same shape and reasoning as parse_hex() above: s is dereferenced
+ * unconditionally by the `for (;;)` loop's first iteration; ok is written
+ * on every return path; end/nz join it unconditionally on the normal path.
+ * Every call site passes the identical required-s/on-stack-locals shape. */
 static double parse_dec(const char *s, const char **end, int *ok, int *nz, int p, int emin, size_t st)
     __attribute__((nonnull(1, 2, 3, 4)));
 static double parse_dec(const char *s, const char **end, int *ok, int *nz, int p, int emin, size_t st) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
@@ -467,25 +447,14 @@ static double parse_dec(const char *s, const char **end, int *ok, int *nz, int p
 	return bn_scale_round(&N, &D, 0, sticky, p, emin);
 }
 
-/* s0 is required: `while (isspace((int)gc(s, st))) s += st;` (s starts
- * as s0) dereferences it unconditionally as this function's first real
- * operation, with no NULL check -- the checker's own report names this
- * one. endptr is genuinely optional: POSIX documents "if endptr is not
- * NULL" for the whole strtod() family, and this function's own `if
- * (endptr) *endptr = ...;` (both the failure and success paths) is a
- * real, live guard, the same shape as setenv()/unsetenv()'s own name
- * check -- every real caller (strtof()/strtod()/strtold() and
- * wcstox()'s own internal `&end`) already relies on that, wcstox()'s
- * own endptr being separately optional and checked the same way one
- * level up.
- *
- * Marking s0 lets the checker explore further into the "nan" literal's
- * own `(...)` suffix parsing than before, now flagging `gc(end, st)`/
- * `gc(q, st)`: end/q are pointer arithmetic off s (`end = s + ...`,
- * `q = end + st`, `q += st`), already proven nonnull -- the same class
- * of residual src/stdlib/qsort.c's swap() and src/stdlib/mbrtowc.c's
- * wcsrtombs() now disclose for a loop increment past what this
- * checker's nonnull propagation currently follows. */
+/* s0 is required: `while (isspace((int)gc(s, st))) s += st;` (s starts as
+ * s0) dereferences it unconditionally as this function's first operation,
+ * with no NULL check. endptr is genuinely optional: POSIX documents "if
+ * endptr is not NULL" for the whole strtod() family, and `if (endptr)
+ * *endptr = ...;` is a real, live guard, the same shape as setenv()/
+ * unsetenv()'s own name check. Marking s0 also lets the checker prove
+ * `gc(end, st)`/`gc(q, st)` below, since end/q are pointer arithmetic off
+ * the now-nonnull s. */
 static long double strtox(const char *s0, char **endptr, int kind, size_t st) __attribute__((nonnull(1)));
 static long double strtox(const char *s0, char **endptr, int kind, size_t st) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {

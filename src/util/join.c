@@ -354,11 +354,13 @@ static void print_o(const struct outspec *specs, size_t nspecs, const struct jli
                      const struct jline *l2, int jf2, char outsep, const char *empty_repl) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
 	size_t i;
+	/* specs is parse_o_list()'s non-NULL output whenever nspecs > 0
+	 * (left NULL only alongside nspecs == 0); asserted once here, where
+	 * that guard is visible, rather than unconditionally on every loop
+	 * iteration below. */
+	if (nspecs) unsafe_assume_pointer_nonnull(specs);
 	for (i = 0; i < nspecs; i++) {
 		size_t len; const char *p;
-		/* specs is parse_o_list()'s non-NULL output whenever nspecs > 0
-		 * (left NULL only alongside nspecs == 0). */
-		unsafe_assume_pointer_nonnull(specs);
 		if (i) join_putc(outsep);
 		if (specs[i].file == 0) {
 			if (l1) p = field_ptr(l1, jf1, &len);
@@ -527,15 +529,18 @@ int __util_join_main(
 
 	{
 		size_t i1 = 0, i2 = 0;
-		while (i1 < n1 && i2 < n2) {
-			int cmp;
-			/* L1/L2 are read_all()'s non-NULL output whenever n1/n2 are
-			 * nonzero (an empty input file leaves a heap array NULL,
-			 * always paired with n == 0); i1 < n1 and i2 < n2 already
-			 * hold here, and every index derived from them below stays
-			 * within [0, n1) / [0, n2). */
+		/* L1/L2 are read_all()'s non-NULL output whenever n1/n2 are
+		 * nonzero (an empty input file leaves a heap array NULL, always
+		 * paired with n == 0); asserted once here, where that guard is
+		 * visible, rather than unconditionally on every loop iteration
+		 * below. Every index derived from i1/i2 below stays within
+		 * [0, n1) / [0, n2). */
+		if (n1 && n2) {
 			unsafe_assume_pointer_nonnull(L1);
 			unsafe_assume_pointer_nonnull(L2);
+		}
+		while (i1 < n1 && i2 < n2) {
+			int cmp;
 			cmp = keys_cmp(&L1[i1], jf1, &L2[i2], jf2);
 			if (cmp == 0) {
 				size_t g1s = i1, g2s = i2, g1e, g2e, x, y;

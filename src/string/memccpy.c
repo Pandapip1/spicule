@@ -7,7 +7,9 @@
 // NOLINTBEGIN(misc-include-cleaner)
 #include <string.h>
 
-void *memccpy(void *__restrict dest, const void *__restrict src, int c, size_t n) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
+void *memccpy(void *__restrict dest withtok(writable_span(n))
+	withtok(disjoint_span(src, n)),
+	const void *__restrict src withtok(readable_span(n)), int c, size_t n) // NOLINT(bugprone-easily-swappable-parameters) -- positional C interface; parameter names distinguish semantic roles
 {
 	unsigned char *d = dest;
 	const unsigned char *s = src;

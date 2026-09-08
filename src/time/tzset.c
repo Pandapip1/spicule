@@ -94,6 +94,15 @@ void tzset(void)
 	read_name(&tz, __tzname_std, sizeof __tzname_std);
 	/* read_name() only ever advances *input from its own live starting
 	 * position; it never stores NULL back through input. */
+	/* spicule.RedundantPointerAxiom (pointeraxiom) reports this as
+	 * narrowable rather than dead: the fact holds because read_name()
+	 * only advances an already-nonnull tz, but that is a postcondition
+	 * of a function called through an out-param, not a guard visible at
+	 * this exact call site, so there is no local restructuring that
+	 * makes the checker's declared-nonnull rule recognize it without
+	 * either changing read_name()'s signature (outside this call site)
+	 * or removing the restatement outright (which the axiom's own
+	 * narrowable-not-redundant verdict says not to do). Left as-is. */
 	unsafe_assume_pointer_nonnull(tz);
 	if (!__tzname_std[0]) memcpy(__tzname_std, "UTC", sizeof "UTC");
 	tzname[0] = __tzname_std;
@@ -111,28 +120,19 @@ void tzset(void)
 	if (!__tzname_dst[0])
 		(void)strlcpy(__tzname_dst, __tzname_std, sizeof __tzname_dst);
 	tzname[1] = __tzname_dst;
-	/* h, mn and s come out of strtol(), which saturates at LONG_MAX --
-	 * and on arch/aarch64/bits/limits.h's non-_WIN32 (aarch64-linux)
-	 * branch, an LP64 target, `long` and `long long` are the same
-	 * 64-bit width, so that saturated LONG_MAX IS LLONG_MAX: naively
-	 * combining in `long long` (`h*3600 + mn*60 + s`, then clamping the
-	 * result) overflows the multiplication itself before the clamp ever
-	 * sees a meaningful value.  TZ=X9223372036854775807 used to wrap
-	 * h*3600 to -3600, which is neither above LONG_MAX nor below
-	 * -LONG_MAX, so the old clamp let it through unchanged and tzset()
-	 * silently adopted a bogus UTC-1 offset instead of saturating.
-	 * (The 32-bit-`long` LLP64 target this used to guard against --
-	 * x86_64-win32 -- never had this problem: strtol() there already
-	 * saturates at 2147483647, and `2147483647 * 3600` fits `long long`
-	 * with room to spare.)
+	/* h/mn/s come from strtol(), which saturates at LONG_MAX. On the LP64
+	 * aarch64-linux target, long and long long are the same 64-bit width,
+	 * so that saturated LONG_MAX IS LLONG_MAX: naively combining in
+	 * `long long` then clamping overflows the multiplication itself before
+	 * the clamp can see it (TZ=X9223372036854775807 used to wrap h*3600 to
+	 * -3600, which the old clamp let through as a bogus UTC-1 offset
+	 * instead of saturating). x86_64-win32's LLP64 long never had this
+	 * problem: strtol() there saturates at 2147483647, which times 3600
+	 * fits long long with room to spare.
 	 *
-	 * mul_sat()/add_sat() below saturate at LONG_MAX -- the target's,
-	 * which can itself equal LLONG_MAX -- one term at a time, so no
-	 * intermediate product or partial sum is ever allowed to need more
-	 * range than the final answer does regardless of how wide `long` is
-	 * on the target; real TZ offsets (h within a day, mn/s within a
-	 * minute) are nowhere near these bounds, so this changes only the
-	 * previously-wrapping cases. */
+	 * mul_sat()/add_sat() saturate at LONG_MAX one term at a time, so no
+	 * intermediate result needs more range than the final answer,
+	 * regardless of long's width on the target. */
 	{
 		long long total = mul_sat(h, 3600, LONG_MAX);
 		total = add_sat(total, mul_sat(mn, 60, LONG_MAX), LONG_MAX);

@@ -7,7 +7,8 @@
 // NOLINTBEGIN(misc-include-cleaner)
 #include <wchar.h>
 
-wchar_t *wcsncpy(wchar_t *__restrict d, const wchar_t *__restrict s, size_t n)
+wchar_t *wcsncpy(wchar_t *__restrict d withtok(writable_elements(n)),
+	const wchar_t *__restrict s, size_t n)
 {
 	wchar_t *a = d;
 	while (n && *s) {

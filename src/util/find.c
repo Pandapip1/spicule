@@ -389,6 +389,14 @@ static struct node *parse_primary(struct find_ctx *c)
 		start = c->i;
 		for (;;) {
 			if (c->i >= c->n) break;
+			/* spicule.RedundantPointerAxiom (pointeraxiom) reports this
+			 * restatement as narrowable: c->v is already established
+			 * nonnull earlier in this same parse_primary() call (see
+			 * peek()'s own comment), and that fact survives to here on
+			 * this loop's own back-edge, but nothing at this specific
+			 * statement declares it independently of that earlier call,
+			 * so there is no guard to move this to that would not just
+			 * be deleting the restatement -- left as-is. */
 			unsafe_assume_pointer_nonnull(c->v); /* see peek()'s own comment */
 			term = c->v[c->i];
 			unsafe_assume_string_terminated(term);

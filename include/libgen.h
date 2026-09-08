@@ -9,11 +9,13 @@
 #ifndef _LIBGEN_H
 #define _LIBGEN_H
 
+#include <ownership.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-char *dirname(char *);
+char *dirname(char * withtok(null_terminated));
 char *basename(char *);
 
 #ifdef __cplusplus

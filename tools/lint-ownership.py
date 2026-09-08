@@ -143,9 +143,15 @@ def fixture_test(path: pathlib.Path) -> None:
             # opt-in spicule.RedundantPointerAxiom checker and tools/
             # lint-pointer-axiom.py: those lines are deliberately findings
             # for that gate and clean for this one.
+            # "ownership-expect: own-parameter-axiom" is the identical split
+            # for the opt-in spicule.OwnParameterAxiom checker and tools/
+            # lint-own-parameter-axiom.py -- spicule.OwnParameterAxiom is
+            # never loaded in this gate's own -analyzer-checker= set, so a
+            # line tagged only for it must not be expected here either.
             if ("ownership-expect" in line
                     and "ownership-expect: resource-leak" not in line
-                    and "ownership-expect: pointer-axiom-" not in line):
+                    and "ownership-expect: pointer-axiom-" not in line
+                    and "ownership-expect: own-parameter-axiom" not in line):
                 expected.add((source.relative_to(ROOT).as_posix(), number))
     actual = {(finding.path, finding.line) for finding in parse_log(path)}
     errors = validate_contracts(parse_contracts(path))

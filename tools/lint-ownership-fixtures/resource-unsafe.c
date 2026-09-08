@@ -72,3 +72,51 @@ int short_circuit_leak(const char *path, int lines)
 		rc = 1;
 	return rc; /* ownership-expect: resource-leak */
 }
+
+/* Adversarial twin of resource-safe.c's redirect_onto_borrowed_target_safe:
+ * the SAME comparison against a borrowed parameter, but only on the
+ * branch where newfd and fd are proven to actually DIFFER -- unlike the
+ * safe version, this branch never releases anything, so the resource
+ * genuinely leaks whenever newfd != fd. Pins that ResourceLifecycleChecker's
+ * new "retired by aliasing" carve-out only ever forgives the branch
+ * where the constraint manager actually proves the aliasing, never the
+ * other one. */
+int redirect_param_mismatch_leak(int fd)
+{
+	int newfd = open("name", 0);
+	if (newfd < 0)
+		return 1;
+	if (newfd != fd) {
+		/* never closes newfd here */
+	}
+	return 0; /* ownership-expect: resource-leak */
+}
+
+/* Adversarial twin of resource-safe.c's redirect_onto_standard_stream_safe:
+ * bounded against a literal that does NOT prove the value is one of the
+ * standard streams 0/1/2 -- fd == 3, 4, or 5 on the untaken branch is a
+ * genuinely unclosed, ordinary descriptor, not a standard stream. */
+int bounded_close_leak(void)
+{
+	int fd = open("name", 0);
+	if (fd < 0)
+		return 1;
+	if (fd > 5)
+		close(fd);
+	return 0; /* ownership-expect: resource-leak */
+}
+
+/* Adversarial twin of resource-safe.c's array_release_loop_safe: the
+ * same acquire-into-a-local-array-by-runtime-index loop, but with no
+ * release loop anywhere in this function -- a real "opened every file,
+ * closed none of them" leak of the identical shape, which
+ * arrayHasCorrelatedReleaseCall's positive release-loop search must not
+ * mistake for the safe version's own correlated close loop. */
+int array_no_release_leak(int n)
+{
+	FILE *files[64];
+	int j;
+	for (j = 0; j < n; j++)
+		files[j] = fopen("name", "r");
+	return 0; /* ownership-expect: resource-leak */
+}

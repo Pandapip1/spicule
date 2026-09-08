@@ -82,11 +82,22 @@ def is_serial(path: Path) -> bool:
     return path.name.startswith(SERIAL_PREFIXES)
 
 
-def run_one(path: Path, runner: list[str], root: Path, timeout: int) -> Result:
+def run_one(path: Path, runner: list[str], root: Path, timeout: int,
+            runtime: str | None) -> Result:
     environment = os.environ.copy()
     if runner:
         environment["WINEDEBUG"] = "-all"
         environment["WINEDLLOVERRIDES"] = "winedbg.exe=d"
+    if runtime:
+        # Same env var tools/test-policy.py already reads for its own,
+        # separate (Python-side) profile resolution -- here it carries the
+        # declared runtime= profile term into the test executable itself,
+        # for test/test-policy.h's spicule_test_runtime_is() to adjudicate
+        # a live check against (see e.g. test/posix-glob.c's chmod()
+        # SKIP-vs-hard-FAIL split). A run with no runtime=VALUE in
+        # --profile leaves whatever this process already inherited alone,
+        # rather than clearing it.
+        environment["SPICULE_TEST_RUNTIME"] = runtime
     with tempfile.TemporaryDirectory(prefix="work.", dir=root) as work:
         try:
             completed = run_captured(
@@ -214,6 +225,7 @@ def main() -> int:
             host == "x86_64" else "no"
         )
 
+    runtime = profile_values.get("runtime")
     results: dict[Path, Result] = {}
     serial = [path for path in executables if is_serial(path)]
     parallel = [path for path in executables if not is_serial(path)]
@@ -224,13 +236,14 @@ def main() -> int:
         with ThreadPoolExecutor(max_workers=args.jobs + bool(serial)) as pool:
             futures = {
                 pool.submit(run_one, path, runner, root,
-                            timeout_for(path, args.timeout)): path
+                            timeout_for(path, args.timeout), runtime): path
                 for path in parallel
             }
 
             def run_serial() -> list[Result]:
                 return [run_one(path, runner, root,
-                                timeout_for(path, args.timeout)) for path in serial]
+                                timeout_for(path, args.timeout), runtime)
+                        for path in serial]
 
             serial_future = pool.submit(run_serial) if serial else None
             for future in as_completed(futures):

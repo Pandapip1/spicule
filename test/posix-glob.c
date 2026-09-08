@@ -403,18 +403,31 @@ static void test_glob_err_callback(void)
 	 * (all four windows-test CI legs) has no ACL-based permission model
 	 * for directory execute bits, so __plat_chmod()'s $LXMOD EA write
 	 * fails there (EINVAL) in a way it does not under Wine. That's
-	 * chmod() failing honestly, not a fixture bug -- probe it live and
-	 * fall back the same as the GLOB_ABORTED probe just below. */
+	 * chmod() failing honestly, not a fixture bug -- but it is only a
+	 * KNOWN, declared limitation on the runtime tools/run-tests.py
+	 * declares as "windows" (test/test-policy.h's
+	 * spicule_test_runtime_is(), fed by SPICULE_TEST_RUNTIME). Anywhere
+	 * else -- Linux, Wine, or an environment nobody declared -- chmod()
+	 * failing here is a real regression and must not be waved through
+	 * as a SKIP. */
 	CHECK(mkdir("noperm", 0755) == 0);
 	if (chmod("noperm", 0) != 0) {
-		printf("SKIP posix-glob GLOB_ERR/errfunc tests "
-		       "(chmod(\"noperm\", 0) failed here, errno=%d; this "
-		       "platform's chmod() cannot clear a directory's execute "
-		       "bits -- no ACL-based permission model, and the $LXMOD "
-		       "EA write it would need is not always honoured on real "
-		       "Windows) -- the EACCES-triggered GLOB_ABORTED/errfunc "
-		       "clauses were not exercised\n", errno);
-		unverified++;
+		if (spicule_test_runtime_is("windows")) {
+			printf("SKIP posix-glob GLOB_ERR/errfunc tests "
+			       "(chmod(\"noperm\", 0) failed here, errno=%d; "
+			       "declared known limitation for runtime=windows -- "
+			       "no ACL-based permission model for a directory's "
+			       "execute bits, and the $LXMOD EA write chmod() "
+			       "needs is not honoured on real Windows) -- the "
+			       "EACCES-triggered GLOB_ABORTED/errfunc clauses "
+			       "were not exercised\n", errno);
+			unverified++;
+		} else {
+			CHECK(0 && "chmod(\"noperm\", 0) failed, and this "
+			      "runtime is not declared runtime=windows (the "
+			      "only declared exemption) -- treating this as a "
+			      "genuine regression rather than SKIPping it");
+		}
 		rmdir("noperm");
 		return;
 	}

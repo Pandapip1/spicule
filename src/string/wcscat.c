@@ -6,10 +6,15 @@
  * so hosted include ownership and unused-include advice do not apply. */
 // NOLINTBEGIN(misc-include-cleaner)
 #include <wchar.h>
+#include "ownership_stubs.h"
 
-wchar_t *wcscat(wchar_t *__restrict dest, const wchar_t *__restrict src)
+withtok(null_terminated)
+wchar_t *wcscat(wchar_t *__restrict dest withtok(null_terminated)
+	grant(null_terminated),
+	const wchar_t *__restrict src withtok(null_terminated))
 {
 	wcscpy(dest + wcslen(dest), src);
+	unsafe_assume_string_terminated(dest);
 	return dest;
 }
 

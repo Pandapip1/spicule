@@ -14,12 +14,14 @@
 #include <wchar.h>
 #include <locale.h>
 
-int wcscoll(const wchar_t *l, const wchar_t *r)
+int wcscoll(const wchar_t *l withtok(null_terminated),
+	const wchar_t *r withtok(null_terminated))
 {
 	return wcscmp(l, r);
 }
 
-int wcscoll_l(const wchar_t *l, const wchar_t *r, locale_t loc)
+int wcscoll_l(const wchar_t *l withtok(null_terminated),
+	const wchar_t *r withtok(null_terminated), locale_t loc)
 {
 	(void)loc;
 	return wcscmp(l, r);

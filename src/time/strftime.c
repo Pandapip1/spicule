@@ -78,9 +78,18 @@ static size_t do_strftime(char *restrict s withtok(writable_span(max)), size_t m
 
 #define PUT_CH(c) do { if (pos + 1 >= max) { overflow = 1; goto done; } s[pos++] = (char)(c); } while (0)
 /* _s is always one of __spicule_day_name[_abbr]/__spicule_month_name[_abbr]'s
- * fixed, non-null string-literal elements (names.c) or the literal
- * "AM"/"PM"; the checker can't see into a global array's initializer. */
+ * fixed, non-null string-literal elements (names.c); the checker can't see
+ * into a global array's initializer. */
 #define PUT_STR(str) do { const char *_s = (str); unsafe_assume_pointer_nonnull(_s); while (*_s) PUT_CH(*_s++); } while (0)
+/* Like PUT_STR, but for an argument each call site already narrows to a
+ * single, directly provable value (a bare string literal, or a pointer
+ * already checked nonnull by its own caller) -- so, unlike PUT_STR's
+ * array-subscript uses above, no manual axiom is needed here at all;
+ * spicule.RedundantPointerAxiom flagged PUT_STR's blanket
+ * unsafe_assume_pointer_nonnull() as overbroad at exactly these call
+ * sites (it can already prove the value nonnull without it), so they use
+ * this narrower macro instead. */
+#define PUT_LIT(str) do { const char *_s = (str); while (*_s) PUT_CH(*_s++); } while (0)
 #define PUT_NUM(v, w, pad) do { \
 		long long _v = (long long)(v); \
 		unsigned long _mag = _v < 0 \
@@ -167,12 +176,12 @@ static size_t do_strftime(char *restrict s withtok(writable_span(max)), size_t m
 		case 'm': PUT_NUM((long long)tm->tm_mon + 1, 2, '0'); break;
 		case 'M': PUT_NUM(tm->tm_min, 2, '0'); break;
 		case 'n': PUT_CH('\n'); break;
-		case 'p': PUT_STR(tm->tm_hour < 12 ? "AM" : "PM"); break;
+		case 'p': if (tm->tm_hour < 12) PUT_LIT("AM"); else PUT_LIT("PM"); break;
 		case 'r':
 			{ int h = tm->tm_hour % 12; PUT_NUM(h ? h : 12, 2, '0'); }
 			PUT_CH(':'); PUT_NUM(tm->tm_min, 2, '0');
 			PUT_CH(':'); PUT_NUM(tm->tm_sec, 2, '0');
-			PUT_CH(' '); PUT_STR(tm->tm_hour < 12 ? "AM" : "PM");
+			PUT_CH(' '); if (tm->tm_hour < 12) PUT_LIT("AM"); else PUT_LIT("PM");
 			break;
 		case 'R': PUT_NUM(tm->tm_hour, 2, '0'); PUT_CH(':'); PUT_NUM(tm->tm_min, 2, '0'); break;
 		case 'S': PUT_NUM(tm->tm_sec, 2, '0'); break;
@@ -235,7 +244,7 @@ static size_t do_strftime(char *restrict s withtok(writable_span(max)), size_t m
 			PUT_NUM(off % 3600 / 60, 2, '0');
 			break;
 		}
-		case 'Z': PUT_STR(tm->__tm_zone ? tm->__tm_zone : "UTC"); break;
+		case 'Z': if (tm->__tm_zone) PUT_LIT(tm->__tm_zone); else PUT_LIT("UTC"); break;
 		case '%': PUT_CH('%'); break;
 		default: PUT_CH('%'); PUT_CH(*f); break;
 		}

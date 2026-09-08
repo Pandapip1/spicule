@@ -94,6 +94,15 @@ void tzset(void)
 	read_name(&tz, __tzname_std, sizeof __tzname_std);
 	/* read_name() only ever advances *input from its own live starting
 	 * position; it never stores NULL back through input. */
+	/* spicule.RedundantPointerAxiom (pointeraxiom) reports this as
+	 * narrowable rather than dead: the fact holds because read_name()
+	 * only advances an already-nonnull tz, but that is a postcondition
+	 * of a function called through an out-param, not a guard visible at
+	 * this exact call site, so there is no local restructuring that
+	 * makes the checker's declared-nonnull rule recognize it without
+	 * either changing read_name()'s signature (outside this call site)
+	 * or removing the restatement outright (which the axiom's own
+	 * narrowable-not-redundant verdict says not to do). Left as-is. */
 	unsafe_assume_pointer_nonnull(tz);
 	if (!__tzname_std[0]) memcpy(__tzname_std, "UTC", sizeof "UTC");
 	tzname[0] = __tzname_std;

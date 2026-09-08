@@ -628,11 +628,28 @@ static void concurrent_append_test(void)
 int main(int argc, char **argv)
 {
 	if (argc < 1 || find_obj_root(argv[0]) < 0) {
-		printf("FAIL: could not locate obj/ from argv[0]\n");
-		return 1;
+		printf("SKIP util-mail: cannot locate obj/ from argv[0] \"%s\"\n",
+			argv[0] ? argv[0] : "(null)");
+		return 77;
 	}
 	path_for(mailx_path, sizeof mailx_path, "bin/mailx.exe");
 	path_for(sh_path, sizeof sh_path, "sh/sh.exe");
+
+	/* obj/bin/mailx.exe is never among the artifacts the real-Windows
+	 * `windows-test` CI legs get: .github/workflows/ci.yml's
+	 * `build-test-exes` job runs `make test-exes`, which builds only
+	 * obj/test/*.exe (+obj/sh/sh.exe) and deliberately excludes
+	 * obj/bin/*.exe -- mailx.exe is only ever built by the Wine-backed
+	 * `spicule-suite`/`check` targets. Every sibling util-*.c test
+	 * (util-fileops.c, util-grep.c, etc.) guards against exactly this
+	 * with the same access() probe below; this one was missing it, so
+	 * on those legs every mailx invocation silently failed to spawn and
+	 * the whole file's checks cascaded into failure instead of a clean
+	 * SKIP. */
+	if (access(mailx_path, R_OK) != 0 || access(sh_path, R_OK) != 0) {
+		printf("SKIP util-mail: mailx.exe or sh.exe is missing\n");
+		return 77;
+	}
 
 #ifdef __linux__
 	{

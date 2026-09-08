@@ -2,7 +2,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later */
 #include <wchar.h>
 
-int wcscmp(const wchar_t *l, const wchar_t *r)
+int wcscmp(const wchar_t *l withtok(null_terminated),
+	const wchar_t *r withtok(null_terminated))
 {
 	while (*l == *r && *l) {
 		l++;

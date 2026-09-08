@@ -15,7 +15,8 @@
 #include <wctype.h>
 #include <locale.h>
 
-int wcscasecmp(const wchar_t *l, const wchar_t *r)
+int wcscasecmp(const wchar_t *l withtok(null_terminated),
+	const wchar_t *r withtok(null_terminated))
 {
 	while (*l && *r && (*l == *r || towlower(*l) == towlower(*r))) {
 		l++;
@@ -36,7 +37,8 @@ int wcsncasecmp(const wchar_t *l, const wchar_t *r, size_t n)
 	return (int)towlower(*l) - (int)towlower(*r);
 }
 
-int wcscasecmp_l(const wchar_t *l, const wchar_t *r, locale_t loc)
+int wcscasecmp_l(const wchar_t *l withtok(null_terminated),
+	const wchar_t *r withtok(null_terminated), locale_t loc)
 {
 	(void)loc;
 	return wcscasecmp(l, r);

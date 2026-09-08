@@ -12,7 +12,8 @@
 // NOLINTBEGIN(misc-include-cleaner)
 #include <wchar.h>
 
-wchar_t *wcstok(wchar_t *__restrict s, const wchar_t *__restrict sep, wchar_t **__restrict p)
+wchar_t *wcstok(wchar_t *__restrict s, const wchar_t *__restrict sep withtok(null_terminated),
+	wchar_t **__restrict p)
 {
 	if (!s) {
 		s = *p;

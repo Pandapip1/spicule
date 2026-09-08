@@ -7,7 +7,7 @@
 // NOLINTBEGIN(misc-include-cleaner)
 #include <string.h>
 
-char *stpcpy(char *__restrict d, const char *__restrict s)
+char *stpcpy(char *__restrict d, const char *__restrict s withtok(null_terminated))
 {
 	while (*s != '\0') {
 		*d = *s;

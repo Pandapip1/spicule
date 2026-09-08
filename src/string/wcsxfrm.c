@@ -15,7 +15,8 @@
 #include <wchar.h>
 #include <locale.h>
 
-size_t wcsxfrm(wchar_t *__restrict dest, const wchar_t *__restrict src, size_t n)
+size_t wcsxfrm(wchar_t *__restrict dest withtok(writable_elements(n)),
+	const wchar_t *__restrict src, size_t n)
 {
 	size_t l = wcslen(src);
 	if (n > l) {
@@ -27,7 +28,8 @@ size_t wcsxfrm(wchar_t *__restrict dest, const wchar_t *__restrict src, size_t n
 	return l;
 }
 
-size_t wcsxfrm_l(wchar_t *__restrict dest, const wchar_t *__restrict src, size_t n, locale_t loc)
+size_t wcsxfrm_l(wchar_t *__restrict dest withtok(writable_elements(n)),
+	const wchar_t *__restrict src, size_t n, locale_t loc)
 {
 	(void)loc;
 	return wcsxfrm(dest, src, n);

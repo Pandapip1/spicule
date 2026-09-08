@@ -116,6 +116,14 @@ int __util_parse_mode(const char *prog, const char *spec, mode_t base, // NOLINT
 			if (parse_clause(&c, &cur, umask_bits) < 0) goto bad;
 			/* *pp only ever advances from a nonnull start; the T**
 			 * out-param loses that fact for the checker. */
+			/* spicule.RedundantPointerAxiom (pointeraxiom) reports this
+			 * as narrowable rather than dead, for the same reason as
+			 * tzset.c's read_name() restatement: the fact is a
+			 * postcondition of parse_clause() reached through an
+			 * out-param, not a guard visible at this exact call site,
+			 * so there is no local restructuring short of changing
+			 * parse_clause()'s signature (outside this call site) or
+			 * deleting the restatement outright. Left as-is. */
 			unsafe_assume_pointer_nonnull(c);
 			if (*c == ',') { c++; continue; }
 			if (*c == 0) break;

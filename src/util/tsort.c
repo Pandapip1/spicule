@@ -47,21 +47,9 @@
 #include "util.h"
 #include "ownership_stubs.h"
 
-/* name and succ are withtok(heap_allocated) -- both are genuinely
- * heap-allocated (strdup()/__util_reallocarray() respectively) and freed
- * only once, in __util_tsort_main()'s own final cleanup loop below -- the
- * same struct-field ownership idiom src/util/man.c's struct man_buf/
- * struct man_reg/etc. and src/util/find.c's struct node's own acc/pruned
- * fields already use. Declaring it lets AllocationLifetimeChecker's
- * checkPostStmt<BinaryOperator> recognize get_or_add()'s
- * `nodes[nnodes].name = strdup(name)` and add_edge()'s
- * `nodes[a].succ = g` as moving the allocation into a real owning slot
- * instead of reporting each one as leaked at the end of its own
- * function -- without it, neither assignment's destination carries any
- * annotation the checker can use to tell an owning store from an
- * ordinary escaping one. Likewise `nodes` itself: get_or_add()'s
- * `nodes = g` reassignment is recognized the same way once the global
- * variable declaration itself carries the annotation. */
+/* name/succ withtok(heap_allocated): lets AllocationLifetimeChecker see
+ * get_or_add()'s and add_edge()'s stores into these fields as owning
+ * moves, not leaks; freed once in __util_tsort_main()'s cleanup loop. */
 struct node {
 	char *name withtok(heap_allocated);
 	size_t indeg;
@@ -70,34 +58,18 @@ struct node {
 	int done;
 };
 
-static struct node *nodes withtok(heap_allocated);
+static struct node *nodes withtok(heap_allocated); /* same reason, for get_or_add()'s `nodes = g` */
 static size_t nnodes, nodecap;
 
 static int find_node(const char *name withtok(null_terminated))
 {
 	size_t i;
 	for (i = 0; i < nnodes; i++) {
-		/* nodes[i].name is a struct node field, not a function
-		 * parameter, so withtok(null_terminated) has no field-level
-		 * spelling to attach to (see include/ownership.h's own
-		 * vocabulary); restate the always-true fact by hand instead,
-		 * the same idiom src/util/pax.c's write_ustar_header() uses
-		 * for struct pax_member's own m->name field. The one real
-		 * populator of this field, get_or_add() below, always writes
-		 * it via strdup(name), which include/string.h declares to
-		 * return a null_terminated string.
-		 *
-		 * Read through a local rather than restating directly on
-		 * nodes[i].name: `nodes` is a file-scope global, and the
-		 * checker's own conservative call-invalidation rule for an
-		 * opaque call (which unsafe_assume_string_terminated() itself
-		 * is, from the analyzer's point of view) re-widens anything
-		 * reachable through a global pointer immediately afterward --
-		 * so a restatement written directly against nodes[i].name
-		 * conjures a fresh symbolic value for the very next read of
-		 * that same field and the fact is lost again before strcmp()
-		 * sees it. A local variable is not reachable through the
-		 * global, so it is not subject to that widening. */
+		/* nodes[i].name has no field-level withtok spelling to carry
+		 * "always populated via strdup() in get_or_add()"; restated by
+		 * hand through a local, since restating it directly on the
+		 * global-reachable field would be re-widened away before
+		 * strcmp() below ever saw it. */
 		char *nm = nodes[i].name;
 		unsafe_assume_string_terminated(nm);
 		if (!strcmp(nm, name)) return (int)i;
@@ -193,11 +165,8 @@ int __util_tsort_main(
 		return 1;
 	}
 	if (argc == 2) {
-		/* argv carries elements_withtok(null_terminated, argc) above,
-		 * but the checker cannot derive "1 < argc" from the argc == 2
-		 * comparison just taken on its own -- restate the contract at
-		 * this one now-in-range index, the same way src/util/test.c's
-		 * __util_test_main() restates it for argv[0]. */
+		/* restate argv[1]'s null-termination at this now-in-range
+		 * index; the checker can't derive it from argc == 2 alone. */
 		unsafe_assume_string_terminated(argv[1]);
 		if (!strcmp(argv[1], "-")) {
 			f = stdin;
@@ -237,12 +206,8 @@ int __util_tsort_main(
 			tok = g;
 			tokcap = newcap;
 		}
-		buf[pos] = 0; /* pos < len guaranteed unless pos==len already, in which
-		                 case writing the NUL at buf[len] is one past real
-		                 content but still inside the allocation (slurp()'s
-		                 cap is always > len when the loop exits via EOF, see
-		                 its own "len == cap" growth check running before the
-		                 next fread), so this is never an out-of-bounds write. */
+		buf[pos] = 0; /* pos <= len; slurp()'s cap is always > len at EOF, so
+		                 a write at buf[len] is still inside the allocation. */
 		tok[ntok++] = buf + start;
 		pos++;
 	}
@@ -256,16 +221,9 @@ int __util_tsort_main(
 
 	for (i = 0; i < ntok / 2; i++) {
 		int a, b;
-		/* Every tok[] entry was set, in the tokenizing loop above, to
-		 * `buf + start` immediately after writing a NUL byte at
-		 * buf[pos] (pos being wherever that token's own run of
-		 * non-whitespace bytes ended) -- each one is therefore already
-		 * a real, null-terminated C string, but that fact was
-		 * established over there, not here, and get_or_add()'s own
-		 * withtok(null_terminated) parameter needs it re-proven at
-		 * this call site the same way src/util/test.c's
-		 * __util_test_main() re-proves argv[0]/argv[n] at its own use
-		 * sites. */
+		/* Each tok[] entry was NUL-terminated in the tokenizing loop
+		 * above; re-proven here for get_or_add()'s withtok(null_terminated)
+		 * parameter at this call site. */
 		unsafe_assume_string_terminated(tok[2 * i]);
 		unsafe_assume_string_terminated(tok[2 * i + 1]);
 		a = get_or_add(tok[2 * i]);
@@ -290,17 +248,17 @@ int __util_tsort_main(
 
 		queue_head = 0;
 		ready_count = 0;
-		for (remaining = nnodes;
-		     remaining > 0 && queue_head < qtail; remaining--) {
-			int cur = queue[queue_head++];
+		for (remaining = nnodes; remaining > 0; remaining--) {
+			int cur;
 			size_t s;
+			if (queue_head >= qtail) break; /* stalled: a cycle remains */
+			cur = queue[queue_head++];
 			ready_count++;
 			nodes[cur].done = 1;
 			printf("%s\n", nodes[cur].name);
 			for (s = 0; s < nodes[cur].nsucc; s++) {
 				int nb = nodes[cur].succ[s];
-				/* Each node's indegree reaches exactly zero at most
-				 * once, so it is pushed onto queue[] at most once --
+				/* Each node's indegree reaches zero at most once, so
 				 * qtail can never exceed nnodes here. */
 				if (--nodes[nb].indeg == 0) queue[qtail++] = nb;
 			}

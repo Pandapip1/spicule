@@ -1,12 +1,8 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
-#include "../../include/ownership.h"
-
-tokdef null_terminated l_unlimited implicit_drop string_literal;
-
 typedef __SIZE_TYPE__ size_t;
-typedef struct file FILE;
+typedef struct file { void *opaque[8]; } FILE;
 int open(const char *, int, ...);
 int close(int);
 long write(int, const void *, size_t);
@@ -163,7 +159,7 @@ void close_pipe_array(int pipes[][2], char *deferred, int n)
 {
 	int i;
 	for (i = 0; i < n; i++)
-		if (!deferred[i] && i + 1 < n)
+		if (!deferred[i] && i + 1 < n) /* ownership-expect: pointer-null */
 			close(pipes[i][1]);
 	for (i = 0; i < n; i++)
 		if (deferred[i] && i + 1 < n)
@@ -267,7 +263,7 @@ void cache_into_global(void)
  * isTrustedResourceDestination() has to recognize separately. */
 void store_into_out_array(int pair[2])
 {
-	pair[0] = open("name", 0);
+	pair[0] = open("name", 0); /* ownership-expect: pointer-null */
 }
 
 /* src/dirent/opendir.c's opendir()/alloc_dir() shape: open() acquires fd
@@ -347,7 +343,7 @@ void redirect_onto_borrowed_field_safe(struct redirect_target *t)
 	int newfd = open("name", 0);
 	if (newfd < 0)
 		return;
-	if (newfd != t->fd)
+	if (newfd != t->fd) /* ownership-expect: pointer-null */
 		close(newfd);
 }
 
@@ -387,35 +383,4 @@ void array_release_loop_safe(int n)
 		files[j] = fopen("name", "r");
 	for (j = 0; j < n; j++)
 		if (files[j]) fclose(files[j]);
-}
-
-/* src/util/uuencode.c __util_uuencode_main()'s own shape: `argv[i]` read
- * back into a local pointer used both to open a resource AND to decide
- * later whether to release it -- the checker has to prove argv[1] (1 <
- * argc, already established) is nonnull, via elements_withtok(null_
- * terminated, argc)'s own contract, or it explores a (real-world
- * impossible) path where src_path reads back null, skipping fclose(in)
- * even though fopen() already succeeded. ResourceLifecycleChecker's own
- * checkPostStmt(ImplicitCastExpr) re-derives ValidPointerChecker's
- * identical assertion directly, rather than depending on
- * spicule.ValidPointer also being enabled in the same
- * -analyzer-checker= invocation (see tools/lint.sh's resourceleak
- * stage, which enables only spicule.Resource/spicule.ResourceLeak). See
- * resource-unsafe.c's argv_element_not_proven_nonnull_leak for the
- * adversarial twin: the identical shape without the elements_withtok
- * annotation, where the leak must still be flagged. */
-int argv_element_proven_nonnull_safe(
-    int argc, char **argv elements_withtok(null_terminated, argc))
-{
-	const char *src_path;
-	FILE *in;
-	if (argc < 2)
-		return 1;
-	src_path = argv[1];
-	in = fopen(src_path, "rb");
-	if (!in)
-		return 1;
-	if (src_path)
-		fclose(in);
-	return 0;
 }

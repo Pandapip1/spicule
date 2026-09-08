@@ -1126,6 +1126,14 @@ static struct sh_command *parse_funcdef(struct parser *p, struct sh_command *cmd
 	while (unsafe_assume_shared_provenance(end > start) &&
 	      isspace((unsigned char)end[-1])) {
 		end--;
+		/* spicule.RedundantPointerAxiom (pointeraxiom) reports this
+		 * restatement as narrowable: it is only provable here because
+		 * the axiom above already ran on this same explored path, not
+		 * because anything at this specific point declares it -- the
+		 * same limitation the loop-back-edge comment above already
+		 * describes. No guard local to this statement makes the fact
+		 * any more visible than it already is, so this is left as the
+		 * defensive restatement it always was. */
 		unsafe_assume_pointer_nonnull(end);
 	}
 

@@ -120,25 +120,3 @@ int array_no_release_leak(int n)
 		files[j] = fopen("name", "r");
 	return 0; /* ownership-expect: resource-leak */
 }
-
-/* Adversarial twin of resource-safe.c's argv_element_proven_nonnull_safe:
- * the identical shape, but `argv` carries no elements_withtok(null_
- * terminated, argc) contract, so argv[1] is never proven nonnull and the
- * (real-world impossible, but still UNPROVEN) null path genuinely stays
- * reachable here -- pinning that ResourceLifecycleChecker's own
- * checkPostStmt(ImplicitCastExpr) only forgives the annotated case,
- * never plain, uncontracted pointer arithmetic of the same shape. */
-int argv_element_not_proven_nonnull_leak(int argc, char **argv)
-{
-	const char *src_path;
-	FILE *in;
-	if (argc < 2)
-		return 1;
-	src_path = argv[1];
-	in = fopen(src_path, "rb");
-	if (!in)
-		return 1;
-	if (src_path)
-		fclose(in);
-	return 0; /* ownership-expect: resource-leak */
-}

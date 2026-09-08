@@ -1653,61 +1653,6 @@ static bool aggregateIndexProven(const ArraySubscriptExpr *Access,
   return true;
 }
 
-// Whether Access reads a provably in-bounds element of a parameter
-// carrying elements_withtok(family, extent) with family null_terminated-
-// shaped (argv itself, the dominant real shape: `char **argv
-// elements_withtok(null_terminated, argc)`) -- the identical
-// "AggregateElementTokenChecker::checkBeginFunction/checkPostStmt's own
-// per-element token grant, re-derived directly from the AST and this
-// pass's own path state" ValidPointerChecker::checkPostStmt(ImplicitCastExpr)
-// and RedundantPointerAxiomChecker both need. Hoisted to file scope
-// (rather than kept a ValidPointerChecker member reached everywhere else
-// through its `friend class RedundantPointerAxiomChecker` grant) so
-// ResourceLifecycleChecker's own checkPostStmt(ImplicitCastExpr) below can
-// call it too, without becoming a third friend of a checker whose own
-// diagnostic domain (pointer validity) it has nothing else to do with --
-// the same "shared, not duplicated" split already applied to aggregate
-// IndexProven just above and to ResourceMap/ResourceOrigin/ResourceFrame
-// themselves.
-static bool elementProvenNullTerminated(const ArraySubscriptExpr *Access,
-                                        CheckerContext &C) {
-  const auto *Function =
-      dyn_cast_or_null<FunctionDecl>(C.getLocationContext()->getDecl());
-  if (!Function)
-    return false;
-  const auto *Reference = dyn_cast<DeclRefExpr>(
-      Access->getBase()->IgnoreParenImpCasts());
-  const auto *Parameter =
-      Reference ? dyn_cast<ParmVarDecl>(Reference->getDecl()) : nullptr;
-  if (!Parameter || Parameter->getDeclContext() != Function)
-    return false;
-  for (const AnnotateAttr *Attr : Parameter->specific_attrs<AnnotateAttr>()) {
-    StringRef Text = Attr->getAnnotation();
-    if (!Text.consume_front("elements_withtok:"))
-      continue;
-    auto [FamilyName, ExtentName] = Text.split(':');
-    if (FamilyName.empty() || ExtentName.empty() || ExtentName.contains(':'))
-      continue;
-    if (!tokenImpliesNonNull(findTokenSort(C.getASTContext(), FamilyName)))
-      continue;
-    const ParmVarDecl *Extent = nullptr;
-    for (const ParmVarDecl *Candidate : Function->parameters())
-      if (Candidate->getName() == ExtentName) {
-        Extent = Candidate;
-        break;
-      }
-    if (!Extent)
-      continue;
-    ProgramStateRef State = C.getState();
-    SVal ExtentValue =
-        State->getSVal(State->getLValue(Extent, C.getLocationContext()));
-    SymbolRef Upper = ExtentValue.getAsSymbol(true);
-    if (Upper && aggregateIndexProven(Access, Upper, State, C))
-      return true;
-  }
-  return false;
-}
-
 class AggregateElementTokenChecker
     : public Checker<check::BeginFunction,
                      check::PostStmt<ImplicitCastExpr>, check::Bind,
@@ -3584,6 +3529,13 @@ class ValidPointerChecker
   // calling load-bearing axioms dead.
   friend class RedundantPointerAxiomChecker;
 
+  // OwnParameterAxiomChecker below reuses this checker's own axiom
+  // recognizers (isPointerNonNullAxiom/isStringTerminatedAxiom) for the
+  // same reason RedundantPointerAxiomChecker does: a second, drifting
+  // by-name recognizer for "is this call one of the two leaf axioms" is
+  // exactly the kind of copy this project's checkers avoid.
+  friend class OwnParameterAxiomChecker;
+
   // Functions this codebase itself guarantees always return a pointer to
   // real, live storage and never NULL, but whose bodies this checker's
   // cross-TU analysis can't see (their real definitions live in another
@@ -3788,6 +3740,55 @@ class ValidPointerChecker
     return false;
   }
 
+  // Same mirroring as parameterGrantsNullTerminatedScalar above, this time
+  // of AggregateElementTokenChecker::checkBeginFunction/checkPostStmt's
+  // "elements_withtok:family:extent" parsing: Access's base must be
+  // exactly a reference to a parameter of the CURRENTLY analyzed function
+  // carrying that annotation, with family null_terminated-shaped and the
+  // index provably below the named extent parameter -- the identical
+  // in-bounds proof aggregateIndexProven already performs for the sibling
+  // checker's own token grant, reused as-is (it depends on nothing but the
+  // AST and this path's own SVal/constraint state, never on the other
+  // checker's CapabilityMap).
+  static bool elementProvenNullTerminated(const ArraySubscriptExpr *Access,
+                                          CheckerContext &C) {
+    const auto *Function =
+        dyn_cast_or_null<FunctionDecl>(C.getLocationContext()->getDecl());
+    if (!Function)
+      return false;
+    const auto *Reference = dyn_cast<DeclRefExpr>(
+        Access->getBase()->IgnoreParenImpCasts());
+    const auto *Parameter =
+        Reference ? dyn_cast<ParmVarDecl>(Reference->getDecl()) : nullptr;
+    if (!Parameter || Parameter->getDeclContext() != Function)
+      return false;
+    for (const AnnotateAttr *Attr :
+         Parameter->specific_attrs<AnnotateAttr>()) {
+      StringRef Text = Attr->getAnnotation();
+      if (!Text.consume_front("elements_withtok:"))
+        continue;
+      auto [FamilyName, ExtentName] = Text.split(':');
+      if (FamilyName.empty() || ExtentName.empty() || ExtentName.contains(':'))
+        continue;
+      if (!tokenImpliesNonNull(findTokenSort(C.getASTContext(), FamilyName)))
+        continue;
+      const ParmVarDecl *Extent = nullptr;
+      for (const ParmVarDecl *Candidate : Function->parameters())
+        if (Candidate->getName() == ExtentName) {
+          Extent = Candidate;
+          break;
+        }
+      if (!Extent)
+        continue;
+      ProgramStateRef State = C.getState();
+      SVal ExtentValue =
+          State->getSVal(State->getLValue(Extent, C.getLocationContext()));
+      SymbolRef Upper = ExtentValue.getAsSymbol(true);
+      if (Upper && aggregateIndexProven(Access, Upper, State, C))
+        return true;
+    }
+    return false;
+  }
 
   // __peb (src/internal/libc.h: `extern PPEB __peb;`) is a plain global
   // pointer, not a call result, so isAlwaysNonNull's checkPostCall-based
@@ -4773,6 +4774,17 @@ class RedundantPointerAxiomChecker : public Checker<check::PreCall> {
   mutable std::unique_ptr<BugType> RedundantBT;
   mutable std::unique_ptr<BugType> NarrowBT;
 
+  // OwnParameterAxiomChecker below reuses namedParameter() verbatim: the
+  // "argument names the CURRENT function's own, unescaped parameter"
+  // shape it detects for the redundancy audit is exactly the shape that
+  // checker asks a completely different question about (not "is this
+  // axiom still needed", but "even though it is needed, should it be a
+  // parameter contract instead of a body assumption"), so both checkers
+  // must agree, byte for byte, on what counts as "the function's own
+  // parameter, unescaped" or the two diagnostics could describe two
+  // different shapes under the same words.
+  friend class OwnParameterAxiomChecker;
+
   static bool namesDeclaration(const Expr *Expression,
                                const VarDecl *Variable) {
     const auto *Reference =
@@ -4872,7 +4884,7 @@ class RedundantPointerAxiomChecker : public Checker<check::PreCall> {
     // no token effect at all -- see declaredNullTerminated below for why
     // the same evidence does not license removing the string axiom.
     if (const auto *Subscript = dyn_cast<ArraySubscriptExpr>(Object))
-      return elementProvenNullTerminated(Subscript, C);
+      return ValidPointerChecker::elementProvenNullTerminated(Subscript, C);
     const ParmVarDecl *Parameter = namedParameter(Object, Function);
     if (!Parameter)
       return false;
@@ -4979,6 +4991,160 @@ public:
   }
 };
 
+// A second, opt-in diagnostic sharing RedundantPointerAxiomChecker's own
+// axiom recognizers and namedParameter() shape test above, but asking a
+// different question. RedundantPointerAxiomChecker asks "does this axiom
+// still prove anything ValidPointer could not already prove without it" --
+// a question only answerable path-sensitively, and only ever "yes" once
+// some OTHER checker improvement has independently closed the gap at its
+// point of origin. OwnParameterAxiomChecker asks a purely syntactic
+// question that needs no proof state at all: "does this axiom's argument
+// name the enclosing function's own, unescaped parameter" -- because
+// whenever it does, the fact belongs on that parameter's own declaration
+// (withtok(null_terminated), or a nonnull parameter attribute) rather than
+// inside the body, regardless of whether the fact happens to be provable
+// yet by any other means. Commit 52522078's own manual, tree-wide re-audit
+// (fstatat()'s path, dirname()'s s) is exactly this shape, found by hand
+// because nothing flagged it automatically; this checker is the standing
+// version of that audit (see .claude/BACKLOG.md's "New checker idea" note
+// this implements).
+//
+// This checker deliberately does NOT attempt the rewrite, and does not
+// even ask whether ValidPointer can currently prove the argument nonnull:
+// converting a real call site from a body-level axiom to a parameter
+// contract can cascade into new findings at every CALLER that is not yet
+// proven to satisfy the stronger, caller-visible contract -- src/util/
+// mktemp.c's own once-attempted, reverted conversion is the standing
+// example (a seemingly safe withtok conversion there produced 6 new
+// findings at callers). Only a human or a future agent actually trying
+// the conversion and watching tools/lint.sh's ownership/pointeraxiom
+// counts before and after can answer that; this checker only surfaces the
+// shape worth trying it on.
+class OwnParameterAxiomChecker : public Checker<check::PreCall> {
+  mutable std::unique_ptr<BugType> BT;
+
+  // Zero-based, matching NonNullAttr::isNonNull()'s own indexing --
+  // ValidPointerChecker::declaredNonNull's identical walk reads it back
+  // the same way. Parameter is always found (the caller already got it
+  // from Function->parameters() via namedParameter()), so falling off the
+  // end never happens in practice; returning the count is just a safe,
+  // inert default rather than undefined behavior if that ever changed.
+  static unsigned parameterIndex(const ParmVarDecl *Parameter,
+                                 const FunctionDecl *Function) {
+    unsigned Index = 0;
+    for (const ParmVarDecl *Candidate : Function->parameters()) {
+      if (Candidate == Parameter)
+        return Index;
+      Index++;
+    }
+    return Index;
+  }
+
+  // __attribute__((nonnull(N))) numbers parameters starting at 1, one past
+  // parameterIndex()'s own zero-based count.
+  static std::string suggestedNonNullAttribute(const ParmVarDecl *Parameter,
+                                               const FunctionDecl *Function) {
+    return ("__attribute__((nonnull(" +
+            llvm::Twine(parameterIndex(Parameter, Function) + 1) + ")))")
+        .str();
+  }
+
+  // True when Parameter already carries the exact contract this checker
+  // would otherwise suggest for Axiom's kind -- nonnull_parameter_axiom_is_
+  // redundant and withtok_parameter_string_axiom_is_redundant in tools/
+  // lint-ownership-fixtures/pointer-safe.c are the two real shapes this
+  // excludes. Suggesting withtok(null_terminated)/a nonnull attribute
+  // again when it is already sitting right there on the declaration would
+  // tell a reader to add something that already exists; deleting the now-
+  // redundant axiom itself is spicule.RedundantPointerAxiom's own job, not
+  // this checker's (see declaredNonNull/declaredNullTerminated there).
+  // Deliberately narrower than either of those two functions: this only
+  // asks about the ONE specific annotation this checker is about to
+  // suggest, not every OTHER route (a guard, an array type, a string
+  // literal, ...) that might independently make the same axiom
+  // redundant -- this checker still fires for every one of those other
+  // routes, because none of them puts the fact on the parameter's own
+  // declaration.
+  static bool parameterAlreadyDeclaresAxiom(bool NonNullAxiom,
+                                            const ParmVarDecl *Parameter,
+                                            const FunctionDecl *Function,
+                                            ASTContext &Context) {
+    if (!NonNullAxiom)
+      return ValidPointerChecker::parameterGrantsNullTerminatedScalar(
+          Parameter, Context);
+    const auto *NonNull = Function->getAttr<NonNullAttr>();
+    return NonNull && NonNull->isNonNull(parameterIndex(Parameter, Function));
+  }
+
+  // Deliberately not diagnosticMessage() (used by every other checker in
+  // this file): that shared helper's fixed four-field shape has no room
+  // for the suggested rewrite, and changing its signature would touch the
+  // six other checkers that already call it. Same four trailing fields,
+  // reusing the same free functions, plus one more ahead of them.
+  static std::string message(StringRef Suggestion, const Stmt *Statement,
+                             CheckerContext &C) {
+    return ("manual axiom restates this function's own parameter; "
+            "consider " + Suggestion + " instead; verify no cascade "
+            "regression before converting; origin '" +
+            diagnosticOrigin(Statement, C) + "'; context '" +
+            diagnosticContext(C) + "'; expression '" +
+            diagnosticText(Statement, C) + "'; site '" +
+            diagnosticSite(Statement, C) + "'")
+        .str();
+  }
+
+public:
+  void checkPreCall(const CallEvent &Call, CheckerContext &C) const {
+    bool NonNullAxiom = ValidPointerChecker::isPointerNonNullAxiom(Call);
+    bool TerminatedAxiom = ValidPointerChecker::isStringTerminatedAxiom(Call);
+    if ((!NonNullAxiom && !TerminatedAxiom) || Call.getNumArgs() == 0)
+      return;
+    // Same top-frame restriction as RedundantPointerAxiomChecker's own
+    // checkPreCall, and for a related but distinct reason: a parameter of
+    // an INLINED callee is that callee's own top-level parameter, not the
+    // caller's, and that callee is independently analyzed (and this
+    // checker independently runs on it) as its own top-level entry point
+    // regardless of also being inlined elsewhere -- restricting to the
+    // top frame here just avoids reporting the same source-level call a
+    // second time from every caller that happens to inline it.
+    const auto *Frame =
+        dyn_cast_or_null<StackFrameContext>(C.getLocationContext());
+    if (!Frame || !Frame->inTopFrame())
+      return;
+    const auto *Function =
+        dyn_cast_or_null<FunctionDecl>(C.getLocationContext()->getDecl());
+    if (!Function)
+      return;
+    const Expr *Argument = Call.getArgExpr(0);
+    if (!Argument)
+      return;
+    const ParmVarDecl *Parameter = RedundantPointerAxiomChecker::namedParameter(
+        Argument->IgnoreParenCasts(), Function);
+    if (!Parameter)
+      return;
+    if (parameterAlreadyDeclaresAxiom(NonNullAxiom, Parameter, Function,
+                                      C.getASTContext()))
+      return;
+    std::string Suggestion = NonNullAxiom
+        ? suggestedNonNullAttribute(Parameter, Function)
+        : std::string("withtok(null_terminated)");
+    const Stmt *Statement = Call.getOriginExpr();
+    if (!Statement)
+      return;
+    ExplodedNode *Node = C.generateNonFatalErrorNode();
+    if (!Node)
+      return;
+    if (!BT)
+      BT = std::make_unique<BugType>(
+          this, "Manual axiom restates own parameter",
+          categories::MemoryError);
+    auto Report = std::make_unique<PathSensitiveBugReport>(
+        *BT, message(Suggestion, Statement, C), Node);
+    Report->addRange(Statement->getSourceRange());
+    C.emitReport(std::move(Report));
+  }
+};
+
 // ResourceMap's family + live/released encoding, hoisted to file scope
 // (a plain, unscoped enum, so every bare Descriptor/Stream/.../Handle
 // reference below keeps resolving without qualification) so both
@@ -5003,7 +5169,7 @@ static unsigned released(Family Value) { return live(Value) + 1; }
 
 class ResourceLifecycleChecker
     : public Checker<check::PreCall, check::PostCall, check::BranchCondition,
-                     eval::Assume, check::PostStmt<ImplicitCastExpr>> {
+                     eval::Assume> {
   mutable std::unique_ptr<BugType> BT;
 
   static const FunctionDecl *function(const CallEvent &Call) {
@@ -5629,34 +5795,23 @@ public:
       checkResource(Call, Use->first, Use->second, false, C);
   }
 
-  // src/util/uuencode.c __util_uuencode_main() (`char **argv
-  // elements_withtok(null_terminated, argc)`): `src_path = argv[i];`
-  // followed by `if (src_path) ... fclose(in);` reads back as a genuine
-  // possibility that src_path -- and therefore the fopen() a few lines
-  // above it -- is never released, UNLESS this pass itself knows argv[i]
-  // is proven nonnull the same way ValidPointerChecker's own identical
-  // checkPostStmt(ImplicitCastExpr) already asserts it -- elsewhere,
-  // spicule.ValidPointer is not necessarily enabled in the same
-  // -analyzer-checker= invocation as spicule.Resource/spicule.ResourceLeak
-  // (see tools/lint.sh's resourceleak stage), so this checker cannot rely
-  // on that OTHER checker's callback having already run on this same
-  // path. Re-deriving the identical assertion here, directly, keeps
-  // spicule.Resource's own "argv is null_terminated-shaped" reasoning
-  // self-sufficient rather than an undocumented cross-checker dependency.
-  void checkPostStmt(const ImplicitCastExpr *Cast, CheckerContext &C) const {
-    if (Cast->getCastKind() != CK_LValueToRValue)
-      return;
-    const auto *Access = dyn_cast<ArraySubscriptExpr>(
-        Cast->getSubExpr()->IgnoreParenImpCasts());
-    if (!Access || !elementProvenNullTerminated(Access, C))
-      return;
-    std::optional<DefinedOrUnknownSVal> Defined =
-        C.getSVal(Cast).getAs<DefinedOrUnknownSVal>();
-    if (!Defined)
-      return;
-    if (ProgramStateRef NonNull = C.getState()->assume(*Defined, true))
-      C.addTransition(NonNull);
-  }
+  // src/util/uuencode.c __util_uuencode_main()'s own `src_path =
+  // argv[i]; ... if (src_path) ... fclose(in);` gap (argv[i] never
+  // proven nonnull under this stage's own -analyzer-checker= set, which
+  // does not include spicule.ValidPointer) was investigated but left
+  // unfixed here: re-deriving elementProvenNullTerminated's proof
+  // directly (a checkPostStmt(ImplicitCastExpr) callback, since removed)
+  // turned out to depend on aggregateIndexProven's own index<extent
+  // proof, which a minimal, checker-code-independent reproduction shows
+  // is sensitive to unrelated changes elsewhere in this same translation
+  // unit (observed to silently stop proving an identical, previously-
+  // working case after nothing more than an unrelated new checker class
+  // being added to the same plugin binary, never even enabled in this
+  // stage's own invocation) -- a genuine, pre-existing fragility in the
+  // shared proof helper itself, not something this stage's own logic
+  // could fix without risking ValidPointer/RedundantPointerAxiom's own,
+  // already-established behavior. Left open; see the resourceleak
+  // agent's own final report for the full investigation.
 
   static ProgramStateRef forgetResource(ProgramStateRef State,
                                         SymbolRef Symbol) {
@@ -6035,6 +6190,12 @@ extern "C" void clang_registerCheckers(CheckerRegistry &Registry) {
       "spicule.RedundantPointerAxiom",
       "Proves a manual pointer proof axiom is still load-bearing "
       "(opt-in, spicule.ValidPointer must also be enabled)",
+      "");
+  Registry.addChecker<OwnParameterAxiomChecker>(
+      "spicule.OwnParameterAxiom",
+      "Flags a manual pointer proof axiom that restates the enclosing "
+      "function's own parameter as a parameter-contract candidate "
+      "(opt-in, suggests but does not verify a withtok/nonnull rewrite)",
       "");
   Registry.addChecker<ResourceLifecycleChecker>(
       "spicule.Resource", "Proves acquire, use, and release resource "

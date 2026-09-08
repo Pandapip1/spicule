@@ -11,11 +11,14 @@
  * a call to the very helper being defined.
  */
 #include "rtlib.h"
+#include "ldbl_format.h"
 
 union fbits { float f; unsigned u; };
 union dbits { double d; struct { unsigned lo, hi; } u; };
+#if SPICULE_LDBL_EXTENDED
 /* x87 extended: 64-bit explicit mantissa, then sign+15-bit exponent. */
 union xbits { long double x; struct { unsigned lo, hi; unsigned short se; } u; };
+#endif
 
 /* Build a 64-bit value from a 64-bit mantissa `m` scaled by 2^e. */
 static unsigned long long scale64(unsigned long long m, int e)
@@ -57,6 +60,7 @@ unsigned long long __fixunsdfdi(double a)
 
 unsigned long long __fixunsxfdi(long double a)
 {
+#if SPICULE_LDBL_EXTENDED
 	union xbits b;
 	int exp;
 	unsigned long long m;
@@ -66,6 +70,13 @@ unsigned long long __fixunsxfdi(long double a)
 	if (exp == 0x7fff) return ~0uLL;
 	m = ((unsigned long long)b.u.hi << 32) | b.u.lo;
 	return scale64(m, exp - 16383 - 63);
+#else
+	/* This tcc's i386 -win32 target aliases long double to double
+	 * (MSVC ABI): sizeof(long double) == 8 here, not the 10/12-byte
+	 * 80-bit extended layout union xbits above assumes.  Decoding it
+	 * as 80-bit storage in that build would read past the object. */
+	return __fixunsdfdi((double)a);
+#endif
 }
 
 static long long signed_magnitude(unsigned long long magnitude, int negative)

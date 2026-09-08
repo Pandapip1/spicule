@@ -109,9 +109,8 @@ static int cksum_one(const char *path, uint32_t *out_crc, uintmax_t *out_len)
 	int r;
 
 	if (path) {
-		/* path, when non-NULL, is always one of __util_cksum_main's own
-		 * argv elements -- genuinely null-terminated, but that fact does
-		 * not survive across cksum_one's own unannotated parameter. */
+		/* always one of __util_cksum_main's own argv elements; that
+		 * doesn't survive across cksum_one's own unannotated parameter. */
 		unsafe_assume_string_terminated(path);
 		f = fopen(path, "rb");
 		if (!f) {
@@ -168,15 +167,10 @@ int __util_cksum_main(
 		char *arg = argv[i];
 		const char *path;
 
-		/* arg is one of argv's own elements, genuinely null-terminated
-		 * by this function's own elements_withtok(null_terminated, argc)
-		 * contract on argv -- restated here since that token does not
-		 * survive the argv[i] use inline below this checker can trace on
-		 * its own. */
+		/* restate argv's own null-termination contract; it doesn't
+		 * survive the argv[i] indexing above. */
 		unsafe_assume_string_terminated(arg);
-		/* A lone "-" conventionally means stdin, matching this
-		 * project's other utilities (see pathchk.c's own comment on
-		 * the same convention). */
+		/* A lone "-" means stdin, matching pathchk.c's own convention. */
 		path = strcmp(arg, "-") == 0 ? 0 : arg;
 
 		if (cksum_one(path, &crc, &len) < 0) { had_error = 1; continue; }

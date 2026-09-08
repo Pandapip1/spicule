@@ -124,9 +124,7 @@ static int read_whole_file(const char *path, struct sfile *out)
 		if (got == 0) break;
 	}
 	if (ferror(f)) {
-		/* fclose(f) is cleanup for the fread() failure just diagnosed;
-		 * if it fails too, its own errno must not overwrite the real
-		 * read error. */
+		/* same fclose-after-diagnosed-failure convention as above */
 		int saved_errno = errno;
 		free(buf);
 		(void)fclose(f);
@@ -353,14 +351,9 @@ static int get_one(const char *path, int pflag, const char *rflag)
 		unsafe_assume_string_terminated(gpath); /* snprintf() always NUL-terminates a nonzero-size buffer */
 		g = fopen(gpath, "wb");
 		if (!g) { __util_diagf("get: %s: %s\n", gpath, strerror(errno)); rc = 1; goto out; }
-		/* fclose(g) must run whether or not write_body() failed --
-		 * short-circuit || here used to skip it on a write failure,
-		 * leaking g (caught by include/stdio.h's file_stream_open
-		 * contract on fopen()/fclose()). errno is saved across the
-		 * unconditional fclose() so a real write_body() failure is
-		 * still what strerror() reports, the same convention
-		 * read_whole_file() above already uses for this exact
-		 * fclose-after-a-diagnosed-failure shape. */
+		/* fclose(g) must run on both branches (else `g` leaks); same
+		 * fclose-after-diagnosed-failure convention as read_whole_file()
+		 * above. */
 		if (write_body(g, lines, nlines) != 0) {
 			int saved_errno = errno;
 			(void)fclose(g);

@@ -1639,6 +1639,112 @@ stage_pointeraxiom() {
 	return $any
 }
 
+# Opt-in (not in requested_stages' default list, not in the CI matrix --
+# the same landing pattern pointeraxiom/resourceleak above and totality/
+# sizearith/loopcond before them each used while their own tree-wide
+# backlog was being triaged down to zero, and only then promoted).
+# OwnParameterAxiomChecker (spicule.OwnParameterAxiom, tools/clang/
+# OwnershipChecker.cpp) is the standing version of the manual, tree-wide
+# re-audit landed in commit 52522078 ("re-audit of
+# unsafe_assume_string_terminated() vs withtok()"): a manual
+# unsafe_assume_pointer_nonnull()/unsafe_assume_string_terminated() axiom
+# whose argument names the enclosing function's own, unescaped parameter
+# directly is always a candidate to push out to a withtok(null_terminated)/
+# nonnull parameter contract instead -- regardless of whether
+# spicule.RedundantPointerAxiom can currently prove the axiom redundant,
+# which is a separate, path-sensitive question. This stage starts with an
+# untriaged backlog (see .claude/BACKLOG.md's "New checker idea" note),
+# so it must not gate the always-on ownership stage, or the opt-in
+# pointeraxiom stage, until that backlog is triaged down.
+#
+# Unlike pointeraxiom, this diagnostic is purely syntactic (namedParameter()
+# reads only the AST -- no ValidPointer nonnull proof is consulted), so
+# spicule.OwnParameterAxiom is enabled alone below, with nothing else
+# required in the same -analyzer-checker= invocation.
+stage_ownparamaxiom() {
+	hdr "manual pointer proof axiom on own parameter is a withtok/nonnull candidate (opt-in)"
+	any=0
+	require_tool clang-18 || return $missing
+	require_tool clang++-18 || return $missing
+	require_tool llvm-config-18 || return $missing
+	require_tool pkg-config || return $missing
+	if ! pkg-config --exists z3; then
+		report_missing "Z3 development headers and library are not installed, so spicule.ValidPointer's extent-bounds fallback (compiled into the same translation unit) cannot be built."
+		return $missing
+	fi
+	if ! z3_flags=$(pkg-config --cflags --libs z3); then
+		report_missing "pkg-config could not resolve Z3 compiler and linker flags."
+		return $missing
+	fi
+	libdir=$(llvm-config-18 --libdir)
+	clang_cpp=$(find "$libdir" -maxdepth 1 -name 'libclang-cpp.so.18*' \
+		-print 2>/dev/null | sort | head -n 1)
+	if [ -z "$clang_cpp" ]; then
+		report_missing "Clang 18 development libraries are not installed, so own-parameter pointer proof axioms cannot be audited."
+		return $missing
+	fi
+	# OwnParameterAxiomChecker lives in OwnershipChecker.cpp itself (it
+	# reuses RedundantPointerAxiomChecker's own namedParameter() shape test
+	# rather than duplicating it), so this stage rebuilds the identical
+	# three-file bundle stage_ownership does, to its own plugin path -- the
+	# stages' builds are otherwise unrelated and safe to run concurrently.
+	plugin=$builddir/spicule-ownparamaxiom-checker.so
+	# shellcheck disable=SC2046,SC2086
+	clang++-18 -fPIC -shared -DOWNERSHIP_CHECKER_BUNDLE -DSPICULE_OWNERSHIP_Z3 \
+		$(llvm-config-18 --cxxflags) -DSPICULE_MEMORY_CONTRACT_Z3 -fexceptions \
+		tools/clang/OwnershipChecker.cpp \
+		tools/clang/AllocationLifetimeChecker.cpp \
+		tools/clang/MemoryContractChecker.cpp \
+		-o "$plugin" "$clang_cpp" \
+		$(llvm-config-18 --ldflags --libs --system-libs) $z3_flags || return 1
+
+	fixture_log=$builddir/ownparamaxiom-fixtures.log
+	: > "$fixture_log"
+	for fixture in tools/lint-ownership-fixtures/*.c; do
+		clang-18 --analyze -Xclang -load -Xclang "$plugin" \
+			-Xclang -analyzer-checker=spicule.OwnParameterAxiom \
+			-DSPICULE_OWNERSHIP_ANALYSIS \
+			-Xclang -analyzer-output=text "$fixture" -o /dev/null \
+			>> "$fixture_log" 2>&1 || any=1
+	done
+	tools/lint-own-parameter-axiom.py --fixtures "$fixture_log" || any=1
+
+	analyzed=0
+	for arch in $LINT_ARCHS; do
+		gen_alltypes "$arch" || { any=1; continue; }
+		flags="$(cppflags_for "$arch")"
+		target=$(pick_target "$arch")
+		nsrc=$(sources_for "$arch" | grep -c . || true)
+		out=$builddir/$arch.ownparamaxiom.log
+		report=$builddir/$arch.ownparamaxiom.report
+		pardir=$(mktemp -d "$builddir/ownparamaxiom.XXXXXX") || return 1
+		# shellcheck disable=SC2086,SC2016
+		sources_for "$arch" | xargs -P "$LINT_JOBS" -I{} sh -c '
+			f=$1; clang=$2; plugin=$3; target=$4; shift 4
+			id=$(printf %s "$f" | tr / _)
+			# shellcheck disable=SC2086
+			"$clang" $target --analyze -Xclang -load -Xclang "$plugin" \
+				-Xclang -analyzer-checker=spicule.OwnParameterAxiom \
+				-Xclang -analyzer-output=text "$@" "$f" -o /dev/null \
+				> "'"$pardir"'/$id.log" 2>&1
+		' _ {} clang-18 "$plugin" "$target" $flags
+		runrc=$?; nlog=$(find "$pardir" -name '*.log' | grep -c . || true)
+		: > "$out"; ls "$pardir"/*.log >/dev/null 2>&1 && cat "$pardir"/*.log > "$out"; rm -rf "$pardir"
+		if [ "$runrc" -ne 0 ] || [ "$nsrc" -eq 0 ] || [ "$nlog" -ne "$nsrc" ]; then
+			note "own-parameter axiom analyzer [$arch]: FAILED -- $nlog of $nsrc source file(s) completed."
+			show_findings "$out"; any=1; continue
+		fi
+		analyzed=$((analyzed + 1))
+		if tools/lint-own-parameter-axiom.py --fixtures "$fixture_log" "$out" > "$report" 2>&1; then
+			note "own-parameter axiom proofs [$arch]: proved -> $report"
+		else
+			note "own-parameter axiom proofs [$arch]: findings -> $report"; show_findings "$report"; any=1
+		fi
+	done
+	[ "$analyzed" -gt 0 ] || return 1
+	return $any
+}
+
 stage_initproof() {
 	hdr "definite-initialization proof obligations"
 	any=0
@@ -2377,6 +2483,7 @@ for s in $stages; do
 		loopcond)   stage_loopcond ;;
 		resourceleak) stage_resourceleak ;;
 		pointeraxiom) stage_pointeraxiom ;;
+		ownparamaxiom) stage_ownparamaxiom ;;
 		widthmod)  tools/lint-widthmod.sh ;;
 		unreferenced) tools/lint-unreferenced.sh ;;
 		undefined) tools/lint-undefined.sh ;;

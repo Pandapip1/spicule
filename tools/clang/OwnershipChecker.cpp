@@ -85,6 +85,21 @@ REGISTER_MAP_WITH_PROGRAMSTATE(ResourceOrigin, SymbolRef, const Stmt *)
 REGISTER_MAP_WITH_PROGRAMSTATE(ResourceFrame, SymbolRef,
                                const StackFrameContext *)
 
+// checkBranchCondition -> evalAssume hand-off for ResourceLifecycleChecker's
+// own "retired by aliasing" carve-out (see checkBranchCondition below):
+// PendingRetireResource names which live Descriptor-family resource a
+// comparison the branch is about to resolve involves; PendingRetireAlias
+// names the symbol it was compared against when that other side is itself
+// symbolic (a borrowed parameter, e.g. src/sh/execute.c apply_one_redir()'s
+// `newfd != fd`), left null when the other side was instead a bare integer
+// literal (src/unistd/daemon.c daemon()'s `fd > STDERR_FILENO`) -- either
+// way evalAssume alone consumes the pair once the branch's own narrowing
+// has actually landed in the state, alive for exactly the one branch
+// decision in between, the same shape ErrnoDisciplineChecker's own
+// checkBranchCondition/evalAssume hand-off (CallSlot) already uses.
+REGISTER_TRAIT_WITH_PROGRAMSTATE(PendingRetireResource, SymbolRef)
+REGISTER_TRAIT_WITH_PROGRAMSTATE(PendingRetireAlias, SymbolRef)
+
 // src/internal/fd.c's __fd_install() returns either a negative failure or
 // a fd index it has just filled into __fds[]; __fd_get() with that exact
 // value, called before anything else could touch the table, is guaranteed
@@ -1636,6 +1651,61 @@ static bool aggregateIndexProven(const ArraySubscriptExpr *Access,
       return false;
   }
   return true;
+}
+
+// Whether Access reads a provably in-bounds element of a parameter
+// carrying elements_withtok(family, extent) with family null_terminated-
+// shaped (argv itself, the dominant real shape: `char **argv
+// elements_withtok(null_terminated, argc)`) -- the identical
+// "AggregateElementTokenChecker::checkBeginFunction/checkPostStmt's own
+// per-element token grant, re-derived directly from the AST and this
+// pass's own path state" ValidPointerChecker::checkPostStmt(ImplicitCastExpr)
+// and RedundantPointerAxiomChecker both need. Hoisted to file scope
+// (rather than kept a ValidPointerChecker member reached everywhere else
+// through its `friend class RedundantPointerAxiomChecker` grant) so
+// ResourceLifecycleChecker's own checkPostStmt(ImplicitCastExpr) below can
+// call it too, without becoming a third friend of a checker whose own
+// diagnostic domain (pointer validity) it has nothing else to do with --
+// the same "shared, not duplicated" split already applied to aggregate
+// IndexProven just above and to ResourceMap/ResourceOrigin/ResourceFrame
+// themselves.
+static bool elementProvenNullTerminated(const ArraySubscriptExpr *Access,
+                                        CheckerContext &C) {
+  const auto *Function =
+      dyn_cast_or_null<FunctionDecl>(C.getLocationContext()->getDecl());
+  if (!Function)
+    return false;
+  const auto *Reference = dyn_cast<DeclRefExpr>(
+      Access->getBase()->IgnoreParenImpCasts());
+  const auto *Parameter =
+      Reference ? dyn_cast<ParmVarDecl>(Reference->getDecl()) : nullptr;
+  if (!Parameter || Parameter->getDeclContext() != Function)
+    return false;
+  for (const AnnotateAttr *Attr : Parameter->specific_attrs<AnnotateAttr>()) {
+    StringRef Text = Attr->getAnnotation();
+    if (!Text.consume_front("elements_withtok:"))
+      continue;
+    auto [FamilyName, ExtentName] = Text.split(':');
+    if (FamilyName.empty() || ExtentName.empty() || ExtentName.contains(':'))
+      continue;
+    if (!tokenImpliesNonNull(findTokenSort(C.getASTContext(), FamilyName)))
+      continue;
+    const ParmVarDecl *Extent = nullptr;
+    for (const ParmVarDecl *Candidate : Function->parameters())
+      if (Candidate->getName() == ExtentName) {
+        Extent = Candidate;
+        break;
+      }
+    if (!Extent)
+      continue;
+    ProgramStateRef State = C.getState();
+    SVal ExtentValue =
+        State->getSVal(State->getLValue(Extent, C.getLocationContext()));
+    SymbolRef Upper = ExtentValue.getAsSymbol(true);
+    if (Upper && aggregateIndexProven(Access, Upper, State, C))
+      return true;
+  }
+  return false;
 }
 
 class AggregateElementTokenChecker
@@ -3718,55 +3788,6 @@ class ValidPointerChecker
     return false;
   }
 
-  // Same mirroring as parameterGrantsNullTerminatedScalar above, this time
-  // of AggregateElementTokenChecker::checkBeginFunction/checkPostStmt's
-  // "elements_withtok:family:extent" parsing: Access's base must be
-  // exactly a reference to a parameter of the CURRENTLY analyzed function
-  // carrying that annotation, with family null_terminated-shaped and the
-  // index provably below the named extent parameter -- the identical
-  // in-bounds proof aggregateIndexProven already performs for the sibling
-  // checker's own token grant, reused as-is (it depends on nothing but the
-  // AST and this path's own SVal/constraint state, never on the other
-  // checker's CapabilityMap).
-  static bool elementProvenNullTerminated(const ArraySubscriptExpr *Access,
-                                          CheckerContext &C) {
-    const auto *Function =
-        dyn_cast_or_null<FunctionDecl>(C.getLocationContext()->getDecl());
-    if (!Function)
-      return false;
-    const auto *Reference = dyn_cast<DeclRefExpr>(
-        Access->getBase()->IgnoreParenImpCasts());
-    const auto *Parameter =
-        Reference ? dyn_cast<ParmVarDecl>(Reference->getDecl()) : nullptr;
-    if (!Parameter || Parameter->getDeclContext() != Function)
-      return false;
-    for (const AnnotateAttr *Attr :
-         Parameter->specific_attrs<AnnotateAttr>()) {
-      StringRef Text = Attr->getAnnotation();
-      if (!Text.consume_front("elements_withtok:"))
-        continue;
-      auto [FamilyName, ExtentName] = Text.split(':');
-      if (FamilyName.empty() || ExtentName.empty() || ExtentName.contains(':'))
-        continue;
-      if (!tokenImpliesNonNull(findTokenSort(C.getASTContext(), FamilyName)))
-        continue;
-      const ParmVarDecl *Extent = nullptr;
-      for (const ParmVarDecl *Candidate : Function->parameters())
-        if (Candidate->getName() == ExtentName) {
-          Extent = Candidate;
-          break;
-        }
-      if (!Extent)
-        continue;
-      ProgramStateRef State = C.getState();
-      SVal ExtentValue =
-          State->getSVal(State->getLValue(Extent, C.getLocationContext()));
-      SymbolRef Upper = ExtentValue.getAsSymbol(true);
-      if (Upper && aggregateIndexProven(Access, Upper, State, C))
-        return true;
-    }
-    return false;
-  }
 
   // __peb (src/internal/libc.h: `extern PPEB __peb;`) is a plain global
   // pointer, not a call result, so isAlwaysNonNull's checkPostCall-based
@@ -4851,7 +4872,7 @@ class RedundantPointerAxiomChecker : public Checker<check::PreCall> {
     // no token effect at all -- see declaredNullTerminated below for why
     // the same evidence does not license removing the string axiom.
     if (const auto *Subscript = dyn_cast<ArraySubscriptExpr>(Object))
-      return ValidPointerChecker::elementProvenNullTerminated(Subscript, C);
+      return elementProvenNullTerminated(Subscript, C);
     const ParmVarDecl *Parameter = namedParameter(Object, Function);
     if (!Parameter)
       return false;
@@ -4958,23 +4979,32 @@ public:
   }
 };
 
+// ResourceMap's family + live/released encoding, hoisted to file scope
+// (a plain, unscoped enum, so every bare Descriptor/Stream/.../Handle
+// reference below keeps resolving without qualification) so both
+// ResourceLifecycleChecker (which owns every transition into these states)
+// and ResourceLeakChecker further down (which reads them back -- both the
+// existing leak-at-exit scan and its own new "retired by aliasing" carve-
+// out, see ResourceLifecycleChecker::checkBranchCondition/evalAssume
+// below) can agree on the same encoding, the same shared-not-duplicated
+// split already applied to the ResourceMap/ResourceOrigin/ResourceFrame
+// program-state tables themselves.
+enum Family : unsigned {
+  Descriptor = 1,
+  Stream,
+  Directory,
+  Semaphore,
+  Mapping,
+  Handle
+};
+
+static unsigned live(Family Value) { return static_cast<unsigned>(Value) * 2; }
+static unsigned released(Family Value) { return live(Value) + 1; }
+
 class ResourceLifecycleChecker
-    : public Checker<check::PreCall, check::PostCall> {
+    : public Checker<check::PreCall, check::PostCall, check::BranchCondition,
+                     eval::Assume, check::PostStmt<ImplicitCastExpr>> {
   mutable std::unique_ptr<BugType> BT;
-
-  enum Family : unsigned {
-    Descriptor = 1,
-    Stream,
-    Directory,
-    Semaphore,
-    Mapping,
-    Handle
-  };
-
-  static unsigned live(Family Value) {
-    return static_cast<unsigned>(Value) * 2;
-  }
-  static unsigned released(Family Value) { return live(Value) + 1; }
 
   static const FunctionDecl *function(const CallEvent &Call) {
     return dyn_cast_or_null<FunctionDecl>(Call.getDecl());
@@ -5598,6 +5628,156 @@ public:
     else if (auto Use = use(Call))
       checkResource(Call, Use->first, Use->second, false, C);
   }
+
+  // src/util/uuencode.c __util_uuencode_main() (`char **argv
+  // elements_withtok(null_terminated, argc)`): `src_path = argv[i];`
+  // followed by `if (src_path) ... fclose(in);` reads back as a genuine
+  // possibility that src_path -- and therefore the fopen() a few lines
+  // above it -- is never released, UNLESS this pass itself knows argv[i]
+  // is proven nonnull the same way ValidPointerChecker's own identical
+  // checkPostStmt(ImplicitCastExpr) already asserts it -- elsewhere,
+  // spicule.ValidPointer is not necessarily enabled in the same
+  // -analyzer-checker= invocation as spicule.Resource/spicule.ResourceLeak
+  // (see tools/lint.sh's resourceleak stage), so this checker cannot rely
+  // on that OTHER checker's callback having already run on this same
+  // path. Re-deriving the identical assertion here, directly, keeps
+  // spicule.Resource's own "argv is null_terminated-shaped" reasoning
+  // self-sufficient rather than an undocumented cross-checker dependency.
+  void checkPostStmt(const ImplicitCastExpr *Cast, CheckerContext &C) const {
+    if (Cast->getCastKind() != CK_LValueToRValue)
+      return;
+    const auto *Access = dyn_cast<ArraySubscriptExpr>(
+        Cast->getSubExpr()->IgnoreParenImpCasts());
+    if (!Access || !elementProvenNullTerminated(Access, C))
+      return;
+    std::optional<DefinedOrUnknownSVal> Defined =
+        C.getSVal(Cast).getAs<DefinedOrUnknownSVal>();
+    if (!Defined)
+      return;
+    if (ProgramStateRef NonNull = C.getState()->assume(*Defined, true))
+      C.addTransition(NonNull);
+  }
+
+  static ProgramStateRef forgetResource(ProgramStateRef State,
+                                        SymbolRef Symbol) {
+    return State->remove<ResourceMap>(Symbol)
+        ->remove<ResourceOrigin>(Symbol)
+        ->remove<ResourceFrame>(Symbol);
+  }
+
+  // A live Descriptor compared directly against a borrowed parameter (src/
+  // sh/execute.c apply_one_redir(): `if (newfd != fd) { dup2(newfd, fd);
+  // close(newfd); }` -- when the condition is false, newfd already IS fd,
+  // no dup2/close wanted or needed) or against an integer literal (src/
+  // unistd/daemon.c daemon(): `if (fd > STDERR_FILENO) close(fd);` -- when
+  // false, fd is one of 0/1/2) is real, checkable evidence of the same
+  // shape isDirectParameterArgument()/isStandardDescriptor() above already
+  // trust: this frame's own copy of the descriptor NUMBER, not just some
+  // unrelated pointer into it, has become interchangeable with something
+  // this analysis either does not own (a borrowed parameter) or is a
+  // standing standard stream. Stashes just the two symbols involved --
+  // never classifies which branch direction proves the aliasing here --
+  // so evalAssume below can ask the constraint manager directly, once the
+  // branch's own narrowing has actually landed in the state, instead of
+  // this function hand-classifying every comparison operator itself.
+  void checkBranchCondition(const Stmt *Condition, CheckerContext &C) const {
+    ProgramStateRef State = C.getState()
+                                ->set<PendingRetireResource>(nullptr)
+                                ->set<PendingRetireAlias>(nullptr);
+    const auto *ConditionExpr = dyn_cast_or_null<Expr>(Condition);
+    const auto *Comparison = dyn_cast_or_null<BinaryOperator>(
+        ConditionExpr ? ConditionExpr->IgnoreParens() : nullptr);
+    if (Comparison && BinaryOperator::isComparisonOp(Comparison->getOpcode())) {
+      const Expr *ResourceSide = Comparison->getLHS();
+      const Expr *OtherSide = Comparison->getRHS();
+      SymbolRef Symbol = C.getSVal(ResourceSide).getAsSymbol(true);
+      const unsigned *Live = Symbol ? State->get<ResourceMap>(Symbol) : nullptr;
+      if (!Live || *Live != live(Descriptor)) {
+        std::swap(ResourceSide, OtherSide);
+        Symbol = C.getSVal(ResourceSide).getAsSymbol(true);
+        Live = Symbol ? State->get<ResourceMap>(Symbol) : nullptr;
+      }
+      if (Live && *Live == live(Descriptor)) {
+        const Expr *OtherExpr = OtherSide->IgnoreParenCasts();
+        // The same "real, checkable AST evidence this analysis cannot see
+        // past" shapes ResourceLeakChecker::isTrustedResourceDestination
+        // already trusts unconditionally for a resource being STORED
+        // into one of them (a MemberExpr through a borrowed pointer, src/
+        // process/posix_spawn.c do_action()'s `a->u.open.fd`; a direct
+        // parameter reference, src/sh/execute.c apply_one_redir()'s
+        // `fd`) apply identically here to a resource merely being
+        // COMPARED against one: either way, the value on that side
+        // belongs to storage this per-function analysis did not itself
+        // acquire.
+        bool IsBorrowed =
+            isa<MemberExpr>(OtherExpr) ||
+            (isa<DeclRefExpr>(OtherExpr) &&
+             isa<ParmVarDecl>(cast<DeclRefExpr>(OtherExpr)->getDecl()));
+        SymbolRef Alias =
+            IsBorrowed ? C.getSVal(OtherSide).getAsSymbol(true) : nullptr;
+        if (Alias || isa<IntegerLiteral>(OtherExpr))
+          State = State->set<PendingRetireResource>(Symbol)
+                      ->set<PendingRetireAlias>(Alias);
+      }
+    }
+    C.addTransition(State);
+  }
+
+  // Consumes checkBranchCondition's stash, once and only once, for
+  // whichever branch this evalAssume call is resolving -- by this point
+  // State already has that branch's own narrowing applied by the
+  // engine's own constraint manager (the reason this asks the question
+  // here, directly, rather than hand-classifying every comparison
+  // operator/direction in checkBranchCondition above the way
+  // ErrnoDisciplineChecker's own OnTrueOutcome/OnFalseOutcome split
+  // must, for a fact -- "this call failed" -- the constraint manager has
+  // no built-in notion of). Every other evalAssume call in the whole
+  // translation unit sees an empty pending slot and returns State
+  // unchanged, at negligible cost.
+  ProgramStateRef evalAssume(ProgramStateRef State, SVal /*Cond*/,
+                             bool /*Assumption*/) const {
+    SymbolRef Symbol = State->get<PendingRetireResource>();
+    if (!Symbol)
+      return State;
+    SymbolRef Alias = State->get<PendingRetireAlias>();
+    State = State->set<PendingRetireResource>(nullptr)
+                ->set<PendingRetireAlias>(nullptr);
+    const unsigned *Live = State->get<ResourceMap>(Symbol);
+    if (!Live || *Live != live(Descriptor))
+      return State;
+    SValBuilder &Builder = State->getStateManager().getSValBuilder();
+    QualType SymbolType = Symbol->getType();
+    if (!SymbolType->isIntegralOrEnumerationType())
+      return State;
+    bool Retired = false;
+    if (Alias) {
+      QualType AliasType = Alias->getType();
+      if (AliasType->isIntegralOrEnumerationType() &&
+          Builder.getContext().getIntWidth(SymbolType) ==
+              Builder.getContext().getIntWidth(AliasType) &&
+          SymbolType->isUnsignedIntegerOrEnumerationType() ==
+              AliasType->isUnsignedIntegerOrEnumerationType()) {
+        SVal Equal =
+            Builder.evalBinOp(State, BO_EQ, nonloc::SymbolVal(Symbol),
+                              nonloc::SymbolVal(Alias),
+                              Builder.getConditionType());
+        std::optional<DefinedOrUnknownSVal> Condition =
+            Equal.getAs<DefinedOrUnknownSVal>();
+        Retired = Condition && !State->assume(*Condition, false);
+      }
+    } else {
+      SVal AtMostStandard =
+          Builder.evalBinOp(State, BO_LE, nonloc::SymbolVal(Symbol),
+                            Builder.makeIntVal(2, SymbolType),
+                            Builder.getConditionType());
+      std::optional<DefinedOrUnknownSVal> Condition =
+          AtMostStandard.getAs<DefinedOrUnknownSVal>();
+      Retired = Condition && !State->assume(*Condition, false);
+    }
+    if (Retired)
+      State = forgetResource(State, Symbol);
+    return State;
+  }
 };
 
 // Opt-in (spicule.ResourceLeak; see tools/lint.sh's resourceleak stage): the
@@ -5675,6 +5855,60 @@ class ResourceLeakChecker
     return false;
   }
 
+  static bool isReleaseCallName(StringRef Name) {
+    return Name == "close" || Name == "fclose" || Name == "pclose" ||
+          Name == "closedir" || Name == "sem_close" || Name == "munmap" ||
+          Name == "NtClose";
+  }
+
+  // Whether Body (the enclosing function's own definition) contains a
+  // call to one of ResourceLifecycleChecker's own release functions on
+  // `ArrayVar[<some non-constant index>]` -- the same array ArrayVar a
+  // store this pass just saw targets, e.g. src/util/paste.c's `for (j
+  // = 0; j < nfiles; j++) if (files[j] ...) fclose(files[j]);` for its
+  // own `for (j = 0; j < nfiles; j++) files[j] = ...fopen(path, "r");`,
+  // and src/util/tee.c's identical shape for its own `fds` array.
+  //
+  // Positive, syntactic evidence a real release loop exists elsewhere in
+  // this function, not merely "the analyzer's own memory model lost
+  // track of which element this is" (ResourceLifecycleChecker's own,
+  // narrower hasSymbolicArrayIndex trust, scoped to a single release
+  // call's own legitimacy check, not to whether the resource is ever
+  // released AT ALL) -- required so a genuine "store an acquired
+  // resource into a local array, never release any element of it" leak
+  // of the identical shape has no such call anywhere in the body and
+  // stays flagged: this recognizes precisely the release loop's own
+  // existence, never merely the acquisition loop's own inability to be
+  // traced element-by-element.
+  static bool arrayHasCorrelatedReleaseCall(const Stmt *Statement,
+                                            const ValueDecl *ArrayVar) {
+    if (!Statement)
+      return false;
+    if (const auto *Call = dyn_cast<CallExpr>(Statement)) {
+      if (const FunctionDecl *Callee = Call->getDirectCallee()) {
+        if (Callee->getIdentifier() &&
+            isReleaseCallName(Callee->getName())) {
+          for (const Expr *Argument : Call->arguments()) {
+            const auto *Subscript = dyn_cast<ArraySubscriptExpr>(
+                Argument->IgnoreParenCasts());
+            if (!Subscript)
+              continue;
+            const auto *Reference = dyn_cast<DeclRefExpr>(
+                Subscript->getBase()->IgnoreParenCasts());
+            if (Reference && Reference->getDecl() == ArrayVar &&
+                !isa<IntegerLiteral>(
+                    Subscript->getIdx()->IgnoreParenCasts()))
+              return true;
+          }
+        }
+      }
+    }
+    for (const Stmt *Child : Statement->children())
+      if (arrayHasCorrelatedReleaseCall(Child, ArrayVar))
+        return true;
+    return false;
+  }
+
   void report(StringRef Reason, const Stmt *Statement,
               CheckerContext &C) const {
     if (!Statement)
@@ -5705,7 +5939,35 @@ public:
   void checkPostStmt(const BinaryOperator *Statement, CheckerContext &C) const {
     if (!Statement->isAssignmentOp())
       return;
-    if (!isTrustedResourceDestination(Statement->getLHS()))
+    const Expr *LHS = Statement->getLHS();
+    bool Trusted = isTrustedResourceDestination(LHS);
+    // isTrustedResourceDestination's own ArraySubscript case is
+    // deliberately scoped to a parameter base (the out-parameter shape,
+    // `pair[0] = client;`) -- a LOCAL array, e.g. src/util/paste.c's own
+    // `files = calloc(...); ...; files[j] = fopen(path, "r");`, doesn't
+    // qualify there on purpose: unlike a struct field or a parameter's
+    // own slot, blindly trusting every store into any local array would
+    // just as blindly hide a genuine "store into an array, never
+    // release any of it" leak. arrayHasCorrelatedReleaseCall requires
+    // real, positive evidence instead -- an actual release call on this
+    // same array elsewhere in the function -- before trusting this one.
+    if (!Trusted) {
+      const auto *Subscript =
+          dyn_cast<ArraySubscriptExpr>(LHS->IgnoreParenCasts());
+      const auto *Reference =
+          Subscript ? dyn_cast<DeclRefExpr>(
+                          Subscript->getBase()->IgnoreParenCasts())
+                    : nullptr;
+      if (Reference) {
+        const auto *Function = dyn_cast_or_null<FunctionDecl>(
+            C.getStackFrame()->getDecl());
+        if (Function && Function->hasBody() &&
+            arrayHasCorrelatedReleaseCall(Function->getBody(),
+                                          Reference->getDecl()))
+          Trusted = true;
+      }
+    }
+    if (!Trusted)
       return;
     SymbolRef Source = C.getSVal(Statement->getRHS()).getAsSymbol(true);
     if (!Source)

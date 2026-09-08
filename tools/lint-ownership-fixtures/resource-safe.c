@@ -1,6 +1,10 @@
 /* SPDX-FileCopyrightText: (C) 2026 Gavin John
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
+#include "../../include/ownership.h"
+
+tokdef null_terminated l_unlimited implicit_drop string_literal;
+
 typedef __SIZE_TYPE__ size_t;
 typedef struct file FILE;
 int open(const char *, int, ...);
@@ -310,4 +314,108 @@ void fd_retired_via_fdopen(void)
 	f = fdopen(fd, "w");
 	if (!f) { close(fd); return; }
 	fclose(f);
+}
+
+/* ResourceLifecycleChecker's own "retired by aliasing" carve-out
+ * (checkBranchCondition/evalAssume): a live Descriptor a branch just
+ * proved is numerically identical to a value this frame does not own is
+ * retired right there, not left this frame's obligation -- src/sh/
+ * execute.c apply_one_redir()'s own `if (newfd != fd) { dup2(newfd,
+ * fd); close(newfd); }` (when false, newfd already IS fd, no dup2/
+ * close wanted or needed). See resource-unsafe.c's
+ * redirect_param_mismatch_leak for the adversarial twin: the SAME
+ * comparison, but on the branch where they are proven to actually
+ * differ, where a missing close() must still be flagged. */
+void redirect_onto_borrowed_target_safe(int fd)
+{
+	int newfd = open("name", 0);
+	if (newfd < 0)
+		return;
+	if (newfd != fd)
+		close(newfd);
+}
+
+/* src/process/posix_spawn.c do_action()'s __SPAWN_OPEN shape: the
+ * identical aliasing, spelled through a struct field read off a
+ * borrowed pointer parameter instead of a plain int parameter --
+ * isTrustedResourceDestination's own MemberExpr case already trusts a
+ * resource STORED into `a->u.open.fd`; this is the same AST shape
+ * trusted for a resource merely COMPARED against it. */
+struct redirect_target { int fd; };
+void redirect_onto_borrowed_field_safe(struct redirect_target *t)
+{
+	int newfd = open("name", 0);
+	if (newfd < 0)
+		return;
+	if (newfd != t->fd)
+		close(newfd);
+}
+
+/* src/unistd/daemon.c daemon()'s own shape: a live Descriptor a branch
+ * just proved is one of the standard streams 0/1/2 is retired by
+ * becoming that stream, not left this frame's own obligation --
+ * `if (fd > STDERR_FILENO) close(fd);` closes it only when it is NOT
+ * one of the standard three. See resource-unsafe.c's bounded_close_leak
+ * for the adversarial twin: bounded against a literal that does NOT
+ * prove the value is one of 0/1/2, where a missing close() must still
+ * be flagged. */
+void redirect_onto_standard_stream_safe(void)
+{
+	int fd = open("name", 0);
+	if (fd < 0)
+		return;
+	if (fd > 2)
+		close(fd);
+}
+
+/* src/util/paste.c/src/util/tee.c's own shape: a resource acquired
+ * inside one loop and stored into a LOCAL array by a runtime-computed
+ * index, closed by a second loop over the same array elsewhere in the
+ * same function. isTrustedResourceDestination()'s own ArraySubscript
+ * case is deliberately scoped to a parameter base and would not reach
+ * this local array; ResourceLeakChecker::arrayHasCorrelatedReleaseCall's
+ * positive search for a real release loop over the identical array is
+ * what has to trust it instead. See resource-unsafe.c's
+ * array_no_release_leak for the adversarial twin: the same store, but
+ * with no release loop anywhere in the function, where the leak must
+ * still be flagged. */
+void array_release_loop_safe(int n)
+{
+	FILE *files[64];
+	int j;
+	for (j = 0; j < n; j++)
+		files[j] = fopen("name", "r");
+	for (j = 0; j < n; j++)
+		if (files[j]) fclose(files[j]);
+}
+
+/* src/util/uuencode.c __util_uuencode_main()'s own shape: `argv[i]` read
+ * back into a local pointer used both to open a resource AND to decide
+ * later whether to release it -- the checker has to prove argv[1] (1 <
+ * argc, already established) is nonnull, via elements_withtok(null_
+ * terminated, argc)'s own contract, or it explores a (real-world
+ * impossible) path where src_path reads back null, skipping fclose(in)
+ * even though fopen() already succeeded. ResourceLifecycleChecker's own
+ * checkPostStmt(ImplicitCastExpr) re-derives ValidPointerChecker's
+ * identical assertion directly, rather than depending on
+ * spicule.ValidPointer also being enabled in the same
+ * -analyzer-checker= invocation (see tools/lint.sh's resourceleak
+ * stage, which enables only spicule.Resource/spicule.ResourceLeak). See
+ * resource-unsafe.c's argv_element_not_proven_nonnull_leak for the
+ * adversarial twin: the identical shape without the elements_withtok
+ * annotation, where the leak must still be flagged. */
+int argv_element_proven_nonnull_safe(
+    int argc, char **argv elements_withtok(null_terminated, argc))
+{
+	const char *src_path;
+	FILE *in;
+	if (argc < 2)
+		return 1;
+	src_path = argv[1];
+	in = fopen(src_path, "rb");
+	if (!in)
+		return 1;
+	if (src_path)
+		fclose(in);
+	return 0;
 }

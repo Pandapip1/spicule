@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later */
 
 typedef __SIZE_TYPE__ size_t;
-typedef struct file FILE;
+typedef struct file { void *opaque[8]; } FILE;
 int open(const char *, int, ...);
 int close(int);
 long write(int, const void *, size_t);

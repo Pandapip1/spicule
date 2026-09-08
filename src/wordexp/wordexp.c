@@ -1255,8 +1255,10 @@ static int emit_field(struct fbuf *b, struct pv *out)
 
 	/* pv_push(out, plain)'s transfer into out->v[] is the same open
 	 * "dynamic allocation is not freed before function exit" as below:
-	 * AllocationLifetimeChecker's escape recognition doesn't read
-	 * struct pv's elements_withtok(internal_heap_allocated, n). */
+	 * pv_push()'s `s` has no consume(internal_heap_allocated) (adding one
+	 * makes OwnershipChecker misclassify pv_push as an unconditional
+	 * freer, like __free(), and false-positive on pv_free_from() -- left
+	 * open). */
 	if (!has_meta) return pv_push(out, plain) ? WRDE_NOSPACE : 0;
 
 	pat.data = 0; pat.lit = 0; pat.n = pat.cap = 0;
